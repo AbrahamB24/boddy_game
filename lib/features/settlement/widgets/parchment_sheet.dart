@@ -65,7 +65,7 @@ class ParchmentSheet extends StatelessWidget {
       minChildSize: minSize,
       maxChildSize: maxSize,
       builder: (_, scrollCtrl) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
         child: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(

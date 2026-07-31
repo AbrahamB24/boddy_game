@@ -38,10 +38,7 @@ class TapButton extends StatelessWidget {
         : BorderSide.none;
     final ShapeBorder shape = circle
         ? CircleBorder(side: side)
-        : RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radius ?? FoE.radius),
-            side: side,
-          );
+        : FoE.facet(radius: radius ?? FoE.radius, side: side);
     return DecoratedBox(
       decoration: ShapeDecoration(
         color: background,

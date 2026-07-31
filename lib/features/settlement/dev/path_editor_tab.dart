@@ -120,7 +120,7 @@ class _PathEditorTabState extends State<PathEditorTab> {
     isScrollControlled: true,
     backgroundColor: FoE.panelDark,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
     ),
     builder: (_) => DraggableScrollableSheet(
       expand: false,

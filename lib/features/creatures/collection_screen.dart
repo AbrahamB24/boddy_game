@@ -144,10 +144,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: FoE.panelDark,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: FoE.borderGold),
-        ),
+        shape: FoE.facet(radius: 12, side: const BorderSide(color: FoE.borderGold)),
         title: Text('Choose ${species.name}?', style: FoE.title(size: 15)),
         content: Text(
           'Your starter accompanies you from the very beginning. This choice is final!',

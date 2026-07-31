@@ -124,6 +124,17 @@ class FoE {
   /// shape under it.
   static BorderRadius cut([double r = FoE.radius]) => BorderRadius.circular(r);
 
+  /// ── THE FACET STEPS ──
+  /// A faceted object is shaded by ITS NEIGHBOURS: one plane catches the light,
+  /// the next one does not, and the edge between them is the whole effect. These
+  /// two make that edge from any colour, so a surface can have a lit side and a
+  /// shaded side without a gradient anywhere.
+  ///
+  /// The amounts are deliberately blunt. A 4 % lift is a gradient's idea of a
+  /// facet; 14 % is a plane turning away from a light.
+  static Color lit(Color c) => Color.lerp(c, Colors.white, 0.14)!;
+  static Color shade(Color c) => Color.lerp(c, Colors.black, 0.22)!;
+
   /// A HARD shadow: the offset facet a flat-shaded object casts. No blur, ever —
   /// a blur is the one thing that cannot happen in a faceted world, and it is
   /// what made the old chrome read as soft plastic.

@@ -32,7 +32,7 @@ class _FeelButtonState extends State<FeelButton> {
       context: context,
       backgroundColor: FoE.panelDark,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(

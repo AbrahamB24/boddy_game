@@ -146,7 +146,7 @@ class DevExportSheet extends StatelessWidget {
       ),
       decoration: const BoxDecoration(
         color: FoE.bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
       ),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 20),
       child: Column(

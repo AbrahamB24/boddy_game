@@ -369,7 +369,7 @@ class _CombatLabScreenState extends State<CombatLabScreen> {
       backgroundColor: FoE.panelDark,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
       ),
       builder: (_) => DraggableScrollableSheet(
         expand: false,

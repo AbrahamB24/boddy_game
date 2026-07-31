@@ -149,15 +149,6 @@ class ParchmentHeader extends StatelessWidget {
 
   static const double height = 52;
 
-  /// THE BAND ITSELF, WITHOUT THE TITLE ROW — the gradient, the lit top edge,
-  /// the double rule and the shadow, wrapped around whatever a screen puts in
-  /// it (user 2026-07-29: "bitte auch die Optik an die anderen Header
-  /// anpassen").
-  ///
-  /// Split out because the settlement's top bar is not a running head: it is a
-  /// resource strip, two rows tall, and it has to wear this exact band rather
-  /// than a hand-rolled lookalike that drifts the next time the band changes.
-  /// Pass no [height] and the band takes the height of its child.
   /// THE BAND'S FILL — one flat colour (user 2026-07-31: "alle header sollen
   /// keine Farbverlauf haben").
   ///
@@ -172,16 +163,12 @@ class ParchmentHeader extends StatelessWidget {
   /// of a paler paper that reads as a different material.
   static const Color bandFill = kParchmentDeep;
 
-  /// The lit top edge — the same hairline the scroll's roller uses to read as
-  /// a cylinder.
-  /// The lit top EDGE — a hairline, not a wash. It survives the gradient's
-  /// removal because it is what stops a flat bar from reading as a rectangle
-  /// somebody forgot to finish, and a line is not a Farbverlauf.
+  /// The band's lit top edge, for a control that draws its own.
   ///
-  /// Turned right down when the theme went dark (2026-07-31): white over a dark
-  /// surface climbs in contrast far faster than white over paper, and the 0.55
-  /// this used to be was a strip light along the top of the bar.
-  static final Color bandHighlight = Colors.white.withValues(alpha: 0.14);
+  /// The band itself no longer uses it: it has two real facet edges now — a lit
+  /// plane on top, a shaded one at the foot (see [band]) — and a white hairline
+  /// over those was the gradient's finishing move, not a facet's.
+  static Color get bandHighlight => FoE.lit(bandFill);
 
   /// The colour a letter or a glyph is CUT INTO the band with — the band's own
   /// material, taken well down towards ink so the recess has a floor.
@@ -245,18 +232,18 @@ class ParchmentHeader extends StatelessWidget {
   /// The band on dark stock: the same three-stop shape, cut from FoE's panels.
   static Widget band({required Widget child, double? height}) => Container(
     height: height,
-    decoration: BoxDecoration(color: bandFill, boxShadow: bandShadow),
-    child: Stack(
-      children: [
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: Container(height: 1.5, color: bandHighlight),
-        ),
-        child,
-      ],
+    decoration: BoxDecoration(
+      color: bandFill,
+      boxShadow: bandShadow,
+      // TWO FACETS, no gradient (user 2026-07-31, low poly): the band's top
+      // plane catches the light and its foot turns away from it. A border does
+      // this in flat colour, where a gradient would have blended the two.
+      border: Border(
+        top: BorderSide(color: FoE.lit(bandFill), width: 2),
+        bottom: BorderSide(color: FoE.shade(bandFill), width: 2),
+      ),
     ),
+    child: child,
   );
 
   /// The band's title, CUT INTO IT. Exposed so a screen that supplies its own

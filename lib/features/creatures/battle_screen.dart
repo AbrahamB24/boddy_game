@@ -423,7 +423,7 @@ class _BattleScreenState extends State<BattleScreen>
       isDismissible: !forced,
       enableDrag: !forced,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
       ),
       builder: (_) => PopScope(
         canPop: !forced,
@@ -635,10 +635,7 @@ class _BattleScreenState extends State<BattleScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: FoE.panelDark,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: FoE.borderGold),
-        ),
+        shape: FoE.facet(radius: 12, side: const BorderSide(color: FoE.borderGold)),
         title: Text('Flee?', style: FoE.title(size: 15)),
         content: Text(
           'The battle ends with no reward. HP and energy stay as they are.',
@@ -1588,7 +1585,7 @@ class _BattleScreenState extends State<BattleScreen>
               ? const BoxDecoration(
                   color: _flatSurface,
                   borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(20)),
+                      BorderRadius.vertical(top: Radius.circular(3)),
                   border: Border(
                     top: BorderSide(color: _flatHairline, width: 1),
                   ),
@@ -1983,7 +1980,7 @@ class _BattleScreenState extends State<BattleScreen>
       context: context,
       backgroundColor: FoE.panelDark,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
       ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(
@@ -2144,7 +2141,7 @@ class _BattleScreenState extends State<BattleScreen>
       context: context,
       backgroundColor: FoE.panelDark,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
       ),
       builder: (_) => Padding(
         padding: EdgeInsets.fromLTRB(

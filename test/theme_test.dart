@@ -124,4 +124,27 @@ void main() {
       expect(find.byType(ClipRRect), findsOneWidget);
     });
   });
+
+  // ── Die Facetten-Stufen (user 2026-07-31) ──
+  // A faceted object is shaded by its NEIGHBOURS: one plane catches the light,
+  // the next turns away, and the edge between them is the whole effect. These
+  // two make that edge from any colour — and they have to be blunt enough to
+  // read, or the app quietly goes back to looking airbrushed.
+  group('facet steps', () {
+    test('lit is lighter, shade is darker, and both by a visible amount', () {
+      for (final c in [FoE.panelMid, FoE.bg, FoE.gold, FoE.positive]) {
+        expect(FoE.lit(c).computeLuminance(), greaterThan(c.computeLuminance()));
+        expect(FoE.shade(c).computeLuminance(), lessThan(c.computeLuminance()));
+        // A 4 % lift is a gradient's idea of a facet; this has to be a step.
+        final spread =
+            FoE.lit(c).computeLuminance() - FoE.shade(c).computeLuminance();
+        expect(spread, greaterThan(0.02), reason: '$c has no facet edge');
+      }
+    });
+
+    test('black and white stay put rather than overflowing', () {
+      expect(FoE.shade(const Color(0xFF000000)), const Color(0xFF000000));
+      expect(FoE.lit(const Color(0xFFFFFFFF)), const Color(0xFFFFFFFF));
+    });
+  });
 }

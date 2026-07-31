@@ -114,10 +114,7 @@ class IntroCardPanel extends StatelessWidget {
         context: context,
         builder: (dialogContext) => AlertDialog(
           backgroundColor: FoE.panelMid,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(FoE.radius),
-            side: const BorderSide(color: FoE.border, width: 2),
-          ),
+          shape: FoE.facet(radius: FoE.radius, side: const BorderSide(color: FoE.border, width: 2)),
           title: Text('Skip the intro?', style: FoE.title(size: 13)),
           content: Text(
             'You will lose the head start that comes with it: faster '

@@ -185,10 +185,7 @@ class MenuPill<T> extends StatelessWidget {
     elevation: 10,
     position: PopupMenuPosition.under,
     padding: EdgeInsets.zero,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
-      side: BorderSide(color: palette.border),
-    ),
+    shape: FoE.facet(radius: 12, side: BorderSide(color: palette.border)),
     onSelected: onSelected,
     itemBuilder: (_) => [
       for (final e in entries)

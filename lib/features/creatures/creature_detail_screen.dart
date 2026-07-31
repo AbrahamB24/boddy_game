@@ -136,9 +136,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: _paper(element, 0.16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: FoE.facet(radius: 20),
         title: Text('Rename',
             style: GoogleFonts.outfit(
                 color: _ink, fontSize: 18, fontWeight: FontWeight.w800)),
@@ -181,10 +179,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: FoE.panelDark,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: FoE.borderGold),
-        ),
+        shape: FoE.facet(radius: 12, side: const BorderSide(color: FoE.borderGold)),
         title: Text('Release?', style: FoE.title(size: 15)),
         content: Text(
           '${creature.displayName} leaves you forever.',
