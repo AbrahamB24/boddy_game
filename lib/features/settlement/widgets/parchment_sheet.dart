@@ -81,10 +81,7 @@ class ParchmentSheet extends StatelessWidget {
               Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(
-                  color: kParchmentInk.withValues(alpha: 0.30),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: ShapeDecoration(color: kParchmentInk.withValues(alpha: 0.30), shape: FoE.facet(radius: 2)),
               ),
               // THE app's bar (user 2026-07-31: "überall wo es einen header
               // hat, soll dieser immer genau gleich aussehen"). A sheet's head

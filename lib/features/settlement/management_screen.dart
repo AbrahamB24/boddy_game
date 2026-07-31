@@ -227,11 +227,7 @@ class _ManagementScreenState extends State<ManagementScreen>
     onTap: () => _unassign(c.id),
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: FoE.panelDark,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: FoE.border),
-      ),
+      decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.border))),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

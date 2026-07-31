@@ -169,12 +169,11 @@ class _QuickTileState extends State<_QuickTile> {
               top: depth,
               height: face,
               child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: item.active
+                decoration: ShapeDecoration(color: item.active
                       ? Color.lerp(FoE.positive, kParchmentInk, 0.55)!
                       : Color.lerp(kParchmentDeep, kParchmentInk, 0.62)!,
-                  borderRadius: BorderRadius.circular(_radius),
-                  boxShadow: [
+                  
+                  shadows: [
                     // Two shadows, because one cannot do both jobs: a tight
                     // dark one says the key TOUCHES the map, a wide soft one
                     // says it stands above it. Both shrink when it is pressed.
@@ -190,8 +189,7 @@ class _QuickTileState extends State<_QuickTile> {
                       spreadRadius: -3,
                       offset: Offset(0, _down ? 3 : 7),
                     ),
-                  ],
-                ),
+                  ], shape: FoE.facet(radius: _radius)),
               ),
             ),
             // ── The face ─────────────────────────────────────────────────
@@ -236,16 +234,10 @@ class _QuickTileState extends State<_QuickTile> {
     label: item.label,
     button: true,
     child: DecoratedBox(
-      decoration: BoxDecoration(
-        // The header's band, verbatim — these are the same material as the bar
+      decoration: ShapeDecoration(// The header's band, verbatim — these are the same material as the bar
         // at the top of the screen.
-        color: ParchmentHeader.bandFill,
-        borderRadius: BorderRadius.circular(_radius),
-        border: Border.all(
-          color: item.active ? FoE.positive : ParchmentHeader.bandRule,
-          width: item.active ? 1.6 : 1,
-        ),
-      ),
+        color: ParchmentHeader.bandFill, shape: FoE.facet(radius: _radius, side: BorderSide(color: item.active ? FoE.positive : ParchmentHeader.bandRule,
+          width: item.active ? 1.6 : 1))),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -312,20 +304,18 @@ class _QuickTileState extends State<_QuickTile> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 constraints: const BoxConstraints(minWidth: 18),
-                decoration: BoxDecoration(
-                  color: FoE.danger,
-                  borderRadius: BorderRadius.circular(9),
+                decoration: ShapeDecoration(color: FoE.danger,
+                  
                   // A ring in the TILE's colour, so the badge reads as pinned
                   // on it rather than as part of the map behind.
-                  border: Border.all(color: kParchmentDeep, width: 1.5),
-                  boxShadow: [
+                  
+                  shadows: [
                     BoxShadow(
                       color: kPageShadow.withValues(alpha: 0.35),
                       blurRadius: 0,
                       offset: const Offset(0, 1),
                     ),
-                  ],
-                ),
+                  ], shape: FoE.facet(radius: 9, side: BorderSide(color: kParchmentDeep, width: 1.5))),
                 child: Text(
                   item.badge > 99 ? '99+' : '${item.badge}',
                   textAlign: TextAlign.center,

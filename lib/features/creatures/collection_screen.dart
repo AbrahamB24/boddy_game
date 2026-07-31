@@ -521,11 +521,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.6,
         ),
-        decoration: BoxDecoration(
-          color: FoE.panelMid,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: FoE.borderGold),
-        ),
+        decoration: ShapeDecoration(color: FoE.panelMid, shape: FoE.facet(radius: 10, side: BorderSide(color: FoE.borderGold))),
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Column(

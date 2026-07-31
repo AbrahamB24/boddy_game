@@ -101,11 +101,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
     title: 'Crafting',
     trailing: Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: kParchmentInk.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: kParchmentInk.withValues(alpha: 0.2)),
-      ),
+      decoration: ShapeDecoration(color: kParchmentInk.withValues(alpha: 0.09), shape: FoE.facet(radius: 10, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.2)))),
       child: Text(
         '⚒️ $_crafters',
         style: FoE.value(size: 12).copyWith(
@@ -298,11 +294,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
     final items = kItemDefs.values.toList();
     return Container(
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: kParchmentLight.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: kParchmentInk.withValues(alpha: 0.16)),
-      ),
+      decoration: ShapeDecoration(color: kParchmentLight.withValues(alpha: 0.45), shape: FoE.facet(radius: 14, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.16)))),
       child: Column(
         children: [
           for (var i = 0; i < items.length; i++) ...[
@@ -360,10 +352,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                           horizontal: 4,
                           vertical: 1,
                         ),
-                        decoration: BoxDecoration(
-                          color: _accent,
-                          borderRadius: BorderRadius.circular(7),
-                        ),
+                        decoration: ShapeDecoration(color: _accent, shape: FoE.facet(radius: 7)),
                         child: Text(
                           '$owned',
                           style: FoE.value(size: 9).copyWith(
@@ -443,11 +432,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
   Widget _card({required Widget child}) => Container(
     width: double.infinity,
     padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-    decoration: BoxDecoration(
-      color: kParchmentLight.withValues(alpha: 0.45),
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: kParchmentInk.withValues(alpha: 0.16)),
-    ),
+    decoration: ShapeDecoration(color: kParchmentLight.withValues(alpha: 0.45), shape: FoE.facet(radius: 14, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.16)))),
     child: child,
   );
 }

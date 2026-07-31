@@ -57,14 +57,8 @@ class PillPalette {
 
   /// One pill's surface. ENGAGED — something typed, something filtered, a
   /// non-default order — is the accent; idle is the plain recess.
-  BoxDecoration skin(bool engaged) => BoxDecoration(
-    color: engaged ? accent.withValues(alpha: 0.14) : fill,
-    borderRadius: BorderRadius.circular(19),
-    border: Border.all(
-      color: engaged ? accent : border,
-      width: engaged ? 1.4 : 1,
-    ),
-  );
+  ShapeDecoration skin(bool engaged) => ShapeDecoration(color: engaged ? accent.withValues(alpha: 0.14) : fill, shape: FoE.facet(radius: 19, side: BorderSide(color: engaged ? accent : border,
+      width: engaged ? 1.4 : 1)));
 }
 
 /// The height every pill shares, so a row of them lines up.

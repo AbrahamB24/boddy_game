@@ -175,10 +175,7 @@ class _GatherDefsTabState extends State<GatherDefsTab> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: FoE.panelDark,
-              borderRadius: BorderRadius.circular(8),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 8)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

@@ -373,18 +373,12 @@ class _LaunchSheetState extends State<_LaunchSheet> {
         opacity: locked ? 0.5 : 1,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          decoration: BoxDecoration(
-            color: active
+          decoration: ShapeDecoration(color: active
                 ? kAccent.withValues(alpha: 0.12)
-                : kInk.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: active
+                : kInk.withValues(alpha: 0.06), shape: FoE.facet(radius: 10, side: BorderSide(color: active
                   ? kAccent.withValues(alpha: 0.55)
                   : kInk.withValues(alpha: 0.18),
-              width: active ? 1.6 : 1,
-            ),
-          ),
+              width: active ? 1.6 : 1))),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -485,17 +479,15 @@ class _LaunchSheetState extends State<_LaunchSheet> {
       builder: (context, box) => Padding(
         padding: EdgeInsets.only(top: box.maxHeight * 0.17),
         child: Container(
-          decoration: BoxDecoration(
-            color: kInk.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
+          decoration: ShapeDecoration(color: kInk.withValues(alpha: 0.10),
+            
+            shadows: [
               BoxShadow(
                 color: kInk.withValues(alpha: 0.24),
                 blurRadius: 0,
                 offset: const Offset(0, 3),
               ),
-            ],
-          ),
+            ], shape: FoE.facet(radius: 22)),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [

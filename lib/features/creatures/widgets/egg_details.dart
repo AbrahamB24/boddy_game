@@ -132,11 +132,7 @@ class _ParentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final box = BoxDecoration(
-      color: _kCardFill,
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: kParchmentInk.withValues(alpha: 0.15)),
-    );
+    final box = ShapeDecoration(color: _kCardFill, shape: FoE.facet(radius: 10, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.15))));
     final creature = c;
 
     if (creature == null) {
@@ -243,10 +239,7 @@ class _EggGeneTableState extends State<EggGeneTable> {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: _kAccent.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
-        ),
+        decoration: ShapeDecoration(color: _kAccent.withValues(alpha: 0.12), shape: FoE.facet(radius: 8)),
         child: Text(
           'This egg was laid before its child was frozen onto it — its stats '
           'are rolled when it hatches.',

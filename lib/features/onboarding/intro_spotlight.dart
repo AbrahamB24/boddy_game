@@ -128,10 +128,7 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
                   rect: hole,
                   child: IgnorePointer(
                     child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: FoE.goldBright, width: 2),
-                      ),
+                      decoration: ShapeDecoration(shape: FoE.facet(radius: 10, side: BorderSide(color: FoE.goldBright, width: 2))),
                     ),
                   ),
                 ),

@@ -707,11 +707,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   }) => Container(
     width: double.infinity,
     padding: padding,
-    decoration: BoxDecoration(
-      color: kParchmentInk.withValues(alpha: 0.07),
-      borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: kParchmentInk.withValues(alpha: 0.14)),
-    ),
+    decoration: ShapeDecoration(color: kParchmentInk.withValues(alpha: 0.07), shape: FoE.facet(radius: radius, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.14)))),
     child: child,
   );
 
@@ -822,11 +818,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     Color element,
   ) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    decoration: BoxDecoration(
-      color: element.withValues(alpha: 0.14),
-      borderRadius: BorderRadius.circular(11),
-      border: Border.all(color: element.withValues(alpha: 0.5)),
-    ),
+    decoration: ShapeDecoration(color: element.withValues(alpha: 0.14), shape: FoE.facet(radius: 11, side: BorderSide(color: element.withValues(alpha: 0.5)))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1201,11 +1193,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 13),
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: filled ? color : Colors.transparent,
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: color, width: 1.6),
-          ),
+          decoration: ShapeDecoration(color: filled ? color : Colors.transparent, shape: FoE.facet(radius: 15, side: BorderSide(color: color, width: 1.6))),
           child: Text(label,
               style: TextStyle(
                   color: filled ? Colors.white : color,
@@ -1240,10 +1228,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               : null,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: canPay ? element : _track,
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: ShapeDecoration(color: canPay ? element : _track, shape: FoE.facet(radius: 12)),
             child: Text('🪙 $cost',
                 style: TextStyle(
                     color: canPay ? Colors.white : _inkDim,
@@ -1284,10 +1269,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: element,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: ShapeDecoration(color: element, shape: FoE.facet(radius: 12)),
                   child: Text(
                     def.kind == ItemKind.revive
                         ? '${def.emoji} ${def.name} ×$count · → ${(creature.maxHp * def.magnitude).round()} HP'

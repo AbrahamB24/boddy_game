@@ -953,10 +953,7 @@ class _BattleScreenState extends State<BattleScreen>
                 Container(
                   width: i == 0 ? 22 : 18,
                   height: 2.5,
-                  decoration: BoxDecoration(
-                    color: order[i].isPlayerSide ? FoE.positive : FoE.danger,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                  decoration: ShapeDecoration(color: order[i].isPlayerSide ? FoE.positive : FoE.danger, shape: FoE.facet(radius: 2)),
                 ),
               ],
             ),
@@ -1175,17 +1172,13 @@ class _BattleScreenState extends State<BattleScreen>
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 2),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: _flatSurfaceHi,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(
-          color: ring,
-          width: targeted || acting ? 1.6 : 1,
-        ),
-        boxShadow: const [
+      decoration: ShapeDecoration(color: _flatSurfaceHi,
+        
+        
+        shadows: const [
           BoxShadow(color: Colors.black38, blurRadius: 0, offset: Offset(0, 2)),
-        ],
-      ),
+        ], shape: FoE.facet(radius: 9, side: BorderSide(color: ring,
+          width: targeted || acting ? 1.6 : 1))),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1271,13 +1264,7 @@ class _BattleScreenState extends State<BattleScreen>
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 3),
         padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          color: FoE.panelDark,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: canSwitchTo ? FoE.goldBright : FoE.border,
-          ),
-        ),
+        decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 6, side: BorderSide(color: canSwitchTo ? FoE.goldBright : FoE.border))),
         child: SizedBox(width: 30, height: 30, child: _portrait(c, size: 22)),
       ),
     );
@@ -1486,15 +1473,13 @@ class _BattleScreenState extends State<BattleScreen>
           : EdgeInsets.zero,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: _fancy
-          ? BoxDecoration(
-              color: _flatSurfaceHi,
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: _flatHairline),
-              boxShadow: const [
+          ? ShapeDecoration(color: _flatSurfaceHi,
+              
+              
+              shadows: const [
                 BoxShadow(
                     color: Colors.black38, blurRadius: 0, offset: Offset(0, 3)),
-              ],
-            )
+              ], shape: FoE.facet(radius: 13, side: BorderSide(color: _flatHairline)))
           : const BoxDecoration(color: FoE.panelDark),
       child: flashing
           ? Text(
@@ -1842,10 +1827,7 @@ class _BattleScreenState extends State<BattleScreen>
         : Container(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
             alignment: Alignment.centerLeft,
-            decoration: BoxDecoration(
-              color: FoE.panelDark,
-              borderRadius: BorderRadius.circular(radius),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: radius)),
             child: content,
           );
     // Strong/weak → a coloured ring + a corner badge (flat: crisp border, no
@@ -1857,10 +1839,7 @@ class _BattleScreenState extends State<BattleScreen>
             : null;
     if (effColor != null) {
       tile = Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: effColor, width: 2),
-        ),
+        decoration: ShapeDecoration(shape: FoE.facet(radius: radius, side: BorderSide(color: effColor, width: 2))),
         child: tile,
       );
     }
@@ -2018,10 +1997,7 @@ class _BattleScreenState extends State<BattleScreen>
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: element.color,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+                  decoration: ShapeDecoration(color: element.color, shape: FoE.facet(radius: 6)),
                   child: Text(
                     element.label,
                     style: FoE.label(size: 11).copyWith(
@@ -2037,10 +2013,7 @@ class _BattleScreenState extends State<BattleScreen>
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _kUtilTint,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+                  decoration: ShapeDecoration(color: _kUtilTint, shape: FoE.facet(radius: 6)),
                   child: Text('$ap AP',
                       style: FoE.label(size: 11)
                           .copyWith(fontWeight: FontWeight.w800)),
@@ -2099,21 +2072,15 @@ class _BattleScreenState extends State<BattleScreen>
         : Container(
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: FoE.panelDark,
-              borderRadius: BorderRadius.circular(radius),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: radius)),
             child: content,
           );
     if (_fancy && enabled) {
       // Flat button: just a subtle shadow to lift it off the tray — no gloss.
       tile = DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          boxShadow: const [
+        decoration: ShapeDecoration(shadows: const [
             BoxShadow(color: Colors.black26, blurRadius: 0, offset: Offset(0, 2)),
-          ],
-        ),
+          ], shape: FoE.facet(radius: radius)),
         child: tile,
       );
     }
@@ -2141,11 +2108,7 @@ class _BattleScreenState extends State<BattleScreen>
       onTap: enabled ? onTap : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: FoE.panelMid,
-          borderRadius: BorderRadius.circular(FoE.radiusSmall + 3),
-          border: Border.all(color: FoE.gold, width: 1.5),
-        ),
+        decoration: ShapeDecoration(color: FoE.panelMid, shape: FoE.facet(radius: FoE.radiusSmall + 3, side: BorderSide(color: FoE.gold, width: 1.5))),
         child: icon == null
             ? text
             : Row(
@@ -2355,11 +2318,7 @@ class _BattleScreenState extends State<BattleScreen>
                       width: 44,
                       height: 44,
                       padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: FoE.panelDark,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: FoE.border),
-                      ),
+                      decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.border))),
                       child: _portrait(p, size: 30),
                     ),
                   ),
@@ -2425,11 +2384,7 @@ class _BattleScreenState extends State<BattleScreen>
     child: Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: FoE.panelDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: FoE.goldBright.withValues(alpha: 0.6)),
-      ),
+      decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 12, side: BorderSide(color: FoE.goldBright.withValues(alpha: 0.6)))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2477,11 +2432,7 @@ class _BattleScreenState extends State<BattleScreen>
       ),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: FoE.panelDark,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: FoE.gold.withValues(alpha: 0.55)),
-        ),
+        decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 10, side: BorderSide(color: FoE.gold.withValues(alpha: 0.55)))),
         child: Row(
           children: [
             SizedBox(
@@ -2546,10 +2497,7 @@ class _BattleScreenState extends State<BattleScreen>
 
   Widget _statGainChip(CreatureStat stat, int gain) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: FoE.positive.withValues(alpha: 0.16),
-      borderRadius: BorderRadius.circular(6),
-    ),
+    decoration: ShapeDecoration(color: FoE.positive.withValues(alpha: 0.16), shape: FoE.facet(radius: 6)),
     child: Text(
       '${_statAbbrev(stat)} +$gain',
       style: FoE.label(size: 10).copyWith(color: FoE.positive),

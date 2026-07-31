@@ -189,18 +189,12 @@ class ParchmentCard extends StatelessWidget {
       child: Container(
         width: double.infinity,
         padding: padding,
-        decoration: BoxDecoration(
-          color: highlight
+        decoration: ShapeDecoration(color: highlight
               ? kAccent.withValues(alpha: 0.12)
-              : kParchmentInk.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: highlight
+              : kParchmentInk.withValues(alpha: 0.06), shape: FoE.facet(radius: 10, side: BorderSide(color: highlight
                 ? kAccent.withValues(alpha: 0.55)
                 : kParchmentInk.withValues(alpha: 0.18),
-            width: highlight ? 1.4 : 1,
-          ),
-        ),
+            width: highlight ? 1.4 : 1))),
         child: child,
       ),
     );

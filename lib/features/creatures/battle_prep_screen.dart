@@ -144,14 +144,8 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
     return Container(
       width: 96,
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: FoE.panelDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: e.isBoss ? FoE.gold : color.withValues(alpha: 0.6),
-          width: e.isBoss ? 2 : 1.4,
-        ),
-      ),
+      decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 12, side: BorderSide(color: e.isBoss ? FoE.gold : color.withValues(alpha: 0.6),
+          width: e.isBoss ? 2 : 1.4))),
       child: Column(
         children: [
           SizedBox(

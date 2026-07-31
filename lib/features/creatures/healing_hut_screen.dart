@@ -242,11 +242,7 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
   /// difference between a list and a wall.
   Widget _stateBand(int treating, int queued, int wounded) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-    decoration: BoxDecoration(
-      color: _cardFill,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: kParchmentInk.withValues(alpha: 0.15)),
-    ),
+    decoration: ShapeDecoration(color: _cardFill, shape: FoE.facet(radius: 12, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.15)))),
     child: Row(
       children: [
         _bandFact('🩹', treating, _ctrl.healCapacity, 'treating', FoE.positive),
@@ -326,11 +322,7 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
       if (leading != null) ...[leading, const SizedBox(height: 8)],
       Container(
         clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: _cardFill,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: kParchmentInk.withValues(alpha: 0.15)),
-        ),
+        decoration: ShapeDecoration(color: _cardFill, shape: FoE.facet(radius: 12, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.15)))),
         child: Column(
           children: [
             for (var i = 0; i < rows.length; i++) ...[
@@ -592,11 +584,7 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
         height: 28,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: filled ? 0.9 : 0.07),
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: color.withValues(alpha: filled ? 0.9 : 0.5)),
-        ),
+        decoration: ShapeDecoration(color: color.withValues(alpha: filled ? 0.9 : 0.07), shape: FoE.facet(radius: 9, side: BorderSide(color: color.withValues(alpha: filled ? 0.9 : 0.5)))),
         child: Text(
           label,
           style: FoE.label(size: 11).copyWith(

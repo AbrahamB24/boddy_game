@@ -1284,15 +1284,9 @@ class _SettlementScreenState extends State<SettlementScreen>
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: BoxDecoration(
-          // An era you have not reached holds nothing, and its chips say so by
+        decoration: ShapeDecoration(// An era you have not reached holds nothing, and its chips say so by
           // fading rather than by disappearing — the ladder stays readable.
-          color: kParchmentInk.withValues(alpha: has ? 0.07 : 0.03),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: kParchmentInk.withValues(alpha: has ? 0.20 : 0.10),
-          ),
-        ),
+          color: kParchmentInk.withValues(alpha: has ? 0.07 : 0.03), shape: FoE.facet(radius: 8, side: BorderSide(color: kParchmentInk.withValues(alpha: has ? 0.20 : 0.10)))),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1459,11 +1453,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                         horizontal: 20,
                         vertical: 8,
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade900.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.red.shade700),
-                      ),
+                      decoration: ShapeDecoration(color: Colors.red.shade900.withValues(alpha: 0.4), shape: FoE.facet(radius: 6, side: BorderSide(color: Colors.red.shade700))),
                       child: Text(
                         'Reset',
                         style: FoE.label().copyWith(color: Colors.red.shade300),
@@ -1486,11 +1476,7 @@ class _SettlementScreenState extends State<SettlementScreen>
       height: 26,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1206),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: FoE.border),
-      ),
+      decoration: ShapeDecoration(color: const Color(0xFF1A1206), shape: FoE.facet(radius: 4, side: BorderSide(color: FoE.border))),
       child: Text(label, style: FoE.dim(size: 9).copyWith(color: FoE.gold)),
     ),
   );

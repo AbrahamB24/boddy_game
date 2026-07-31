@@ -214,10 +214,7 @@ class _SpeciesMatrixViewState extends State<SpeciesMatrixView> {
         width: size,
         height: size,
         margin: const EdgeInsets.all(1),
-        decoration: BoxDecoration(
-          color: Color.lerp(FoE.panelDark, base, 0.15 + off * 0.75),
-          borderRadius: BorderRadius.circular(4),
-        ),
+        decoration: ShapeDecoration(color: Color.lerp(FoE.panelDark, base, 0.15 + off * 0.75), shape: FoE.facet(radius: 4)),
         child: Stack(
           children: [
             Center(
@@ -236,10 +233,7 @@ class _SpeciesMatrixViewState extends State<SpeciesMatrixView> {
                     horizontal: 3,
                     vertical: 1,
                   ),
-                  decoration: BoxDecoration(
-                    color: FoE.danger,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  decoration: ShapeDecoration(color: FoE.danger, shape: FoE.facet(radius: 4)),
                   child: Text(
                     r.tooShort > 0 && r.tooLong > 0
                         ? '≶'

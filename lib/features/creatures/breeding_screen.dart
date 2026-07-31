@@ -312,11 +312,7 @@ class _BreedingScreenState extends State<BreedingScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _cardFill,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: kParchmentInk.withValues(alpha: 0.18)),
-      ),
+      decoration: ShapeDecoration(color: _cardFill, shape: FoE.facet(radius: 10, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.18)))),
       child: Row(
         children: [
           SizedBox(
@@ -572,18 +568,16 @@ class _BreedingScreenState extends State<BreedingScreen> {
       builder: (context, box) => Padding(
         padding: EdgeInsets.only(top: box.maxHeight * 0.17),
         child: Container(
-          decoration: BoxDecoration(
-            // The build menu's own _cardInactive / shadow, to the value.
+          decoration: ShapeDecoration(// The build menu's own _cardInactive / shadow, to the value.
             color: kParchmentInk.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
+            
+            shadows: [
               BoxShadow(
                 color: kPageShadow.withValues(alpha: 0.24),
                 blurRadius: 0,
                 offset: const Offset(0, 3),
               ),
-            ],
-          ),
+            ], shape: FoE.facet(radius: 22)),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -789,10 +783,7 @@ class _BreedingScreenState extends State<BreedingScreen> {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: _accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: ShapeDecoration(color: _accent.withValues(alpha: 0.12), shape: FoE.facet(radius: 8)),
           child: Text(
             'Every single stat has a ${(favored * 100).round()} % chance to '
             'inherit the better stat of its parents.',

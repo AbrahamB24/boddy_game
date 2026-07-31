@@ -679,10 +679,7 @@ class _SpeciesTabState extends State<_SpeciesTab> {
 
   Widget _tag(String s, {Color? color}) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: FoE.panelDark,
-      borderRadius: BorderRadius.circular(4),
-    ),
+    decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 4)),
     child: Text(
       s,
       style: FoE.dim(size: 10).copyWith(color: color ?? FoE.textDim),

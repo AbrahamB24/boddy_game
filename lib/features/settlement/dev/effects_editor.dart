@@ -1312,11 +1312,7 @@ class _LevelPreviewState extends State<_LevelPreview> {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-        decoration: BoxDecoration(
-          color: FoE.panelDark,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: FoE.border),
-        ),
+        decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.border))),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1661,11 +1657,7 @@ class _LevelPreviewState extends State<_LevelPreview> {
 
   Widget _chip(int level, String value) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-    decoration: BoxDecoration(
-      color: FoE.panelMid,
-      borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: FoE.border),
-    ),
+    decoration: ShapeDecoration(color: FoE.panelMid, shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.border))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [

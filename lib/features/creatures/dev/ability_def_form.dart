@@ -339,11 +339,7 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: FoE.panelDark,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: FoE.border),
-      ),
+      decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.border))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -542,11 +538,7 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: FoE.panelDark,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: FoE.border),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.border))),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/foe_theme.dart';
 
 /// WHAT THE BARS MEASURE — a two-segment switch over any stat table (user
 /// 2026-07-27: "lvl 1 und das Icon sollen klickbar sein. Wenn ich das level up
@@ -38,10 +39,7 @@ class GeneBarToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 22,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(11),
-      border: Border.all(color: inkFaint.withValues(alpha: 0.45)),
-    ),
+    decoration: ShapeDecoration(shape: FoE.facet(radius: 11, side: BorderSide(color: inkFaint.withValues(alpha: 0.45)))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -83,10 +81,7 @@ class GeneBarToggle extends StatelessWidget {
       height: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: active ? accent.withValues(alpha: 0.16) : Colors.transparent,
-        borderRadius: BorderRadius.circular(11),
-      ),
+      decoration: ShapeDecoration(color: active ? accent.withValues(alpha: 0.16) : Colors.transparent, shape: FoE.facet(radius: 11)),
       child: child,
     ),
   );

@@ -373,14 +373,8 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: ready ? _accent.withValues(alpha: 0.12) : _cardFill,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: ready ? _accent : kParchmentInk.withValues(alpha: 0.18),
-          width: ready ? 1.5 : 1,
-        ),
-      ),
+      decoration: ShapeDecoration(color: ready ? _accent.withValues(alpha: 0.12) : _cardFill, shape: FoE.facet(radius: 12, side: BorderSide(color: ready ? _accent : kParchmentInk.withValues(alpha: 0.18),
+          width: ready ? 1.5 : 1))),
       child: Row(
         children: [
           // THE EGG, not the species sprite (user 2026-07-27). The sprite was a
@@ -616,17 +610,15 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
       builder: (context, box) => Padding(
         padding: EdgeInsets.only(top: box.maxHeight * 0.17),
         child: Container(
-          decoration: BoxDecoration(
-            color: kParchmentInk.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
+          decoration: ShapeDecoration(color: kParchmentInk.withValues(alpha: 0.10),
+            
+            shadows: [
               BoxShadow(
                 color: kPageShadow.withValues(alpha: 0.24),
                 blurRadius: 0,
                 offset: const Offset(0, 3),
               ),
-            ],
-          ),
+            ], shape: FoE.facet(radius: 22)),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -747,11 +739,7 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
       height: 38,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: borderAlpha)),
-      ),
+      decoration: ShapeDecoration(color: color.withValues(alpha: 0.07), shape: FoE.facet(radius: 12, side: BorderSide(color: color.withValues(alpha: borderAlpha)))),
       child: Text(
         label,
         maxLines: 1,

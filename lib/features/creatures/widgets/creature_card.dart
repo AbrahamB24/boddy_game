@@ -128,10 +128,7 @@ class CreatureCard extends StatelessWidget {
                 bottom: 0,
                 child: Container(
                   clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: stripDark,
-                    borderRadius: BorderRadius.circular(22),
-                  ),
+                  decoration: ShapeDecoration(color: stripDark, shape: FoE.facet(radius: 22)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -443,10 +440,7 @@ class CreatureCard extends StatelessWidget {
 
   Widget _badge(String label, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(6),
-    ),
+    decoration: ShapeDecoration(color: color, shape: FoE.facet(radius: 6)),
     child: Text(label, style: FoE.title(size: 11).copyWith(color: Colors.white)),
   );
 

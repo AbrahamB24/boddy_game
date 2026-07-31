@@ -430,10 +430,7 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
                             horizontal: 6,
                             vertical: 2,
                           ),
-                          decoration: BoxDecoration(
-                            color: _takenInk,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
+                          decoration: ShapeDecoration(color: _takenInk, shape: FoE.facet(radius: 4)),
                           child: Text(
                             'Works in $badge',
                             style: FoE.label(size: 9)

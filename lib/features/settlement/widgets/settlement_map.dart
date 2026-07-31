@@ -589,15 +589,9 @@ class SettlementMapState extends State<SettlementMap>
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          decoration: BoxDecoration(
-            color: danger
+          decoration: ShapeDecoration(color: danger
                 ? Colors.red.shade900.withValues(alpha: 0.4)
-                : FoE.panelMid,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: danger ? Colors.red.shade700 : FoE.border,
-            ),
-          ),
+                : FoE.panelMid, shape: FoE.facet(radius: 6, side: BorderSide(color: danger ? Colors.red.shade700 : FoE.border))),
           child: Text(
             label,
             style: FoE.label().copyWith(
@@ -900,10 +894,7 @@ class SettlementMapState extends State<SettlementMap>
     Widget? trailing,
   }) => Container(
     padding: EdgeInsets.fromLTRB(12, title == null ? 12 : 9, 12, 12),
-    decoration: BoxDecoration(
-      color: _dlgInset,
-      borderRadius: BorderRadius.circular(14),
-    ),
+    decoration: ShapeDecoration(color: _dlgInset, shape: FoE.facet(radius: 14)),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2792,11 +2783,7 @@ class SettlementMapState extends State<SettlementMap>
           onTap: widget.onExitRoadMode,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: FoE.panelDark,
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: Colors.greenAccent.shade400),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 5, side: BorderSide(color: Colors.greenAccent.shade400))),
             child: Text(
               'Done',
               style: FoE.label(size: 11).copyWith(color: Colors.greenAccent),
@@ -2833,11 +2820,7 @@ class SettlementMapState extends State<SettlementMap>
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: FoE.panelDark,
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: FoE.accentBlue),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 5, side: BorderSide(color: FoE.accentBlue))),
             child: Text(
               'Done',
               style: FoE.label(size: 11).copyWith(color: FoE.accentBlue),

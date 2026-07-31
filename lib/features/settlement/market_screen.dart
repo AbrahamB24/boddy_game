@@ -304,14 +304,8 @@ class _MarketScreenState extends State<MarketScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: ready ? _accent.withValues(alpha: 0.12) : _cardFill,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: ready ? _accent : kParchmentInk.withValues(alpha: 0.18),
-          width: ready ? 1.5 : 1,
-        ),
-      ),
+      decoration: ShapeDecoration(color: ready ? _accent.withValues(alpha: 0.12) : _cardFill, shape: FoE.facet(radius: 12, side: BorderSide(color: ready ? _accent : kParchmentInk.withValues(alpha: 0.18),
+          width: ready ? 1.5 : 1))),
       child: Row(
         children: [
           // WHAT IS COMING HOME, not the pack animal: the return leg is the
@@ -470,17 +464,15 @@ class _MarketScreenState extends State<MarketScreen> {
       builder: (context, box) => Padding(
         padding: EdgeInsets.only(top: box.maxHeight * 0.17),
         child: Container(
-          decoration: BoxDecoration(
-            color: kParchmentInk.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
+          decoration: ShapeDecoration(color: kParchmentInk.withValues(alpha: 0.10),
+            
+            shadows: [
               BoxShadow(
                 color: kPageShadow.withValues(alpha: 0.24),
                 blurRadius: 0,
                 offset: const Offset(0, 3),
               ),
-            ],
-          ),
+            ], shape: FoE.facet(radius: 22)),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -612,14 +604,8 @@ class _MarketScreenState extends State<MarketScreen> {
       child: Container(
         height: 34,
         padding: const EdgeInsets.only(left: 12, right: 6),
-        decoration: BoxDecoration(
-          color: _accent.withValues(alpha: loaded ? 0.16 : 0.06),
-          borderRadius: BorderRadius.circular(17),
-          border: Border.all(
-            color: _accent.withValues(alpha: loaded ? 1 : 0.45),
-            width: loaded ? 1.4 : 1,
-          ),
-        ),
+        decoration: ShapeDecoration(color: _accent.withValues(alpha: loaded ? 0.16 : 0.06), shape: FoE.facet(radius: 17, side: BorderSide(color: _accent.withValues(alpha: loaded ? 1 : 0.45),
+            width: loaded ? 1.4 : 1))),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -775,11 +761,7 @@ class _MarketScreenState extends State<MarketScreen> {
   /// would be the same fact six times.
   Widget _caravanFacts() => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-    decoration: BoxDecoration(
-      color: _cardFill,
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: kParchmentInk.withValues(alpha: 0.15)),
-    ),
+    decoration: ShapeDecoration(color: _cardFill, shape: FoE.facet(radius: 10, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.15)))),
     child: Row(
       children: [
         _fact('🏋', '${caravanCarry(_caravan)}', 'carry'),
@@ -831,10 +813,7 @@ class _MarketScreenState extends State<MarketScreen> {
   /// building pages wear.
   Widget _tabBar() => Container(
     height: 34,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(17),
-      border: Border.all(color: _inkFaint.withValues(alpha: 0.45)),
-    ),
+    decoration: ShapeDecoration(shape: FoE.facet(radius: 17, side: BorderSide(color: _inkFaint.withValues(alpha: 0.45)))),
     child: Row(
       children: [
         for (final t in _MarketTab.values)
@@ -845,12 +824,9 @@ class _MarketScreenState extends State<MarketScreen> {
               child: Container(
                 height: double.infinity,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _tab == t
+                decoration: ShapeDecoration(color: _tab == t
                       ? _accent.withValues(alpha: 0.16)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(17),
-                ),
+                      : Colors.transparent, shape: FoE.facet(radius: 17)),
                 child: Text(
                   t.label,
                   style: FoE.label(size: 12).copyWith(
@@ -948,11 +924,7 @@ class _MarketScreenState extends State<MarketScreen> {
   /// noch nicht angepasst. Diese sollen viel kompakter sein").
   Widget _tradeList(List<Widget> rows) => Container(
     clipBehavior: Clip.antiAlias,
-    decoration: BoxDecoration(
-      color: _cardFill,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: kParchmentInk.withValues(alpha: 0.18)),
-    ),
+    decoration: ShapeDecoration(color: _cardFill, shape: FoE.facet(radius: 12, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.18)))),
     child: Column(
       children: [
         for (var i = 0; i < rows.length; i++) ...[
@@ -1067,11 +1039,7 @@ class _MarketScreenState extends State<MarketScreen> {
         // a column of costs.
         Container(
           clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: _cardFill,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: kParchmentInk.withValues(alpha: 0.18)),
-          ),
+          decoration: ShapeDecoration(color: _cardFill, shape: FoE.facet(radius: 12, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.18)))),
           child: Column(
             children: [
               for (var i = 0; i < stock.length; i++) ...[
@@ -1121,10 +1089,7 @@ class _MarketScreenState extends State<MarketScreen> {
                         horizontal: 4,
                         vertical: 1,
                       ),
-                      decoration: BoxDecoration(
-                        color: _accent,
-                        borderRadius: BorderRadius.circular(7),
-                      ),
+                      decoration: ShapeDecoration(color: _accent, shape: FoE.facet(radius: 7)),
                       child: Text(
                         '$owned',
                         style: FoE.value(size: 9).copyWith(
@@ -1199,11 +1164,7 @@ class _MarketScreenState extends State<MarketScreen> {
         height: 28,
         padding: const EdgeInsets.symmetric(horizontal: 9),
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: filled ? 0.9 : 0.07),
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: color.withValues(alpha: filled ? 0.9 : 0.5)),
-        ),
+        decoration: ShapeDecoration(color: color.withValues(alpha: filled ? 0.9 : 0.07), shape: FoE.facet(radius: 9, side: BorderSide(color: color.withValues(alpha: filled ? 0.9 : 0.5)))),
         child: Text(
           label,
           style: FoE.label(size: 11).copyWith(
@@ -1276,11 +1237,7 @@ class _MarketScreenState extends State<MarketScreen> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-      decoration: BoxDecoration(
-        color: _cardFill,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kParchmentInk.withValues(alpha: 0.18)),
-      ),
+      decoration: ShapeDecoration(color: _cardFill, shape: FoE.facet(radius: 12, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.18)))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

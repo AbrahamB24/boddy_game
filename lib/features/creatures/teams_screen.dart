@@ -356,13 +356,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
       child: Container(
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        decoration: BoxDecoration(
-          color: picked ? FoE.panelDark : Colors.transparent,
-          borderRadius: BorderRadius.circular(FoE.radiusSmall),
-          border: Border.all(
-            color: picked ? FoE.goldBright : FoE.border,
-          ),
-        ),
+        decoration: ShapeDecoration(color: picked ? FoE.panelDark : Colors.transparent, shape: FoE.facet(radius: FoE.radiusSmall, side: BorderSide(color: picked ? FoE.goldBright : FoE.border))),
         child: Row(
           children: [
             Text(

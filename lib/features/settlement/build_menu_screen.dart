@@ -531,20 +531,17 @@ class _BuildCard extends StatelessWidget {
               bottom: 0,
               height: height,
               child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  // Green when buildable, faded parchment when not (user
+                decoration: ShapeDecoration(// Green when buildable, faded parchment when not (user
                   // 2026-07-23) — the scroll's own palette. A soft brown shadow
                   // so the card reads as LYING ON the paper.
                   color: enabled ? _cardActive : _cardInactive,
-                  boxShadow: [
+                  shadows: [
                     BoxShadow(
                       color: kPageShadow.withValues(alpha: 0.24),
                       blurRadius: 0,
                       offset: const Offset(0, 3),
                     ),
-                  ],
-                ),
+                  ], shape: FoE.facet(radius: 16)),
                 child: Padding(
                   // Top padding = the art's footprint inside the tile, which
                   // the Stack draws over.
@@ -655,10 +652,7 @@ class _BuildCard extends StatelessWidget {
     if (label == null) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: FoE.danger.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(6),
-      ),
+      decoration: ShapeDecoration(color: FoE.danger.withValues(alpha: 0.9), shape: FoE.facet(radius: 6)),
       child: Text(
         label,
         style: FoE.dim(size: 8).copyWith(
@@ -684,10 +678,7 @@ class _BuildCard extends StatelessWidget {
     // light blue.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-      decoration: BoxDecoration(
-        color: enabled ? _insetActive : _insetInactive,
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: ShapeDecoration(color: enabled ? _insetActive : _insetInactive, shape: FoE.facet(radius: 8)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

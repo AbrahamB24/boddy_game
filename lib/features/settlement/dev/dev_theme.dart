@@ -78,11 +78,7 @@ Future<bool> confirmDeleteDialog(
                       horizontal: 20,
                       vertical: 10,
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade900.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.red.shade700),
-                    ),
+                    decoration: ShapeDecoration(color: Colors.red.shade900.withValues(alpha: 0.4), shape: FoE.facet(radius: 6, side: BorderSide(color: Colors.red.shade700))),
                     child: Text(
                       'Delete',
                       style: FoE.label(

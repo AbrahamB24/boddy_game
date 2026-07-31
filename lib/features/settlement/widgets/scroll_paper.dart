@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/foe_theme.dart';
 
 // ── Die Schriftrolle ist weg (user 2026-07-31) ──
 // "alles soll im low poly flatdesign sein"
@@ -42,10 +43,7 @@ const Color kPageShadow = Color(0xFF000000);
 const Color kActionGreen = Color(0xFF8C9A3C);
 const Color kActionGreenDeep = Color(0xFF6C7A2C);
 
-BoxDecoration parchmentButton({bool active = true}) => BoxDecoration(
-  borderRadius: BorderRadius.circular(12),
-  color: active ? kActionGreen : kParchmentInk.withValues(alpha: 0.10),
-);
+ShapeDecoration parchmentButton({bool active = true}) => ShapeDecoration(color: active ? kActionGreen : kParchmentInk.withValues(alpha: 0.10), shape: FoE.facet(radius: 12));
 
 /// Ink on a [parchmentButton]: near-white on the green when live, faint brown
 /// when not.

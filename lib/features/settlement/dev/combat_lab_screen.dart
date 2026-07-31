@@ -97,11 +97,7 @@ class _CombatLabScreenState extends State<CombatLabScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: FoE.panelDark,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: FoE.border),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.border))),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -183,11 +179,7 @@ class _CombatLabScreenState extends State<CombatLabScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: FoE.panelMid,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: FoE.borderGold),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelMid, shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.borderGold))),
             child: Text(
               '→ ${dmg.round()} damage per basic hit\n'
               '(before type/crit/random; those can up to ~4.5× it)',
@@ -318,11 +310,7 @@ class _CombatLabScreenState extends State<CombatLabScreen> {
     required bool isA,
   }) => Container(
     padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(
-      color: FoE.panelDark,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: isA ? FoE.accentBlue : FoE.danger),
-    ),
+    decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 8, side: BorderSide(color: isA ? FoE.accentBlue : FoE.danger))),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -463,11 +451,7 @@ class _CombatLabScreenState extends State<CombatLabScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: FoE.panelMid,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: FoE.borderGold),
-      ),
+      decoration: ShapeDecoration(color: FoE.panelMid, shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.borderGold))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -611,11 +595,7 @@ class _CombatLabScreenState extends State<CombatLabScreen> {
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: FoE.panelDark,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: FoE.borderGold),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.borderGold))),
             child: Text(
               value.toStringAsFixed(2),
               style: FoE.value(size: 14).copyWith(color: FoE.goldBright),

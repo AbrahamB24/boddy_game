@@ -46,11 +46,7 @@ class NotificationButton extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     constraints: const BoxConstraints(minWidth: 16),
-                    decoration: BoxDecoration(
-                      color: FoE.danger,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: FoE.panelDark, width: 1.5),
-                    ),
+                    decoration: ShapeDecoration(color: FoE.danger, shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.panelDark, width: 1.5))),
                     child: Text(
                       // Caps the badge: "99+" keeps the header stable no matter
                       // how long you were away.

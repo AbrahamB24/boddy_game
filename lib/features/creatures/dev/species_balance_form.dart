@@ -436,11 +436,7 @@ class _SpeciesBalanceFormState extends State<SpeciesBalanceForm> {
 
   Widget _pill(String label, String value) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-    decoration: BoxDecoration(
-      color: FoE.panelMid,
-      borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: FoE.border),
-    ),
+    decoration: ShapeDecoration(color: FoE.panelMid, shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.border))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [

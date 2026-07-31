@@ -403,10 +403,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
                     horizontal: 7,
                     vertical: 2,
                   ),
-                  decoration: BoxDecoration(
-                    color: dangerColor(area.dangerLevel).withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
+                  decoration: ShapeDecoration(color: dangerColor(area.dangerLevel).withValues(alpha: 0.18), shape: FoE.facet(radius: 5)),
                   child: Text(
                     'Danger ${area.dangerLevel}',
                     style: FoE.label(size: 9).copyWith(
