@@ -823,13 +823,9 @@ class _BreedingScreenState extends State<BreedingScreen> {
           return Container(
             margin: const EdgeInsets.all(12),
             constraints: const BoxConstraints(maxHeight: 560),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [kParchmentLight, kParchmentMid],
-              ),
+            decoration: ShapeDecoration(
+              color: kParchmentLight,
+              shape: FoE.facet(radius: 16),
             ),
             child: Stack(
               children: [

@@ -3127,8 +3127,8 @@ class _BuildingTile extends StatelessWidget {
         bottom: 2,
         left: 2,
         right: 2,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(2),
+        child: ClipPath(
+      clipper: ShapeBorderClipper(shape: FoE.facet(radius: 2)),
           child: LinearProgressIndicator(
             value: building.constructionProgress,
             minHeight: 3,

@@ -306,8 +306,8 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
           ),
         ),
         Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(3),
+          child: ClipPath(
+      clipper: ShapeBorderClipper(shape: FoE.facet(radius: 3)),
             child: LinearProgressIndicator(
               value: maxTotal == 0 ? 0 : total / maxTotal,
               minHeight: 8,

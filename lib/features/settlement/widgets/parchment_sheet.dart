@@ -4,7 +4,7 @@ import '../../../core/theme/foe_theme.dart';
 import '../../common/widgets/parchment_page.dart';
 import 'meander_strip.dart';
 import 'scroll_paper.dart'
-    show kParchmentDeep, kParchmentInk, kParchmentLight, kParchmentMid;
+    show kParchmentInk, kParchmentMid;
 
 /// The bottom sheet every settlement menu wears (user 2026-07-27: "Bag und
 /// Energy sollen im gleichen Stil gestaltet werden wie die anderen neueren
@@ -67,13 +67,14 @@ class ParchmentSheet extends StatelessWidget {
       builder: (_, scrollCtrl) => ClipRRect(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
         child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [kParchmentLight, kParchmentMid],
+          decoration: BoxDecoration(
+            // ONE TONE with a lit top edge (2026-07-31, low poly): a sheet is
+            // a slab pushed up over the page, and the plane that catches the
+            // light is its near edge — not a wash down its whole height.
+            color: kParchmentMid,
+            border: Border(
+              top: BorderSide(color: FoE.lit(kParchmentMid), width: 2),
             ),
-            border: Border(top: BorderSide(color: kParchmentDeep, width: 1.5)),
           ),
           child: Column(
             children: [

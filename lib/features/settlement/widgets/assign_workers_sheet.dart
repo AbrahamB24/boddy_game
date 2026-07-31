@@ -13,7 +13,6 @@ import 'scroll_paper.dart'
     show
         kActionGreen,
         kParchmentInk,
-        kParchmentLight,
         kParchmentMid,
         parchmentButton,
         parchmentButtonInk;
@@ -158,11 +157,7 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
           // a dark panel over a parchment one read as a different app.
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [kParchmentLight, kParchmentMid],
-            ),
+            color: kParchmentMid,
           ),
           child: Stack(
             children: [

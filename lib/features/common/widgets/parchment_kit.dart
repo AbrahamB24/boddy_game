@@ -7,7 +7,6 @@ import '../../settlement/widgets/scroll_paper.dart'
         kActionGreen,
         kParchmentInk,
         kParchmentLight,
-        kParchmentMid,
         parchmentButton,
         parchmentButtonInk;
 import 'parchment_page.dart';
@@ -115,14 +114,14 @@ class ParchmentInfoButton extends StatelessWidget {
         child: Container(
           width: 320,
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [kParchmentLight, kParchmentMid],
+          // FLAT and CUT (2026-07-31, low poly): a dialog is a slab laid on
+          // the page, so it is one tone with a facet edge.
+          decoration: ShapeDecoration(
+            color: kParchmentLight,
+            shape: FoE.facet(
+              radius: 16,
+              side: BorderSide(color: kParchmentInk.withValues(alpha: 0.25)),
             ),
-            border: Border.all(color: kParchmentInk.withValues(alpha: 0.25)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -354,14 +353,12 @@ Future<bool> parchmentConfirm(
       child: Container(
         width: 300,
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [kParchmentLight, kParchmentMid],
+        decoration: ShapeDecoration(
+          color: kParchmentLight,
+          shape: FoE.facet(
+            radius: 16,
+            side: BorderSide(color: kParchmentInk.withValues(alpha: 0.25)),
           ),
-          border: Border.all(color: kParchmentInk.withValues(alpha: 0.25)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

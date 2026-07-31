@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/foe_theme.dart';
 
 import '../models/creature_enums.dart';
 
@@ -58,8 +59,8 @@ class CreatureBackdrop extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(radius),
+  Widget build(BuildContext context) => ClipPath(
+      clipper: ShapeBorderClipper(shape: FoE.facet(radius: radius)),
     child: CustomPaint(
       painter: _GradientBackdrop(baseColor ?? element.color),
       child: LayoutBuilder(

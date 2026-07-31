@@ -167,8 +167,8 @@ class _AreaDefFormState extends State<AreaDefForm> {
     padding: const EdgeInsets.symmetric(vertical: 8),
     child: Row(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+        ClipPath(
+      clipper: ShapeBorderClipper(shape: FoE.facet(radius: 8)),
           child: SizedBox(
             width: 92,
             height: 56,

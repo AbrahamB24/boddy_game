@@ -626,18 +626,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         curve: Curves.easeOut,
         padding: const EdgeInsets.symmetric(vertical: 8),
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(15),
-          gradient: on
-              ? LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color.lerp(element, Colors.white, 0.22)!,
-                    element,
-                  ],
-                )
-              : null,
+        // The selected key is ONE plane of the element's colour (2026-07-31):
+        // it used to be lit at the top and deep at the foot, which is a curve
+        // pretending to be a key.
+        decoration: ShapeDecoration(
+          color: on ? element : Colors.transparent,
+          shape: FoE.facet(radius: 15),
         ),
         child: Text(
           label,

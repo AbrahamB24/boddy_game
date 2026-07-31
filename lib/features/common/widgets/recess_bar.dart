@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/foe_theme.dart';
 
 import '../../settlement/widgets/scroll_paper.dart' show kParchmentInk;
 
@@ -55,8 +56,8 @@ class RecessBar extends StatelessWidget {
           final w = v <= 0
               ? 0.0
               : (c.maxWidth * v).clamp(height, c.maxWidth).toDouble();
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(r),
+          return ClipPath(
+      clipper: ShapeBorderClipper(shape: FoE.facet(radius: r)),
             child: Stack(
               children: [
                 Positioned.fill(

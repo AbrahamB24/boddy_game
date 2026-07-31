@@ -13,7 +13,6 @@ import '../widgets/meander_strip.dart';
 import '../widgets/scroll_paper.dart'
     show
         kParchmentInk,
-        kParchmentLight,
         kParchmentMid,
         parchmentButton,
         parchmentButtonInk;
@@ -289,11 +288,7 @@ class _BuildingUpgradeSheet extends StatelessWidget {
         margin: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [kParchmentLight, kParchmentMid],
-          ),
+          color: kParchmentMid,
         ),
         child: Stack(
           children: [

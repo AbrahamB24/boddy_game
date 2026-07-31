@@ -348,11 +348,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [kParchmentLight, kParchmentMid],
-                  ),
+                  color: kParchmentMid,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.4),
