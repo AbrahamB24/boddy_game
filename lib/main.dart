@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/ui/feel.dart';
+import 'core/orientation_lock.dart';
 import 'core/supabase/supabase_client.dart';
 import 'core/theme/foe_theme.dart';
+import 'core/theme/parchment_theme.dart';
+import 'features/settlement/widgets/scroll_paper.dart'
+    show kParchmentLight, kParchmentMid;
+import 'core/ui/phone_frame.dart';
 import 'features/settlement/settlement_screen.dart';
 
 /// Bøddy — settlement & creature game.
@@ -13,6 +19,9 @@ import 'features/settlement/settlement_screen.dart';
 /// created there signs in here.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // The sound/vibration switches, before the first frame — so a player who
+  // muted the game last time does not get one cue back on launch.
+  await Feel.load();
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseAnonKey);
   runApp(const BoddyGameApp());
 }
@@ -24,10 +33,16 @@ class BoddyGameApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Bøddy Game',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: FoE.bg,
-    ),
+    // ONE theme for the whole app (user 2026-07-27) — see parchment_theme.dart
+    // for why a theme rather than a sweep of call sites.
+    theme: buildParchmentTheme(),
+    // Wraps the Navigator, so pushed routes, dialogs and sheets are all inside
+    // the phone viewport rather than around it.
+    builder: (context, child) => PhoneFrame(child: child!),
+    // OrientationLock subscribes screens to this to re-apply their lock when
+    // the route above them pops. It was never registered, so didPopNext never
+    // fired and a screen's lock silently stopped being re-applied.
+    navigatorObservers: [orientationRouteObserver],
     home: const _AuthGate(),
   );
 }
@@ -90,8 +105,17 @@ class _LoginScreenState extends State<_LoginScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: FoE.bg,
-    body: Center(
+    // The front door is the same sheet of paper as everything behind it.
+    backgroundColor: kParchmentMid,
+    body: DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [kParchmentLight, kParchmentMid],
+        ),
+      ),
+      child: Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(28),
         child: ConstrainedBox(
@@ -99,13 +123,13 @@ class _LoginScreenState extends State<_LoginScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('🏰 Bøddy Game', style: FoE.title(size: 22)),
+              Text('Bøddy Game', style: FoE.title(size: 22)),
               const SizedBox(height: 6),
               Text('Sign in with your Bøddy account.', style: FoE.dim(size: 12)),
               const SizedBox(height: 24),
-              _field(_email, 'Email', false),
+              _field(_email, 'Email', false, action: TextInputAction.next),
               const SizedBox(height: 12),
-              _field(_password, 'Password', true),
+              _field(_password, 'Password', true, action: TextInputAction.done),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(
@@ -117,13 +141,10 @@ class _LoginScreenState extends State<_LoginScreen> {
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
+                // No styleFrom: the theme's ElevatedButton IS the commit green
+                // every other button in the game wears.
                 child: ElevatedButton(
                   onPressed: _busy ? null : _signIn,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: FoE.gold,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
                   child: _busy
                       ? const SizedBox(
                           width: 18,
@@ -137,27 +158,29 @@ class _LoginScreenState extends State<_LoginScreen> {
           ),
         ),
       ),
+      ),
     ),
   );
 
-  Widget _field(TextEditingController c, String label, bool obscure) =>
+  Widget _field(
+    TextEditingController c,
+    String label,
+    bool obscure, {
+    TextInputAction action = TextInputAction.next,
+  }) =>
       TextField(
         controller: c,
         obscureText: obscure,
+        textInputAction: action,
+        // Enter submits — moves to the next field, or logs in from the last one.
+        onSubmitted: (_) {
+          if (action == TextInputAction.done && !_busy) {
+            _signIn();
+          } else {
+            FocusScope.of(context).nextFocus();
+          }
+        },
         style: FoE.value(size: 14),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: FoE.dim(size: 12),
-          filled: true,
-          fillColor: FoE.panelDark,
-          enabledBorder: OutlineInputBorder(
-            borderSide: const BorderSide(color: FoE.border),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderSide: const BorderSide(color: FoE.gold),
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
+        decoration: InputDecoration(labelText: label),
       );
 }

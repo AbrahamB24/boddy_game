@@ -1,4 +1,9 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+
 import '../../../core/supabase/supabase_client.dart';
+import '../../onboarding/intro_flow.dart';
 import '../data/building_definitions.dart';
 import '../models/energy_model.dart';
 import '../models/placed_building.dart';
@@ -26,10 +31,16 @@ class SettlementService {
     await Future.wait([
       supabase.from('resources').insert({
         'settlement_id': model.id,
-        'wood': 500.0,
+        // Covers the guided tutorial's full build bill (healing hut +
+        // woodland camp + quarry + hut + fishing hut ≈ 620 wood / 170
+        // stone) with slack — the script must never stall on "can't afford".
+        'wood': 750.0,
         'stone': 300.0,
-        'fish': 0.0,
-        'fur': 0.0,
+        // Jumpstart float, not income: fish/fur are the region-dungeon entry
+        // cost and buildings make them deliberately slowly (workshop mult
+        // 0.12), so a new player would otherwise stall at the first gate.
+        'fish': kJumpstartGiftFish,
+        'fur': kJumpstartGiftFur,
       }),
       supabase.from('energy_state').insert({
         'settlement_id': model.id,
@@ -38,9 +49,11 @@ class SettlementService {
       supabase.from('placed_buildings').insert({
         'settlement_id': model.id,
         'building_type_id': 'main_hall',
-        // Centered in the starting 12x12 buildable zone (main_hall is 3x3).
-        'grid_x': kInitialPlotX + (kInitialPlotSize - 3) ~/ 2,
-        'grid_y': kInitialPlotY + (kInitialPlotSize - 3) ~/ 2,
+        // Centred in the starting plot, derived from the hall's own footprint
+        // — see kMainHallStartX/Y. This used to be a hardcoded `- 3` and the
+        // hall silently sat off-centre once the def wasn't 3x3.
+        'grid_x': kMainHallStartX,
+        'grid_y': kMainHallStartY,
         'construction_seconds_required': 0,
         'construction_seconds_built': 0,
         'is_complete': true,
@@ -78,6 +91,36 @@ class SettlementService {
     return (rows as List).map((r) => PlacedBuilding.fromMap(r)).toList();
   }
 
+  /// Daily-tasks blob, or null pre-migration / when never saved — the caller
+  /// rolls a fresh set either way, so a missing column degrades to "tasks
+  /// simply don't persist yet" (same tolerance style as loadTechGates).
+  Future<Map<String, dynamic>?> loadDailyTasks(String settlementId) async {
+    try {
+      final row = await supabase
+          .from('settlements')
+          .select('daily_tasks')
+          .eq('id', settlementId)
+          .single();
+      return (row['daily_tasks'] as Map?)?.cast<String, dynamic>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveDailyTasks(
+    String settlementId,
+    Map<String, dynamic> json,
+  ) async {
+    try {
+      await supabase
+          .from('settlements')
+          .update({'daily_tasks': json})
+          .eq('id', settlementId);
+    } catch (_) {
+      // Pre-migration: progress just isn't persisted yet.
+    }
+  }
+
   // ── Savers ────────────────────────────────────────────────
   Future<void> saveResources(ResourceModel r) async {
     try {
@@ -111,25 +154,33 @@ class SettlementService {
     await supabase.from('energy_state').upsert(e.toMap());
   }
 
+  /// Upserts [buildings] in ONE request.
+  ///
+  /// This was a sequential `await` per building — and a road is one row PER
+  /// GRID CELL (`road` is 1x1, maxCount 0), so a settlement with its buildings
+  /// wired up holds 200+ rows, not the ~16 you'd guess from the build menu.
+  /// At 5s ticks and a phone's ~80ms round trip, that loop took LONGER than
+  /// the tick interval: cycles overlapped forever and the radio never idled.
+  /// Batching turns 200 requests into one.
+  ///
+  /// See SettlementController._persist for the other half of the fix — not
+  /// sending unchanged rows in the first place.
   Future<void> saveBuildings(List<PlacedBuilding> buildings) async {
-    for (final b in buildings) {
-      try {
-        await supabase.from('placed_buildings').upsert(b.toMap());
-      } catch (_) {
-        // Fallback: omit laborers_assigned if that column doesn't exist yet
-        // (pre-migration).
-        final map = b.toMap()..remove('laborers_assigned');
-        await supabase.from('placed_buildings').upsert(map);
-      }
-    }
+    if (buildings.isEmpty) return;
+    final rows = buildings.map((b) => b.toMap()).toList();
+    await supabase.from('placed_buildings').upsert(rows);
   }
 
   Future<void> saveSettlement(SettlementModel s) async {
     try {
       await supabase.from('settlements').upsert(s.toMap());
     } catch (_) {
-      // Fallback: omit the research-progress columns if they don't exist yet
-      // (pre-migration) — era/hall level always save regardless.
+      // Fallback: omit the crafting columns if migration 0011 hasn't run yet.
+      // Postgrest rejects the WHOLE row over one unknown column, so without
+      // this a pre-0011 profile couldn't save its era or hall level either —
+      // the same failure mode that `healing_until` caused for creatures.
+      // Losing the craft job costs a Workshop its progress; losing this write
+      // would stall the settlement itself.
       await supabase.from('settlements').upsert({
         'id': s.id,
         'user_id': s.userId,
@@ -178,10 +229,36 @@ class SettlementService {
   }
 
   // ── Reset ─────────────────────────────────────────────────
-  // Wipes buildings, resources, energy allocation and research back to a
-  // fresh start. Deliberately leaves `profiles` (BP/level) untouched.
-  Future<void> resetSettlement(String settlementId) async {
+  /// Wipes EVERYTHING this account has played back to a first-launch state:
+  /// buildings, resources, energy, research, the whole creature collection,
+  /// saved teams, breeding jobs, expeditions, spot depletion, and the
+  /// profile's region progress/intro step. Afterwards the account is
+  /// indistinguishable from one that has just signed up — including the intro
+  /// chain and its jumpstart.
+  ///
+  /// Deliberately NOT touched: the `*_defs` content tables (buildings, techs,
+  /// eras, areas, species, abilities). Those are authored game content shared
+  /// by every player, not this account's progress — wiping them on a personal
+  /// reset would delete the game itself.
+  ///
+  /// Kept in sync with [getOrCreate] by hand: any change to what a new account
+  /// starts with must be mirrored in both.
+  ///
+  /// [devFloat] keeps a DEV account stocked across a reset (user 2026-07-26:
+  /// "wenn ich auf plus Gold/holz/stein drücke, will ich, dass dies bleibt").
+  /// Resetting is something a dev does constantly while testing, and having to
+  /// re-press the grant button every single time is friction with no upside.
+  /// It only ever RAISES the starting bill to [kDevResetFloat], so a normal
+  /// account (devFloat false) is byte-for-byte the first-launch state.
+  Future<void> resetSettlement(
+    String settlementId,
+    String userId, {
+    bool devFloat = false,
+  }) async {
     final now = DateTime.now().toUtc();
+    double floor(double startingBill) =>
+        devFloat ? math.max(startingBill, kDevResetFloat) : startingBill;
+
     await Future.wait([
       supabase
           .from('placed_buildings')
@@ -191,16 +268,28 @@ class SettlementService {
           .from('research_unlocks')
           .delete()
           .eq('settlement_id', settlementId),
+      // Everything below is keyed by user, not settlement.
+      supabase.from('creatures').delete().eq('user_id', userId),
+      _deleteTolerant('breeding_jobs', 'user_id', userId),
+      _deleteTolerant('expeditions', 'user_id', userId),
+      _deleteTolerant('resource_spot_states', 'user_id', userId),
+      // Teams reference creature ids that are being wiped above — a surviving
+      // team would name monsters this profile no longer has.
+      _deleteTolerant('saved_teams', 'user_id', userId),
     ]);
 
     await Future.wait([
       saveResources(
         ResourceModel(
           settlementId: settlementId,
-          wood: 500,
-          stone: 300,
-          gold: 0,
-          goods: const {'fish': 0, 'fur': 0},
+          // Keep in sync with getOrCreate's starting bill above.
+          wood: floor(750),
+          stone: floor(300),
+          gold: floor(0),
+          goods: const {
+            'fish': kJumpstartGiftFish,
+            'fur': kJumpstartGiftFur,
+          },
           lastUpdatedAt: now,
         ),
       ),
@@ -212,17 +301,50 @@ class SettlementService {
         ),
       ),
       _resetSettlementRow(settlementId),
+      _resetProfileRow(userId),
     ]);
 
     await supabase.from('placed_buildings').insert({
       'settlement_id': settlementId,
       'building_type_id': 'main_hall',
-      'grid_x': kInitialPlotX + (kInitialPlotSize - 3) ~/ 2,
-      'grid_y': kInitialPlotY + (kInitialPlotSize - 3) ~/ 2,
+      'grid_x': kMainHallStartX,
+      'grid_y': kMainHallStartY,
       'construction_seconds_required': 0,
       'construction_seconds_built': 0,
       'is_complete': true,
     });
+  }
+
+  /// Delete that tolerates the table not existing yet — the expedition/gate
+  /// tables arrive with migrations 0001/0004, and a reset must still work on a
+  /// deployment where those haven't been applied.
+  Future<void> _deleteTolerant(String table, String column, String value) async {
+    try {
+      await supabase.from(table).delete().eq(column, value);
+    } catch (e) {
+      debugPrint('[SettlementService] reset: skipped $table ($e)');
+    }
+  }
+
+  /// Back to a freshly-created profile: the intro chain restarts from step 0
+  /// (so the jumpstart is on again) and BP is the same gift [getOrCreate]
+  /// hands a brand-new account — not 0, or the first research would be
+  /// unreachable exactly as it is for a new player without the gift.
+  Future<void> _resetProfileRow(String userId) async {
+    Future<void> write(Map<String, dynamic> patch) =>
+        supabase.from('profiles').upsert({'id': userId, ...patch});
+    try {
+      await write({
+        'dungeon_max_stage': 1,
+        'expansions_unlocked': 0,
+        'battles_cleared': 0,
+        'intro_step': IntroStep.pickStarter.index,
+      });
+    } catch (_) {
+      // Pre-migration deployment: drop the columns that may not exist yet
+      // rather than losing the whole profile reset.
+      await write({'dungeon_max_stage': 1});
+    }
   }
 
   Future<void> _resetSettlementRow(String settlementId) async {
@@ -232,12 +354,15 @@ class SettlementService {
           .update({
             'era_index': 1,
             'main_building_level': 1,
-            'active_research_id': null,
-            'research_seconds_built': 0,
+            // The Workshop and the bag, cleared: a "first launch" profile that
+            // still held potions from the last run wouldn't be one.
+            'active_craft_id': null,
+            'craft_seconds_built': 0,
+            'items': <String, int>{},
           })
           .eq('id', settlementId);
     } catch (_) {
-      // Fallback: omit the research-progress columns if they don't exist yet.
+      // Fallback: omit the crafting columns if migration 0011 hasn't run.
       await supabase
           .from('settlements')
           .update({'era_index': 1, 'main_building_level': 1})
@@ -245,141 +370,96 @@ class SettlementService {
     }
   }
 
-  // ── Research ──────────────────────────────────────────────
-  Future<Set<String>> loadResearch(String settlementId) async {
-    final rows = await supabase
-        .from('research_unlocks')
-        .select('tech_id')
-        .eq('settlement_id', settlementId);
-    return (rows as List).map((r) => r['tech_id'] as String).toSet();
-  }
+  // loadResearch() is gone (user 2026-07-26) with the feature-unlock system it
+  // fed. `research_unlocks` is still WIPED on reset — the rows exist in old
+  // databases and a reset that left them behind would be lying about being a
+  // first-launch state — but nothing reads them any more.
 
-  Future<void> unlockTech(String settlementId, String techId) async {
-    await supabase.from('research_unlocks').insert({
-      'settlement_id': settlementId,
-      'tech_id': techId,
-    });
-  }
-
-  // ── BP ───────────────────────────────────────────────────
-  Future<int> addBp(String userId, int amount) async {
-    final profile = await supabase
-        .from('profiles')
-        .select()
-        .eq('id', userId)
-        .maybeSingle();
-    final current = profile != null ? (profile['bp'] as num).toInt() : 0;
-    final newBp = current + amount;
-    final newLevel = bpToLevel(newBp);
-    await supabase.from('profiles').upsert({
-      'id': userId,
-      'bp': newBp,
-      'level': newLevel,
-    });
-    return newBp;
-  }
-
+  /// Tech-gate clears (mini-dungeons beaten). Tolerates the table not existing
+  /// yet (pre-migration) — returns empty so the rest of load() still works.
   Future<Map<String, int>> loadProfile(String userId) async {
     final row = await supabase
         .from('profiles')
         .select()
         .eq('id', userId)
         .maybeSingle();
-    if (row == null) return {'bp': 0, 'level': 1, 'dungeon_max_stage': 1};
+    if (row == null) {
+      return {
+        'dungeon_max_stage': 1,
+        'expansions_unlocked': 0,
+        'battles_cleared': 0,
+      };
+    }
     return {
-      'bp': (row['bp'] as num).toInt(),
-      'level': (row['level'] as num).toInt(),
       // Highest dungeon stage unlocked so far (permanent progression — see
       // kMaxDungeonStage). Tolerates the column not existing yet.
+      //
+      // `bp` and `level` used to be read here too. The columns may well still
+      // exist on the profile row (migration 0010 drops them); nothing reads
+      // them any more — the player level was itself only ever derived from BP
+      // and was never displayed or gated on anywhere.
       'dungeon_max_stage': (row['dungeon_max_stage'] as num?)?.toInt() ?? 1,
+      // Expansion unlocks earned from map "expansion points" — the Building
+      // Plot reward count (see SettlementController.buildPlotLimit).
+      'expansions_unlocked':
+          (row['expansions_unlocked'] as num?)?.toInt() ?? 0,
+      // Linear-path progress: campaign battles won so far. Drives party size
+      // (partySizeForBattle) and, later, map-milestone unlocks. Tolerates the
+      // column not existing yet (migration 0019).
+      'battles_cleared': (row['battles_cleared'] as num?)?.toInt() ?? 0,
     };
   }
 
+  /// A write failed only because the column/table isn't migrated yet — safe to
+  /// ignore (the in-memory value still holds this session). A REAL or transient
+  /// error (network, RLS, timeout) must NOT match, so callers rethrow it and the
+  /// UI can flag the save as failed instead of losing progress silently.
+  static bool isMissingSchema(Object e) {
+    final s = e.toString().toLowerCase();
+    return s.contains('does not exist') ||
+        s.contains('could not find') ||
+        s.contains('pgrst204') || // schema cache miss (unknown column)
+        s.contains('42703') || // undefined_column
+        s.contains('42p01'); // undefined_table
+  }
+
   /// Persists a newly-unlocked dungeon stage (clearing stage N's boss
-  /// unlocks N+1 — see CreaturesController/DungeonMapScreen).
+  /// unlocks N+1). Rethrows anything that isn't a pre-migration schema gap so a
+  /// dropped write surfaces instead of vanishing.
   Future<void> saveDungeonMaxStage(String userId, int stage) async {
     try {
       await supabase.from('profiles').upsert({
         'id': userId,
         'dungeon_max_stage': stage,
       });
-    } catch (_) {
-      // Column not migrated yet — in-memory value still holds this session.
+    } catch (e) {
+      if (!isMissingSchema(e)) rethrow;
     }
   }
 
-  // Workout stats persisted on the profile: the daily-BP counter (survives
-  // restarts, resets only at local midnight — see
-  // SettlementController._resetDailyIfNeeded) plus the lifetime workout count
-  // and the day-streak. Dates are 'YYYY-MM-DD' strings in the device's local
-  // time. Tolerates the columns not existing yet on older deployments
-  // (read-side default), mirroring loadIsDev.
-  Future<
-    ({
-      int bpToday,
-      String? bpDate,
-      int completed,
-      int streak,
-      String? lastDate,
-    })
-  >
-  loadWorkoutStats(String userId) async {
-    try {
-      final row = await supabase
-          .from('profiles')
-          .select(
-            'workout_bp_today, workout_bp_date, workouts_completed, '
-            'workout_streak, last_workout_date',
-          )
-          .eq('id', userId)
-          .maybeSingle();
-      if (row == null) {
-        return (
-          bpToday: 0,
-          bpDate: null,
-          completed: 0,
-          streak: 0,
-          lastDate: null,
-        );
-      }
-      return (
-        bpToday: (row['workout_bp_today'] as num?)?.toInt() ?? 0,
-        bpDate: row['workout_bp_date'] as String?,
-        completed: (row['workouts_completed'] as num?)?.toInt() ?? 0,
-        streak: (row['workout_streak'] as num?)?.toInt() ?? 0,
-        lastDate: row['last_workout_date'] as String?,
-      );
-    } catch (_) {
-      return (
-        bpToday: 0,
-        bpDate: null,
-        completed: 0,
-        streak: 0,
-        lastDate: null,
-      );
-    }
-  }
-
-  Future<void> saveWorkoutStats(
-    String userId, {
-    required int bpToday,
-    required String bpDate,
-    required int completed,
-    required int streak,
-    required String lastDate,
-  }) async {
+  /// Persists the earned expansion-unlock count (each map expansion point grants
+  /// one — see SettlementController.unlockExpansion).
+  Future<void> saveExpansionsUnlocked(String userId, int count) async {
     try {
       await supabase.from('profiles').upsert({
         'id': userId,
-        'workout_bp_today': bpToday,
-        'workout_bp_date': bpDate,
-        'workouts_completed': completed,
-        'workout_streak': streak,
-        'last_workout_date': lastDate,
+        'expansions_unlocked': count,
       });
-    } catch (_) {
-      // Columns not migrated yet — the in-memory values still hold for this
-      // session; nothing else depends on the write succeeding.
+    } catch (e) {
+      if (!isMissingSchema(e)) rethrow;
+    }
+  }
+
+  /// Persists the linear-path progress (campaign battles won — see
+  /// SettlementController.advanceBattlesCleared).
+  Future<void> saveBattlesCleared(String userId, int count) async {
+    try {
+      await supabase.from('profiles').upsert({
+        'id': userId,
+        'battles_cleared': count,
+      });
+    } catch (e) {
+      if (!isMissingSchema(e)) rethrow;
     }
   }
 
@@ -400,11 +480,35 @@ class SettlementService {
     }
   }
 
-  static int bpToLevel(int bp) {
-    final thresholds = [0, 100, 350, 850, 1850, 3850, 7850, 15850];
-    for (int i = thresholds.length - 1; i >= 0; i--) {
-      if (bp >= thresholds[i]) return i + 1;
+  // ── Intro / jumpstart progress ───────────────────────────
+  // Own methods rather than folding into loadProfile for the same reason
+  // loadIsDev is separate: the column may not exist yet (migration
+  // 0005_intro_step.sql). A pre-migration client reads `done` — better a
+  // veteran-style silent start than trapping someone in a step whose progress
+  // can never be written back.
+
+  Future<int> loadIntroStep(String userId) async {
+    try {
+      final row = await supabase
+          .from('profiles')
+          .select('intro_step')
+          .eq('id', userId)
+          .maybeSingle();
+      return (row?['intro_step'] as num?)?.toInt() ?? IntroStep.done.index;
+    } catch (_) {
+      return IntroStep.done.index;
     }
-    return 1;
   }
+
+  Future<void> saveIntroStep(String userId, int step) async {
+    try {
+      await supabase.from('profiles').upsert({
+        'id': userId,
+        'intro_step': step,
+      });
+    } catch (_) {
+      // Column not migrated yet — in-memory value still holds this session.
+    }
+  }
+
 }

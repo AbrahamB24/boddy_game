@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
-import '../workout/widgets/workout_back_button.dart';
+import '../common/widgets/parchment_page.dart';
+import 'creature_detail_screen.dart';
+import 'models/creature_instance.dart';
 import 'models/species_def.dart';
+import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
+import 'widgets/creature_card.dart';
+import '../common/widgets/recess_bar.dart';
 
 // The bestiary (Dex) — the collection endgame: every defined species, with
 // undiscovered ones shown as dark silhouettes. "Discovered" = you own (or
@@ -37,163 +42,107 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
     return (owned: owned, bestStage: bestStage);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: FoE.bg,
-      body: SafeArea(
-        child: ListenableBuilder(
-          listenable: _ctrl,
-          builder: (context, _) {
-            final species = kSpeciesDefs.values.toList()
-              ..sort((a, b) {
-                final r = a.rarity.index.compareTo(b.rarity.index);
-                return r != 0 ? r : a.name.compareTo(b.name);
-              });
-            final discovered = species
-                .where((s) => _progressFor(s.id).owned > 0)
-                .length;
-            final mastered = species
-                .where((s) => _progressFor(s.id).bestStage >= 2)
-                .length;
-            return Column(
-              children: [
-                _topBar(discovered, species.length),
-                if (species.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                    child: Column(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: species.isEmpty
-                                ? 0
-                                : discovered / species.length,
-                            minHeight: 8,
-                            backgroundColor: FoE.panelDark,
-                            color: FoE.goldBright,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$discovered/${species.length} discovered · '
-                          '$mastered/${species.length} at final stage',
-                          style: FoE.dim(size: 10),
-                        ),
-                      ],
-                    ),
-                  ),
-                Expanded(
-                  child: species.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No species defined yet.',
-                            style: FoE.dim(size: 12),
-                          ),
-                        )
-                      : GridView.builder(
-                          padding: const EdgeInsets.all(12),
-                          gridDelegate:
-                              const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 130,
-                                mainAxisSpacing: 10,
-                                crossAxisSpacing: 10,
-                                childAspectRatio: 0.8,
-                              ),
-                          itemCount: species.length,
-                          itemBuilder: (_, i) => _dexCard(species[i]),
-                        ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
+  /// The owned creature that represents a species on its bestiary tile: the one
+  /// with the highest total power, if you hold several (user 2026-07-18). Null
+  /// = undiscovered.
+  CreatureInstance? _representativeFor(String speciesId) {
+    CreatureInstance? best;
+    for (final c in _ctrl.creatures) {
+      if (c.speciesId != speciesId) continue;
+      if (best == null || totalPower(c) > totalPower(best)) best = c;
+    }
+    return best;
   }
 
-  Widget _topBar(int discovered, int total) => Container(
-    height: 48,
-    decoration: FoE.topBarDecor,
-    padding: const EdgeInsets.symmetric(horizontal: 8),
-    child: Row(
-      children: [
-        WorkoutBackButton(
-          color: FoE.parchment,
-          onTap: () => Navigator.of(context).pop(),
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _ctrl,
+    builder: (context, _) {
+      final species = kSpeciesDefs.values.toList()
+        ..sort((a, b) {
+          final r = a.rarity.index.compareTo(b.rarity.index);
+          return r != 0 ? r : a.name.compareTo(b.name);
+        });
+      final discovered =
+          species.where((s) => _progressFor(s.id).owned > 0).length;
+      final mastered =
+          species.where((s) => _progressFor(s.id).bestStage >= 2).length;
+      return ParchmentPage(
+        title: 'Bestiary',
+        trailing: Text(
+          species.isEmpty
+              ? ''
+              : '${(discovered / species.length * 100).round()}%',
+          style: FoE.value(size: 13).copyWith(color: FoE.gold),
         ),
-        Text('📖 Bestiary', style: FoE.title(size: 15)),
-        const Spacer(),
-        Text(
-          total == 0 ? '' : '${(discovered / total * 100).round()}%',
-          style: FoE.value(size: 13).copyWith(color: FoE.goldBright),
+        child: Column(
+          children: [
+            if (species.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(ParchmentPage.kParchmentPagePad, 10, ParchmentPage.kParchmentPagePad, 0),
+                child: Column(
+                  children: [
+                    RecessBar(
+                      value: discovered / species.length,
+                      color: FoE.gold,
+                      height: 12,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$discovered/${species.length} discovered · '
+                      '$mastered/${species.length} at final stage',
+                      style: FoE.dim(size: 10),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: species.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No species defined yet.',
+                        style: FoE.dim(size: 12),
+                      ),
+                    )
+                  : GridView.builder(
+                      padding:
+                          const EdgeInsets.fromLTRB(ParchmentPage.kParchmentPagePad, 4, ParchmentPage.kParchmentPagePad, 20),
+                      // Same grid as the Monsters screen so the tiles read 1:1
+                      // (user 2026-07-18).
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 0.70,
+                      ),
+                      itemCount: species.length,
+                      itemBuilder: (_, i) => _dexCard(species[i]),
+                    ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-      ],
-    ),
+      );
+    },
   );
 
+  /// The bestiary tile: the exact Monsters-screen card for a discovered species
+  /// (using its highest-power owned creature), or a shrouded silhouette for one
+  /// not yet discovered (user 2026-07-18).
   Widget _dexCard(SpeciesDef species) {
-    final progress = _progressFor(species.id);
-    final discovered = progress.owned > 0;
-    // Show the best stage reached — undiscovered species show stage 0 as a
-    // black silhouette and hide every detail.
-    final stage = discovered ? progress.bestStage : 0;
-    final imageUrl = species.stageAt(stage.clamp(0, 2)).imageUrl;
-
-    Widget image = imageUrl == null
-        ? Icon(
-            Icons.pets,
-            color: discovered ? FoE.gold : Colors.black87,
-            size: 36,
-          )
-        : Image.network(
-            imageUrl,
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) =>
-                const Icon(Icons.pets, color: FoE.gold, size: 36),
-          );
-    if (!discovered && imageUrl != null) {
-      // Silhouette: paint every non-transparent pixel near-black.
-      image = ColorFiltered(
-        colorFilter: const ColorFilter.mode(
-          Color(0xE6000000),
-          BlendMode.srcIn,
-        ),
-        child: image,
+    final rep = _representativeFor(species.id);
+    if (rep == null) {
+      return CreatureCard.shrouded(
+        shroudImageUrl: species.stageAt(0).imageUrl,
       );
     }
-
-    return Container(
-      decoration: FoE.panel(
-        radius: 10,
-        overrideBorder: discovered ? species.rarity.color : null,
-      ),
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        children: [
-          Expanded(child: image),
-          const SizedBox(height: 4),
-          Text(
-            discovered ? species.name : '???',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: FoE.label(size: 11).copyWith(
-              color: discovered ? FoE.parchment : FoE.textDim,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            discovered
-                ? '${species.element.emoji} ×${progress.owned} · '
-                      'Stage ${progress.bestStage + 1}/3'
-                : species.rarity.label,
-            style: FoE.dim(size: 9).copyWith(
-              color: discovered ? FoE.gold : species.rarity.color,
-            ),
-          ),
-        ],
+    return CreatureCard(
+      creature: rep,
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CreatureDetailScreen(creatureId: rep.id),
+        ),
       ),
     );
   }

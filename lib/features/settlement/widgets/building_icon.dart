@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 // Shared icon renderer for BuildingDef (and the handful of non-building
 // "source" rows that still use a literal emoji, e.g. resource_breakdown_sheet
-// .dart's synthetic population-upkeep row, and TechDef/EraDef rows in
+// .dart's synthetic population-upkeep row, and EraDef rows in
 // dev_mode_screen.dart which never got PNGs). Buildings themselves have no
 // emoji anymore — see BuildingDef.imageUrl — so `imageUrl` is the primary
 // path and `emoji` only matters for those non-building callers.
@@ -29,6 +29,11 @@ class BuildingIcon extends StatelessWidget {
   // instead of being cut off. See widgets/settlement_map.dart's _BuildingTile.
   final bool anchorBottomOverflowTop;
 
+  // How the image fills its box (ignored in anchorBottomOverflowTop mode).
+  // Default `contain` letterboxes non-square art — pass `cover`/`fill` for
+  // tiles that must be filled edge-to-edge, e.g. road cells on the map.
+  final BoxFit fit;
+
   const BuildingIcon({
     super.key,
     this.imageUrl,
@@ -38,6 +43,7 @@ class BuildingIcon extends StatelessWidget {
     this.height,
     this.dimmed = false,
     this.anchorBottomOverflowTop = false,
+    this.fit = BoxFit.contain,
   }) : assert(size != null || width != null, 'Pass width or size'),
        assert(
          anchorBottomOverflowTop || size != null || height != null,
@@ -65,7 +71,7 @@ class BuildingIcon extends StatelessWidget {
         imageUrl: imageUrl!,
         width: _w,
         height: _h,
-        fit: BoxFit.contain,
+        fit: fit,
         placeholder: (context, url) => _fallback(),
         errorWidget: (context, url, error) => _fallback(),
       );
@@ -106,4 +112,63 @@ class BuildingIcon extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A building [BuildingIcon] standing on its own cast SHADOW — the monsters'
+/// look (battle_screen._spriteWithShadow): a SHARP, un-blurred silhouette of
+/// the art itself, nudged down-right and slightly smaller, so it reads as cast
+/// on the ground rather than as a soft drop shadow.
+///
+/// One definition for both places a building's art stands out of a tile — the
+/// build-menu card and the detail dialog — so the two can never drift apart.
+/// Bottom-anchored, so it belongs in a Stack whose `alignment` is
+/// `Alignment.bottomCenter`; the caller reserves the headroom for the overflow.
+class ShadowedBuildingIcon extends StatelessWidget {
+  final String? imageUrl;
+  final double width;
+
+  /// Dims the art (not the shadow) — the build menu greys an unaffordable card.
+  final bool dimmed;
+
+  const ShadowedBuildingIcon({
+    super.key,
+    required this.imageUrl,
+    required this.width,
+    this.dimmed = false,
+  });
+
+  Widget _icon({required bool asShadow}) {
+    final image = BuildingIcon(
+      imageUrl: imageUrl,
+      width: width,
+      anchorBottomOverflowTop: true,
+      dimmed: dimmed && !asShadow,
+    );
+    if (!asShadow) return image;
+    return Opacity(
+      opacity: 0.32,
+      child: Transform.translate(
+        offset: const Offset(4, 7),
+        child: Transform.scale(
+          scale: 0.92,
+          alignment: Alignment.bottomCenter,
+          child: ColorFiltered(
+            // Opaque tint = a true silhouette; the Opacity above sets how dark
+            // it lands.
+            colorFilter: const ColorFilter.mode(
+              Color(0xFF06170F),
+              BlendMode.srcATop,
+            ),
+            child: image,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    alignment: Alignment.bottomCenter,
+    children: [_icon(asShadow: true), _icon(asShadow: false)],
+  );
 }

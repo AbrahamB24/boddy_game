@@ -64,6 +64,7 @@ class PlacedBuilding {
   PlacedBuilding copyWith({
     int? gridX,
     int? gridY,
+    double? constructionSecondsRequired,
     double? constructionSecondsBuilt,
     bool? isComplete,
     bool? isQueued,
@@ -75,7 +76,8 @@ class PlacedBuilding {
     gridX: gridX ?? this.gridX,
     gridY: gridY ?? this.gridY,
     level: level ?? this.level,
-    constructionSecondsRequired: constructionSecondsRequired,
+    constructionSecondsRequired:
+        constructionSecondsRequired ?? this.constructionSecondsRequired,
     constructionSecondsBuilt:
         constructionSecondsBuilt ?? this.constructionSecondsBuilt,
     isComplete: isComplete ?? this.isComplete,

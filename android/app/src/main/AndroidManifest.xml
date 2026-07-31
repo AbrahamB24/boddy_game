@@ -1,4 +1,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The whole game runs against Supabase — without this, RELEASE builds
+         (unlike debug, where Flutter's debug manifest adds it for hot
+         reload) fail every request with "SocketException: Failed host
+         lookup", which looks like a DNS problem but isn't. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Real step counter (steps → energy): Android 10+ gates the hardware
+         TYPE_STEP_COUNTER sensor behind this runtime permission. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+    <!-- Not required so the game still installs on devices without the
+         sensor — the tracker degrades to unavailable there. -->
+    <uses-feature
+        android:name="android.hardware.sensor.stepcounter"
+        android:required="false"/>
+    <!-- Reminders when an offline timer lands (expeditions, caravans, breeding,
+         hatching, healing). Android 13+ requires POST_NOTIFICATIONS at runtime;
+         the app asks for it the first time it actually schedules something, not
+         at launch. RECEIVE_BOOT_COMPLETED is what lets a pending reminder
+         survive a restart — without it a 12 h hunt sent before a reboot would
+         land in silence. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
         android:label="boddygame"
         android:name="${applicationName}"
@@ -25,6 +46,24 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- flutter_local_notifications: the receiver that re-arms scheduled
+             reminders after a reboot, and the one that shows a reminder whose
+             time has come. Scheduling works without these on a running device
+             and then silently loses everything on restart, which is the worst of
+             both worlds. -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

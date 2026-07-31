@@ -1,6 +1,8 @@
+import 'dart:math' as math;
+
 import '../data/building_definitions.dart';
 import '../data/goods_definitions.dart';
-import '../data/tech_definitions.dart';
+
 import '../models/energy_model.dart';
 import '../models/placed_building.dart';
 import '../models/resource_model.dart';
@@ -29,15 +31,25 @@ class GameTickResult {
   final EnergyModel energy;
   final ResourceModel resources;
   final List<PlacedBuilding> buildings;
-  final double researchSecondsBuilt;
-  final bool researchComplete;
+
+  /// Hours of this tick that actually produced (energy-gated) — lets the
+  /// controller accrue tick-proportional extras (passive BP) at exactly the
+  /// same uptime the engine used.
+  final double effectiveHours;
+
+  /// Building id → the wall-clock moment it FINISHED, for any building that
+  /// completed during this tick. A load-time catch-up folds hours of offline
+  /// time into one tick, so a building that finished long ago would otherwise
+  /// be reported "just now"; this lets the controller timestamp the event to
+  /// the real finish. Empty when nothing completed.
+  final Map<String, DateTime> completedAt;
 
   const GameTickResult({
     required this.energy,
     required this.resources,
     required this.buildings,
-    this.researchSecondsBuilt = 0,
-    this.researchComplete = false,
+    this.effectiveHours = 0,
+    this.completedAt = const {},
   });
 }
 
@@ -120,6 +132,12 @@ class GameEngine {
       if (def == null || !b.isComplete || def.isRoad || def.isMainBuilding) {
         continue;
       }
+      // A Build Plot is a free AREA, not a structure (it has no art) — it just
+      // extends buildable territory and never needs a road connection.
+      if (def.isBuildPlot) {
+        connected.add(b.id);
+        continue;
+      }
       final touches = _borderCells(
         b.gridX,
         b.gridY,
@@ -142,19 +160,48 @@ class GameEngine {
     double total = 0;
     for (final b in buildings.where((b) => functional(b, connected))) {
       final def = kBuildingDefs[b.buildingTypeId];
-      if (def != null) total += def.buildSpeedBonus;
+      if (def != null) {
+        total += def.buildSpeedBonus * buildingYieldFactor(b.level);
+      }
     }
     return total;
   }
 
   // Extra build queue slots granted by functional buildings (e.g. Builder
-  // Camp) — added on top of kBaseQueueSlots/tech-granted slots.
-  static int buildingsQueueSlotsBonusTotal(List<PlacedBuilding> buildings) {
+  // Camp) — added on top of kBaseQueueSlots/tech-granted slots. Two sources,
+  // summed: the legacy flat [queueSlotsBonus] scalar (globally level-scaled),
+  // and the per-level `queueSlots` effect (user 2026-07-25) authored with
+  // explicit per-level steps in Dev Mode. Pass the settlement's [eraOrder] so a
+  // per-era queueSlots entry only counts once its era is reached.
+  static int buildingsQueueSlotsBonusTotal(
+    List<PlacedBuilding> buildings, {
+    int eraOrder = 99,
+  }) {
     final connected = connectedBuildingIds(buildings);
     int total = 0;
     for (final b in buildings.where((b) => functional(b, connected))) {
       final def = kBuildingDefs[b.buildingTypeId];
-      if (def != null) total += def.queueSlotsBonus;
+      if (def == null) continue;
+      total += (def.queueSlotsBonus * buildingYieldFactor(b.level)).floor();
+      total += def.queueSlotsAt(b.level, eraOrder: eraOrder);
+    }
+    return total;
+  }
+
+  // Extra SIMULTANEOUS construction sites granted by functional buildings, from
+  // their per-level `buildSlots` effect (user 2026-07-25) — added on top of
+  // kBaseBuildSlots + tech-granted slots. Same shape as the queue-slot total;
+  // pass the settlement's [eraOrder] so a per-era entry only counts once reached.
+  static int buildingsBuildSlotsBonusTotal(
+    List<PlacedBuilding> buildings, {
+    int eraOrder = 99,
+  }) {
+    final connected = connectedBuildingIds(buildings);
+    int total = 0;
+    for (final b in buildings.where((b) => functional(b, connected))) {
+      final def = kBuildingDefs[b.buildingTypeId];
+      if (def == null) continue;
+      total += def.buildSlotsAt(b.level, eraOrder: eraOrder);
     }
     return total;
   }
@@ -180,14 +227,18 @@ class GameEngine {
     return cells;
   }
 
+  /// [region] lets a caller pass an already-built region set. Without it this
+  /// rebuilds the whole thing — and it's called from the placement ghost on
+  /// every pointer move, so the drag path was rebuilding it per frame.
   static bool isAreaBuildable(
     int x,
     int y,
     int w,
     int h,
-    List<PlacedBuilding> buildings,
-  ) {
-    final region = buildableRegionCells(buildings);
+    List<PlacedBuilding> buildings, {
+    Set<int>? region,
+  }) {
+    region ??= buildableRegionCells(buildings);
     for (int dx = 0; dx < w; dx++) {
       for (int dy = 0; dy < h; dy++) {
         if (!region.contains(_cellKey(x + dx, y + dy))) return false;
@@ -201,9 +252,10 @@ class GameEngine {
     int y,
     int w,
     int h,
-    List<PlacedBuilding> buildings,
-  ) {
-    final region = buildableRegionCells(buildings);
+    List<PlacedBuilding> buildings, {
+    Set<int>? region,
+  }) {
+    region ??= buildableRegionCells(buildings);
     for (int dx = 0; dx < w; dx++) {
       for (int dy = 0; dy < h; dy++) {
         if (region.contains(_cellKey(x + dx, y + dy))) return true;
@@ -211,12 +263,6 @@ class GameEngine {
     }
     return _borderCells(x, y, w, h).any(region.contains);
   }
-
-  // ── Needs system ───────────────────────────────────────────
-  // A building's need bonuses are active exactly while its required good has
-  // stock > 0 — no penalty when it runs out, the bonus just switches off.
-  static bool _needFulfilled(BuildingDef def, Map<String, double> goodsStock) =>
-      def.needGoodId != null && (goodsStock[def.needGoodId] ?? 0) > 0;
 
   // ── Main tick ─────────────────────────────────────────────
   static GameTickResult tick(
@@ -231,8 +277,11 @@ class GameEngine {
     double techGoods = 0,
     double techAll = 0,
     double techBuildSpeed = 0,
-    String? activeResearchId,
-    double researchSecondsBuilt = 0,
+    // Multiplicative scale on top of the additive bonuses above — the
+    // new-player jumpstart passes 1/kJumpstartTimeScale (= 5x). Separate
+    // because the tech/building bonuses are a SUM and this is a factor;
+    // folding it in there would make it scale with them.
+    double buildSpeedScale = 1.0,
   }) {
     final hoursDelta =
         now.difference(energy.lastUpdatedAt).inMicroseconds / 3.6e9;
@@ -241,42 +290,35 @@ class GameEngine {
         energy: energy,
         resources: resources,
         buildings: buildings,
-        researchSecondsBuilt: researchSecondsBuilt,
       );
     }
 
     final startEnergy = energy.currentEnergy;
-    if (startEnergy <= 0) {
-      return GameTickResult(
-        energy: energy.copyWith(lastUpdatedAt: now),
-        resources: resources,
-        buildings: buildings,
-        researchSecondsBuilt: researchSecondsBuilt,
-      );
-    }
 
+    // Energy is a BOOST, not a gate (user 2026-07-21): hours with energy in
+    // the tank run at full rate, hours after it empties still run at
+    // kEnergyFloorRate. An empty settlement slows to a trickle instead of
+    // stopping dead — the old hard stop punished exactly the player who
+    // hadn't walked, at the moment the game needed to win them back.
     final drainNeeded = kDrainPerHour * hoursDelta;
-    final double effectiveHours = startEnergy >= drainNeeded
-        ? hoursDelta
-        : startEnergy / kDrainPerHour;
+    final double fullHours = startEnergy <= 0
+        ? 0
+        : (startEnergy >= drainNeeded
+              ? hoursDelta
+              : startEnergy / kDrainPerHour);
+    final double effectiveHours =
+        fullHours + (hoursDelta - fullHours) * kEnergyFloorRate;
 
     final connected = connectedBuildingIds(buildings);
-    final goodsStock = resources.goods;
 
-    // Percentage bonuses still come from functional buildings (needs system +
-    // build-speed buildings) — they layer on top of the creature-driven power.
+    // Percentage bonuses still come from functional build-speed buildings —
+    // they layer on top of the creature-driven power.
     double woodBonusPct = 0, stoneBonusPct = 0;
-    double goldMult = 1.0;
     double buildingsBuildSpeedBonus = 0;
     for (final b in buildings.where((b) => functional(b, connected))) {
       final def = kBuildingDefs[b.buildingTypeId];
       if (def == null) continue;
       buildingsBuildSpeedBonus += def.buildSpeedBonus;
-      if (_needFulfilled(def, goodsStock)) {
-        woodBonusPct += def.needWoodBonus;
-        stoneBonusPct += def.needStoneBonus;
-        goldMult += def.needGoldBonus;
-      }
     }
     woodBonusPct += techWood + techAll;
     stoneBonusPct += techStone + techAll;
@@ -289,24 +331,31 @@ class GameEngine {
         resources.wood + woodPower * (1 + woodBonusPct) * effectiveHours;
     final newStone =
         resources.stone + stonePower * (1 + stoneBonusPct) * effectiveHours;
-    final newGold = resources.gold + goldPower * goldMult * effectiveHours;
+    final newGold = resources.gold + goldPower * effectiveHours;
 
-    // Construction: creatures stationed in construction roles produce
-    // build-seconds/hour (workshopPower['construction']), split evenly across
-    // all active (non-queued) build sites. Zero builders = nothing builds.
-    final buildPower = workshopPower[WorkshopRole.kConstruction] ?? 0;
-    final activeCount = buildings
-        .where(
-          (b) =>
-              !b.isComplete && !b.isQueued && b.constructionSecondsRequired > 0,
-        )
-        .length;
-    final buildSecondsGained = activeCount > 0
-        ? buildPower *
-              (1.0 + techBuildSpeed + buildingsBuildSpeedBonus) *
-              effectiveHours /
-              activeCount
-        : 0.0;
+    // Construction: workshopPower['construction'] is a count of BUILD POINTS
+    // (stationed builders + passive effects, 1:1), and points buy a percent off
+    // the authored build time — buildSpeedFromPoints is 1/(1 − that cut), so
+    // 3600 × it is the build-seconds one real hour is worth. EVERY active site
+    // builds at the FULL rate (user 2026-07-24: no split across sites).
+    //
+    // Zero builders no longer means zero progress (user 2026-07-26): a site
+    // with nobody on it advances at 3600 s/h, i.e. finishes in exactly the time
+    // its def says. Builders only ever make that shorter.
+    final buildPoints = workshopPower[WorkshopRole.kConstruction] ?? 0;
+    final buildSecondsGained = 3600 *
+        buildSpeedFromPoints(buildPoints) *
+        (1.0 + techBuildSpeed + buildingsBuildSpeedBonus) *
+        buildSpeedScale *
+        effectiveHours;
+
+    // Construction only runs during the energy-gated effectiveHours, which
+    // occupy the START of this tick's window (energy drains, then work stops),
+    // so a build finishes at prevNow + (fraction of the gain it needed) ×
+    // effectiveHours. Precise enough to timestamp the "finished" event to when
+    // it really happened rather than to screen-open.
+    final prevNow = energy.lastUpdatedAt;
+    final completedAt = <String, DateTime>{};
 
     final newBuildings = buildings.map((b) {
       if (b.isComplete || b.isQueued || b.constructionSecondsRequired <= 0) {
@@ -316,38 +365,33 @@ class GameEngine {
         0.0,
         b.constructionSecondsRequired,
       );
+      final done = newBuilt >= b.constructionSecondsRequired;
+      if (done && buildSecondsGained > 0) {
+        final remaining =
+            b.constructionSecondsRequired - b.constructionSecondsBuilt;
+        final frac = (remaining / buildSecondsGained).clamp(0.0, 1.0);
+        completedAt[b.id] = prevNow.add(
+          Duration(microseconds: (frac * effectiveHours * 3.6e9).round()),
+        );
+      }
       return b.copyWith(
         constructionSecondsBuilt: newBuilt,
-        isComplete: newBuilt >= b.constructionSecondsRequired,
+        isComplete: done,
       );
     }).toList();
 
-    final newGoods = _tickGoods(
-      buildings,
+    // Refineries buy their input out of THIS tick's yard (raw already banked
+    // plus what was just gathered), so a sawmill can eat the wood the camps
+    // produced alongside it.
+    final goodsTick = _tickGoods(
       resources.goods,
       workshopPower,
       creatureCount,
       effectiveHours,
       techGoods,
-      connected,
+      rawStock: {'wood': newWood, 'stone': newStone, 'gold': newGold},
     );
-
-    // Research: creatures in research roles produce research-seconds/hour
-    // (workshopPower['research']), accrued into the active tech until it
-    // reaches its own researchSeconds. Zero researchers = no progress.
-    final researchPower = workshopPower[WorkshopRole.kResearch] ?? 0;
-    double newResearchSecondsBuilt = researchSecondsBuilt;
-    bool researchComplete = false;
-    if (activeResearchId != null) {
-      final researchDef = kTechDefs[activeResearchId];
-      if (researchDef != null) {
-        newResearchSecondsBuilt =
-            (researchSecondsBuilt + researchPower * effectiveHours)
-                .clamp(0.0, researchDef.researchSeconds);
-        researchComplete =
-            newResearchSecondsBuilt >= researchDef.researchSeconds;
-      }
-    }
+    final newGoods = goodsTick.goods;
 
     final newEnergyLevel = (startEnergy - kDrainPerHour * hoursDelta).clamp(
       0.0,
@@ -360,109 +404,130 @@ class GameEngine {
         lastUpdatedAt: now,
       ),
       resources: resources.copyWith(
-        wood: newWood,
-        stone: newStone,
-        gold: newGold,
+        wood: newWood - (goodsTick.rawSpent['wood'] ?? 0),
+        stone: newStone - (goodsTick.rawSpent['stone'] ?? 0),
+        gold: newGold - (goodsTick.rawSpent['gold'] ?? 0),
         goods: newGoods,
         lastUpdatedAt: now,
       ),
       buildings: newBuildings,
-      researchSecondsBuilt: newResearchSecondsBuilt,
-      researchComplete: researchComplete,
+      effectiveHours: effectiveHours,
+      completedAt: completedAt,
     );
   }
 
   // ── Goods tick ────────────────────────────────────────────
-  static Map<String, double> _tickGoods(
-    List<PlacedBuilding> buildings,
+  /// Produces this tick's goods and returns them together with the RAW
+  /// resources the refineries burned (wood/stone/gold), which tick() then
+  /// deducts.
+  ///
+  /// A refined good (GoodsDef.refinedFrom, user 2026-07-22) is throttled to
+  /// what its inputs actually cover: a sawmill with no wood in the yard makes
+  /// no planks, it doesn't mint them from nothing. Materials are processed in
+  /// era order so a chain (planks → steel) can spend what the same tick just
+  /// refined.
+  static ({Map<String, double> goods, Map<String, double> rawSpent}) _tickGoods(
     Map<String, double> currentGoods,
     Map<String, double> workshopPower,
     int creatureCount,
     double hours,
-    double techGoods,
-    Set<String> connected,
-  ) {
-    final needConsumption = _needConsumptionTotals(buildings, connected);
+    double techGoods, {
+    Map<String, double> rawStock = const {},
+  }) {
     final newGoods = Map<String, double>.from(currentGoods);
-    for (final gDef in kGoodsDefs.values) {
+    final rawSpent = <String, double>{};
+    double rawLeft(String id) => (rawStock[id] ?? 0) - (rawSpent[id] ?? 0);
+
+    final ordered = kGoodsDefs.values.toList()
+      ..sort((a, b) {
+        final byEra = a.eraOrder.compareTo(b.eraOrder);
+        return byEra != 0 ? byEra : a.id.compareTo(b.id);
+      });
+
+    for (final gDef in ordered) {
       final rate = (workshopPower[gDef.id] ?? 0) * (1 + techGoods);
-      final produced = rate * hours;
-      final consumed =
-          (creatureCount * gDef.consumptionPerCapitaPerHour +
-              (needConsumption[gDef.id] ?? 0)) *
-          hours;
+      var produced = rate * hours;
+      if (produced > 0 && gDef.isElement) {
+        // Cap by the scarcest input, then charge every input for what was
+        // really made.
+        for (final input in gDef.refinedFrom.entries) {
+          final available = kGoodsDefs.containsKey(input.key)
+              ? (newGoods[input.key] ?? 0)
+              : rawLeft(input.key);
+          produced = math.min(produced, available / input.value);
+        }
+        produced = math.max(0, produced);
+        for (final input in gDef.refinedFrom.entries) {
+          final cost = produced * input.value;
+          if (kGoodsDefs.containsKey(input.key)) {
+            newGoods[input.key] = ((newGoods[input.key] ?? 0) - cost).clamp(
+              0.0,
+              double.infinity,
+            );
+          } else {
+            rawSpent[input.key] = (rawSpent[input.key] ?? 0) + cost;
+          }
+        }
+      }
+      final consumed = creatureCount * gDef.consumptionPerCapitaPerHour * hours;
       newGoods[gDef.id] = ((newGoods[gDef.id] ?? 0) + produced - consumed)
           .clamp(0.0, double.infinity);
     }
-    return newGoods;
-  }
-
-  // Real per-building upkeep, keyed by the good it drains — e.g. every
-  // functional Hut drinks 1 Fish/h regardless of whether its own need-bonus is
-  // currently active. Independent of creatures' per-capita consumption.
-  static Map<String, double> _needConsumptionTotals(
-    List<PlacedBuilding> buildings,
-    Set<String> connected,
-  ) {
-    final totals = <String, double>{};
-    for (final b in buildings.where((b) => functional(b, connected))) {
-      final def = kBuildingDefs[b.buildingTypeId];
-      if (def == null || def.needGoodId == null) continue;
-      if (def.needConsumptionPerHour == 0) continue;
-      totals[def.needGoodId!] =
-          (totals[def.needGoodId!] ?? 0) + def.needConsumptionPerHour;
-    }
-    return totals;
+    return (goods: newGoods, rawSpent: rawSpent);
   }
 
   // ── Housing capacity ──────────────────────────────────────
   // How many creatures the settlement can shelter — the sum of every
-  // functional housing building's capacity (needPopulationBonus/populationBonus
-  // still boost it, matching the old population math so existing housing tuning
-  // carries over unchanged; they just now cap the collection instead of
-  // spawning workers).
-  static int housingCapacity(
-    List<PlacedBuilding> buildings,
-    Map<String, double> goodsStock,
-  ) {
+  // functional housing building's capacity, scaled by the settlement-wide
+  // populationBonus of every functional building.
+  static int housingCapacity(List<PlacedBuilding> buildings, {int eraOrder = 1}) {
     final connected = connectedBuildingIds(buildings);
     double cap = 0;
     double bonusTotal = 0;
     for (final b in buildings.where((b) => functional(b, connected))) {
       final def = kBuildingDefs[b.buildingTypeId];
       if (def == null) continue;
-      final bonus = _needFulfilled(def, goodsStock)
-          ? def.needPopulationBonus
-          : 0;
-      cap += def.housingCapacity * (1 + bonus);
-      bonusTotal += def.populationBonus;
+      // Level scales both a building's own housing and any % bonus it grants.
+      final f = buildingYieldFactor(b.level);
+      // A per-era `housing` effect OVERRIDES the flat population column — that
+      // is how a persistent dwelling shelters more each era.
+      // The housing effect carries its own level scaling now; the flat
+      // population-column fallback is still scaled by the global curve here.
+      final baseCap = def.hasEffect('housing', eraOrder)
+          ? def.effectAt('housing', '', eraOrder, level: b.level)
+          : def.housingCapacity.toDouble() * f;
+      cap += baseCap;
+      bonusTotal += def.populationBonus * f;
     }
     return (cap * (1 + bonusTotal)).round();
   }
 
   // Grouped-by-type breakdown of housing capacity, for the housing overview.
   static List<ProductionSource> housingSources(
-    List<PlacedBuilding> buildings,
-    Map<String, double> goodsStock,
-  ) {
+    List<PlacedBuilding> buildings, {
+    int eraOrder = 1,
+  }) {
     final connected = connectedBuildingIds(buildings);
     final functionalBuildings =
         buildings.where((b) => functional(b, connected));
     double bonusTotal = 0;
     for (final b in functionalBuildings) {
       final def = kBuildingDefs[b.buildingTypeId];
-      if (def != null) bonusTotal += def.populationBonus;
+      if (def != null) {
+        bonusTotal += def.populationBonus * buildingYieldFactor(b.level);
+      }
     }
 
     final totals = <String, double>{};
     final counts = <String, int>{};
     for (final b in functionalBuildings) {
       final def = kBuildingDefs[b.buildingTypeId];
-      if (def == null || def.housingCapacity == 0) continue;
-      final bonus = _needFulfilled(def, goodsStock)
-          ? def.needPopulationBonus
-          : 0;
-      final amount = def.housingCapacity * (1 + bonus) * (1 + bonusTotal);
+      if (def == null) continue;
+      final baseCap = def.hasEffect('housing', eraOrder)
+          ? def.effectAt('housing', '', eraOrder, level: b.level)
+          : def.housingCapacity.toDouble() * buildingYieldFactor(b.level);
+      if (baseCap == 0) continue;
+      final amount = baseCap * (1 + bonusTotal);
       totals[def.id] = (totals[def.id] ?? 0) + amount;
       counts[def.id] = (counts[def.id] ?? 0) + 1;
     }
@@ -488,39 +553,40 @@ class GameEngine {
 
   // ── Hourly display rates ──────────────────────────────────
   // Turns the raw creature-driven workshop power into the per-hour rate shown
-  // in the top bar, applying the same need/tech bonuses tick() does. Energy
-  // gates everything: zero energy = zero rate.
+  // in the top bar, applying the same tech bonuses tick() does. Energy boosts
+  // everything: an empty tank runs at kEnergyFloorRate, not zero.
   static Map<String, double> hourlyRates(
     EnergyModel energy,
-    List<PlacedBuilding> buildings,
-    Map<String, double> workshopPower,
-    Map<String, double> goodsStock, {
+    Map<String, double> workshopPower, {
     double techWood = 0,
     double techStone = 0,
     double techGoods = 0,
     double techAll = 0,
   }) {
-    final connected = connectedBuildingIds(buildings);
-    double woodBonusPct = 0, stoneBonusPct = 0, goldMult = 1.0;
-    for (final b in buildings.where((b) => functional(b, connected))) {
-      final def = kBuildingDefs[b.buildingTypeId];
-      if (def == null || !_needFulfilled(def, goodsStock)) continue;
-      woodBonusPct += def.needWoodBonus;
-      stoneBonusPct += def.needStoneBonus;
-      goldMult += def.needGoldBonus;
-    }
-    woodBonusPct += techWood + techAll;
-    stoneBonusPct += techStone + techAll;
+    final woodBonusPct = techWood + techAll;
+    final stoneBonusPct = techStone + techAll;
 
-    final active = energy.currentEnergy > 0 ? 1.0 : 0.0;
+    final active = energy.currentEnergy > 0 ? 1.0 : kEnergyFloorRate;
     final rates = <String, double>{
       'wood': (workshopPower['wood'] ?? 0) * (1 + woodBonusPct) * active,
       'stone': (workshopPower['stone'] ?? 0) * (1 + stoneBonusPct) * active,
-      'gold': (workshopPower['gold'] ?? 0) * goldMult * active,
+      'gold': (workshopPower['gold'] ?? 0) * active,
     };
     for (final gDef in kGoodsDefs.values) {
       rates[gDef.id] =
           (workshopPower[gDef.id] ?? 0) * (1 + techGoods) * active;
+    }
+    // A refinery's INPUT is a real drain on the rate the player reads: a
+    // sawmill running at 5 planks/h is quietly eating 10 wood/h, and a top bar
+    // that showed the gross wood rate would promise a surplus that never
+    // arrives. Assumes the inputs are covered (the yard's stock isn't known
+    // here) — the same optimism the gross rate already had.
+    for (final gDef in kGoodsDefs.values.where((g) => g.isElement)) {
+      final made = rates[gDef.id] ?? 0;
+      if (made <= 0) continue;
+      gDef.refinedFrom.forEach((input, per) {
+        rates[input] = (rates[input] ?? 0) - made * per;
+      });
     }
     return rates;
   }

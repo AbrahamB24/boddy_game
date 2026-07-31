@@ -6,6 +6,7 @@ import '../models/placed_building.dart';
 import '../services/game_engine.dart';
 import '../settlement_controller.dart';
 import '../widgets/building_icon.dart';
+import '../widgets/parchment_sheet.dart';
 
 // Housing & workforce overview — opened from the 🏠 header cell. Captured
 // creatures ARE the population now: housing buildings cap how many you can
@@ -36,105 +37,80 @@ class _PopulationOverviewSheetState extends State<PopulationOverviewSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (context, scrollCtrl) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        child: Container(
-          decoration: const BoxDecoration(
-            gradient: FoE.panelGradient,
-            border: Border(top: BorderSide(color: FoE.borderGold, width: 1.5)),
-          ),
-          child: AnimatedBuilder(
-            animation: ctrl,
-            builder: (context, _) {
-              final used = ctrl.housingUsed;
-              final cap = ctrl.housingCapacity;
-              final sources = ctrl.housingSources;
-              final workshops = _workshops;
-
-              return Padding(
-                padding: EdgeInsets.only(
-                  left: 24,
-                  right: 24,
-                  top: 20,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                ),
-                child: SingleChildScrollView(
-                  controller: scrollCtrl,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 36,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: FoE.borderGold,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          const Text('🏠', style: TextStyle(fontSize: 20)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text('Housing', style: FoE.title(size: 16)),
-                          ),
-                          Text(
-                            '$used / $cap',
-                            style: FoE.value(size: 14).copyWith(
-                              color:
-                                  used >= cap ? Colors.redAccent : FoE.goldBright,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        used >= cap
-                            ? 'Full — build more housing to catch or hatch more creatures.'
-                            : '${cap - used} free slot(s) for new creatures.',
-                        style: FoE.dim(size: 11).copyWith(
-                          color: used >= cap ? Colors.redAccent : FoE.textDim,
-                        ),
-                      ),
-                      FoE.divider(vPad: 8),
-                      if (sources.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Text(
-                            'No housing built yet.',
-                            style:
-                                FoE.dim(size: 11).copyWith(color: FoE.textDim),
-                          ),
-                        )
-                      else
-                        ...sources.map(_sourceRow),
-                      const SizedBox(height: 14),
-                      Text('Workshops', style: FoE.title(size: 14)),
-                      const SizedBox(height: 8),
-                      if (workshops.isEmpty)
-                        Text(
-                          'No connected workshop yet. Build one and station '
-                          'creatures in it from its dialog on the map.',
-                          style: FoE.dim(size: 11).copyWith(color: FoE.textDim),
-                        )
-                      else
-                        ...workshops.map(_workshopRow),
-                    ],
-                  ),
-                ),
-              );
-            },
+    return ParchmentSheet(
+      title: 'Housing',
+      initialSize: 0.7,
+      minSize: 0.4,
+      maxSize: 0.95,
+      trailing: AnimatedBuilder(
+        animation: ctrl,
+        builder: (context, _) => Text(
+          '${ctrl.housingUsed} / ${ctrl.housingCapacity}',
+          style: FoE.value(size: 14).copyWith(
+            color: ctrl.housingUsed >= ctrl.housingCapacity
+                ? FoE.danger
+                : ParchmentSheet.accent,
           ),
         ),
+      ),
+      builder: (context, scrollCtrl) => AnimatedBuilder(
+        animation: ctrl,
+        builder: (context, _) {
+          final used = ctrl.housingUsed;
+          final cap = ctrl.housingCapacity;
+          final sources = ctrl.housingSources;
+          final workshops = _workshops;
+          return SingleChildScrollView(
+            controller: scrollCtrl,
+            padding: EdgeInsets.fromLTRB(
+              26,
+              4,
+              26,
+              MediaQuery.of(context).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  used >= cap
+                      ? 'Full — build more housing to catch or hatch more creatures.'
+                      : '${cap - used} free slot(s) for new creatures.',
+                  style: FoE.dim(size: 11).copyWith(
+                    color: used >= cap ? FoE.danger : ParchmentSheet.inkSoft,
+                  ),
+                ),
+                FoE.divider(vPad: 8),
+                if (sources.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      'No housing built yet.',
+                      style: FoE.dim(size: 11)
+                          .copyWith(color: ParchmentSheet.inkFaint),
+                    ),
+                  )
+                else
+                  ...sources.map(_sourceRow),
+                const SizedBox(height: 14),
+                Text(
+                  'Workshops',
+                  style: FoE.title(size: 14).copyWith(color: ParchmentSheet.ink),
+                ),
+                const SizedBox(height: 8),
+                if (workshops.isEmpty)
+                  Text(
+                    'No connected workshop yet. Build one and station '
+                    'creatures in it from its dialog on the map.',
+                    style: FoE.dim(size: 11)
+                        .copyWith(color: ParchmentSheet.inkSoft),
+                  )
+                else
+                  ...workshops.map(_workshopRow),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -182,7 +158,8 @@ class _PopulationOverviewSheetState extends State<PopulationOverviewSheet> {
                             c.assignedStat == role.stat)
                         .length;
                     return Text(
-                      '${role.stat.label} → ${role.resource}: $n/${role.slots}',
+                      '${role.stat.label} → ${role.resource}: '
+                      '$n/${effectiveSlots(role, b.level)}',
                       style: FoE.dim(size: 10).copyWith(
                         color: n > 0 ? FoE.gold : FoE.textDim,
                       ),

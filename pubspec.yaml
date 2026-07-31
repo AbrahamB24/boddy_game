@@ -14,6 +14,22 @@ dependencies:
   google_fonts: ^6.2.1
   cached_network_image: ^3.4.1
   file_picker: ^11.0.2
+  pedometer: ^4.2.0
+  permission_handler: ^12.0.3
+  shared_preferences: ^2.5.5
+  # Pulls the player back when an offline timer lands — expeditions, caravans,
+  # breeding, hatching, crafting, healing and construction all finish while the
+  # app is closed, and until now nothing said so (user 2026-07-30).
+  flutter_local_notifications: ^19.4.2
+  # zonedSchedule() works in a named zone, so the reminder has to be built in the
+  # DEVICE's zone — otherwise a 2 h trip fires at the right instant on Android and
+  # at the wrong wall-clock time on iOS.
+  timezone: ^0.10.1
+  flutter_timezone: ^4.1.1
+  # Sound effects (user 2026-07-30). Kept behind Feel.soundOn so a player who
+  # wants silence gets it, and every clip is a small generated WAV in
+  # assets/sfx/ — see core/ui/feel.dart.
+  audioplayers: ^6.5.1
 
 dev_dependencies:
   flutter_test:
@@ -24,3 +40,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/sfx/

@@ -1,89 +1,29 @@
 import 'package:flutter/material.dart';
+import '../../creatures/models/species_def.dart' show kSpeciesDefs;
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/theme/parchment_theme.dart';
 
-// The app's ambient Material theme (buildWorkoutTheme in workout_theme.dart)
-// is a LIGHT theme built for the Workout side of the app. Dev Mode's plain
-// TextFormField/DropdownButtonFormField/Checkbox widgets would otherwise
-// inherit that theme's colors — near-invisible against FoE's near-black
-// background, which is why the original Dev Mode UI was hard to read. Every
+// Dev Mode's plain TextFormField/DropdownButtonFormField/Checkbox widgets
+// inherit the ambient Material theme's colors, which can render
+// near-invisible against FoE's near-black background — which is why the
+// original Dev Mode UI was hard to read. Every
 // Dev Mode screen wraps its Scaffold in `Theme(data: buildDevModeTheme(),
 // child: ...)` so form fields are readable without repeating color
 // overrides on every single field.
-ThemeData buildDevModeTheme() {
-  return ThemeData(
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: FoE.bg,
-    colorScheme: const ColorScheme.dark(
-      primary: FoE.gold,
-      secondary: FoE.gold,
-      surface: FoE.panelDark,
-      onSurface: FoE.parchment,
-      error: Colors.redAccent,
-    ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: FoE.panelDark,
-      labelStyle: FoE.label(size: 13).copyWith(color: FoE.gold),
-      floatingLabelStyle: FoE.label(size: 13).copyWith(color: FoE.goldBright),
-      hintStyle: FoE.label(size: 13).copyWith(color: FoE.textDim),
-      helperStyle: FoE.label(size: 11).copyWith(color: FoE.textDim),
-      border: const OutlineInputBorder(
-        borderSide: BorderSide(color: FoE.border),
-      ),
-      enabledBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: FoE.border),
-      ),
-      focusedBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: FoE.goldBright, width: 2),
-      ),
-      disabledBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: FoE.textMuted),
-      ),
-    ),
-    textSelectionTheme: const TextSelectionThemeData(
-      cursorColor: FoE.goldBright,
-      selectionColor: FoE.borderGold,
-      selectionHandleColor: FoE.goldBright,
-    ),
-    checkboxTheme: CheckboxThemeData(
-      fillColor: WidgetStateProperty.resolveWith(
-        (states) =>
-            states.contains(WidgetState.selected) ? FoE.gold : FoE.panelMid,
-      ),
-      checkColor: const WidgetStatePropertyAll(Colors.black),
-      side: const BorderSide(color: FoE.border, width: 1.5),
-    ),
-    chipTheme: ChipThemeData(
-      backgroundColor: FoE.panelMid,
-      selectedColor: FoE.gold,
-      labelStyle: FoE.label(size: 12),
-      secondaryLabelStyle: FoE.label(size: 12).copyWith(color: Colors.black),
-      side: const BorderSide(color: FoE.border),
-    ),
-    appBarTheme: AppBarTheme(
-      backgroundColor: FoE.panelDark,
-      titleTextStyle: FoE.title(size: 16),
-      iconTheme: const IconThemeData(color: FoE.gold),
-    ),
-    tabBarTheme: TabBarThemeData(
-      labelColor: FoE.goldBright,
-      unselectedLabelColor: FoE.textDim,
-      indicatorColor: FoE.gold,
-      labelStyle: FoE.label(size: 13),
-    ),
-    iconTheme: const IconThemeData(color: FoE.parchment),
-    dropdownMenuTheme: DropdownMenuThemeData(textStyle: FoE.label(size: 13)),
-    popupMenuTheme: PopupMenuThemeData(
-      color: FoE.panelDark,
-      textStyle: FoE.label(size: 13),
-    ),
-    textTheme: TextTheme(
-      bodyLarge: FoE.label(size: 14),
-      bodyMedium: FoE.label(size: 13),
-      bodySmall: FoE.label(size: 12),
-    ),
-  );
-}
+/// The dev forms' theme (user 2026-07-27: "übertrage dies bitte auf die gesamte
+/// app … D.h Buttons, Dropdown menüs etc. ebenfalls anpassen").
+///
+/// It used to be a whole second ThemeData — `Brightness.dark`, a dark colour
+/// scheme, its own field borders, chips, app bar and popup menus. That was
+/// right when the app was dark chrome and the forms needed readable fields on
+/// it; now it is the one thing left holding a dark surface on a parchment app,
+/// and every value in it is a value the app theme already carries.
+///
+/// So it IS the app theme. The wrapper stays because the forms all call it —
+/// deleting it would be a change to fifteen files for no behaviour — and
+/// because dev forms may yet want a tweak of their own; there is now exactly
+/// one place to put it.
+ThemeData buildDevModeTheme() => buildParchmentTheme();
 
 // Matches the FoE-styled confirm dialog already used in
 // settlement_screen.dart's _confirmReset — a plain Dialog + FoE.panel()
@@ -160,3 +100,18 @@ Future<bool> confirmDeleteDialog(
   );
   return ok ?? false;
 }
+
+/// A monster's name in ITS RARITY'S colour (user 2026-07-30: "Gib mir zudem im
+/// ganzen Kampagnen dev screen an, welche Seltenheit ein Monster hat, indem der
+/// Name in der Schriftfarbe gehalten ist").
+///
+/// The campaign screens list species by name over and over — in a node's enemy
+/// rows, in the per-era distribution, in the roster the dice draws from — and a
+/// name alone says nothing about what you are actually putting in front of the
+/// player. The rarity already owns a colour ([CreatureRarity.color]); this is
+/// simply that colour, applied where the name is read.
+///
+/// Falls back to the parchment ink for an id nothing defines, so a stale
+/// reference still reads as text rather than disappearing.
+Color speciesNameColor(String speciesId) =>
+    kSpeciesDefs[speciesId]?.rarity.color ?? FoE.parchment;

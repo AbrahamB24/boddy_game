@@ -3,7 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/supabase/supabase_client.dart';
 import '../models/ability_def.dart';
+import '../models/heal_balance.dart';
+import '../models/species_balance.dart';
 import '../models/species_def.dart';
+import '../models/xp_balance.dart';
 import 'creature_defs_service.dart';
 
 // Singleton, mirroring GameDefsController: loads species/ability defs from
@@ -39,6 +42,18 @@ class CreatureDefsController extends ChangeNotifier {
           for (final row in speciesRows)
             row['id'] as String: SpeciesDef.fromDefRow(row),
         });
+
+      // Global species-balance config (per-rarity budgets + attribute caps).
+      final balance = await _svc.loadSpeciesBalance();
+      if (balance != null) kSpeciesBalance = balance;
+
+      // Global XP config (curve + passive/training rates + era multiplier).
+      final xp = await _svc.loadXpBalance();
+      if (xp != null) kXpBalance = xp;
+
+      // Global healing config (treatment time + goods per HP + K.O. factor).
+      final heal = await _svc.loadHealBalance();
+      if (heal != null) kHealBalance = heal;
     } catch (e) {
       // Tables not migrated yet / offline: keep whatever is in the maps.
       debugPrint('[CreatureDefsController] load failed: $e');

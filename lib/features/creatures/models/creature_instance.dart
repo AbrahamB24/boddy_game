@@ -5,9 +5,10 @@ import 'species_def.dart';
 
 // One creature OWNED by a player — a row in the `creatures` table. Species
 // data (per-stat mean curves, stages, abilities) lives in kSpeciesDefs; this
-// holds the individual: level/XP, gender, the 12 independently-sampled genes
-// (6 stat bases + 6 growth slopes — see rollGenes), evolution stage and the
-// persistent HP/energy pools (both survive between fights by design).
+// holds the individual: level/XP, gender, the 28 independently-sampled genes
+// (a base value AND a growth slope for each of the 14 stats — see rollGenes),
+// evolution stage and the persistent HP pool (it survives between fights by
+// design).
 class CreatureInstance {
   final String id; // uuid (DB-generated on insert)
   final String userId;
@@ -19,7 +20,7 @@ class CreatureInstance {
   int xp;
 
   /// 0 = base form, 1/2 = evolutions (gated by the species' own evoLevel1/2
-  /// + BP cost). Evolving bumps [statBase] additively — see
+  /// Evolving bumps [statBase] additively — see
   /// CreaturesController.evolve.
   int stage;
 
@@ -33,10 +34,43 @@ class CreatureInstance {
   /// spec: evolution bumps the base/socket, never the slope).
   final Map<CreatureStat, double> statSlope;
 
-  /// Persistent pools. `currentHp` is clamped to maxHp on read so a level-up
+  /// Persistent HP pool. `currentHp` is clamped to maxHp on read so a level-up
   /// or evolution never leaves it out of range; 0 = K.O. until healed.
+  /// (There is no energy pool any more — combat runs on Action Points.)
   int currentHp;
-  int currentEnergy;
+
+  /// When this creature's treatment finishes, or null when it isn't being
+  /// healed. Healing takes real time proportional to the damage (see
+  /// healing_cost.dart's healDuration) and a creature is UNAVAILABLE while it
+  /// mends — that wait is what makes a knockout cost something beyond goods.
+  ///
+  /// Resolved lazily on read/load rather than by a timer, so a heal that
+  /// finishes while the app is closed is simply done next launch — same rule
+  /// as expeditions and breeding.
+  DateTime? healingUntil;
+
+  bool get isHealing =>
+      healingUntil != null && healingUntil!.isAfter(DateTime.now());
+
+  /// WHEN THIS MONSTER WAS PUT IN LINE for the Healing Hut, or null when it is
+  /// not queued (migration 0029, user 2026-07-27: "treat all sollte nicht
+  /// funktionieren, da ich aktuell keine Warteschlange habe").
+  ///
+  /// The hut treats only so many at once; anyone else waits here and is pulled
+  /// in — oldest entry first — as a slot frees. Cleared the moment treatment
+  /// starts, so [healingUntil] and this are never both set.
+  DateTime? healQueuedAt;
+
+  /// In line, but not yet under treatment.
+  bool get isQueuedForHealing => healQueuedAt != null && !isHealing;
+
+  /// Treatment time left, or zero when it isn't healing (or is done).
+  Duration get healingRemaining {
+    final until = healingUntil;
+    if (until == null) return Duration.zero;
+    final left = until.difference(DateTime.now());
+    return left.isNegative ? Duration.zero : left;
+  }
 
   /// Work assignment (settlement economy). A creature works in AT MOST ONE
   /// workshop at a time: [assignedBuildingId] is the PlacedBuilding it's
@@ -64,13 +98,13 @@ class CreatureInstance {
     required this.statBase,
     required this.statSlope,
     int? currentHp,
-    int? currentEnergy,
+    this.healingUntil,
+    this.healQueuedAt,
     this.assignedBuildingId,
     this.assignedStat,
     this.parentAId,
     this.parentBId,
-  }) : currentHp = currentHp ?? -1,
-       currentEnergy = currentEnergy ?? -1;
+  }) : currentHp = currentHp ?? -1;
 
   bool get isAssigned => assignedBuildingId != null && assignedStat != null;
 
@@ -94,6 +128,13 @@ class CreatureInstance {
 
   String? get imageUrl => species?.stageAt(stage).imageUrl;
 
+  /// The battle back-view (player's own monster seen from behind). Falls back
+  /// to the front view while no dedicated back art has been uploaded.
+  String? get backImageUrl {
+    final s = species?.stageAt(stage);
+    return s?.backImageUrl ?? s?.imageUrl;
+  }
+
   // ── Stat formula (single source of truth) ─────────────────
   // Stat(Level) = Ausgangswert + WertProLevel·(Level-1) — linear, per the
   // balance spec. Kept unrounded until the very last step to avoid
@@ -106,28 +147,28 @@ class CreatureInstance {
   }
 
   int get maxHp => statValue(CreatureStat.hp);
-  int get maxEnergy => statValue(CreatureStat.energy);
 
   int get hp => currentHp < 0 ? maxHp : currentHp.clamp(0, maxHp);
   set hp(int v) => currentHp = v.clamp(0, maxHp);
-
-  int get energy =>
-      currentEnergy < 0 ? maxEnergy : currentEnergy.clamp(0, maxEnergy);
-  set energy(int v) => currentEnergy = v.clamp(0, maxEnergy);
 
   bool get isKo => hp <= 0;
 
   // ── XP / leveling ─────────────────────────────────────────
   /// Adds XP, consuming level-ups until the cap. Returns levels gained.
-  int gainXp(int amount) {
+  ///
+  /// [levelCap] is the ERA's ceiling (user 2026-07-22: era N caps every
+  /// monster at N×10). XP past the cap is FORFEITED — the pool zeroes, so a
+  /// capped monster banks nothing toward the next era.
+  int gainXp(int amount, {int? levelCap}) {
+    final cap = (levelCap ?? kCreatureMaxLevel).clamp(1, kCreatureMaxLevel);
     var gained = 0;
     xp += amount;
-    while (level < kCreatureMaxLevel && xp >= xpToNextLevel(level)) {
+    while (level < cap && xp >= xpToNextLevel(level)) {
       xp -= xpToNextLevel(level);
       level++;
       gained++;
     }
-    if (level >= kCreatureMaxLevel) xp = 0;
+    if (level >= cap) xp = 0;
     return gained;
   }
 
@@ -138,16 +179,17 @@ class CreatureInstance {
     return level >= s.evoLevelFrom(stage);
   }
 
-  /// BP price for the NEXT evolution (null if already final stage).
-  int? get nextEvolutionCostBp {
-    final s = species;
-    if (s == null || stage >= 2) return null;
-    return evolutionCostBp(s.rarity, stage + 1);
-  }
+  /// Whether a further evolution stage exists at all (stage 2 is final).
+  ///
+  /// This replaced `nextEvolutionCostBp`, which returned a BP price and used
+  /// null to mean "final stage". Evolution costs nothing now — it's a reward
+  /// for the levelling, claimed by hand — so only the question survives.
+  bool get hasNextStage => species != null && stage < 2;
 
   // ── Gene sampling (IV replacement) ─────────────────────────
-  // Every one of the 12 genes (6 stat bases + 6 growth slopes) is sampled
-  // INDEPENDENTLY from a Gaussian around the species' own stage-1 mean,
+  // Every one of the 28 genes (a base value and a growth slope for each of the
+  // 14 stats) is sampled INDEPENDENTLY from a Gaussian around the species' own
+  // stage-1 mean,
   // clamped to ±2σ (base σ=8% of mean, slope σ=6% — see creature_enums.dart)
   // so no roll is ever a wild outlier. Best-vs-worst individual of the same
   // species lands ~26% apart at max level, per the balance spec.
@@ -211,9 +253,9 @@ class CreatureInstance {
   /// Each gene is inherited INDEPENDENTLY from the parents' CURRENT values
   /// (including any evolution bonus they've earned — an intentional incentive
   /// to evolve breeding stock first). [favoredChance] is the probability the
-  /// BETTER parent's value wins; it's no longer a fixed 0.70 but scales with
-  /// the pair's `breeding` civilian stat (0.50 = coin-flip at breeding 0, up
-  /// toward 1.0 — see breedingFavoredChance). Never re-sampled.
+  /// BETTER parent's value wins — a flat 60 % since 2026-07-27, passed in from
+  /// [breedingFavoredChance]; it used to scale with the pair's `breeding` stat.
+  /// Never re-sampled.
   static Map<CreatureStat, double> inheritGenes(
     Map<CreatureStat, double> a,
     Map<CreatureStat, double> b,
@@ -245,16 +287,21 @@ class CreatureInstance {
       // falls back to 10/1 for any still-missing stat in the meantime.
       statBase: {
         for (final stat in CreatureStat.values)
-          if (baseJson[stat.name] != null)
-            stat: (baseJson[stat.name] as num).toDouble(),
+          if (stat.readJson(baseJson) != null)
+            stat: stat.readJson(baseJson)!.toDouble(),
       },
+      healingUntil: row['healing_until'] == null
+          ? null
+          : DateTime.tryParse(row['healing_until'] as String)?.toLocal(),
+      healQueuedAt: row['heal_queued_at'] == null
+          ? null
+          : DateTime.tryParse(row['heal_queued_at'] as String)?.toLocal(),
       statSlope: {
         for (final stat in CreatureStat.values)
-          if (slopeJson[stat.name] != null)
-            stat: (slopeJson[stat.name] as num).toDouble(),
+          if (stat.readJson(slopeJson) != null)
+            stat: stat.readJson(slopeJson)!.toDouble(),
       },
       currentHp: (row['current_hp'] as num?)?.toInt() ?? -1,
-      currentEnergy: (row['current_energy'] as num?)?.toInt() ?? -1,
       assignedBuildingId: row['assigned_building_id'] as String?,
       assignedStat: row['assigned_stat'] == null
           ? null
@@ -278,9 +325,14 @@ class CreatureInstance {
     'stat_base': {for (final e in statBase.entries) e.key.name: e.value},
     'stat_slope': {for (final e in statSlope.entries) e.key.name: e.value},
     'current_hp': currentHp,
-    'current_energy': currentEnergy,
+    'healing_until': healingUntil?.toUtc().toIso8601String(),
+    'heal_queued_at': healQueuedAt?.toUtc().toIso8601String(),
     'assigned_building_id': assignedBuildingId,
     'assigned_stat': assignedStat?.name,
+    // NB: a creature's expedition lock is NOT stored here — it's derived at
+    // load time from active rows in the `expeditions` table (member_ids) and
+    // tracked in CreaturesController.expeditionIds, so `creatures` needs no
+    // schema change. See [[expedition-overworld-redesign]].
     'parent_a': parentAId,
     'parent_b': parentBId,
   };

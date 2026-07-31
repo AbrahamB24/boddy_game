@@ -1,8 +1,16 @@
 // ── Era definition ────────────────────────────────────────
 // Eras are the settlement's overall progression track — advancing consumes
 // resources (like a building) and, unlike buildings/tech, can also grant a
-// one-time resource/BP gift plus a permanent, cumulative production bonus
+// one-time resource gift plus a permanent, cumulative production bonus
 // the moment you reach it. See SettlementController.advanceEra().
+//
+// ── They are CHAPTERS, not centuries (user 2026-07-22) ──
+// An era is one stage of THIS settlement's rise — a chapter the player lives
+// through — not a historical age spanning generations. That reading is the
+// whole reason the monsters you caught in chapter I are still with you in
+// chapter VIII: the eight chapters are a career, not a millennium. Name and
+// word them accordingly ("Ascend", "chapter", "stage"), and never in units of
+// time ("the Bronze Age", "centuries later").
 class EraDef {
   final String id;
   final String name;
@@ -12,13 +20,12 @@ class EraDef {
   final int order;
   // Resources required to advance TO this era (paid once, like a building).
   final Map<String, double> advancementCost;
-  // One-time grant applied exactly once at the moment of advancing. The
-  // 'bp' key is special-cased by the controller (profile BP, not a
-  // ResourceModel field) — every other key routes through
-  // ResourceModel.grant() the same way advancementCost routes through
-  // ResourceModel.deduct().
+  // One-time grant applied exactly once at the moment of advancing. Every key
+  // routes through ResourceModel.grant(), the same way advancementCost routes
+  // through ResourceModel.deduct(). ('bp' used to be special-cased here — it
+  // went to the profile rather than ResourceModel. BP no longer exists.)
   final Map<String, double> grantResources;
-  // Permanent, cumulative bonuses — same vocabulary/targets as TechDef's,
+  // Permanent, cumulative bonuses — the vocabulary the deleted TechDef shared,
   // active for every era with order <= the settlement's current era once
   // reached (see eraBonusTotals below), summed alongside tech bonuses at
   // the GameEngine call sites in settlement_controller.dart.
@@ -27,7 +34,6 @@ class EraDef {
   final double foodBonus;
   final double allBonus;
   final double buildSpeedBonus;
-  final double workoutBpBonus;
 
   const EraDef({
     required this.id,
@@ -41,15 +47,15 @@ class EraDef {
     this.foodBonus = 0,
     this.allBonus = 0,
     this.buildSpeedBonus = 0,
-    this.workoutBpBonus = 0,
   });
 
   // ── Dev Mode: DB row <-> EraDef ──────────────────────────
-  // Same translation-layer pattern as BuildingDef/TechDef.fromDefRow — see
-  // building_definitions.dart for the sibling implementation.
+  // Same translation-layer pattern as BuildingDef.fromDefRow — see
+  // building_definitions.dart for the sibling implementation. (TechDef was the
+  // third; technologies are PLACES on the map now and its file is gone.)
   factory EraDef.fromDefRow(Map<String, dynamic> row) {
     double woodBonus = 0, stoneBonus = 0, foodBonus = 0, allBonus = 0;
-    double buildSpeedBonus = 0, workoutBpBonus = 0;
+    double buildSpeedBonus = 0;
 
     final effects = (row['effects'] as List?) ?? const [];
     for (final raw in effects) {
@@ -67,8 +73,6 @@ class EraDef {
         allBonus += value;
       } else if (target == 'buildSpeed') {
         buildSpeedBonus += value;
-      } else if (target == 'workoutBp') {
-        workoutBpBonus += value;
       }
     }
 
@@ -90,7 +94,6 @@ class EraDef {
       foodBonus: foodBonus,
       allBonus: allBonus,
       buildSpeedBonus: buildSpeedBonus,
-      workoutBpBonus: workoutBpBonus,
     );
   }
 
@@ -115,14 +118,6 @@ class EraDef {
         'value': buildSpeedBonus,
       });
     }
-    if (workoutBpBonus != 0) {
-      effects.add({
-        'type': 'bonus',
-        'target': 'workoutBp',
-        'value': workoutBpBonus,
-      });
-    }
-
     return {
       'id': id,
       'name': name,
@@ -140,17 +135,39 @@ class EraDef {
 // cost — the player is already in it); Era II's cost is migrated from the
 // old kMainHallUpgradeCost[0]. Grants/bonuses are left empty here
 // deliberately — tune them via Dev Mode rather than inventing numbers.
-// Public (not `_`-prefixed) so GameDefsService.seedFromFallback() can push
-// this exact content rather than whatever the live kEraDefs map currently
-// holds (see that function's note for why that distinction matters).
+// Public (not `_`-prefixed) because GameDefsController reads it directly as
+// the base the DB rows are layered onto.
 const kFallbackEraDefs = <String, EraDef>{
-  'era_1': EraDef(id: 'era_1', name: 'Era I', emoji: '🏘️', order: 1),
+  // Named for what the SETTLEMENT is, not for a point in history — see the
+  // chapter note at the top of this file.
+  'era_1': EraDef(id: 'era_1', name: 'The Clearing', emoji: '🏘️', order: 1),
   'era_2': EraDef(
     id: 'era_2',
-    name: 'Era II',
+    name: 'The Sawmill Vale',
     emoji: '🌅',
     order: 2,
     advancementCost: {'wood': 1000, 'stone': 800},
+  ),
+  // Eras III–VIII (user 2026-07-24). Named for what the SETTLEMENT becomes, not
+  // a point in history (chapter, not century — see the note at the top). Only
+  // id/name/emoji/order: the ascension TOLL is formula-based in
+  // SettlementController.eraAscensionCost(order), and grants/bonuses are left
+  // for Dev Mode rather than invented here — same policy as era_2 above.
+  'era_3': EraDef(id: 'era_3', name: 'The Kiln Quarter', emoji: '🏺', order: 3),
+  'era_4': EraDef(id: 'era_4', name: 'The Plaster Rows', emoji: '🏛️', order: 4),
+  'era_5': EraDef(id: 'era_5', name: 'The Ironworks', emoji: '⚒️', order: 5),
+  'era_6': EraDef(
+    id: 'era_6',
+    name: 'The Furnace District',
+    emoji: '🏭',
+    order: 6,
+  ),
+  'era_7': EraDef(id: 'era_7', name: 'The Glass Spires', emoji: '🔷', order: 7),
+  'era_8': EraDef(
+    id: 'era_8',
+    name: 'The Crystal Heights',
+    emoji: '💠',
+    order: 8,
   ),
 };
 
@@ -159,19 +176,13 @@ const kFallbackEraDefs = <String, EraDef>{
 final Map<String, EraDef> kEraDefs = Map.of(kFallbackEraDefs);
 
 // Sum of every reached era's permanent bonus (order <= currentEraOrder) —
-// mirrors techBonusTotals in tech_definitions.dart. Summed together with
-// that function's result at the GameEngine call sites in
-// settlement_controller.dart; GameEngine itself never reads kEraDefs.
-({
-  double wood,
-  double stone,
-  double food,
-  double all,
-  double buildSpeed,
-  double workoutBp,
-})
+// This is now the ONLY source of those bonuses: it mirrored techBonusTotals
+// until technologies became places on the map and tech_definitions.dart was
+// deleted. Read at the GameEngine call sites in settlement_controller.dart;
+// GameEngine itself never reads kEraDefs.
+({double wood, double stone, double food, double all, double buildSpeed})
 eraBonusTotals(int currentEraOrder) {
-  double w = 0, s = 0, f = 0, a = 0, b = 0, wx = 0;
+  double w = 0, s = 0, f = 0, a = 0, b = 0;
   for (final era in kEraDefs.values) {
     if (era.order > currentEraOrder) continue;
     w += era.woodBonus;
@@ -179,7 +190,6 @@ eraBonusTotals(int currentEraOrder) {
     f += era.foodBonus;
     a += era.allBonus;
     b += era.buildSpeedBonus;
-    wx += era.workoutBpBonus;
   }
-  return (wood: w, stone: s, food: f, all: a, buildSpeed: b, workoutBp: wx);
+  return (wood: w, stone: s, food: f, all: a, buildSpeed: b);
 }

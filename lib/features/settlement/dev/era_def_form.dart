@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../data/era_definitions.dart';
-import '../services/game_defs_service.dart';
+import '../services/game_defs_controller.dart';
 import 'dev_theme.dart';
 import 'effects_editor.dart';
 import 'resource_map_editor.dart';
@@ -21,7 +21,6 @@ class EraDefForm extends StatefulWidget {
 }
 
 class _EraDefFormState extends State<EraDefForm> {
-  final _svc = GameDefsService();
   bool _saving = false;
 
   late String _id;
@@ -84,7 +83,7 @@ class _EraDefFormState extends State<EraDefForm> {
     final finalDef = EraDef.fromDefRow(row);
 
     try {
-      await _svc.upsertEraDef(finalDef);
+      await GameDefsController().saveEraDef(finalDef);
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -105,8 +104,16 @@ class _EraDefFormState extends State<EraDefForm> {
           'assigned to this era will no longer be available/researchable.',
     );
     if (!ok) return;
-    await _svc.deleteEraDef(_id);
-    if (mounted) Navigator.pop(context);
+    // Same silent-failure trap as the building form (user 2026-07-31).
+    try {
+      await GameDefsController().deleteEraDef(_id);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      }
+    }
   }
 
   @override
@@ -114,7 +121,6 @@ class _EraDefFormState extends State<EraDefForm> {
     return Theme(
       data: buildDevModeTheme(),
       child: Scaffold(
-        backgroundColor: FoE.bg,
         appBar: AppBar(
           title: Text(
             _isNew ? 'New Era' : 'Edit Era',
@@ -169,13 +175,13 @@ class _EraDefFormState extends State<EraDefForm> {
             ),
             const SizedBox(height: 16),
             Text(
-              'One-time grant on advancement (bp is a valid key)',
+              'One-time grant on advancement',
               style: FoE.label(size: 14).copyWith(color: FoE.gold),
             ),
             const SizedBox(height: 8),
             ResourceMapEditor(
               values: _grantResources,
-              hintText: 'resource id or "bp"',
+              hintText: 'resource id',
               onChanged: (m) => setState(() => _grantResources = m),
             ),
             const SizedBox(height: 16),
@@ -206,7 +212,7 @@ class _EraDefFormState extends State<EraDefForm> {
                           'Save',
                           style: FoE.label(
                             size: 14,
-                          ).copyWith(color: FoE.goldBright),
+                          ).copyWith(color: Colors.white),
                         ),
                 ),
               ),
