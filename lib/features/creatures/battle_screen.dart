@@ -42,13 +42,6 @@ class CatchSuccess {
 // back to the collection (pools always, XP on victory) and the screen pops
 // with the CombatOutcome as its result.
 class BattleScreen extends StatefulWidget {
-  /// Presentation toggle (user 2026-07-20): `true` = the polished "mobile game"
-  /// look (scene backdrop, glossy panels, chunkier buttons); `false` = the
-  /// original flat layout. Static so the choice sticks across battles for the
-  /// session; flipped live by the palette button in the top bar. Same battle
-  /// LOGIC either way — only the styling differs.
-  static bool polished = true;
-
   final List<CreatureInstance> team;
   final List<Combatant> enemies;
   final String title;
@@ -487,21 +480,22 @@ class _BattleScreenState extends State<BattleScreen>
     });
   }
 
-  // ── Polished "mobile game" styling (user 2026-07-20) ──────
-  // A single flag flips the whole screen between the flat original and a
-  // glossy, chunkier mobile-game look. Every _fancy branch below leaves the
-  // classic path untouched so switching back is exact.
-  bool get _fancy => BattleScreen.polished;
+  // ── ONE LOOK (user 2026-08-01: "designe den Kampfscreen komplett neu, so
+  // dass er modern wirkt, aber trotzdem den gleichen Stil verfolgt") ──
+  //
+  // There were TWO designs in this file behind a `polished` flag — a flat
+  // original and a glossier one — and every surface carried both branches. That
+  // is how a screen stops having a style: half the decisions are made twice, and
+  // the one nobody looks at rots. The flag, its toggle button and every branch
+  // are gone; what is left is the app's own language, faceted and dark.
 
-  // ── Flat modern palette (user 2026-07-20) ─────────────────
-  // The monsters are FLAT-coloured art, so the polished chrome is flat too: no
-  // gloss/gradients/3D bevels — matte cool-graphite surfaces, thin cool
-  // hairlines, gold kept as the one accent so the vivid element colours pop.
-  static const Color _sceneTop = Color(0xFF2E3A43); // Steel Blue, lifted
-  static const Color _sceneBottom = FoE.bg;
+  // ── The screen's two surfaces ─────────────────────────────
+  // The monsters are FLAT-coloured art, so the chrome is too: the tray and the
+  // slabs on it are one tone each, separated by a STEP rather than by a
+  // hairline, and lit along the edge that faces you (FoE.lit). Gold stays the
+  // one accent, so the vivid element colours keep the field to themselves.
   static const Color _flatSurface = FoE.panelDark; // trays, cards, log
   static const Color _flatSurfaceHi = FoE.panelMid; // raised surface
-  static const Color _flatHairline = FoE.border; // cool border
 
   @override
   Widget build(BuildContext context) {
@@ -584,21 +578,10 @@ class _BattleScreenState extends State<BattleScreen>
         if (!didPop) _confirmFlee();
       },
       child: Scaffold(
-        // In fancy mode a deep scene gradient replaces the flat black, so the
-        // rounded panels read as floating over a battlefield (user 2026-07-20).
-        backgroundColor: _fancy ? _sceneBottom : FoE.bg,
-        body: _fancy
-            ? DecoratedBox(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [_sceneTop, _sceneBottom],
-                  ),
-                ),
-                child: body,
-              )
-            : body,
+        // The arena paints its own place (see BattleScene); everything around
+        // it is the app's page.
+        backgroundColor: FoE.bg,
+        body: body,
       ),
     );
   }
@@ -806,18 +789,6 @@ class _BattleScreenState extends State<BattleScreen>
         // (user request), instead of on a row of its own.
         Expanded(child: _initiativeStrip()),
         const SizedBox(width: 6),
-        // Live look toggle: flip between the polished mobile-game skin and the
-        // original flat layout (user 2026-07-20).
-        IconButton(
-          icon: Icon(
-            _fancy ? Icons.auto_awesome : Icons.auto_awesome_outlined,
-            color: _fancy ? FoE.goldBright : FoE.textDim,
-            size: 18,
-          ),
-          tooltip: _fancy ? 'Classic look' : 'Polished look',
-          onPressed: () => setState(() => BattleScreen.polished = !_fancy),
-        ),
-        const SizedBox(width: 2),
         // Same tint as the other deck buttons (user request); the ✔ marks it on.
         _deckButton(
           icon: Icons.smart_toy,
@@ -906,59 +877,58 @@ class _BattleScreenState extends State<BattleScreen>
   );
 
   // ── Turn order (CTB queue) ────────────────────────────────
-  // The monsters' PNGs in upcoming-turn order, INLINE between Flee and AUTO
-  // (user request). No label, no scroll — it shows exactly as many portraits as
-  // fit the gap between the two buttons; ONLY the one whose turn it is (first)
-  // is marked, with a plain gold circle.
+  /// Who acts next, as faceted cards between Flee and AUTO (redesign
+  /// 2026-08-01).
+  ///
+  /// It was a row of portraits with a gold CIRCLE around the current one and a
+  /// coloured underline for the side. Three problems, all of them style: a
+  /// circle is the shape this app cannot make, an underline is a fourth way of
+  /// saying "side" on a screen that already says it by position, and the queue
+  /// read as a strip of stickers rather than as part of the bar.
+  ///
+  /// Now each fighter is a small slab cut from the bar, tinted by SIDE, and the
+  /// one acting is the tall one with a lit edge — size and light rather than a
+  /// ring. Nothing else marks it, because nothing else needs to.
   Widget _initiativeStrip() => LayoutBuilder(
     builder: (context, box) {
-      // Widest slot (the ringed current icon is 34) + gap, so the packed row
-      // can never overflow the width between the buttons.
-      const slot = 34.0;
-      const gap = 5.0;
+      const slot = 30.0;
+      const gap = 4.0;
       final fit = ((box.maxWidth + gap) / (slot + gap)).floor().clamp(1, 12);
       final order = _engine.forecast(fit);
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           for (var i = 0; i < order.length; i++) ...[
             if (i > 0) const SizedBox(width: gap),
-            // WHOSE turn it is, and WHOSE SIDE. The side bar is new (user
-            // 2026-07-27): the strip used to alternate between two monsters, so
-            // the sides were obvious; with up to six in the queue a row of bare
-            // portraits says nothing about who is about to hit whom.
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                i == 0
-                    ? Container(
-                        width: 34,
-                        height: 34,
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: FoE.goldBright, width: 2),
-                        ),
-                        child: _portrait(order[i], size: 26),
-                      )
-                    : SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: _portrait(order[i], size: 26),
-                      ),
-                const SizedBox(height: 2),
-                Container(
-                  width: i == 0 ? 22 : 18,
-                  height: 2.5,
-                  decoration: ShapeDecoration(color: order[i].isPlayerSide ? FoE.positive : FoE.danger, shape: FoE.facet(radius: 2)),
-                ),
-              ],
-            ),
+            _queueCard(order[i], acting: i == 0),
           ],
         ],
       );
     },
   );
+
+  /// One place in the queue. [acting] is the fighter whose turn it is.
+  Widget _queueCard(Combatant c, {required bool acting}) {
+    final side = c.isPlayerSide ? FoE.positive : FoE.danger;
+    return Container(
+      width: acting ? 30 : 26,
+      height: acting ? 34 : 28,
+      padding: const EdgeInsets.all(2),
+      decoration: ShapeDecoration(
+        // The side, as the card's own tint — no extra bar to read.
+        color: side.withValues(alpha: acting ? 0.30 : 0.16),
+        shape: FoE.facet(
+          radius: 6,
+          side: BorderSide(
+            color: acting ? FoE.lit(side) : side.withValues(alpha: 0.45),
+            width: acting ? 2 : 1,
+          ),
+        ),
+      ),
+      child: _portrait(c, size: acting ? 26 : 22),
+    );
+  }
 
   // ── Battlefield ─────────────────────────────────
   // ONE arena, TWO ranks (redesign 2026-07-31). It used to be two halves, each
@@ -1148,13 +1118,20 @@ class _BattleScreenState extends State<BattleScreen>
     );
   }
 
-  /// The compact nameplate under one fighter: name, level and HP.
+  /// The nameplate under one fighter (redesign 2026-08-01).
   ///
-  /// Replaces the half's single corner plate — a third of the screen wide, so
-  /// it carries the three facts you act on and nothing else. Two rings tell you
-  /// where you are: GOLD for the monster whose turn it is (with three of your
-  /// own acting in turn, the initiative bar alone means hunting for the name),
-  /// RED for the enemy your next action is aimed at.
+  /// It carried a name, a level and an HP fraction in two stacked rows, plus
+  /// status icons — five things under each of six monsters. Health moved to the
+  /// platform's rim on 2026-07-31 and the plate never lost the weight it was
+  /// carrying for it.
+  ///
+  /// One row now: the name, then the numbers that decide whether one more hit
+  /// finishes it. Status rides ABOVE the plate as a strip of marks, where it is
+  /// read at a glance instead of competing with the name.
+  ///
+  /// The two states you act on are said by the plate's own EDGE — gold for the
+  /// monster whose turn it is, red for the enemy you are aimed at — because a
+  /// facet edge is what this app uses for "this one".
   Widget _slotPlate(
     Combatant c, {
     required bool acting,
@@ -1165,59 +1142,71 @@ class _BattleScreenState extends State<BattleScreen>
         ? FoE.danger
         : acting
             ? FoE.goldBright
-            : _flatHairline;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: ShapeDecoration(color: _flatSurfaceHi,
-        
-        
-        shadows: const [
-          BoxShadow(color: Colors.black38, blurRadius: 0, offset: Offset(0, 2)),
-        ], shape: FoE.facet(radius: 9, side: BorderSide(color: ring,
-          width: targeted || acting ? 1.6 : 1))),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            : FoE.lit(_flatSurfaceHi);
+    final marks = <Widget>[
+      if (c.hasted)
+        const Icon(Icons.keyboard_double_arrow_up,
+            size: 11, color: FoE.positive),
+      if (c.slowed)
+        const Icon(Icons.keyboard_double_arrow_down,
+            size: 11, color: FoE.accentBlue),
+      if (c.mainStatus != null)
+        Text(c.mainStatus!.emoji, style: const TextStyle(fontSize: 10)),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // The status strip, only when there is something to say.
+        if (marks.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(bottom: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: ShapeDecoration(
+              color: FoE.bg.withValues(alpha: 0.65),
+              shape: FoE.facet(radius: 5),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: marks),
+          ),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: ShapeDecoration(
+            color: _flatSurfaceHi,
+            shadows: FoE.drop(dy: 2, alpha: 0.4),
+            shape: FoE.facet(
+              radius: 7,
+              side: BorderSide(
+                color: ring,
+                width: targeted || acting ? 2 : 1,
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Flexible(
                 child: Text(
                   c.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
                   style: FoE.label(size: 11).copyWith(
                     color: FoE.parchment,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
-              if (c.hasted)
-                const Icon(Icons.keyboard_double_arrow_up,
-                    size: 11, color: FoE.positive),
-              if (c.slowed)
-                const Icon(Icons.keyboard_double_arrow_down,
-                    size: 11, color: FoE.accentBlue),
-              if (c.mainStatus != null)
-                Text(c.mainStatus!.emoji, style: const TextStyle(fontSize: 9)),
+              const SizedBox(width: 6),
+              // The numbers, dimmer than the name: you look for the name, you
+              // read the numbers once you have found it.
+              Text(
+                '${c.hp}/${c.maxHp}',
+                maxLines: 1,
+                style: FoE.dim(size: 10).copyWith(color: FoE.textDim),
+              ),
             ],
           ),
-          const SizedBox(height: 2),
-          // NO BAR HERE any more (user 2026-07-31): health is the platform's
-          // front rim now. The NUMBERS stay — an arc tells you roughly how bad
-          // it is, "34/120" tells you whether one more hit finishes it.
-          Text(
-            'Lv ${c.level} · ${c.hp}/${c.maxHp}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: FoE.dim(size: 9).copyWith(color: FoE.textDim),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1463,21 +1452,18 @@ class _BattleScreenState extends State<BattleScreen>
       width: double.infinity,
       height: _kLogHeight,
       alignment: Alignment.center,
-      // Fancy: a floating rounded, glossy banner with a gold hairline + shadow.
-      // Classic: an edge-to-edge square opaque bar (user request).
-      margin: _fancy
-          ? const EdgeInsets.symmetric(horizontal: 14)
-          : EdgeInsets.zero,
+      // A slab floating on the seam between the two ranks: one tone, a cut
+      // corner, and the hard offset a flat-shaded thing casts.
+      margin: const EdgeInsets.symmetric(horizontal: 14),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: _fancy
-          ? ShapeDecoration(color: _flatSurfaceHi,
-              
-              
-              shadows: const [
-                BoxShadow(
-                    color: Colors.black38, blurRadius: 0, offset: Offset(0, 3)),
-              ], shape: FoE.facet(radius: 13, side: BorderSide(color: _flatHairline)))
-          : const BoxDecoration(color: FoE.panelDark),
+      decoration: ShapeDecoration(
+        color: _flatSurfaceHi,
+        shadows: FoE.drop(dy: 3),
+        shape: FoE.facet(
+          radius: 10,
+          side: BorderSide(color: FoE.lit(_flatSurfaceHi), width: 1.5),
+        ),
+      ),
       child: flashing
           ? Text(
               _flash!,
@@ -1523,8 +1509,8 @@ class _BattleScreenState extends State<BattleScreen>
   static const double _kAbilityH = 56;
   static const double _kTileGap = 8;
   static const double _kMenuH = 44;
-  static const double _kApPipH = 17; // one vertical AP pip incl. its margin
-  static const double _kApColW = 26; // AP column + its gap, reserved beside abilities
+  /// The AP row's height including the gap under it — one line, not a column.
+  static const double _kApRowH = 14;
   // Shared tint for EVERY non-type deck button (Auto/End Turn/Items/Catch/Change)
   // so they read as one utility family next to the vivid type abilities.
   static const Color _kUtilTint = FoE.panelLight;
@@ -1532,24 +1518,22 @@ class _BattleScreenState extends State<BattleScreen>
   Widget _actionPanel() {
     return LayoutBuilder(
       builder: (context, box) {
-        // Abilities share the row with a vertical AP column, so they lose its
-        // width.
-        final usable = box.maxWidth - 20 - _kApColW;
+        // The AP row sits ABOVE the moves now, so the tiles have the full
+        // width (2026-08-01).
+        final usable = box.maxWidth - 20;
         final perRow =
             ((usable + _kTileGap) / (_kAbilityW + _kTileGap)).floor().clamp(1, 6);
         final abilities = _engine.activePlayer?.abilities.length ?? 0;
         final boxes = 1 + abilities; // attack + abilities
         final rows = (boxes / perRow).ceil().clamp(1, 6);
         final abilitiesH = rows * _kAbilityH + (rows - 1) * _kTileGap;
-        final maxAp = _engine.activePlayer != null
-            ? maxActionPointsForStage(_engine.activePlayer!.stage)
-            : kBaseActionPoints;
-        final apColH = maxAp * _kApPipH;
+        // The AP row is one line, whatever the pool is.
+        const apRowH = _kApRowH;
         // utility row + gap + (abilities | AP column, tallest). The deck now
         // ENDS directly above the buttons (user request): the enemy-turn status
         // no longer reserves a strip on top — it floats just above the deck (see
         // the overlay below) so the deck shrinks and the arena grows to match.
-        final contentH = _kMenuH + 8 + math.max(abilitiesH, apColH);
+        final contentH = _kMenuH + 8 + apRowH + 6 + abilitiesH;
         final panelH = contentH + 22; // top 8 / bottom 10 padding + buffer
 
         final showStatus = _engine.outcome == null && !_engine.needsPlayerSwitch;
@@ -1578,26 +1562,17 @@ class _BattleScreenState extends State<BattleScreen>
         }
         return Container(
           height: panelH.toDouble(),
-          // Fancy: a FLAT rounded command tray — matte surface, thin cool top
-          // hairline, one soft shadow for separation (no gloss/gradient).
-          // Classic: flat black (user request).
-          decoration: _fancy
-              ? const BoxDecoration(
-                  color: _flatSurface,
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(3)),
-                  border: Border(
-                    top: BorderSide(color: _flatHairline, width: 1),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black38,
-                      blurRadius: 0,
-                      offset: Offset(0, -3),
-                    ),
-                  ],
-                )
-              : const BoxDecoration(color: FoE.bg),
+          // The command tray: one plane, lit along the edge that faces you —
+          // the same two-facet grammar the page's header band wears.
+          decoration: BoxDecoration(
+            color: _flatSurface,
+            border: Border(
+              top: BorderSide(color: FoE.lit(_flatSurface), width: 2),
+            ),
+            boxShadow: const [
+              BoxShadow(color: Colors.black45, offset: Offset(0, -3)),
+            ],
+          ),
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
           // The status line floats ABOVE the deck (negative top) so it never
           // reserves height inside it.
@@ -1688,7 +1663,9 @@ class _BattleScreenState extends State<BattleScreen>
           ),
         ),
         const SizedBox(height: 8),
-        // Ability tiles (thumb zone) + the vertical AP column to their RIGHT.
+        // The cost, then what it buys (2026-08-01).
+        Align(alignment: Alignment.centerLeft, child: _apBar(ap, maxAp)),
+        const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -1714,32 +1691,41 @@ class _BattleScreenState extends State<BattleScreen>
                 ],
               ),
             ),
-            const SizedBox(width: _kTileGap),
-            _apColumn(ap, maxAp),
           ],
         ),
       ],
     );
   }
 
-  /// AP as a VERTICAL stack of pips beside the abilities (user request): the
-  /// remaining points glow gold, spent ones are greyed out.
-  Widget _apColumn(int ap, int maxAp) => Column(
-    mainAxisSize: MainAxisSize.min,
-    mainAxisAlignment: MainAxisAlignment.center,
+  /// THE ACTION POINTS — a row of faceted chips above the moves they pay for
+  /// (redesign 2026-08-01).
+  ///
+  /// They were a column of round pips down the right-hand edge, which cost the
+  /// tiles a whole column of width and put the number you spend furthest from
+  /// the thing you spend it on. A ROW sits directly over the moves, reads
+  /// left-to-right like a cost, and is the one place a circle had survived the
+  /// faceting.
+  ///
+  /// Spent points are not hidden, they are EMPTIED: what you had this turn is
+  /// as much a part of the read as what is left.
+  Widget _apBar(int ap, int maxAp) => Row(
+    mainAxisAlignment: MainAxisAlignment.start,
     children: [
+      Text('AP', style: FoE.dim(size: 10).copyWith(color: FoE.textDim)),
+      const SizedBox(width: 6),
       for (var i = 0; i < maxAp; i++)
         Container(
-          margin: const EdgeInsets.symmetric(vertical: 2.5),
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            // Remaining (top) = gold; spent = greyed out.
-            color: i < ap ? FoE.gold : FoE.panelLight,
-            border: Border.all(
-              color: i < ap ? FoE.gold : FoE.border,
-              width: 1.5,
+          margin: const EdgeInsets.only(right: 4),
+          width: 16,
+          height: 8,
+          decoration: ShapeDecoration(
+            color: i < ap ? FoE.gold : Colors.transparent,
+            shape: FoE.facet(
+              radius: 3,
+              side: BorderSide(
+                color: i < ap ? FoE.lit(FoE.gold) : FoE.border,
+                width: 1.2,
+              ),
             ),
           ),
         ),
@@ -1766,10 +1752,19 @@ class _BattleScreenState extends State<BattleScreen>
     ),
   );
 
-  /// An ability tile: the SAME type backdrop as the monsters — the element's
-  /// gradient with its symbol EMBOSSED into the background (via CreatureBackdrop)
-  /// — with the name + AP on top and NO border (user request). Fixed size so the
-  /// name length never changes the footprint. Disabled = flat greyed panel.
+  /// A MOVE, as a faceted card (redesign 2026-08-01).
+  ///
+  /// The surface is the monster's own — [CreatureBackdrop], the same material
+  /// the platforms under the fighters wear — so a move and the type it belongs
+  /// to are one thing wherever you meet them.
+  ///
+  /// What changed with the redesign:
+  ///  • the AP cost was a second line of text under the name. It is a CORNER
+  ///    CHIP now: a cost is a number you scan, not a sentence you read, and the
+  ///    name gets the whole width back.
+  ///  • effectiveness was a ring plus a round badge. The ring stays (it is a
+  ///    facet edge); the badge is a TRIANGLE — the one shape a faceted world
+  ///    makes, pointing the way the damage goes.
   Widget _abilityBtn(
     String name,
     int ap, {
@@ -1787,48 +1782,37 @@ class _BattleScreenState extends State<BattleScreen>
     // type chart isn't the only place to read it (user request 2026-07-20).
     // Only DAMAGE moves with a real element land bonus/reduced damage.
     final isDamage = ability == null || ability.kind == AbilityKind.damage;
-    final mult = (enabled && isDamage)
-        ? _effectivenessVsEnemy(element)
-        : 1.0;
+    final mult = (enabled && isDamage) ? _effectivenessVsEnemy(element) : 1.0;
     final radius = FoE.radiusSmall + 2;
-    Widget content = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
+
+    Widget label = Align(
+      alignment: Alignment.bottomLeft,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(9, 0, 9, 7),
+        child: Text(
           name,
-          maxLines: 1,
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: FoE.label(size: 12).copyWith(
             color: fg,
             fontWeight: FontWeight.w800,
+            height: 1.1,
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          '$ap AP',
-          style: FoE.dim(size: 10).copyWith(
-            color: enabled ? fg.withValues(alpha: 0.85) : FoE.textMuted,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
+      ),
     );
+
     Widget tile = enabled
-        ? CreatureBackdrop(
-            element: element,
-            radius: radius,
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-            child: Align(alignment: Alignment.centerLeft, child: content),
-          )
+        ? CreatureBackdrop(element: element, radius: radius, child: label)
         : Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-            alignment: Alignment.centerLeft,
-            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: radius)),
-            child: content,
+            decoration: ShapeDecoration(
+              color: FoE.panelDark,
+              shape: FoE.facet(radius: radius),
+            ),
+            child: label,
           );
-    // Strong/weak → a coloured ring + a corner badge (flat: crisp border, no
-    // glow bloom).
+
+    // Strong/weak → a facet edge in the answer's colour.
     final effColor = mult > 1.0
         ? FoE.positive
         : mult < 1.0
@@ -1836,10 +1820,16 @@ class _BattleScreenState extends State<BattleScreen>
             : null;
     if (effColor != null) {
       tile = Container(
-        decoration: ShapeDecoration(shape: FoE.facet(radius: radius, side: BorderSide(color: effColor, width: 2))),
+        decoration: ShapeDecoration(
+          shape: FoE.facet(
+            radius: radius,
+            side: BorderSide(color: effColor, width: 2),
+          ),
+        ),
         child: tile,
       );
     }
+
     return SizedBox(
       width: _kAbilityW,
       height: _kAbilityH,
@@ -1850,23 +1840,42 @@ class _BattleScreenState extends State<BattleScreen>
           clipBehavior: Clip.none,
           children: [
             Positioned.fill(child: tile),
+            // THE COST, in the corner it is cut from.
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(7, 2, 6, 3),
+                decoration: ShapeDecoration(
+                  color: enabled
+                      ? FoE.bg.withValues(alpha: 0.55)
+                      : Colors.transparent,
+                  shape: const BeveledRectangleBorder(
+                    // Cut on the inner corner only: the chip is a piece of the
+                    // tile's own edge, not a sticker on it.
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(9),
+                    ),
+                  ),
+                ),
+                child: Text(
+                  '$ap',
+                  style: FoE.value(size: 11).copyWith(
+                    color: enabled ? fg : FoE.textMuted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
             if (effColor != null)
               Positioned(
-                top: -5,
-                right: -5,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
+                bottom: -1,
+                right: -1,
+                child: CustomPaint(
+                  size: const Size(16, 16),
+                  painter: _EffectivenessMark(
                     color: effColor,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: FoE.bg, width: 1.5),
-                  ),
-                  child: Icon(
-                    mult > 1.0
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    size: 13,
-                    color: FoE.bg,
+                    strong: mult > 1.0,
                   ),
                 ),
               ),
@@ -2072,12 +2081,13 @@ class _BattleScreenState extends State<BattleScreen>
             decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: radius)),
             child: content,
           );
-    if (_fancy && enabled) {
-      // Flat button: just a subtle shadow to lift it off the tray — no gloss.
+    if (enabled) {
+      // The offset facet that lifts a key off the tray.
       tile = DecoratedBox(
-        decoration: ShapeDecoration(shadows: const [
-            BoxShadow(color: Colors.black26, blurRadius: 0, offset: Offset(0, 2)),
-          ], shape: FoE.facet(radius: radius)),
+        decoration: ShapeDecoration(
+          shadows: FoE.drop(dy: 2, alpha: 0.35),
+          shape: FoE.facet(radius: radius),
+        ),
         child: tile,
       );
     }
@@ -2950,4 +2960,34 @@ class _FloatingNumberState extends State<_FloatingNumber>
       },
     );
   }
+}
+
+/// The strong/weak mark on a move: a filled TRIANGLE in the tile's bottom
+/// corner, pointing up for extra damage and down for reduced (2026-08-01).
+///
+/// It was a circle with a chevron in it. A circle is the one shape the app's
+/// language cannot make, and a triangle says the same thing with its own
+/// silhouette — no glyph inside it to read.
+class _EffectivenessMark extends CustomPainter {
+  final Color color;
+  final bool strong;
+
+  const _EffectivenessMark({required this.color, required this.strong});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final p = Path();
+    if (strong) {
+      p..moveTo(w, 0)..lineTo(w, h)..lineTo(0, h)..close();
+    } else {
+      p..moveTo(w, h)..lineTo(w, 0)..lineTo(0, 0)..close();
+    }
+    canvas.drawPath(p, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_EffectivenessMark old) =>
+      old.color != color || old.strong != strong;
 }
