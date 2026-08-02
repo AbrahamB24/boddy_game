@@ -16,11 +16,9 @@ import 'package:boddygame/features/settlement/widgets/parchment_sheet.dart';
 // value that drifts from the band is exactly how a "shared" look comes apart
 // again, and nothing else would catch it.
 //
-// SHEETS ARE NOT PAGES (user 2026-08-01: "lösche den oberen Balken … Bitte
-// überall bei diesen menüs löschen"). A running head belongs to something you
-// navigated TO; a sheet slid up over what you were already looking at, and it
-// carries its title on its own paper. "The same header everywhere" was never
-// about giving one to things that are not pages.
+// A SHEET WEARS IT TOO (user 2026-08-01: "Das Header Band wollte ich
+// behalten"). What a sheet does NOT wear is the grab handle that used to sit
+// above it — a bar hinting at a gesture the whole surface already answers.
 void main() {
   // The theme builds Google-font text styles, so it has to be built INSIDE a
   // test — at main() level google_fonts fires an HTTP fetch outside the test
@@ -107,9 +105,7 @@ void main() {
     expect(t.snackBarTheme.shape, isA<BeveledRectangleBorder>());
   });
 
-  testWidgets('a sheet carries no bar and no grab handle', (tester) async {
-    // Both were stacked over every sheet's title: a light grey handle for a
-    // gesture that works anywhere on the sheet, and under it a page's band.
+  testWidgets('a sheet wears the band, but no grab handle', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -121,7 +117,19 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Wood'), findsOneWidget, reason: 'the title stays');
-    expect(find.byType(ParchmentHeader), findsNothing);
+    expect(find.text('Wood'), findsOneWidget);
+    // The band names it, exactly as a page's does.
+    expect(find.byType(ParchmentHeader), findsNothing,
+        reason: 'a sheet uses the BAND, not the whole header widget');
+    // …and nothing sits above that band: the handle was a bar spending a row
+    // to hint at a drag the entire sheet accepts.
+    final column = tester.widget<Column>(
+      find.descendant(
+        of: find.byType(ParchmentSheet),
+        matching: find.byType(Column),
+      ).first,
+    );
+    expect(column.children.first, isA<Container>(),
+        reason: 'the band is the first thing on the sheet');
   });
 }

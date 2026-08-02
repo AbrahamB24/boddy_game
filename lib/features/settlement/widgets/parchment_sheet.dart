@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
+import '../../common/widgets/parchment_page.dart';
 import 'meander_strip.dart';
 import 'scroll_paper.dart'
     show kParchmentInk, kParchmentMid;
@@ -77,29 +78,27 @@ class ParchmentSheet extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // ── NO BARS OVER THE TITLE (user 2026-08-01: "lösche den oberen
-              //    Balken und den hellen grauen … Bitte überall bei diesen
-              //    menüs löschen") ──
+              // ── The BAND stays, the handle goes (user 2026-08-01: "lösche
+              //    den oberen Balken und den hellen grauen", then "Das Header
+              //    Band wollte ich behalten") ──
               //
-              // A sheet had TWO of them stacked: a light grey grab handle, and
-              // under it the page's header band. The handle is a hint for a
-              // gesture that works anywhere on the sheet, and the band is a
-              // PAGE's device — a running head belongs to something you
-              // navigated to, not to something that slid up over what you were
-              // already looking at. What is left is the title, on the sheet's
-              // own paper.
-              Padding(
-                padding: const EdgeInsets.fromLTRB(26, 16, 22, 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: FoE.title(size: 16).copyWith(color: ink),
+              // There were two bars stacked over the title: a light grey grab
+              // handle and, under it, the app's header band. The handle was the
+              // one to lose — it hints at a gesture that works anywhere on the
+              // sheet, so it spends a row saying what the whole surface already
+              // does. The band is how every titled thing in the app names
+              // itself, and a sheet is no exception.
+              ParchmentHeader.band(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 16, 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(title, style: ParchmentHeader.titleStyle()),
                       ),
-                    ),
-                    if (trailing != null) trailing!,
-                  ],
+                      if (trailing != null) trailing!,
+                    ],
+                  ),
                 ),
               ),
               Expanded(
