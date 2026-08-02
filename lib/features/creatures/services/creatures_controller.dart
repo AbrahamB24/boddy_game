@@ -558,6 +558,35 @@ class CreaturesController extends ChangeNotifier {
     }
   }
 
+  /// DEV: pushes [creature] straight to its next form (user 2026-08-01: "gib
+  /// mir bei den monsterdetailscrrens einen devbutton, wobmit ich direkt eine
+  /// evolution auslösen kann (d.h level bis dort steigern unabhängig von der
+  /// ära)").
+  ///
+  /// It raises the LEVEL to the evolution threshold and then evolves, rather
+  /// than jumping the stage on its own: a monster that is stage 2 at level 4
+  /// has stats no real creature could have, and every balance reading taken off
+  /// it afterwards would be fiction.
+  ///
+  /// The era cap is deliberately ignored — that is the whole request. The cap
+  /// exists so a player cannot outgrow the chapter they are in; a dev checking
+  /// what the third form looks like is not that player. The level stays where
+  /// this puts it, so the monster is a legitimate over-levelled one rather than
+  /// a broken one.
+  Future<String?> devEvolve(CreatureInstance creature) async {
+    final species = creature.species;
+    if (species == null) return 'Unknown species.';
+    if (!creature.hasNextStage) return 'Already at the final stage.';
+    final need = species.evoLevelFrom(creature.stage);
+    if (creature.level < need) {
+      creature.level = need;
+      creature.xp = 0;
+      // The new form is met at full health, like any evolution.
+      creature.currentHp = -1;
+    }
+    return evolve(creature);
+  }
+
   /// Adds a successfully caught wild to the collection. The catch keeps the
   /// wild's exact identity: species, level, evolution stage, gender and its
   /// exact sampled genes. Joins with full pools (fresh start in your team).

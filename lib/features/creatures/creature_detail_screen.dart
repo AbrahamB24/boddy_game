@@ -129,6 +129,18 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   // Rename dialog, styled to match this screen (dark sheet, Outfit font, the
   // creature's element as the accent) rather than the global FoE gold theme
   // (user 2026-07-18).
+  Future<void> _devEvolve(CreatureInstance creature) async {
+    final err = await _ctrl.devEvolve(creature);
+    if (!mounted) return;
+    if (err != null) {
+      context.snack(err, error: true);
+    } else {
+      setState(() {});
+      final name = creature.species?.stageAt(creature.stage).name ?? 'its next form';
+      context.snack('🛠 Evolved to $name (Lv ${creature.level})');
+    }
+  }
+
   Future<void> _rename(CreatureInstance creature) async {
     final element = creature.species?.element.color ?? FoE.gold;
     final controller = TextEditingController(text: creature.nickname ?? '');
@@ -791,6 +803,20 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           const SizedBox(height: 8),
           _pillBtn('🛠 +500 XP (Dev)', _inkDim,
               filled: false, onTap: () => _ctrl.devGainXp(creature, 500)),
+          // Straight to the next form: the level is raised to the threshold
+          // first, so the monster that comes out is a legitimate over-levelled
+          // one rather than a stage-2 body with stage-1 stats (user
+          // 2026-08-01). Hidden at the final stage — there is nothing to jump
+          // to, and a button that only ever refuses is worse than no button.
+          if (creature.hasNextStage) ...[
+            const SizedBox(height: 8),
+            _pillBtn(
+              '🛠 Evolve to ${creature.species?.stageAt(creature.stage + 1).name ?? 'next stage'} (Dev)',
+              _inkDim,
+              filled: false,
+              onTap: () => _devEvolve(creature),
+            ),
+          ],
         ],
       ],
     );
