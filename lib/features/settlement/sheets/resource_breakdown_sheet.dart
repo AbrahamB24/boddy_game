@@ -74,14 +74,27 @@ class ResourceBreakdownSheet extends StatelessWidget {
             _storageBlock(),
             const SizedBox(height: 14),
           ],
-          if (sources.isEmpty)
+          // ── MADE, EATEN, AND WHAT IS LEFT (user 2026-08-01) ──
+          // The two directions were one mixed list, so a drain read like a
+          // smaller source, and the sheet never said what the two came to. They
+          // are separate blocks now with the net underneath — which is the
+          // number in the header, arrived at rather than asserted.
+          if (_made.isEmpty && _eaten.isEmpty)
             Text(
               'Nothing is producing this yet.',
               style: FoE.dim(size: 11).copyWith(color: ParchmentSheet.inkFaint),
             )
           else ...[
-            _heading('Produced by'),
-            for (final s in sources) _sourceRow(s),
+            if (_made.isNotEmpty) ...[
+              _heading('Produced by'),
+              for (final s in _made) _sourceRow(s),
+            ],
+            if (_eaten.isNotEmpty) ...[
+              if (_made.isNotEmpty) const SizedBox(height: 12),
+              _heading('Consumed by'),
+              for (final s in _eaten) _sourceRow(s),
+            ],
+            _netRow(),
           ],
           if (capacitySources.isNotEmpty) ...[
             const SizedBox(height: 14),
@@ -89,6 +102,51 @@ class ResourceBreakdownSheet extends StatelessWidget {
             for (final s in capacitySources)
               _sourceRow(s, unitOverride: ''),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// The two directions, split. A drain in a list of sources reads as a small
+  /// source; it is the opposite of one.
+  List<ProductionSource> get _made =>
+      sources.where((s) => s.amount >= 0).toList();
+  List<ProductionSource> get _eaten =>
+      sources.where((s) => s.amount < 0).toList();
+
+  /// WHAT IS ACTUALLY PRODUCED — the sum of everything above it.
+  ///
+  /// Not [total]: that is what the header shows, and the point of this line is
+  /// that it is ARRIVED AT. If the two ever disagree, the breakdown is missing a
+  /// row and this is where you would see it.
+  Widget _netRow() {
+    final net = sources.fold<double>(0, (a, s) => a + s.amount);
+    final positive = net > 0;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(top: 10),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: ParchmentSheet.ink.withValues(alpha: 0.25)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              positive ? 'Net gain' : net < 0 ? 'Net loss' : 'Break even',
+              style: FoE.label(size: 13).copyWith(
+                color: ParchmentSheet.ink,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Text(
+            '${net > 0 ? '+' : ''}${net.toStringAsFixed(1)}$unit',
+            style: FoE.value(size: 14).copyWith(
+              color: net < 0 ? Colors.redAccent : ParchmentSheet.accent,
+            ),
+          ),
         ],
       ),
     );

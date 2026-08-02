@@ -2367,6 +2367,33 @@ class SettlementController extends ChangeNotifier {
       );
     }).toList()..sort((a, b) => b.amount.compareTo(a.amount));
 
+    // ── WHAT EATS IT (user 2026-08-01: "sollen mir auch die negativen Werte/
+    // Verbrauch angezeigt werden und am Ende das Total, welches wirklich
+    // produziert wird") ──
+    //
+    // Creatures eating was the only drain this list knew about. The other one is
+    // REFINING: a Clay Refinery making 5 Timber Frame an hour is quietly eating
+    // 10 wood and 10 stone, and [GameEngine.hourlyRates] has always subtracted
+    // that — so the header showed a net rate while this sheet listed only the
+    // gross, and the rows did not add up to the number above them.
+    //
+    // Grouped per REFINED GOOD rather than per building, because that is how the
+    // rate is computed (workshopPower is per good): one line per thing being
+    // made from this, which is also the line you would act on.
+    final rates = hourlyRates;
+    for (final g in kGoodsDefs.values.where((g) => g.isElement)) {
+      final per = g.refinedFrom[resourceId];
+      if (per == null || per <= 0) continue;
+      final made = rates[g.id] ?? 0;
+      if (made <= 0) continue;
+      sources.add(ProductionSource(
+        emoji: g.emoji,
+        label: 'Refined into ${g.name}',
+        count: 1,
+        amount: -made * per,
+      ));
+    }
+
     // Goods consumption row (creatures eating).
     final gDef = kGoodsDefs[resourceId];
     if (gDef != null && gDef.consumptionPerCapitaPerHour > 0 && housingUsed > 0) {
