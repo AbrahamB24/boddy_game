@@ -1048,6 +1048,11 @@ class SettlementMapState extends State<SettlementMap>
   /// wrap — a stack of full-width buttons made a Tribal Center dialog scroll
   /// for no reason. The two that carry live numbers (healing's price, the
   /// build-skip toll) stay full width, because that number is the decision.
+  /// A building can be paused when it RUNS something: a work post, or a
+  /// worker-free `production` effect. Everything else has nothing to stop.
+  bool _canPause(BuildingDef def) =>
+      def.workshops.isNotEmpty || def.effectKeys('production').isNotEmpty;
+
   Widget _actionArea(
     BuildContext context,
     PlacedBuilding b,
@@ -1055,6 +1060,16 @@ class SettlementMapState extends State<SettlementMap>
     bool functional,
   ) {
     final pills = <Widget>[
+      // ── PAUSE (user 2026-08-01: "ich will gebäude pausieren können") ──
+      // Only for buildings that actually RUN something. Pausing a house or a
+      // store would be a switch with nothing behind it: housing and storage are
+      // what a building is, not what it does, and they keep counting either way.
+      if (b.isComplete && _canPause(def))
+        _actionPill(
+          b.isPaused ? '▶' : '⏸',
+          b.isPaused ? 'Resume' : 'Pause',
+          () => widget.ctrl.setPaused(b.id, !b.isPaused),
+        ),
       if (b.isComplete && def.isMainBuilding)
         _actionPill(
           '🏠',
@@ -1422,6 +1437,22 @@ class SettlementMapState extends State<SettlementMap>
         ),
       ],
     );
+
+    // PAUSED SAYS SO FIRST (user 2026-08-01). The figures below stay — they are
+    // what the building WOULD make — and this line is why none of it is
+    // happening, in the same place the empty-tank warning lands.
+    if (b.isPaused) {
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            '⏸ Paused — producing and consuming nothing. Housing and storage '
+            'still count.',
+            style: FoE.dim(size: 11).copyWith(color: FoE.danger),
+          ),
+        ),
+      );
+    }
 
     // ── Base: what it makes with nobody stationed ──
     // ONLY its authored `production` effects (user 2026-07-25) — the code-side
@@ -1798,10 +1829,12 @@ class SettlementMapState extends State<SettlementMap>
       // figures above stay (they are what the building CAN do); the Total says
       // what it currently banks, which is nothing.
       final halted = functional && parts.isNotEmpty &&
-          (!widget.ctrl.hasEnergy || starved.isNotEmpty);
-      final haltReason = !widget.ctrl.hasEnergy
-          ? '0/h · no energy'
-          : '0/h · no ${starved.map(_resLabel).join(' / ')}';
+          (b.isPaused || !widget.ctrl.hasEnergy || starved.isNotEmpty);
+      final haltReason = b.isPaused
+          ? '0/h · paused'
+          : !widget.ctrl.hasEnergy
+              ? '0/h · no energy'
+              : '0/h · no ${starved.map(_resLabel).join(' / ')}';
       rows
         ..add(const SizedBox(height: 8))
         ..add(
@@ -2658,6 +2691,24 @@ class SettlementMapState extends State<SettlementMap>
                 left: 1,
                 child: Text('🚫', style: TextStyle(fontSize: 12)),
               ),
+            // PAUSED, on the map (user 2026-08-01): a switch you cannot see
+            // from the outside is one you forget you flipped — and a building
+            // that has quietly produced nothing for a week looks exactly like a
+            // building that is working.
+            if (b.isPaused && b.isComplete) ...[
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: FoE.bg.withValues(alpha: 0.45),
+                  ),
+                ),
+              ),
+              const Positioned(
+                bottom: 1,
+                right: 1,
+                child: Text('⏸', style: TextStyle(fontSize: 12)),
+              ),
+            ],
           ],
         ),
       ),

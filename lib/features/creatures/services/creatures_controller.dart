@@ -93,12 +93,25 @@ class CreaturesController extends ChangeNotifier {
   /// mating/expedition but not treatment, and the building dialog spelled out a
   /// third union of its own. So a K.O. monster earned work XP for a job it could
   /// not do, and a monster in the Healing Hut produced fish from its bed.
+  /// A PAUSED building is a shift nobody is working (user 2026-08-01): the post
+  /// is still yours, the building simply is not running — so no output, and no
+  /// work XP for standing in it.
   bool isWorkingNow(CreatureInstance c) =>
       c.isAssigned &&
       !isOnExpedition(c.id) &&
       !isBreeding(c.id) &&
       !c.isKo &&
-      !c.isHealing;
+      !c.isHealing &&
+      !_isInPausedBuilding(c);
+
+  bool _isInPausedBuilding(CreatureInstance c) {
+    final bId = c.assignedBuildingId;
+    if (bId == null) return false;
+    for (final b in SettlementController().buildings) {
+      if (b.id == bId) return b.isPaused;
+    }
+    return false;
+  }
 
   /// True when [c]'s current post is a training role (WorkshopRole.kTraining
   /// — the Training Grounds). Resolves the placed building to its def; false

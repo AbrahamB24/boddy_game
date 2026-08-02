@@ -9,6 +9,17 @@ class PlacedBuilding {
   final double constructionSecondsBuilt;
   final bool isComplete;
   final bool isQueued; // waiting for an active build slot to free up
+
+  /// PAUSED (user 2026-08-01: "ich will gebäude pausieren können").
+  ///
+  /// A paused building produces nothing and therefore consumes nothing — the
+  /// switch you want when a refinery is eating wood faster than you can cut it
+  /// and un-staffing it would cost you the posting.
+  ///
+  /// It keeps its workers, its level and its place. Housing and storage keep
+  /// counting: those are what the building IS, not what it does, and pausing a
+  /// full storehouse would spill its contents to save nothing.
+  final bool isPaused;
   final DateTime placedAt;
 
   const PlacedBuilding({
@@ -22,6 +33,7 @@ class PlacedBuilding {
     required this.constructionSecondsBuilt,
     required this.isComplete,
     this.isQueued = false,
+    this.isPaused = false,
     required this.placedAt,
   });
 
@@ -38,6 +50,7 @@ class PlacedBuilding {
         .toDouble(),
     isComplete: m['is_complete'] as bool,
     isQueued: (m['is_queued'] as bool?) ?? false,
+    isPaused: (m['is_paused'] as bool?) ?? false,
     placedAt: DateTime.parse(m['placed_at'] as String),
   );
 
@@ -52,6 +65,7 @@ class PlacedBuilding {
     'construction_seconds_built': constructionSecondsBuilt,
     'is_complete': isComplete,
     'is_queued': isQueued,
+    'is_paused': isPaused,
   };
 
   double get constructionProgress => constructionSecondsRequired <= 0
@@ -68,6 +82,7 @@ class PlacedBuilding {
     double? constructionSecondsBuilt,
     bool? isComplete,
     bool? isQueued,
+    bool? isPaused,
     int? level,
   }) => PlacedBuilding(
     id: id,
@@ -82,6 +97,7 @@ class PlacedBuilding {
         constructionSecondsBuilt ?? this.constructionSecondsBuilt,
     isComplete: isComplete ?? this.isComplete,
     isQueued: isQueued ?? this.isQueued,
+    isPaused: isPaused ?? this.isPaused,
     placedAt: placedAt,
   );
 }

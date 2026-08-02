@@ -198,6 +198,13 @@ class SettlementService {
         .eq('id', buildingId);
   }
 
+  Future<void> setBuildingPaused(String buildingId, bool paused) async {
+    await supabase
+        .from('placed_buildings')
+        .update({'is_paused': paused})
+        .eq('id', buildingId);
+  }
+
   Future<void> deleteBuilding(String buildingId) async {
     await supabase.from('placed_buildings').delete().eq('id', buildingId);
   }

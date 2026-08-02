@@ -1075,7 +1075,10 @@ class SettlementController extends ChangeNotifier {
     // LEVEL that scales its output) and its def.
     final workshops = <String, ({PlacedBuilding b, BuildingDef def})>{};
     for (final b in buildings) {
-      if (!b.isComplete || !connected.contains(b.id)) continue;
+      // PAUSED = not running (user 2026-08-01). Skipping it here is what makes
+      // the pause real everywhere at once: hourlyRates, the tick, the refinery
+      // burn and the breakdown all read this one map.
+      if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
       final def = kBuildingDefs[b.buildingTypeId];
       if (def != null && def.workshops.isNotEmpty) {
         workshops[b.id] = (b: b, def: def);
@@ -1130,7 +1133,7 @@ class SettlementController extends ChangeNotifier {
     // what its effect list says, and nothing at all when that list is empty.
     final era = settlement?.eraIndex ?? 1;
     for (final b in buildings) {
-      if (!b.isComplete || !connected.contains(b.id)) continue;
+      if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
       final def = kBuildingDefs[b.buildingTypeId];
       if (def == null) continue;
       // A stationed LEGENDARY multiplies this building's worker-free production
@@ -2209,6 +2212,29 @@ class SettlementController extends ChangeNotifier {
     return null;
   }
 
+  /// Stops or restarts a building (user 2026-08-01: "ich will gebäude
+  /// pausieren können").
+  ///
+  /// The state is applied LOCALLY first and saved after, like every other
+  /// building edit: pausing is what you reach for when something is draining
+  /// away, and a switch that waits for the network is a switch you press twice.
+  Future<void> setPaused(String buildingId, bool paused) async {
+    final idx = buildings.indexWhere((b) => b.id == buildingId);
+    if (idx < 0) return;
+    _buildingsDirty = true;
+    buildings = [
+      for (final b in buildings)
+        if (b.id == buildingId) b.copyWith(isPaused: paused) else b,
+    ];
+    notifyListeners();
+    try {
+      await _svc.setBuildingPaused(buildingId, paused);
+    } catch (e) {
+      debugPrint('[SettlementController] setPaused save failed: $e');
+      _flagSaveFailed();
+    }
+  }
+
   Future<String?> moveBuilding(String buildingId, int newX, int newY) async {
     final idx = buildings.indexWhere((b) => b.id == buildingId);
     if (idx < 0) return 'Building not found';
@@ -2320,7 +2346,7 @@ class SettlementController extends ChangeNotifier {
     final totals = <String, double>{};
     final counts = <String, int>{};
     for (final b in buildings) {
-      if (!b.isComplete || !connected.contains(b.id)) continue;
+      if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
       final def = kBuildingDefs[b.buildingTypeId];
       if (def == null) continue;
       double out = 0;
