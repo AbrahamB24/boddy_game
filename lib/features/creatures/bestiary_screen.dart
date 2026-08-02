@@ -7,14 +7,28 @@ import 'models/creature_instance.dart';
 import 'models/species_def.dart';
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
-import 'widgets/creature_card.dart';
+import 'widgets/creature_sprite.dart';
 import '../common/widgets/recess_bar.dart';
+import '../settlement/widgets/scroll_paper.dart' show kParchmentInk;
 
-// The bestiary (Dex) — the collection endgame: every defined species, with
-// undiscovered ones shown as dark silhouettes. "Discovered" = you own (or
-// owned... currently: own) at least one creature of the species; per species
-// it also shows how many you hold and the highest evolution stage you've
-// reached, so 100% completion means every species at final stage.
+// The bestiary (Dex) — the collection endgame.
+//
+// ── THE WHOLE LINE, NOT THE FIRST OF IT (user 2026-08-01: "beim bestiary will
+// ich alle Monster haben, nicht nur stufe 1. Bitte immer alle drei
+// nebeneinander") ──
+//
+// It showed ONE tile per species — your best owned creature, or a silhouette of
+// stage 1. So a page meant to answer "what is there and how far have I got"
+// showed a third of what there is, and the two forms every monster grows into
+// were invisible until you happened to own one.
+//
+// Every species is a ROW now: its three stages side by side, in order, each one
+// either its art or a silhouette. Progress reads along the row — how far this
+// line has come for you — and down the page: how many lines you have started.
+//
+// "Discovered" = you own at least one creature of the species. A STAGE counts as
+// seen when your best of that species has reached it (or been caught at it),
+// which is the same rule the completion figures at the top have always used.
 class BestiaryScreen extends StatefulWidget {
   const BestiaryScreen({super.key});
 
@@ -104,20 +118,16 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
                         style: FoE.dim(size: 12),
                       ),
                     )
-                  : GridView.builder(
-                      padding:
-                          const EdgeInsets.fromLTRB(ParchmentPage.kParchmentPagePad, 4, ParchmentPage.kParchmentPagePad, 20),
-                      // Same grid as the Monsters screen so the tiles read 1:1
-                      // (user 2026-07-18).
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: 0.70,
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(
+                        ParchmentPage.kParchmentPagePad,
+                        6,
+                        ParchmentPage.kParchmentPagePad,
+                        20,
                       ),
                       itemCount: species.length,
-                      itemBuilder: (_, i) => _dexCard(species[i]),
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) => _speciesRow(species[i]),
                     ),
             ),
           ],
@@ -126,24 +136,139 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
     },
   );
 
-  /// The bestiary tile: the exact Monsters-screen card for a discovered species
-  /// (using its highest-power owned creature), or a shrouded silhouette for one
-  /// not yet discovered (user 2026-07-18).
-  Widget _dexCard(SpeciesDef species) {
+  /// ONE SPECIES, as its whole line: the three stages side by side.
+  ///
+  /// The row is a card on the page, so the three tiles read as one family
+  /// rather than as three loose monsters — which is the entire point of showing
+  /// them together.
+  Widget _speciesRow(SpeciesDef species) {
+    final progress = _progressFor(species.id);
     final rep = _representativeFor(species.id);
-    if (rep == null) {
-      return CreatureCard.shrouded(
-        shroudImageUrl: species.stageAt(0).imageUrl,
-      );
-    }
-    return CreatureCard(
-      creature: rep,
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CreatureDetailScreen(creatureId: rep.id),
+    final discovered = progress.owned > 0;
+    return GestureDetector(
+      // Tapping a line you have started opens your best of it. An undiscovered
+      // line has nothing to open, and must not pretend otherwise.
+      onTap: rep == null
+          ? null
+          : () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CreatureDetailScreen(creatureId: rep.id),
+                ),
+              ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+        decoration: ShapeDecoration(
+          color: kParchmentInk.withValues(alpha: discovered ? 0.10 : 0.05),
+          shape: FoE.facet(
+            radius: 14,
+            side: BorderSide(
+              color: discovered
+                  ? species.rarity.color.withValues(alpha: 0.6)
+                  : kParchmentInk.withValues(alpha: 0.14),
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Text(species.element.emoji, style: const TextStyle(fontSize: 13)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    // An undiscovered species keeps its NAME hidden — the line
+                    // is the reward, and the silhouettes are the tease.
+                    discovered ? species.name : '???',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: FoE.label(size: 13).copyWith(
+                      color: discovered ? FoE.parchment : FoE.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  // How far this line has come: 0/3 through 3/3.
+                  '${(progress.bestStage + 1).clamp(0, 3)}/3',
+                  style: FoE.value(size: 11).copyWith(
+                    color: progress.bestStage >= 2
+                        ? FoE.positive
+                        : discovered
+                            ? FoE.gold
+                            : FoE.textMuted,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var stage = 0; stage < 3; stage++) ...[
+                  if (stage > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: _stageTile(
+                      species,
+                      stage,
+                      seen: progress.bestStage >= stage,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  /// One stage of a line: its art if you have got this far, else its own
+  /// silhouette.
+  ///
+  /// The SILHOUETTE is the stage's real art blacked out, not a question mark —
+  /// so an unreached form still shows you its shape, which is what makes a
+  /// bestiary worth opening before it is full.
+  Widget _stageTile(SpeciesDef species, int stage, {required bool seen}) {
+    final def = species.stageAt(stage);
+    final url = def.imageUrl;
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: 1,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: ShapeDecoration(
+              color: kParchmentInk.withValues(alpha: seen ? 0.06 : 0.10),
+              shape: FoE.facet(radius: 10),
+            ),
+            child: url == null
+                ? Icon(Icons.help_outline, size: 20, color: FoE.textMuted)
+                : seen
+                    ? CreatureSprite(url: url)
+                    : ColorFiltered(
+                        // Flat black, no blur: the same hard-edged treatment
+                        // the rest of the app gives a silhouette.
+                        colorFilter: ColorFilter.mode(
+                          kParchmentInk.withValues(alpha: 0.55),
+                          BlendMode.srcIn,
+                        ),
+                        child: CreatureSprite(url: url),
+                      ),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          seen ? def.name : '· · ·',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: FoE.dim(size: 9).copyWith(
+            color: seen ? FoE.textDim : FoE.textMuted,
+          ),
+        ),
+      ],
     );
   }
 }
