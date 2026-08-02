@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:boddygame/core/theme/parchment_theme.dart';
 import 'package:boddygame/features/common/widgets/parchment_page.dart';
+import 'package:boddygame/features/settlement/widgets/parchment_sheet.dart';
 
 // ── Ein Header, überall (user 2026-07-31) ───────────────────
 // "überall wo es einen header hat, soll dieser immer genau gleich aussehen"
@@ -14,6 +15,12 @@ import 'package:boddygame/features/common/widgets/parchment_page.dart';
 // the same band by the THEME. What is pinned here is that second half: a theme
 // value that drifts from the band is exactly how a "shared" look comes apart
 // again, and nothing else would catch it.
+//
+// SHEETS ARE NOT PAGES (user 2026-08-01: "lösche den oberen Balken … Bitte
+// überall bei diesen menüs löschen"). A running head belongs to something you
+// navigated TO; a sheet slid up over what you were already looking at, and it
+// carries its title on its own paper. "The same header everywhere" was never
+// about giving one to things that are not pages.
 void main() {
   // The theme builds Google-font text styles, so it has to be built INSIDE a
   // test — at main() level google_fonts fires an HTTP fetch outside the test
@@ -98,5 +105,23 @@ void main() {
     expect(t.dialogTheme.shape, isA<BeveledRectangleBorder>());
     expect(t.popupMenuTheme.shape, isA<BeveledRectangleBorder>());
     expect(t.snackBarTheme.shape, isA<BeveledRectangleBorder>());
+  });
+
+  testWidgets('a sheet carries no bar and no grab handle', (tester) async {
+    // Both were stacked over every sheet's title: a light grey handle for a
+    // gesture that works anywhere on the sheet, and under it a page's band.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ParchmentSheet(
+            title: 'Wood',
+            builder: (_, c) => ListView(controller: c),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Wood'), findsOneWidget, reason: 'the title stays');
+    expect(find.byType(ParchmentHeader), findsNothing);
   });
 }

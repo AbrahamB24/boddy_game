@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
-import '../../common/widgets/parchment_page.dart';
 import 'meander_strip.dart';
 import 'scroll_paper.dart'
     show kParchmentInk, kParchmentMid;
@@ -78,27 +77,29 @@ class ParchmentSheet extends StatelessWidget {
           ),
           child: Column(
             children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: ShapeDecoration(color: kParchmentInk.withValues(alpha: 0.30), shape: FoE.facet(radius: 2)),
-              ),
-              // THE app's bar (user 2026-07-31: "überall wo es einen header
-              // hat, soll dieser immer genau gleich aussehen"). A sheet's head
-              // was a bare title row on the paper — same job as a page's bar,
-              // different size, different weight, no band under it.
-              ParchmentHeader.band(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 16, 10),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(title, style: ParchmentHeader.titleStyle()),
+              // ── NO BARS OVER THE TITLE (user 2026-08-01: "lösche den oberen
+              //    Balken und den hellen grauen … Bitte überall bei diesen
+              //    menüs löschen") ──
+              //
+              // A sheet had TWO of them stacked: a light grey grab handle, and
+              // under it the page's header band. The handle is a hint for a
+              // gesture that works anywhere on the sheet, and the band is a
+              // PAGE's device — a running head belongs to something you
+              // navigated to, not to something that slid up over what you were
+              // already looking at. What is left is the title, on the sheet's
+              // own paper.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(26, 16, 22, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: FoE.title(size: 16).copyWith(color: ink),
                       ),
-                      if (trailing != null) trailing!,
-                    ],
-                  ),
+                    ),
+                    if (trailing != null) trailing!,
+                  ],
                 ),
               ),
               Expanded(
