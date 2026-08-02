@@ -1122,6 +1122,13 @@ class _SettlementScreenState extends State<SettlementScreen>
         // "full" would understate it — the cell has to say that this is a
         // surplus being spent down, not a store that has simply stopped.
         final over = cap > 0 && amount > cap;
+        // A NET LOSS SAYS SO (user 2026-08-01: "wenn eine Ressource minus macht,
+        // dann bitte nicht +- schreiben im header sondern nur -" + "und rot
+        // markieren"). The '+' used to be printed unconditionally, so a
+        // shrinking pile read "+-1.2/h" — a sign that cancels itself out on the
+        // one number where the direction is the whole point.
+        final losing = rate < 0;
+        final digits = rate.abs() >= 10 ? 0 : 1;
         return _cellBody(
           emoji: emoji,
           value: _short(amount),
@@ -1129,8 +1136,12 @@ class _SettlementScreenState extends State<SettlementScreen>
               ? 'over ${_short(cap)}'
               : full
               ? 'full'
-              : '+${rate.toStringAsFixed(rate >= 10 ? 0 : 1)}/h',
-          subColor: full ? const Color(0xFF9B3B22) : null,
+              : '${losing ? '' : '+'}${rate.toStringAsFixed(digits)}/h',
+          subColor: losing
+              ? FoE.danger
+              : full
+                  ? const Color(0xFF9B3B22)
+                  : null,
         );
       },
     ),

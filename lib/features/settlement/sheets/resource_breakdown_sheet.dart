@@ -61,7 +61,12 @@ class ResourceBreakdownSheet extends StatelessWidget {
       maxSize: 0.9,
       trailing: Text(
         '${total >= 0 ? '+' : ''}${total.toStringAsFixed(1)}$unit',
-        style: FoE.value(size: 14).copyWith(color: ParchmentSheet.accent),
+        // A NET LOSS IS RED, here as in the header (user 2026-08-01). This is
+        // the one figure the sheet exists to explain; wearing the accent while
+        // the pile shrinks made it look like good news.
+        style: FoE.value(size: 14).copyWith(
+          color: total < 0 ? FoE.danger : ParchmentSheet.accent,
+        ),
       ),
       builder: (context, scrollCtrl) => ListView(
         controller: scrollCtrl,
@@ -144,7 +149,7 @@ class ResourceBreakdownSheet extends StatelessWidget {
           Text(
             '${net > 0 ? '+' : ''}${net.toStringAsFixed(1)}$unit',
             style: FoE.value(size: 14).copyWith(
-              color: net < 0 ? Colors.redAccent : ParchmentSheet.accent,
+              color: net < 0 ? FoE.danger : ParchmentSheet.accent,
             ),
           ),
         ],
@@ -230,7 +235,7 @@ class ResourceBreakdownSheet extends StatelessWidget {
             '${unitOverride ?? unit}',
             style: FoE.value(
               size: 12,
-            ).copyWith(color: isNegative ? Colors.redAccent : FoE.gold),
+            ).copyWith(color: isNegative ? FoE.danger : FoE.gold),
           ),
         ],
       ),
