@@ -32,6 +32,32 @@ Der Preis ist Charakter: ein Generator liefert Bausatz, kein Handgezeichnetes.
 Die Ecken der markierten Fläche müssen den linken, rechten und unteren Bildrand
 berühren. Tun sie das, stimmt die Einbettung. Nie mit `--guides` ausliefern.
 
+## In Blender anschauen
+
+Ohne `--background`, mit `--no-render` — dann baut das Skript die Szene und hört
+auf, und du stehst vor dem Ding statt vor einem PNG:
+
+```powershell
+Start-Process "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" `
+    -ArgumentList '--python','tool/blender/render_building.py','--', `
+                  '--preset','breeding_hut','--no-render' `
+    -WorkingDirectory "C:\Users\olivi\BoddyGame"
+```
+
+Es öffnet in der Kameraansicht mit gerendertem Shading. Mittlere Maustaste dreht,
+Mausrad zoomt, `Numpad 0` zurück in die Kamera — dort ist der Ausschnitt exakt
+der, den die Karte zeichnet.
+
+## Auf der Karte anschauen
+
+```powershell
+python tool/preview_on_map.py docs/renders/breeding_hut.png 3 4
+```
+
+Legt den Render in Originalgrösse auf den Ära-I-Boden über seine eigene
+Grundfläche, daneben dasselbe in 3×. **Beurteile bei 224 px**, nicht bei 672 —
+ein Render in voller Grösse sieht immer gut aus.
+
 ## Weitere Schalter
 
 | | |
@@ -39,6 +65,8 @@ berühren. Tun sie das, stimmt die Einbettung. Nie mit `--guides` ausliefern.
 | `--scale N` | Pixel pro Kachel. 3 reicht, 4 für Wahrzeichen |
 | `--headroom F` | Bildhöhe als Vielfaches der Basisbreite. Höher für Türme |
 | `--guides` | s.o. |
+| `--no-render` | Szene bauen und aufhören (für die GUI) |
+| `--blend PFAD` | Szene zusätzlich als .blend speichern |
 
 ## Ein neues Gebäude
 
