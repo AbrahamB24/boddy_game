@@ -4,13 +4,25 @@
 // one-time resource gift plus a permanent, cumulative production bonus
 // the moment you reach it. See SettlementController.advanceEra().
 //
-// ── They are CHAPTERS, not centuries (user 2026-07-22) ──
-// An era is one stage of THIS settlement's rise — a chapter the player lives
-// through — not a historical age spanning generations. That reading is the
-// whole reason the monsters you caught in chapter I are still with you in
-// chapter VIII: the eight chapters are a career, not a millennium. Name and
-// word them accordingly ("Ascend", "chapter", "stage"), and never in units of
-// time ("the Bronze Age", "centuries later").
+// ── They are AGES after all (user 2026-08-03) ──
+// This reverses the chapter rule of 2026-07-22, knowingly and on request: "ich
+// will dennoch zeitalter wählen, auch wenn dies keinen Sinn ergibt". Era I is
+// the Stone Age.
+//
+// The tension the old rule protected against is real — a settlement crossing
+// millennia while the monsters you caught on day one are still on the team —
+// and naming the eras does not resolve it. What keeps it survivable is that an
+// age here names a BUILDING STYLE, not a span of time: what your walls are made
+// of and what the place looks like. Nothing else in the game measures years,
+// and monsters still do not age (see the breeding/hatching design).
+//
+// So: name eras for their material and craft, never for a date or a dynasty,
+// and never write elapsed time into UI copy ("centuries later", "generations
+// passed"). "Ascend" stays the verb — you are still climbing, not waiting.
+//
+// Only era I is named this way so far (user: "wir machen nur das stone age,
+// sonst noch nichts"). Eras II–VIII keep their settlement names below until
+// they are done one at a time.
 class EraDef {
   final String id;
   final String name;
@@ -138,9 +150,11 @@ class EraDef {
 // Public (not `_`-prefixed) because GameDefsController reads it directly as
 // the base the DB rows are layered onto.
 const kFallbackEraDefs = <String, EraDef>{
-  // Named for what the SETTLEMENT is, not for a point in history — see the
-  // chapter note at the top of this file.
-  'era_1': EraDef(id: 'era_1', name: 'The Clearing', emoji: '🏘️', order: 1),
+  // The starting age. Wood lashed to stone, thatch, no metal and no mortar —
+  // which is exactly what era I already builds with (wood and stone raw, no
+  // element; see kGoodsDefs). The name finally says out loud what the costs
+  // have said all along.
+  'era_1': EraDef(id: 'era_1', name: 'Stone Age', emoji: '🪨', order: 1),
   'era_2': EraDef(
     id: 'era_2',
     name: 'The Sawmill Vale',
