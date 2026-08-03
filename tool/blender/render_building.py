@@ -87,6 +87,7 @@ PALETTE = {
     'sand': (0.90, 0.77, 0.52),        # trodden ground inside a court
     'straw': (0.94, 0.77, 0.30),       # bedding, thatch, nests
     'leaf': (0.37, 0.53, 0.22),        # the only green; use it sparingly
+    'moss': (0.44, 0.50, 0.26),        # duller and yellower — it is on a roof
     # Mid-steps. The monsters get four to six tones out of one hue; three is
     # what a box gives you from lighting alone, so the rest has to be painted.
     # Use these for coursing, joints and mouldings — never for a whole surface.
@@ -581,6 +582,140 @@ def mosaic(name, x, y, z, sx, sy, key_a='travertine', key_b='tile',
                 mat(key_a if (i * 3 + j) % 4 else key_b))
 
 
+def moss(name, x, y, z, sx, sy, h, ridge=0.45, overhang=0.3, patches=9,
+         key='moss'):
+    """Moss creeping up a roof from the eaves.
+
+    Weathering is what says a building has been standing a while rather than
+    having been placed this morning, and this is the cheapest kind: a handful
+    of patches, biased LOW on the slope, because that is where a real roof stays
+    damp. Spread by the golden angle so they never line up into a row.
+    """
+    sx += overhang * 2
+    sy += overhang * 2
+    long_y = sy >= sx
+    r = (sy if long_y else sx) * ridge / 2
+    for i in range(patches):
+        # sqrt biases towards the eaves; the ridge dries out first.
+        f = 0.06 + 0.5 * ((i + 0.5) / patches) ** 1.7
+        a = 2.399963 * i
+        t = (a / (2 * math.pi)) % 1.0 - 0.5
+        if long_y:
+            hx, hy = (sx / 2) * (1 - f), sy / 2 - (sy / 2 - r) * f
+            bx, by = x + t * 2 * hx, y + math.copysign(hy, math.sin(a))
+        else:
+            hx, hy = sx / 2 - (sx / 2 - r) * f, (sy / 2) * (1 - f)
+            bx, by = x + math.copysign(hx, math.sin(a)), y + t * 2 * hy
+        s = 0.11 + 0.09 * ((i * 7) % 3) / 2
+        box(f'{name}_{i}', bx, by, z + f * h, s, s, 0.045, mat(key))
+
+
+def vine(name, x, y, z, h, key='leaf', facing='y', leaves=9):
+    """A creeper up a wall: one stem and a scatter of leaves either side.
+
+    Green is the rarest colour in this palette, so a vine is a strong move —
+    one per building, on the wall that has the least going on."""
+    def at(into, along=0.0):
+        return (x + (along if facing == 'y' else -into),
+                y + (into if facing == 'y' else along))
+
+    sx_, sy_ = at(-0.02)
+    wall_box(f'{name}_stem', sx_, sy_, z, 0.045, 0.05, h, mat('oak'),
+             facing=facing)
+    for i in range(leaves):
+        f = (i + 0.5) / leaves
+        side = 1 if i % 2 else -1
+        lx, ly = at(-0.035, side * (0.05 + 0.09 * ((i * 5) % 3)))
+        s = 0.09 + 0.05 * ((i * 3) % 2)
+        box(f'{name}_leaf{i}', lx, ly, z + h * f, s, s, s * 0.55, mat(key))
+
+
+def tufts(name, x, y, sx, sy, key='leaf', pitch=0.42):
+    """Grass at the foot of a wall, where a broom never quite reaches."""
+    for axis, span, other in ((0, sx, sy), (1, sy, sx)):
+        n = max(1, int(span / pitch))
+        for i in range(n):
+            t = -span / 2 + span * (i + 0.5) / n
+            for sign in (-1, 1):
+                if _hash01(f'{name}{axis}{i}{sign}') < 0.45:
+                    continue          # bald patches; a fringe is a hedge
+                if axis == 0:
+                    bx, by = x + t, y + sign * (other / 2 + 0.03)
+                else:
+                    bx, by = x + sign * (other / 2 + 0.03), y + t
+                box(f'{name}_{axis}_{i}_{sign}', bx, by, 0,
+                    0.13, 0.13, 0.11, mat(key))
+                box(f'{name}_b{axis}_{i}_{sign}', bx, by, 0.09,
+                    0.07, 0.07, 0.07, mat(key))
+
+
+def dovecote(name, x, y, z, w, h, holes=3):
+    """A small tower with its own roof and a wall of nest holes.
+
+    Asymmetry that earns its keep. A tower on ONE corner does three things at
+    once: it breaks the silhouette, it gives the roofline a second height to
+    read against, and on a breeding building it says what happens inside
+    without a single word. Symmetry is what made the hut look correct and
+    lifeless; one thing that only exists on one side fixes it.
+    """
+    ashlar_courses(f'{name}_base', x, y, z, w + 0.1, w + 0.1, 0.16,
+                   course=0.16, block=0.3)
+    box(f'{name}_shaft', x, y, z + 0.16, w, w, h, mat('stucco'))
+    box(f'{name}_band', x, y, z + 0.16 + h * 0.5, w + 0.05, w + 0.05, 0.06,
+        mat('travertine'))
+    # The holes face the two walls a player can see, and nothing is spent on
+    # the two they cannot.
+    for i in range(holes):
+        hz = z + 0.24 + h * (0.24 + 0.26 * i)
+        arch(f'{name}_hole_a{i}', x, y - w / 2 + 0.03, hz, 0.1, 0.13, 0.1)
+        arch(f'{name}_hole_b{i}', x + w / 2 - 0.03, y, hz, 0.1, 0.13, 0.1,
+             facing='x')
+        box(f'{name}_ledge_a{i}', x, y - w / 2 - 0.02, hz - 0.045,
+            0.2, 0.08, 0.035, mat('travertine'))
+        box(f'{name}_ledge_b{i}', x + w / 2 + 0.02, y, hz - 0.045,
+            0.08, 0.2, 0.035, mat('travertine'))
+    top = z + 0.16 + h
+    box(f'{name}_cornice', x, y, top - 0.05, w + 0.16, w + 0.16, 0.06,
+        mat('travertine'))
+    hip_roof(f'{name}_roof', x, y, top, w, w, w * 0.55, overhang=0.14,
+             ridge=0.2)
+    pantiles(f'{name}_tiles', x, y, top, w, w, w * 0.55, overhang=0.14,
+             ridge=0.2, courses=7, lip=0.022)
+    box(f'{name}_finial', x, y, top + w * 0.55, 0.08, 0.08, 0.11, mat('gold'))
+
+
+def lean_to(name, x, y, z, sx, sy, h, drop=0.28, key='tile'):
+    """A mono-pitch shelter on posts: high at the back, low at the front.
+
+    The other half of breaking symmetry. A second roof at a different pitch and
+    a different height stops the building reading as one shape repeated.
+    """
+    for sxs in (-1, 1):
+        for sys in (-1, 1):
+            box(f'{name}_post_{sxs}_{sys}', x + sxs * (sx / 2 - 0.06),
+                y + sys * (sy / 2 - 0.06), z, 0.13, 0.13,
+                h - (drop if sys < 0 else 0), mat('oak'))
+    verts = [
+        (-sx / 2 - 0.12, -sy / 2 - 0.12, h - drop),
+        (sx / 2 + 0.12, -sy / 2 - 0.12, h - drop),
+        (sx / 2 + 0.12, sy / 2 + 0.12, h),
+        (-sx / 2 - 0.12, sy / 2 + 0.12, h),
+    ]
+    verts += [(vx, vy, vz - 0.07) for vx, vy, vz in verts]
+    faces = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2),
+             (2, 6, 7, 3), (3, 7, 4, 0)]
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    ob = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(ob)
+    ob.location = (x, y, z)
+    ob.data.materials.append(mat(key))
+    for p in ob.data.polygons:
+        p.use_smooth = False
+    return ob
+
+
 def acroterion(name, x, y, z, sx, sy, ridge=0.45, overhang=0.3, key='gold'):
     """The ornaments capping the ends of a ridge. Two of them, and the roofline
     stops just ending and starts finishing."""
@@ -820,6 +955,7 @@ def breeding_hut(w, h):
 
     # The plinth is laid as STONES, not cast as a slab — see ashlar_courses.
     ashlar_courses('plinth', 0, body_y, 0, body_w + 0.26, body_d + 0.26, 0.22)
+    tufts('grass', 0, body_y, body_w + 0.26, body_d + 0.26)
     box('plinth_cap', 0, body_y, 0.22, body_w + 0.18, body_d + 0.18, 0.05,
         mat('travertine'))
     box('body', 0, body_y, 0.24, body_w, body_d, wall_h, mat('stucco'))
@@ -846,22 +982,29 @@ def breeding_hut(w, h):
     # the mouth and be larger — it is seen only as the rim that survives around
     # the dark shape. Put it in front, as I first did, and it simply plugs the
     # hole and the doorway disappears.
+    # ── The door is OFF CENTRE (user 2026-08-03: "noch schöner") ──
+    # A centred door under a centred roof between mirrored windows is a
+    # building that is correct and lifeless. Everything hung off the doorway —
+    # steps, lamps, garland, keystone — takes its x from door_x, so moving the
+    # door moves the whole composition and nothing has to be re-measured.
     door_w, door_h = body_w * 0.30, wall_h * 0.66
+    door_x = -body_w * 0.16
     face_y = body_y - body_d / 2
-    arch('surround', 0, face_y + 0.17, 0.22,
+    arch('surround', door_x, face_y + 0.17, 0.22,
          door_w + 0.20, door_h + 0.10, 0.22, key='travertine')
-    arch('mouth', 0, face_y + 0.04, 0.22, door_w, door_h, 0.22)
+    arch('mouth', door_x, face_y + 0.04, 0.22, door_w, door_h, 0.22)
     # A stable door: boarded to hip height, open above. Exactly right for a
     # place animals go in and out of, and it puts a made thing in the one
     # opening that was a plain black hole.
-    plank_door('door', 0, face_y - 0.03, 0.24, door_w - 0.03, door_h * 0.46)
+    plank_door('door', door_x, face_y - 0.03, 0.24, door_w - 0.03,
+               door_h * 0.46)
     # A keystone over the arch. One block, and the arch stops being a hole with
     # a rim and becomes something that was built.
-    box('keystone', 0, face_y + 0.02, 0.22 + door_h - 0.02,
+    box('keystone', door_x, face_y + 0.02, 0.22 + door_h - 0.02,
         0.17, 0.1, 0.2, mat('travertine'))
-    steps('steps', 0, face_y - 0.06, 0.0, door_w + 0.3)
+    steps('steps', door_x, face_y - 0.06, 0.0, door_w + 0.3)
 
-    box('plaque', 0, face_y - 0.01, 0.22 + door_h + 0.2, 0.52, 0.06, 0.18,
+    box('plaque', door_x, face_y - 0.01, 0.22 + door_h + 0.2, 0.52, 0.06, 0.18,
         mat('travertine'))
     # Lamps either side of the door, with the swag slung between them. They are
     # the reason the facade reads as an entrance rather than as a wall that
@@ -872,8 +1015,9 @@ def breeding_hut(w, h):
     # cannot drift: move the sconces and it follows.
     lamp_x, lamp_z = door_w / 2 + 0.34, 1.10
     for sign in (-1, 1):
-        sconce(f'sconce{sign}', sign * lamp_x, face_y, lamp_z)
-    garland('garland', 0, face_y - 0.05, lamp_z + 0.02, lamp_x * 2, sag=0.14)
+        sconce(f'sconce{sign}', door_x + sign * lamp_x, face_y, lamp_z)
+    garland('garland', door_x, face_y - 0.05, lamp_z + 0.02, lamp_x * 2,
+            sag=0.14)
 
     roof_z = 0.22 + wall_h
     hip_roof('roof', 0, body_y, roof_z, body_w, body_d, 0.85)
@@ -882,6 +1026,7 @@ def breeding_hut(w, h):
     hip_ridges('hips', 0, body_y, roof_z, body_w, body_d, 0.85)
     antefixes('antefix', 0, body_y, roof_z - 0.02, body_w + 0.6, body_d + 0.6)
     acroterion('acro', 0, body_y, roof_z + 0.85, body_w, body_d)
+    moss('moss', 0, body_y, roof_z, body_w, body_d, 0.85)
 
     # A bundle of thatch stored up under the eaves, where a farmyard keeps it.
     for i, sy in enumerate((-0.3, 0.1)):
@@ -904,13 +1049,25 @@ def breeding_hut(w, h):
 
     # Two arched windows on the long wall, which is otherwise the largest blank
     # surface the camera ever sees.
-    for i, sy in enumerate((-1, 1)):
-        wy = body_y + sy * body_d * 0.26
-        window(f'win{i}', body_w / 2 - 0.02, wy, 0.68, 0.28, 0.4, 0.2,
-               facing='x')
-        grille(f'bars{i}', body_w / 2 - 0.06, wy, 0.68, 0.28, 0.36,
-               facing='x')
-    banner('banner', body_w / 2 + 0.04, body_y, 1.14, 0.32, 0.42, facing='x')
+    # ONE window, not a mirrored pair — the tower takes the other end of the
+    # wall, and a tower opposite a window is a composition where two windows
+    # were only a pattern.
+    wy = body_y + body_d * 0.28
+    window('win', body_w / 2 - 0.02, wy, 0.68, 0.28, 0.4, 0.2, facing='x')
+    grille('bars', body_w / 2 - 0.06, wy, 0.68, 0.28, 0.36, facing='x')
+    banner('banner', body_w / 2 + 0.04, body_y - body_d * 0.06, 1.14, 0.32,
+           0.42, facing='x')
+    vine('vine', body_w / 2 - 0.02, body_y + body_d * 0.44, 0.28, 1.0,
+         facing='x')
+
+    # The dovecote as a CORNER tower, its two outer faces flush with the two
+    # walls the camera can see. Placed inside the block it simply rose through
+    # the main roof and its whole shaft — the nest holes, the ledges, the point
+    # of it — was buried. Flush with the corner, all of that is on show and the
+    # tower still breaks the roofline.
+    cote_w = 0.62
+    dovecote('cote', body_w / 2 - cote_w / 2, face_y + cote_w / 2, 0,
+             cote_w, 1.95)
     # A course of blocks under the windows, running the length of the long
     # wall — the largest surface the camera ever sees, and the one that most
     # needs something on it.
@@ -951,17 +1108,24 @@ def breeding_hut(w, h):
     # the eggs and the doorway both — and the eggs are the entire reason this
     # building is recognisable. More detail is only ever worth having while it
     # costs nothing that already reads. Keep it for a building with room.
-    nest('nest', -0.12, court_y + 0.06, 0.18, 0.42)
-    straw_scatter('litter', -0.12, court_y + 0.06, 0.18, 0.78)
-    straw_bale('bale', court_w / 2 - 0.42, court_y - court_d * 0.30, 0.18,
-               0.4, 0.28, 0.26)
-    egg('egg_a', -0.36, court_y + 0.18, 0.20, 0.23, mat('stucco'))
-    egg('egg_b', 0.06, court_y + 0.26, 0.20, 0.26, mat('stucco'))
-    egg('egg_c', -0.10, court_y - 0.20, 0.20, 0.21, mat('stucco'))
+    # A shelter over the LEFT of the court only. The nest moves right to meet
+    # it, so the court has a covered half and an open half instead of one even
+    # rectangle — and nothing stands in front of the eggs, which was the lesson
+    # the pergola taught.
+    lean_to('shelter', -court_w * 0.31, court_y + 0.02, 0.16, 0.84, 0.9, 0.96,
+            key='straw')
+
+    nest('nest', court_w * 0.16, court_y + 0.02, 0.18, 0.40)
+    straw_scatter('litter', court_w * 0.16, court_y + 0.02, 0.18, 0.72)
+    straw_bale('bale', -court_w * 0.30, court_y + 0.24, 0.18, 0.4, 0.28, 0.26)
+    ex = court_w * 0.16
+    egg('egg_a', ex - 0.24, court_y + 0.14, 0.20, 0.23, mat('stucco'))
+    egg('egg_b', ex + 0.18, court_y + 0.22, 0.20, 0.26, mat('stucco'))
+    egg('egg_c', ex + 0.02, court_y - 0.24, 0.20, 0.21, mat('stucco'))
 
     # The working clutter, kept to the edges so the middle stays the eggs.
-    pot('pot_a', court_w / 2 - 0.36, court_y + court_d * 0.32, 0.16)
-    plant('plant_a', court_w / 2 - 0.34, court_y - court_d * 0.10, 0.16)
+    pot('pot_a', court_w / 2 - 0.34, court_y + court_d * 0.30, 0.16)
+    plant('plant_a', court_w / 2 - 0.32, court_y - court_d * 0.14, 0.16)
     # The brazier goes to the GATE, not beside the door: anything tall on the
     # near-left stands directly across the line from the camera to the arch,
     # and the arch is half of what makes this building legible.
@@ -1023,17 +1187,67 @@ def light():
     # 2.6 blew the pale walls out to near-white, which cost the stucco exactly
     # the warmth it is chosen for. Flat colour has no highlight roll-off to
     # rescue it — what clips is simply gone.
-    sun.data.energy = 2.4
-    sun.data.angle = 0  # hard-edged shadows; a soft one is a gradient
+    sun.data.energy = 2.5
+    sun.data.angle = math.radians(2.2)   # a hair of softness, not a gradient
+    sun.data.color = (1.0, 0.95, 0.86)   # warm key against the cool fill
 
-    # The sun must be on the CAMERA's side of the building. The camera looks
-    # from +x/-y, so the two walls a player ever sees are the +x and -y faces;
-    # lighting from -x/-y (the first attempt) lit one of them and left the big
-    # one to the ambient, which is why the stucco came out grey instead of warm.
-    # Travel direction here is (-x, +y, -z): over the shoulder, but off-axis
-    # enough that the two visible walls still differ. That difference IS the
-    # shading — light them equally and the building goes flat.
-    sun.rotation_euler = (math.radians(50), 0, math.radians(32))
+    # ── Why the sun is LOW ──
+    # It has to stay on the camera's side — the camera looks from +x/-y, so
+    # those two walls are the only ones a player ever sees, and lighting the
+    # other pair leaves them to the ambient and turns the stucco grey.
+    #
+    # But at 40 degrees above the horizon it was almost directly over the
+    # camera's shoulder, and nothing visible fell into shadow. That is why
+    # switching on occlusion changed nothing and why even a full path trace
+    # changed nothing: there were no shadows to deepen. Occlusion darkens what
+    # is already shaded; if everything is lit, there is nothing to occlude.
+    #
+    # At 28 degrees the shadows get long enough to do the work: the eaves lay a
+    # deep band down the wall, every pilaster and dentil casts, the court walls
+    # throw across the floor, and the columns reach over the paving. That, and
+    # not the renderer, is what makes it look solid.
+    sun.rotation_euler = (math.radians(62), 0, math.radians(28))
+
+    # A fill from the opposite side so the shadow side keeps its colour instead
+    # of dying. Weak and cool — its whole job is to stop black, not to light.
+    bpy.ops.object.light_add(type='SUN')
+    fill = bpy.context.object
+    fill.name = 'fill'
+    fill.data.energy = 0.55
+    fill.data.color = (0.72, 0.80, 1.0)
+    fill.data.angle = math.radians(30)
+    fill.rotation_euler = (math.radians(58), 0, math.radians(-150))
+
+    # ── Contact darkening ──
+    # The one thing missing that no amount of ornament could supply: every part
+    # sat ON the next one without ever getting DARKER where they meet. Under
+    # the eaves, in the court corners, where the nest touches the floor — all
+    # of it was lit as if nothing was in the way, which is exactly what makes a
+    # render read as flat colour rather than as a solid object.
+    #
+    # Fast GI is EEVEE's screen-space approximation and it is the right tool
+    # here: the effect wanted is short-range occlusion at junctions, not
+    # accurate bounce light. Distance is in world units and one tile is 1.0, so
+    # 0.55 darkens a corner and leaves the open court alone.
+    ev = scene.eevee
+    ev.use_raytracing = True
+    ev.use_fast_gi = True
+    if hasattr(ev, 'fast_gi_method'):
+        try:
+            ev.fast_gi_method = 'AMBIENT_OCCLUSION_ONLY'
+        except TypeError:
+            pass
+    ev.fast_gi_distance = 0.55
+    ev.fast_gi_ray_count = 4
+    ev.fast_gi_step_count = 12
+    ev.taa_render_samples = 96
+    ev.use_shadows = True
+    if hasattr(ev, 'ray_tracing_options'):
+        ev.ray_tracing_options.use_denoise = True
+        try:
+            ev.ray_tracing_options.resolution_scale = '1'
+        except TypeError:
+            pass
 
     scene.world.use_nodes = True
     bg = scene.world.node_tree.nodes['Background']
@@ -1044,7 +1258,7 @@ def light():
     # tinted warm rather than sky-blue, so the shadows stay in the family
     # instead of turning grey.
     bg.inputs['Color'].default_value = (0.55, 0.50, 0.58, 1)
-    bg.inputs['Strength'].default_value = 0.18
+    bg.inputs['Strength'].default_value = 0.22
 
 
 def frame(w, h, px_per_tile, headroom):
@@ -1098,6 +1312,55 @@ def frame(w, h, px_per_tile, headroom):
     cam.location = right * aim_x + up * aim_y + back * 60
     cam.data.clip_start = 0.1
     cam.data.clip_end = 200
+
+
+_VARIANTS = {}
+
+
+def _hash01(text):
+    """A stable pseudo-random in [0,1) from a string. Deterministic on purpose:
+    a render that differs between runs cannot be compared against the one
+    before it, and comparing against the one before it is the whole method."""
+    h = 2166136261
+    for ch in text:
+        h = ((h ^ ord(ch)) * 16777619) & 0xFFFFFFFF
+    return h / 0xFFFFFFFF
+
+
+def vary_tones(spread=0.075):
+    """Give every piece its own slightly different shade of its own colour.
+
+    A roof of two hundred tiles painted in ONE orange is the giveaway. No two
+    real tiles fired the same, no two stones came off the same bed, and the eye
+    knows it long before it can say why. Varying the colour per PIECE — not per
+    material — turns a flat plate into a surface, and it is the cheapest beauty
+    in the whole kit: no geometry, no light, one pass at the end.
+
+    The spread is small on purpose. Past about a tenth the pieces stop reading
+    as one material and start reading as a mistake.
+    """
+    for ob in bpy.data.objects:
+        if ob.type != 'MESH' or ob.name == 'guide':
+            continue
+        for slot_i, slot in enumerate(ob.material_slots):
+            base = slot.material
+            if base is None:
+                continue
+            # Three steps rather than a continuum: this is a faceted art style,
+            # and a smooth gradient across a roof would be a different one.
+            step = int(_hash01(f'{ob.name}#{slot_i}') * 3) - 1
+            if step == 0:
+                continue
+            key = (base.name, step)
+            if key not in _VARIANTS:
+                rgb = base.node_tree.nodes['Principled BSDF'] \
+                    .inputs['Base Color'].default_value
+                f = 1.0 + step * spread
+                _VARIANTS[key] = flat(
+                    f'{base.name}_{step}',
+                    tuple(min(1.0, c * f) for c in rgb[:3]),
+                )
+            slot.material = _VARIANTS[key]
 
 
 def bevel_everything():
@@ -1154,6 +1417,13 @@ def main():
                     help='image height as a multiple of the base width')
     ap.add_argument('--guides', action='store_true',
                     help='mark the footprint, to check the framing')
+    # NOT --cycles: the Cycles add-on parses sys.argv itself and claims every
+    # --cycles* option, so Blender aborts with "ambiguous option" before this
+    # script is even reached.
+    ap.add_argument('--pathtrace', action='store_true',
+                    help='path-trace instead of rasterise: real contact '
+                         'shading, at the cost of render time')
+    ap.add_argument('--samples', type=int, default=96)
     ap.add_argument('--no-bevel', action='store_true',
                     help='skip the edge bevel — tells geometry bugs from '
                          'modifier artefacts apart in one render')
@@ -1167,18 +1437,30 @@ def main():
     build(w, h)
     if args.guides:
         guide_plane(w, h)
+    vary_tones()
     if not args.no_bevel:
         bevel_everything()
     light()
     frame(w, h, args.scale, args.headroom)
 
     scene = bpy.context.scene
-    # EEVEE's identifier moved in 4.2 and again after; ask, do not assume.
     engines = scene.render.bl_rna.properties['engine'].enum_items.keys()
-    for name in ('BLENDER_EEVEE_NEXT', 'BLENDER_EEVEE', 'CYCLES'):
-        if name in engines:
-            scene.render.engine = name
-            break
+    if args.pathtrace and 'CYCLES' in engines:
+        # Cycles for the real contact shading. EEVEE's fast GI only occludes
+        # INDIRECT light, and this scene is lit almost entirely by one sun —
+        # there was barely any indirect light left to occlude, which is why the
+        # corners stayed as bright as the open court.
+        scene.render.engine = 'CYCLES'
+        scene.cycles.samples = args.samples
+        scene.cycles.use_denoising = True
+        scene.cycles.max_bounces = 4
+        scene.cycles.diffuse_bounces = 3
+    else:
+        # EEVEE's identifier moved in 4.2 and again after; ask, do not assume.
+        for name in ('BLENDER_EEVEE_NEXT', 'BLENDER_EEVEE'):
+            if name in engines:
+                scene.render.engine = name
+                break
 
     if args.blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(args.blend))

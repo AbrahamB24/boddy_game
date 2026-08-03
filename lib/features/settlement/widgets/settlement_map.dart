@@ -2730,6 +2730,21 @@ class SettlementMapState extends State<SettlementMap>
         child: Stack(
           clipBehavior: Clip.none,
           children: [
+            // ── STANDING ON THE GROUND (user 2026-08-03) ──
+            // Without this a building hovers: nothing joins it to the tile it
+            // occupies, and every sprite reads as pasted on rather than built
+            // there. It has to live HERE and not in the art, because the map
+            // draws the ground — a shadow baked into the PNG would arrive as a
+            // patch of someone else's grass sitting on top of this tile.
+            //
+            // Roads are ground themselves and build plots are bare land, so
+            // neither casts.
+            if (!def.isRoad && !def.isBuildPlot)
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _ContactShadowPainter(w: def.gridW, h: def.gridH),
+                ),
+              ),
             // Isolated raster: the whole buildings layer rebuilds on every 5s
             // tick, but a tile's art only changes when the building does, so a
             // RepaintBoundary keeps the tick from repainting all ~200 tiles.
@@ -3330,6 +3345,35 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GridPainter old) =>
       old.buildableRegion != buildableRegion;
+}
+
+/// A soft pool of shade on the ground a building occupies (2026-08-03).
+///
+/// The shape is the FOOTPRINT, not the sprite's box: those two differ for
+/// anything that is not square, and a shadow that disagrees with the ground it
+/// lies on is worse than none. It is offset up-left because the renders are lit
+/// from the camera's right — the shadow has to fall away from the light or the
+/// building looks lit from two directions at once.
+class _ContactShadowPainter extends CustomPainter {
+  final int w;
+  final int h;
+  const _ContactShadowPainter({required this.w, required this.h});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.translate(-2.5, 2.0);
+    canvas.drawPath(
+      footprintPathLocal(w, h),
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.26)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_ContactShadowPainter old) => old.w != w || old.h != h;
 }
 
 /// The footprint diamond, filled and outlined — the ghost preview's "can I
