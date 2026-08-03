@@ -924,6 +924,53 @@ def frame(w, h, px_per_tile, headroom):
     cam.data.clip_end = 200
 
 
+def _hash01(a, b, c):
+    """A deterministic pseudo-random in [0,1) from three numbers.
+
+    Deterministic matters twice over: a render that differs between runs cannot
+    be compared against the one before it, and — more importantly — two
+    vertices that sit at the SAME world position must be given the SAME offset,
+    or the wall and the pilaster touching it tear apart along their shared edge.
+    Seeding from position rather than from a counter is what guarantees that.
+    """
+    s = math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453
+    return s - math.floor(s)
+
+
+def roughen(amount=0.024):
+    """Nudge every vertex off true, before the bevel runs over it.
+
+    The bevel alone gave every edge an even, machine-cut strip — the buildings
+    read as manufactured next to monsters whose surfaces are covered in
+    irregular planes. Pushing the corners slightly out of square makes the wall
+    faces very faintly non-planar, so the light breaks across them the way it
+    breaks across a monster, and the bevel strips stop being uniform because the
+    edges they follow no longer are.
+
+    Two things are protected. Vertices ON the ground stay on the ground —
+    horizontally free, vertically pinned — because a building floating a
+    millimetre above its plinth is visible and a building sunk into it is worse.
+    And the amount stays under a thirtieth of a tile: this is meant to be felt
+    and not seen, and the footprint contract is not negotiable.
+    """
+    for ob in bpy.data.objects:
+        if ob.type != 'MESH' or ob.name == 'guide':
+            continue
+        mw = ob.matrix_world
+        inv = mw.inverted()
+        for v in ob.data.vertices:
+            w = mw @ v.co
+            # Round before hashing so coincident vertices agree despite float
+            # noise; without this the seams open up again at random.
+            key = (round(w.x, 3), round(w.y, 3), round(w.z, 3))
+            dx = (_hash01(*key) - 0.5) * 2 * amount
+            dy = (_hash01(key[1], key[2], key[0]) - 0.5) * 2 * amount
+            dz = (_hash01(key[2], key[0], key[1]) - 0.5) * 2 * amount
+            if w.z < 0.01:
+                dz = 0.0
+            v.co = inv @ Vector((w.x + dx, w.y + dy, max(0.0, w.z + dz)))
+
+
 def bevel_everything():
     """Cut every edge back a little, on every mesh in the scene.
 
@@ -988,6 +1035,10 @@ def main():
     build(w, h)
     if args.guides:
         guide_plane(w, h)
+    # Order matters: roughen first so the bevel follows edges that are already
+    # off true. Bevel first and the strips are perfect and the jitter only
+    # wobbles them.
+    roughen()
     bevel_everything()
     light()
     frame(w, h, args.scale, args.headroom)
