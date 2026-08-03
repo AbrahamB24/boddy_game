@@ -153,6 +153,17 @@ List<(Offset, Offset)> footprintSeams(int w, int h) {
 /// The width a building's art is drawn at: the full width of [isoBounds].
 double spriteWidth(int w, int h) => (w + h) * kIsoTileW / 2;
 
+/// A footprint's box in ITS OWN coordinates — origin at (0, 0).
+///
+/// [isoBounds] is in MAP space and carries [isoOriginX] with it, which is right
+/// for placing a tile on the map and wrong for anything drawn INSIDE that tile.
+/// Mixing the two shifted every sprite half a map to the right and left taps
+/// landing on ground the building had never stood on (user 2026-08-01:
+/// "gebäude und strassen sind verschoben. Gebäude können nicht mehr angewählt
+/// werden").
+Rect isoLocalBounds(int w, int h) =>
+    Rect.fromLTWH(0, 0, spriteWidth(w, h), spriteWidth(w, h) / 2);
+
 /// Where to draw a building's PICTURE so that its BASE lands on [bounds].
 ///
 /// The image is placed by its base, not by its own edges (user 2026-08-01: "So

@@ -2825,7 +2825,7 @@ class SettlementMapState extends State<SettlementMap>
           if (!def.isBuildPlot)
             Builder(
               builder: (_) {
-                final local = Rect.fromLTWH(0, 0, iso.width, iso.height);
+                final local = isoLocalBounds(def.gridW, def.gridH);
                 final art = artPlacement(
                   local,
                   baseWidth: def.artBaseWidth,
@@ -3211,7 +3211,9 @@ class _BuildingTile extends StatelessWidget {
       // footprint and slid so that base's foot sits on the footprint's — which
       // is not the same as fitting the image to the tile, because generated art
       // comes back square with the building somewhere inside it.
-      final bounds = isoBounds(0, 0, def.gridW, def.gridH);
+      // LOCAL: this is drawn inside the tile, so the map's origin must not be
+      // in it. isoBounds would carry it and push the art a map-width sideways.
+      final bounds = isoLocalBounds(def.gridW, def.gridH);
       final art = artPlacement(
         bounds,
         baseWidth: def.artBaseWidth,

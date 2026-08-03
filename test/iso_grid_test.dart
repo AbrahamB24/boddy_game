@@ -241,4 +241,49 @@ void main() {
       expect(artPlacement(bounds, baseWidth: -1).width, bounds.width);
     });
   });
+
+  // ── Kartenraum ist nicht Kachelraum (user 2026-08-01) ──────
+  // "gebäude und strassen sind verschoben. Gebäude können nicht mehr angewählt
+  //  werden"
+  //
+  // isoBounds carries the map's origin; anything drawn INSIDE a tile must not.
+  // Mixing them shifted every sprite a map-width sideways, so a tap landed on
+  // ground the building had never stood on — the projection was right and the
+  // picture was somewhere else entirely.
+  group('local vs map coordinates', () {
+    test('a local box starts at the origin, whatever the footprint', () {
+      for (final (w, h) in [(1, 1), (2, 2), (3, 2), (5, 5)]) {
+        final local = isoLocalBounds(w, h);
+        expect(local.left, 0, reason: '$w x $h');
+        expect(local.top, 0, reason: '$w x $h');
+      }
+    });
+
+    test('it is the same SIZE as the map box it stands in', () {
+      for (final (w, h) in [(1, 1), (2, 2), (3, 2)]) {
+        final map = isoBounds(7, 9, w, h);
+        final local = isoLocalBounds(w, h);
+        expect(local.width, map.width, reason: '$w x $h width');
+        expect(local.height, map.height, reason: '$w x $h height');
+      }
+    });
+
+    test('the map box is NOT at the origin — which is the trap', () {
+      // If this ever became 0 the bug would look fixed while the two boxes
+      // silently meant the same thing again.
+      expect(isoBounds(0, 0, 2, 2).left, isNot(0));
+      expect(isoOriginX, greaterThan(0));
+    });
+
+    test('the local outline fits the local box exactly', () {
+      for (final (w, h) in [(1, 1), (3, 2), (2, 4)]) {
+        final local = isoLocalBounds(w, h);
+        final path = footprintPathLocal(w, h).getBounds();
+        expect(path.left, closeTo(local.left, 0.001));
+        expect(path.top, closeTo(local.top, 0.001));
+        expect(path.width, closeTo(local.width, 0.001));
+        expect(path.height, closeTo(local.height, 0.001));
+      }
+    });
+  });
 }
