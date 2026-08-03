@@ -90,11 +90,33 @@ Gebäude auf zusammenzupassen.
 Holz ist **Zierde, nicht Konstruktion** — Balken, Türen, Läden, Geländer. Ein
 überwiegend hölzernes Gebäude rutscht zurück in die nordeuropäische Hütte.
 
-Bausteine: `hip_roof()`, `arch()`, `plinth()`, `box()`, `egg()`. Zwei Fallen,
-beide teuer gelernt: `arch()` liefert einen **massiven Körper, keinen Ring** —
-das Gewände muss also *hinter* der Öffnung liegen und grösser sein, sonst
-verstopft es sie. Und der Firstbalken muss **im** First sitzen; steht er darüber,
-liest er zusammen mit den Gratlinien als Kreuz auf dem Dach.
+## Bauteile
+
+| Struktur | Ornament |
+|---|---|
+| `box()` Mitte-Boden | `pantiles()` Ziegelreihen aufs Dach |
+| `hip_roof()` Walmdach | `dentils()` Zahnschnitt unter dem Gesims |
+| `plinth()` Steinsockel | `antefixes()` Stirnziegel an der Traufe |
+| `arch()` Rundbogen | `window()` Bogenfenster mit Läden |
+| `wall_box()` Trimm an einer Wand | `steps()` Freitreppe |
+| `egg()` facettierte Kugel | `banner()` Wimpel |
+
+**Verzierung ist nicht Schmuck, sondern Massstab.** Eine leere Wand hat keine
+Grösse; eine Wand mit Zahnschnitt unter der Traufe ist unverkennbar ein Gebäude
+statt einer Kiste. Bei 224 px hört das Ornament auf, als es selbst lesbar zu
+sein, und wird Textur — das ist das Ziel, nicht das Scheitern: man soll
+„verziert" lesen, nicht die Verzierungen zählen.
+
+### Drei Fallen, jede einen Render teuer
+
+- **`arch()` ist ein massiver Körper, kein Ring.** Das Gewände muss *hinter* der
+  Öffnung liegen und grösser sein — davor verstopft es sie einfach.
+- **Die beiden Ausrichtungen zeigen entgegengesetzt.** Eine für −Y gezeichnete
+  Wand wird mit wachsendem y tiefer, eine +X-Wand mit *kleinerem* x. Falsches
+  Vorzeichen = derselbe Fehler wie oben, gespiegelt. Deshalb heisst der Parameter
+  `into` und nicht `out`.
+- **Der Firstbalken muss *im* First sitzen.** Darüber liest er mit den
+  Gratlinien zusammen als Kreuz auf dem Dach.
 
 ## Ein neues Gebäude
 

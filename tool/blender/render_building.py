@@ -69,6 +69,8 @@ PALETTE = {
     'iron': (0.24, 0.24, 0.27),        # fittings, hinges, grilles
     'gold': (0.85, 0.66, 0.22),        # finials — a few square pixels, no more
     'dark': (0.11, 0.08, 0.07),        # an opening, read as depth
+    'banner': (0.62, 0.13, 0.20),      # the one saturated cloth per building
+    'sand': (0.84, 0.74, 0.56),        # trodden ground inside a court
 }
 
 
@@ -187,7 +189,7 @@ def plinth(name, x, y, sx, sy, h=0.22, key='ashlar'):
     return box(name, x, y, 0, sx, sy, h, mat(key))
 
 
-def arch(name, x, y, z, w, h, depth, key='dark', segments=4):
+def arch(name, x, y, z, w, h, depth, key='dark', segments=4, facing='y'):
     """An opening with a rounded head, faceted like everything else.
 
     Drawn as the DARK inside rather than as a frame: at this size an arch is
@@ -217,10 +219,164 @@ def arch(name, x, y, z, w, h, depth, key='dark', segments=4):
     ob = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(ob)
     ob.location = (x, y, z)
+    # Built in the XZ plane looking down -Y; a wall facing +X needs it turned.
+    if facing == 'x':
+        ob.rotation_euler = (0, 0, math.radians(90))
     ob.data.materials.append(mat(key))
     for p in ob.data.polygons:
         p.use_smooth = False
     return ob
+
+
+def wall_box(name, x, y, z, along, thick, height, material, facing='y'):
+    """A box measured ALONG a wall and THROUGH it, whichever way the wall runs.
+
+    Every piece of trim — sills, shutters, rails — is naturally described that
+    way, and writing it as sx/sy means writing each one twice.
+    """
+    sx, sy = (along, thick) if facing == 'y' else (thick, along)
+    return box(name, x, y, z, sx, sy, height, material)
+
+
+# ── Ornament ───────────────────────────────────────────────
+# Detail here is not decoration for its own sake — it is what tells the eye how
+# BIG something is. A blank wall has no scale; a wall with a course of dentils
+# under its eaves is unmistakably a building rather than a box. Everything below
+# is sized so it still contributes at 224 px, where it stops being readable as
+# itself and becomes texture. That is the correct outcome, not a failure: at
+# life size you should read "carved", not count the carvings.
+
+
+def pantiles(name, x, y, z, sx, sy, h, ridge=0.45, key='tile_dark',
+             overhang=0.3, pitch=0.16):
+    """Tile courses running down a hip roof's two long slopes.
+
+    The roof is the largest surface on any of these buildings, and flat it is a
+    plate of colour. Ribbed, it is a roof.
+
+    Each rib is SHORTENED by how far out it sits, because a hip roof's slope is
+    a trapezoid: a rib of full length out near the corner would hang off the
+    side. Solving for that per rib is also what makes the tiling converge
+    towards the ridge the way a real hip roof does.
+    """
+    sx += overhang * 2
+    sy += overhang * 2
+    r = sx * ridge / 2
+    run = sy / 2
+    length = math.hypot(run, h)
+    alpha = math.atan2(h, run)                 # the pitch, off horizontal
+
+    n = max(3, int(sx / pitch) // 2)
+    for i in range(n + 1):
+        rx = -sx / 2 + sx * i / n
+        # How far up this rib may go before the trapezoid narrows past it.
+        span = sx / 2 - r
+        frac = 1.0 if span <= 0 else ((sx / 2 - abs(rx)) / span)
+        frac = max(0.0, min(1.0, frac))
+        if frac < 0.05:
+            continue
+        ell = length * frac
+        for sign in (-1, 1):
+            ob = box(f'{name}_{i}_{sign}', 0, 0, 0,
+                     pitch * 0.42, ell, 0.05, mat(key))
+            ob.rotation_euler = (sign * alpha, 0, 0)
+            ob.location = (
+                x + rx,
+                y + sign * (-sy / 2 + (ell / 2) * math.cos(alpha)),
+                z + (ell / 2) * math.sin(alpha) + 0.03,
+            )
+
+
+def dentils(name, x, y, z, sx, sy, key='travertine', pitch=0.2, size=0.09):
+    """A course of small blocks under the eaves. The most Roman thing there is,
+    and the cheapest scale cue in the whole kit."""
+    for axis in (0, 1):
+        span = sx if axis == 0 else sy
+        n = max(2, int(span / pitch))
+        for i in range(n):
+            t = -span / 2 + span * (i + 0.5) / n
+            for sign in (-1, 1):
+                if axis == 0:
+                    bx, by = x + t, y + sign * sy / 2
+                else:
+                    bx, by = x + sign * sx / 2, y + t
+                box(f'{name}_{axis}_{i}_{sign}', bx, by, z,
+                    size, size, size * 1.1, mat(key))
+
+
+def antefixes(name, x, y, z, sx, sy, key='tile_dark', pitch=0.34):
+    """Upright tile-ends standing along the eaves. Roman roofs are edged, not
+    cut off, and the little row of them is what stops the roof's bottom edge
+    reading as a straight machine cut."""
+    for sign in (-1, 1):
+        n = max(2, int(sx / pitch))
+        for i in range(n):
+            bx = x - sx / 2 + sx * (i + 0.5) / n
+            box(f'{name}_{i}_{sign}', bx, y + sign * sy / 2, z,
+                0.12, 0.07, 0.13, mat(key))
+
+
+def window(name, x, y, z, w, h, depth, shutters=True, facing='y'):
+    """An arched window: dark opening, travertine surround, oak shutters.
+
+    [depth] is how far the surround stands behind the hole. Same rule as the
+    doorway — the surround is BEHIND and larger, so only its rim survives.
+    """
+    def at(into, along=0.0):
+        """A point `into` the wall (positive = deeper) and `along` it.
+
+        The two facings point OPPOSITE ways: a wall drawn for -Y goes deeper as
+        y grows, a wall on +X goes deeper as x SHRINKS. Getting that sign wrong
+        puts the surround in front of the hole, which plugs it — the same
+        failure as the doorway, mirrored, and it looks like a pale panel
+        instead of a window.
+        """
+        return (x + (along if facing == 'y' else -into),
+                y + (into if facing == 'y' else along))
+
+    sx, sy = at(depth * 0.6)
+    arch(f'{name}_surround', sx, sy, z, w + 0.14, h + 0.07, depth,
+         key='travertine', facing=facing)
+    hx, hy = at(0.0)
+    arch(f'{name}_hole', hx, hy, z, w, h, depth, facing=facing)
+    lx, ly = at(0.02)
+    wall_box(f'{name}_sill', lx, ly, z - 0.09, w + 0.26, 0.18, 0.09,
+             mat('travertine'), facing=facing)
+    if shutters:
+        for sign in (-1, 1):
+            bx, by = at(-0.04, sign * (w / 2 + 0.11))
+            wall_box(f'{name}_shutter_{sign}', bx, by, z + 0.04,
+                     0.14, 0.07, h * 0.74, mat('oak'), facing=facing)
+
+
+def steps(name, x, y, z, w, count=3, rise=0.075, tread=0.16, key='travertine'):
+    """A flight up to a threshold. Three steps say "there is a way in" louder
+    than any door does, because a door is a shape and a step is an invitation."""
+    for i in range(count):
+        box(f'{name}_{i}', x, y - i * tread, z + (count - 1 - i) * rise,
+            w - i * 0.1, tread + 0.02, rise + (count - 1 - i) * rise,
+            mat(key))
+
+
+def banner(name, x, y, z, w, h, key='banner', facing='y'):
+    """Cloth hung from a rail. The medieval half of the style, and the one place
+    a saturated colour is allowed to sit on an otherwise pale wall."""
+    def at(into, along=0.0):
+        return (x + (along if facing == 'y' else -into),
+                y + (into if facing == 'y' else along))
+
+    rx, ry = at(0.0)
+    wall_box(f'{name}_rail', rx, ry, z, w + 0.18, 0.07, 0.07, mat('iron'),
+             facing=facing)
+    cx, cy = at(-0.015)
+    wall_box(f'{name}_cloth', cx, cy, z - h, w, 0.04, h, mat(key),
+             facing=facing)
+    # The swallow-tail, faked with two blocks — a notch at this size is two
+    # pixels, and two pixels of silhouette is what a pennant IS.
+    for sign in (-1, 1):
+        tx, ty = at(-0.015, sign * w / 4)
+        wall_box(f'{name}_tail_{sign}', tx, ty, z - h - 0.09, w / 2.4, 0.04,
+                 0.1, mat(key), facing=facing)
 
 
 # ── The buildings ──────────────────────────────────────────
@@ -260,13 +416,22 @@ def breeding_hut(w, h):
     body_w = w - 0.35
     body_y = h / 2 - body_d / 2 - 0.18         # pushed to the back
 
-    plinth('plinth', 0, body_y, body_w + 0.18, body_d + 0.18)
+    plinth('plinth', 0, body_y, body_w + 0.26, body_d + 0.26)
+    box('plinth_cap', 0, body_y, 0.22, body_w + 0.18, body_d + 0.18, 0.07,
+        mat('travertine'))
     box('body', 0, body_y, 0.22, body_w, body_d, wall_h, mat('stucco'))
     # A course of cut stone at the base of the render: Roman walls change
     # material as they rise, and the change is what stops a wall reading as one
     # blank rectangle of light.
     box('course', 0, body_y, 0.22, body_w + 0.04, body_d + 0.04, 0.3,
         mat('travertine'))
+    # The entablature: dentils, then the cornice they carry. Together they are
+    # the line that separates wall from roof, and without it the roof looks set
+    # down on the walls rather than built onto them.
+    dentils('dentils', 0, body_y, 0.22 + wall_h - 0.15, body_w + 0.04,
+            body_d + 0.04)
+    box('cornice', 0, body_y, 0.22 + wall_h - 0.05, body_w + 0.2,
+        body_d + 0.2, 0.1, mat('travertine'))
     # The doorway. Two arches, not one: the travertine surround is what makes
     # the dark shape read as an OPENING. On its own the hole is a black blob
     # leaning on the wall, because a pale wall and a dark patch share no edge
@@ -281,22 +446,44 @@ def breeding_hut(w, h):
     arch('surround', 0, face_y + 0.17, 0.22,
          door_w + 0.20, door_h + 0.10, 0.22, key='travertine')
     arch('mouth', 0, face_y + 0.04, 0.22, door_w, door_h, 0.22)
-    hip_roof('roof', 0, body_y, 0.22 + wall_h, body_w, body_d, 0.85)
+    # A keystone over the arch. One block, and the arch stops being a hole with
+    # a rim and becomes something that was built.
+    box('keystone', 0, face_y + 0.02, 0.22 + door_h - 0.02,
+        0.17, 0.1, 0.2, mat('travertine'))
+    steps('steps', 0, face_y - 0.06, 0.0, door_w + 0.3)
+
+    roof_z = 0.22 + wall_h
+    hip_roof('roof', 0, body_y, roof_z, body_w, body_d, 0.85)
+    pantiles('tiles', 0, body_y, roof_z, body_w, body_d, 0.85)
+    antefixes('antefix', 0, body_y, roof_z - 0.02, body_w + 0.6, body_d + 0.6)
 
     # Corner pilasters — travertine, not timber. Timber corners drag the whole
     # thing back to a Northern hut; stone corners under a tile roof are Roman.
+    # Base and capital both: a plain post is a post, a post with a foot and a
+    # head is a column, and that difference is four small boxes.
     for sx in (-1, 1):
         for sy in (-1, 1):
-            box('pilaster', sx * (body_w / 2 - 0.07),
-                body_y + sy * (body_d / 2 - 0.07), 0.22,
-                0.22, 0.22, wall_h, mat('travertine'))
+            px = sx * (body_w / 2 - 0.07)
+            py = body_y + sy * (body_d / 2 - 0.07)
+            box('pilaster', px, py, 0.22, 0.22, 0.22, wall_h,
+                mat('travertine'))
+            box('pil_base', px, py, 0.22, 0.31, 0.31, 0.12, mat('travertine'))
+            box('pil_cap', px, py, 0.22 + wall_h - 0.16, 0.32, 0.32, 0.16,
+                mat('travertine'))
+
+    # Two arched windows on the long wall, which is otherwise the largest blank
+    # surface the camera ever sees.
+    for i, sy in enumerate((-1, 1)):
+        window(f'win{i}', body_w / 2 - 0.02, body_y + sy * body_d * 0.26, 0.68,
+               0.28, 0.4, 0.2, facing='x')
+    banner('banner', body_w / 2 + 0.04, body_y, 1.14, 0.32, 0.42, facing='x')
 
     # ── The court ──
     court_d = h - body_d - 0.35
     court_y = body_y - body_d / 2 - court_d / 2
     court_w = w - 0.35
     box('sand', 0, court_y, 0, court_w - 0.3, court_d - 0.3, 0.16,
-        mat('stucco'))
+        mat('sand'))
     # Low walls, not a fence: masonry on three sides, open to the front so the
     # eggs are visible. Capped in travertine so the top edge catches light.
     for sx in (-1, 1):
