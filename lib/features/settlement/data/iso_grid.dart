@@ -134,6 +134,22 @@ Path footprintPathLocal(int w, int h) {
     ..close();
 }
 
+/// The seams BETWEEN the cells of a footprint, in the coordinates of its own
+/// [isoBounds] — so a highlighted 2×2 reads as four tiles rather than as one
+/// wash the size of four.
+///
+/// Each entry is a line from one edge of the footprint to the other.
+List<(Offset, Offset)> footprintSeams(int w, int h) {
+  final a = kIsoTileW / 2;
+  final b = kIsoTileH / 2;
+  Offset corner(int gx, int gy) =>
+      Offset((h + gx - gy) * a, (gx + gy) * b);
+  return [
+    for (var i = 1; i < w; i++) (corner(i, 0), corner(i, h)),
+    for (var j = 1; j < h; j++) (corner(0, j), corner(w, j)),
+  ];
+}
+
 /// The width a building's art is drawn at: the full width of [isoBounds].
 double spriteWidth(int w, int h) => (w + h) * kIsoTileW / 2;
 

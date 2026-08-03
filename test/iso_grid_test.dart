@@ -143,4 +143,44 @@ void main() {
       }
     });
   });
+
+  // ── Markiert heisst: die Kacheln leuchten (user 2026-08-01) ──
+  // "Wenn das gebäude markiert ist, will ich nur die gehighlighteten Kachel
+  //  sehen"
+  //
+  // So the highlight has to show the CELLS, not an area the size of them — a
+  // 2×2 that lights up as one wash says nothing about how much grid it eats.
+  group('the footprint seams', () {
+    test('a single cell has none', () {
+      expect(footprintSeams(1, 1), isEmpty);
+    });
+
+    test('a w x h footprint has (w-1) + (h-1) of them', () {
+      expect(footprintSeams(2, 2), hasLength(2));
+      expect(footprintSeams(3, 2), hasLength(3));
+      expect(footprintSeams(1, 4), hasLength(3));
+    });
+
+    test('every seam runs edge to edge, inside the bounds', () {
+      for (final (w, h) in [(2, 2), (3, 2), (1, 3), (4, 4)]) {
+        final bounds = footprintPathLocal(w, h).getBounds().inflate(0.001);
+        for (final (from, to) in footprintSeams(w, h)) {
+          expect(bounds.contains(from), isTrue, reason: '$w x $h from $from');
+          expect(bounds.contains(to), isTrue, reason: '$w x $h to $to');
+          expect(from, isNot(to));
+        }
+      }
+    });
+
+    test('a seam is parallel to the footprint edge it divides', () {
+      // Both families run along a grid axis: half a tile across per half tile
+      // down. A seam at any other angle would cut across the cells instead of
+      // between them.
+      for (final (from, to) in footprintSeams(3, 3)) {
+        final dx = (to.dx - from.dx).abs();
+        final dy = (to.dy - from.dy).abs();
+        expect(dx / dy, closeTo(kIsoTileW / kIsoTileH, 0.0001));
+      }
+    });
+  });
 }

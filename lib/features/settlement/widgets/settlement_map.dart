@@ -2698,21 +2698,33 @@ class SettlementMapState extends State<SettlementMap>
             RepaintBoundary(
               child: _BuildingTile(def: def, building: b),
             ),
+            // SELECTED = ITS CELLS, LIT (user 2026-08-01: "jetzt noch den
+            // grünen Rahmen entfernen. Wenn das gebäude markiert ist, will ich
+            // nur die gehighlighteten Kachel sehen").
+            //
+            // It was a rectangle around the sprite's bounding box — a shape the
+            // map no longer has, drawn around ground the building does not
+            // stand on. What is lit now is the footprint itself, cell by cell,
+            // so selecting a 2×2 shows you four tiles rather than a frame.
             if (isSelected)
               Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: FoE.accentBlue, width: 2),
-                    color: FoE.accentBlue.withValues(alpha: 0.13),
+                child: CustomPaint(
+                  painter: _FootprintPainter(
+                    w: def.gridW,
+                    h: def.gridH,
+                    color: FoE.accentBlue,
+                    outline: false,
                   ),
                 ),
               ),
             if (isDisconnected)
               Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.redAccent, width: 1.5),
-                    color: Colors.black.withValues(alpha: 0.35),
+                child: CustomPaint(
+                  painter: _FootprintPainter(
+                    w: def.gridW,
+                    h: def.gridH,
+                    color: FoE.danger,
+                    outline: false,
                   ),
                 ),
               ),
@@ -3264,10 +3276,16 @@ class _FootprintPainter extends CustomPainter {
   final int h;
   final Color color;
 
+  /// The crisp edge a PLACEMENT preview needs. Off for a selected building:
+  /// there the answer is which cells it stands on, and an outline around them
+  /// is the frame the user asked to be rid of.
+  final bool outline;
+
   const _FootprintPainter({
     required this.w,
     required this.h,
     required this.color,
+    this.outline = true,
   });
 
   @override
@@ -3276,21 +3294,32 @@ class _FootprintPainter extends CustomPainter {
     // MAP space and therefore landed a whole map-origin away from the box it
     // was painting in — the outline the user saw beside the building rather
     // than under it (2026-08-01).
-    final path = footprintPathLocal(w, h);
-    canvas
-      ..drawPath(path, Paint()..color = color.withValues(alpha: 0.22))
-      ..drawPath(
-        path,
+    final fill = Paint()..color = color.withValues(alpha: 0.24);
+    canvas.drawPath(footprintPathLocal(w, h), fill);
+    // CELL BY CELL: the seams between the tiles, so a 2×2 reads as four of
+    // them. One flat wash would say "an area", and the question a selected
+    // building answers is "how much of the grid is this".
+    final seam = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = color.withValues(alpha: 0.55);
+    for (final (from, to) in footprintSeams(w, h)) {
+      canvas.drawLine(from, to, seam);
+    }
+    if (outline) {
+      canvas.drawPath(
+        footprintPathLocal(w, h),
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
           ..color = color,
       );
+    }
   }
 
   @override
   bool shouldRepaint(_FootprintPainter old) =>
-      old.w != w || old.h != h || old.color != color;
+      old.w != w || old.h != h || old.color != color || old.outline != outline;
 }
 
 /// One cell's diamond, for clipping road art to its tile.
