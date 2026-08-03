@@ -68,6 +68,34 @@ ein Render in voller Grösse sieht immer gut aus.
 | `--no-render` | Szene bauen und aufhören (für die GUI) |
 | `--blend PFAD` | Szene zusätzlich als .blend speichern |
 
+## Der Stil: Fantasy römisch-mittelalterlich
+
+Römisch liefert das Dach und den Bogen, mittelalterlich das Holzwerk und die
+Neigung, Fantasy die Erlaubnis, alles zu sättigen. `PALETTE` in
+[render_building.py](../tool/blender/render_building.py) ist die einzige
+Farbquelle — greif nie zu einem rohen RGB, so hört ein Set nach dem dritten
+Gebäude auf zusammenzupassen.
+
+**Drei Signale tragen den Stil bei 224 px, alles andere ist Zierde:**
+
+1. **Terrakotta-Dach**, gewalmt mit kurzem First und tiefem Überstand. Das
+   lauteste Signal — und der Grund, warum der Stil zum Spiel passt: die
+   Materialleiter raffiniert in Stufe II bereits Lehm. Die Dächer *sind*, was
+   die Siedlung zu brennen lernt.
+2. **Helle Wände** darunter — Kalkputz, Travertin. Der Kontrast zwischen heissem
+   Dach und kühler Wand *ist* der Look.
+3. **Ein Steinsockel.** Römer setzten keine Wand auf Erde. Löst nebenbei ein
+   Bildproblem: das Gebäude wirkt auf seine Kacheln gegründet statt daraufgelegt.
+
+Holz ist **Zierde, nicht Konstruktion** — Balken, Türen, Läden, Geländer. Ein
+überwiegend hölzernes Gebäude rutscht zurück in die nordeuropäische Hütte.
+
+Bausteine: `hip_roof()`, `arch()`, `plinth()`, `box()`, `egg()`. Zwei Fallen,
+beide teuer gelernt: `arch()` liefert einen **massiven Körper, keinen Ring** —
+das Gewände muss also *hinter* der Öffnung liegen und grösser sein, sonst
+verstopft es sie. Und der Firstbalken muss **im** First sitzen; steht er darüber,
+liest er zusammen mit den Gratlinien als Kreuz auf dem Dach.
+
 ## Ein neues Gebäude
 
 Eine Funktion in `tool/blender/render_building.py`, ein Eintrag in `PRESETS`:

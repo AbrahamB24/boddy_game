@@ -12,6 +12,12 @@ STYLE: faceted low-poly — flat colour per facet, no gradients, no textures, no
 outlines. 3-5 tones per colour family: one lit facet, one mid, one shadow, in
 sharp angular patches. Bold, saturated, warm-lit, toy-like, not gritty.
 
+WORLD: fantasy Roman-medieval. Terracotta pantile roofs, hipped with a short
+ridge and a deep overhang. Pale walls under them — lime stucco, travertine,
+limestone — on a cut-stone plinth, never straight on the ground. Round arches
+for doors and openings, stone pilasters at the corners. Dark oak is TRIM only:
+beams, doors, shutters, railings. Iron fittings, small gold finials.
+
 VIEW: true 2:1 isometric, PARALLEL projection — no perspective, no vanishing
 point. The near corner points at the bottom of the image; one wall faces
 bottom-left, the other bottom-right, roof visible. Upright, not tilted.
@@ -25,10 +31,18 @@ diamond when W = H, otherwise a parallelogram of that many tiles). It fills the
 image's width and touches its bottom edge. The building may be as tall as it
 needs; leave the space above it empty.
 
-BUILDING: <TYPE> — <one line: what it is, what happens there>. Materials:
-<timber and thatch / clay brick / cut stone / iron and glass>. Colours:
-<primary>, <secondary>, <accent>. Features: <2-4 concrete shapes>.
+BUILDING: <TYPE> — <one line: what it is, what happens there>. Features:
+<2-4 concrete shapes>.
 ```
+
+**Why no material knob any more:** the materials ARE the style. A building that
+picks its own palette is a building that stops matching the other thirty. Say
+what it *is* and what happens there; the walls follow.
+
+**The three signals that carry it at 224 px:** a hot terracotta roof, pale walls
+under it, and a stone plinth it stands on. Get those and the style reads even
+when no other detail survives. Timber-framed walls slide the whole thing back to
+a Northern-European hut — keep oak to trim.
 
 **Why no ground:** the map draws the tile the building stands on. Any terrain in
 the PNG lands as a patch of someone else's grass on top of it — which is exactly
