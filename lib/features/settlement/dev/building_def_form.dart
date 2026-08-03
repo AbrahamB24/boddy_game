@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../data/building_definitions.dart';
+import '../data/iso_grid.dart';
 import '../data/era_definitions.dart';
 import '../data/goods_definitions.dart';
 import '../services/game_defs_controller.dart';
@@ -1392,6 +1393,22 @@ class _BuildingDefFormState extends State<BuildingDefForm>
               'asks for. Generated art usually needs less width and a lift.',
               style: FoE.dim(size: 11),
             ),
+            const SizedBox(height: 8),
+            // ── THE PREVIEW (user 2026-08-01: "das Gebäude ist ein bisschen
+            //    verschoben. Man sieht es an allen Ecken") ──
+            //
+            // Three numbers you cannot see the effect of are three numbers you
+            // guess at, save, walk to the map for, and come back to. The same
+            // tiles the map draws, at the same 2:1, with the art placed by the
+            // current values — dial it here and the answer is under your thumb.
+            _BasePreview(
+              imageUrl: _imageUrl!,
+              gridW: _gridW,
+              gridH: _gridH,
+              baseWidth: _artBaseWidth,
+              anchorX: _artAnchorX,
+              lift: _artLift,
+            ),
             const SizedBox(height: 6),
             Row(
               children: [
@@ -1400,8 +1417,9 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                     'Base width (0–1)',
                     _artBaseWidth,
                     isDouble: true,
-                    onChanged: (v) =>
-                        _artBaseWidth = (v as double).clamp(0.05, 1.0),
+                    onChanged: (v) => setState(
+                      () => _artBaseWidth = (v as double).clamp(0.05, 1.0),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1410,8 +1428,9 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                     'Anchor X',
                     _artAnchorX,
                     isDouble: true,
-                    onChanged: (v) =>
-                        _artAnchorX = (v as double).clamp(0.0, 1.0),
+                    onChanged: (v) => setState(
+                      () => _artAnchorX = (v as double).clamp(0.0, 1.0),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1420,7 +1439,9 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                     'Lift',
                     _artLift,
                     isDouble: true,
-                    onChanged: (v) => _artLift = (v as double).clamp(-1.0, 1.0),
+                    onChanged: (v) => setState(
+                      () => _artLift = (v as double).clamp(-1.0, 1.0),
+                    ),
                   ),
                 ),
               ],
@@ -1597,4 +1618,121 @@ class _SearchPickerDialogState extends State<_SearchPickerDialog> {
       ),
     ),
   );
+}
+
+/// The building on its own tiles, at the size the map draws it — so the three
+/// art numbers can be dialled in by eye instead of by walking to the map
+/// (2026-08-01).
+///
+/// Deliberately the SAME geometry the map uses (iso_grid.dart), not a lookalike:
+/// a preview that computes the placement its own way would agree with the map
+/// only until one of the two changed.
+class _BasePreview extends StatelessWidget {
+  final String imageUrl;
+  final int gridW;
+  final int gridH;
+  final double baseWidth;
+  final double anchorX;
+  final double lift;
+
+  const _BasePreview({
+    required this.imageUrl,
+    required this.gridW,
+    required this.gridH,
+    required this.baseWidth,
+    required this.anchorX,
+    required this.lift,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bounds = isoLocalBounds(gridW, gridH);
+    final art = artPlacement(
+      bounds,
+      baseWidth: baseWidth,
+      anchorX: anchorX,
+      lift: lift,
+    );
+    // Room above for a tall building and around for art wider than its base.
+    final boxW = math.max(bounds.width, art.width) + 24;
+    final boxH = bounds.height * 2 + 120;
+    return Container(
+      height: boxH,
+      alignment: Alignment.bottomCenter,
+      decoration: ShapeDecoration(
+        color: const Color(0xFF3E6B45), // the era-I ground, so it reads as map
+        shape: FoE.facet(radius: 8),
+      ),
+      child: SizedBox(
+        width: boxW,
+        height: boxH,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // The footprint, where the map would put it.
+            Positioned(
+              left: (boxW - bounds.width) / 2,
+              bottom: 24,
+              width: bounds.width,
+              height: bounds.height,
+              child: CustomPaint(
+                painter: _PreviewFootprint(w: gridW, h: gridH),
+              ),
+            ),
+            Positioned(
+              left: (boxW - bounds.width) / 2 + art.left,
+              bottom: 24 + (bounds.height - art.bottom),
+              width: art.width,
+              child: BuildingIcon(
+                imageUrl: imageUrl,
+                width: art.width,
+                anchorBottomOverflowTop: true,
+              ),
+            ),
+            Positioned(
+              left: 6,
+              bottom: 4,
+              child: Text(
+                '${gridW}x$gridH · base ${bounds.width.toInt()}px · '
+                'image ${art.width.toInt()}px',
+                style: FoE.dim(size: 10).copyWith(color: Colors.white70),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The footprint's cells, drawn the way the map draws them so the eye can line
+/// the building up against something real.
+class _PreviewFootprint extends CustomPainter {
+  final int w;
+  final int h;
+  const _PreviewFootprint({required this.w, required this.h});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = footprintPathLocal(w, h);
+    canvas
+      ..drawPath(path, Paint()..color = Colors.white.withValues(alpha: 0.10))
+      ..drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4
+          ..color = Colors.white.withValues(alpha: 0.75),
+      );
+    final seam = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8
+      ..color = Colors.white.withValues(alpha: 0.35);
+    for (final (from, to) in footprintSeams(w, h)) {
+      canvas.drawLine(from, to, seam);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PreviewFootprint old) => old.w != w || old.h != h;
 }
