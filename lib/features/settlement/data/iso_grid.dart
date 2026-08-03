@@ -158,10 +158,18 @@ double spriteWidth(int w, int h) => (w + h) * kIsoTileW / 2;
 ///
 /// Without this the map is drawn in list order and a tower behind a hut is
 /// painted on top of it — the single most obvious way an isometric map looks
-/// broken. The key is the footprint's FAR corner (x + y), because that is what
-/// decides which of two overlapping buildings is in front; ties go to the one
-/// further east so the order is total and therefore stable.
-int isoDrawOrder(int ax, int ay, int bx, int by) {
-  final byDepth = (ax + ay).compareTo(bx + by);
+/// broken.
+///
+/// The key is the footprint's LAST cell, not its first (user 2026-08-01, with
+/// the roads). A 2×2 building starting at (4,4) reaches to (5,5), and a
+/// neighbour at (5,4) is beside it, not behind it — keyed on the north corner
+/// the big building would sort as though it stood a tile and a half further
+/// back than it does, and its neighbour would paint over its wall.
+///
+/// Ties go to the one further east, so the order is total and therefore stable:
+/// an unstable sort makes two neighbours swap between frames and flicker.
+int isoDrawOrder(int ax, int ay, int aw, int ah, int bx, int by, int bw,
+    int bh) {
+  final byDepth = (ax + aw + ay + ah).compareTo(bx + bw + by + bh);
   return byDepth != 0 ? byDepth : ax.compareTo(bx);
 }

@@ -2501,6 +2501,34 @@ class SettlementMapState extends State<SettlementMap>
     return lines;
   }
 
+  /// The buildings to paint, in order. [roads] picks the ground layer or the
+  /// things standing on it.
+  ///
+  /// A def that has gone missing counts as NOT a road: it draws nothing either
+  /// way, and guessing "ground" for something unknown is how a hole in the map
+  /// ends up under everything.
+  List<PlacedBuilding> _sortedForPainting({required bool roads}) {
+    final out = [
+      for (final b in widget.ctrl.buildings)
+        if ((kBuildingDefs[b.buildingTypeId]?.isRoad ?? false) == roads) b,
+    ];
+    out.sort((a, b) {
+      final ad = kBuildingDefs[a.buildingTypeId];
+      final bd = kBuildingDefs[b.buildingTypeId];
+      return isoDrawOrder(
+        a.gridX,
+        a.gridY,
+        ad?.gridW ?? 1,
+        ad?.gridH ?? 1,
+        b.gridX,
+        b.gridY,
+        bd?.gridW ?? 1,
+        bd?.gridH ?? 1,
+      );
+    });
+    return out;
+  }
+
   // ── Build ─────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -2574,16 +2602,23 @@ class SettlementMapState extends State<SettlementMap>
                               ),
                             ),
                           ),
-                        // BACK TO FRONT (2026-08-01). Drawn in list order, a
-                        // tower behind a hut lands on top of it — the single
-                        // most obvious way an isometric map looks broken.
-                        ...(widget.ctrl.buildings.toList()
-                              ..sort((a, b) => isoDrawOrder(
-                                    a.gridX,
-                                    a.gridY,
-                                    b.gridX,
-                                    b.gridY,
-                                  )))
+                        // ── GROUND FIRST, THEN WHAT STANDS ON IT ──
+                        // (user 2026-08-01: "die Strasse ist jetzt über dem
+                        // Gebäude").
+                        //
+                        // Depth alone cannot fix that. A road one tile in FRONT
+                        // of a building is genuinely nearer the viewer, so it
+                        // sorts later — and then its flat tile paints over the
+                        // wall that leans into that space, because a tall sprite
+                        // occupies tiles its footprint does not.
+                        //
+                        // So roads are a LAYER, not a competitor: they are
+                        // ground, and nothing that lies on the ground may cover
+                        // something standing on it.
+                        ..._sortedForPainting(roads: true)
+                            .map((b) => _buildingTile(b)),
+                        // BACK TO FRONT among themselves.
+                        ..._sortedForPainting(roads: false)
                             .map((b) => _buildingTile(b)),
                         if (ghostTypeId != null &&
                             _ghostX != null &&

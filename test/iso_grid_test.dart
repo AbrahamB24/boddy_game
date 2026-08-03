@@ -74,25 +74,39 @@ void main() {
   });
 
   group('painter order', () {
+    int order((int, int, int, int) a, (int, int, int, int) b) =>
+        isoDrawOrder(a.$1, a.$2, a.$3, a.$4, b.$1, b.$2, b.$3, b.$4);
+
     test('nearer the viewer is drawn later', () {
-      // (2,2) is in FRONT of (0,0): bigger x+y, so it sorts after it.
-      expect(isoDrawOrder(0, 0, 2, 2), lessThan(0));
-      expect(isoDrawOrder(2, 2, 0, 0), greaterThan(0));
+      // (2,2) is in FRONT of (0,0): deeper, so it sorts after it.
+      expect(order((0, 0, 1, 1), (2, 2, 1, 1)), lessThan(0));
+      expect(order((2, 2, 1, 1), (0, 0, 1, 1)), greaterThan(0));
+    });
+
+    test('a big footprint is judged by where it REACHES', () {
+      // The bug the roads found: a 2x2 at (4,4) reaches to (5,5), so a 1x1
+      // neighbour at (5,4) is BESIDE it, not behind it. Keyed on the north
+      // corner the big building sorts as though it stood further back, and the
+      // neighbour paints over its wall.
+      expect(order((4, 4, 2, 2), (5, 4, 1, 1)), greaterThan(0),
+          reason: 'the 2x2 reaches deeper and must draw later');
+      expect(order((4, 4, 2, 2), (6, 6, 1, 1)), lessThan(0),
+          reason: '…but a tile genuinely in front still wins');
     });
 
     test('equal depth is broken consistently, never left equal', () {
       // A total order matters: an unstable sort on ties makes two neighbours
       // swap places between frames and flicker.
-      expect(isoDrawOrder(3, 1, 1, 3), greaterThan(0));
-      expect(isoDrawOrder(1, 3, 3, 1), lessThan(0));
-      expect(isoDrawOrder(2, 2, 2, 2), 0);
+      expect(order((3, 1, 1, 1), (1, 3, 1, 1)), greaterThan(0));
+      expect(order((1, 3, 1, 1), (3, 1, 1, 1)), lessThan(0));
+      expect(order((2, 2, 1, 1), (2, 2, 1, 1)), 0);
     });
 
     test('sorting a row of buildings puts the front one last', () {
-      final cells = [(5, 5), (0, 0), (2, 1), (1, 2)];
-      cells.sort((a, b) => isoDrawOrder(a.$1, a.$2, b.$1, b.$2));
-      expect(cells.first, (0, 0));
-      expect(cells.last, (5, 5));
+      final cells = [(5, 5, 1, 1), (0, 0, 1, 1), (2, 1, 1, 1), (1, 2, 1, 1)];
+      cells.sort(order);
+      expect(cells.first, (0, 0, 1, 1));
+      expect(cells.last, (5, 5, 1, 1));
     });
   });
 
