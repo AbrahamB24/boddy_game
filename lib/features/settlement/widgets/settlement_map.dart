@@ -37,6 +37,7 @@ import '../../creatures/models/species_def.dart';
 import '../../creatures/services/creatures_controller.dart';
 import 'assign_workers_sheet.dart';
 import '../data/building_definitions.dart';
+import '../data/iso_grid.dart';
 import '../data/resource_icons.dart';
 import '../data/era_definitions.dart' show EraDef;
 import '../data/goods_definitions.dart';
@@ -213,10 +214,15 @@ class SettlementMapState extends State<SettlementMap>
     final def = kBuildingDefs[b.buildingTypeId];
     if (view == null || def == null) return;
     final scale = _txCtrl.value.getMaxScaleOnAxis();
-    final mapW = kGridCols * kCellSize * scale;
-    final mapH = kGridRows * kCellSize * scale;
-    final cx = (b.gridX + def.gridW / 2) * kCellSize * scale;
-    final cy = (b.gridY + def.gridH / 2) * kCellSize * scale;
+    final mapW = isoCanvasSize.width * scale;
+    final mapH = isoCanvasSize.height * scale;
+    // The building's own point on the diamond, not the middle of a rectangle.
+    final centre = gridToScreen(
+      b.gridX + def.gridW / 2,
+      b.gridY + def.gridH / 2,
+    );
+    final cx = centre.dx * scale;
+    final cy = centre.dy * scale;
     final tx = (view.width / 2 - cx)
         .clamp(math.min(0.0, view.width - mapW), 0.0)
         .toDouble();
@@ -290,8 +296,9 @@ class SettlementMapState extends State<SettlementMap>
 
   // ── Tap inside InteractiveViewer (normal + edit-idle) ─────
   void _handleTap(Offset local) {
-    final col = (local.dx / kCellSize).floor().clamp(0, kGridCols - 1);
-    final row = (local.dy / kCellSize).floor().clamp(0, kGridRows - 1);
+    // ISOMETRIC (2026-08-01): the inverse projection, not a division — see
+    // iso_grid.dart. It clamps to the map the way the old floor+clamp did.
+    final (col, row) = screenToGrid(local);
 
     if (_inMoveMode) {
       final def = kBuildingDefs[_movingType!]!;
@@ -333,8 +340,9 @@ class SettlementMapState extends State<SettlementMap>
     }
     if (_inPlaceMode) return;
 
-    final col = (local.dx / kCellSize).floor().clamp(0, kGridCols - 1);
-    final row = (local.dy / kCellSize).floor().clamp(0, kGridRows - 1);
+    // ISOMETRIC (2026-08-01): the inverse projection, not a division — see
+    // iso_grid.dart. It clamps to the map the way the old floor+clamp did.
+    final (col, row) = screenToGrid(local);
     final hit = _hitTest(col, row);
     if (hit == null) return;
     // Build plots are permanent — no move (see settlement_controller).
@@ -354,8 +362,7 @@ class SettlementMapState extends State<SettlementMap>
     if (!_inMoveMode && !_inPlaceMode) return;
     final typeId = _inMoveMode ? _movingType! : widget.pendingTypeId!;
     final def = kBuildingDefs[typeId]!;
-    final col = (local.dx / kCellSize).floor();
-    final row = (local.dy / kCellSize).floor();
+    final (col, row) = screenToGrid(local);
     var gx = (col - def.gridW ~/ 2).clamp(0, kGridCols - def.gridW);
     var gy = (row - def.gridH ~/ 2).clamp(0, kGridRows - def.gridH);
     // Build plots snap the ghost to the 5×5 grid so the preview sits exactly
@@ -372,8 +379,9 @@ class SettlementMapState extends State<SettlementMap>
   // road it erases it; over any other building it's a no-op. Free, instant.
   void _paintRoadAt(Offset screenLocal) {
     final scene = _txCtrl.toScene(screenLocal);
-    final col = (scene.dx / kCellSize).floor().clamp(0, kGridCols - 1);
-    final row = (scene.dy / kCellSize).floor().clamp(0, kGridRows - 1);
+    // ISOMETRIC (2026-08-01): the inverse projection, not a division — see
+    // iso_grid.dart. It clamps to the map the way the old floor+clamp did.
+    final (col, row) = screenToGrid(scene);
     final key = row * kGridCols + col;
     if (key == _lastRoadKey) return;
     _lastRoadKey = key;
@@ -405,8 +413,9 @@ class SettlementMapState extends State<SettlementMap>
   // ── Edit-mode overlay handlers (screen-space coordinates) ──
   void _handleOverlayTap(Offset screenLocal) {
     final scene = _txCtrl.toScene(screenLocal);
-    final col = (scene.dx / kCellSize).floor().clamp(0, kGridCols - 1);
-    final row = (scene.dy / kCellSize).floor().clamp(0, kGridRows - 1);
+    // ISOMETRIC (2026-08-01): the inverse projection, not a division — see
+    // iso_grid.dart. It clamps to the map the way the old floor+clamp did.
+    final (col, row) = screenToGrid(scene);
     final hit = _hitTest(col, row);
     setState(() {
       _selectedId = hit?.id;
@@ -417,8 +426,9 @@ class SettlementMapState extends State<SettlementMap>
   void _handleDragStart(Offset screenLocal) {
     if (_selectedId == null) return;
     final scene = _txCtrl.toScene(screenLocal);
-    final col = (scene.dx / kCellSize).floor().clamp(0, kGridCols - 1);
-    final row = (scene.dy / kCellSize).floor().clamp(0, kGridRows - 1);
+    // ISOMETRIC (2026-08-01): the inverse projection, not a division — see
+    // iso_grid.dart. It clamps to the map the way the old floor+clamp did.
+    final (col, row) = screenToGrid(scene);
     final hit = _hitTest(col, row);
     if (hit?.id != _selectedId) {
       return; // drag didn't start on selected building
@@ -438,8 +448,7 @@ class SettlementMapState extends State<SettlementMap>
     if (!_isDragging || _movingType == null) return;
     final scene = _txCtrl.toScene(screenLocal);
     final def = kBuildingDefs[_movingType!]!;
-    final col = (scene.dx / kCellSize).floor();
-    final row = (scene.dy / kCellSize).floor();
+    final (col, row) = screenToGrid(scene);
     setState(() {
       _ghostX = (col - def.gridW ~/ 2).clamp(0, kGridCols - def.gridW);
       _ghostY = (row - def.gridH ~/ 2).clamp(0, kGridRows - def.gridH);
@@ -2492,11 +2501,34 @@ class SettlementMapState extends State<SettlementMap>
     return lines;
   }
 
+  /// The screen box a footprint occupies: its diamond's bounding rectangle.
+  ///
+  /// The art hangs from the box's BOTTOM (the diamond's south corner) and is
+  /// free to overflow the top, which is how a two-storey building fits over a
+  /// 2×2 base.
+  ({double left, double top, double width, double height}) _isoBox(
+    int gx,
+    int gy,
+    int w,
+    int h,
+  ) {
+    final south = spriteAnchor(gx, gy, w, h);
+    final width = spriteWidth(w, h);
+    final height = width / 2; // the diamond is 2:1
+    return (
+      left: south.dx - width / 2,
+      top: south.dy - height,
+      width: width,
+      height: height,
+    );
+  }
+
   // ── Build ─────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final mapW = kGridCols * kCellSize;
-    final mapH = kGridRows * kCellSize;
+    // The diamond's bounding box — wider and flatter than the grid it holds.
+    final mapW = isoCanvasSize.width;
+    final mapH = isoCanvasSize.height;
     final ghostTypeId = _inMoveMode ? _movingType! : widget.pendingTypeId;
 
     return LayoutBuilder(
@@ -2564,7 +2596,17 @@ class SettlementMapState extends State<SettlementMap>
                               ),
                             ),
                           ),
-                        ...widget.ctrl.buildings.map((b) => _buildingTile(b)),
+                        // BACK TO FRONT (2026-08-01). Drawn in list order, a
+                        // tower behind a hut lands on top of it — the single
+                        // most obvious way an isometric map looks broken.
+                        ...(widget.ctrl.buildings.toList()
+                              ..sort((a, b) => isoDrawOrder(
+                                    a.gridX,
+                                    a.gridY,
+                                    b.gridX,
+                                    b.gridY,
+                                  )))
+                            .map((b) => _buildingTile(b)),
                         if (ghostTypeId != null &&
                             _ghostX != null &&
                             _ghostY != null)
@@ -2651,11 +2693,18 @@ class SettlementMapState extends State<SettlementMap>
         !def.isRoad &&
         !def.isMainBuilding &&
         !widget.ctrl.connectedBuildingIds.contains(b.id);
+    // ── ISOMETRIC PLACEMENT (2026-08-01) ──
+    // The box is the footprint's DIAMOND, and the art hangs from its south
+    // corner — the point nearest the viewer — running upward as far as it
+    // likes. A tall building is tall; nothing about its footprint says so, so
+    // the box may not clip (Clip.none below, and BuildingIcon's
+    // anchorBottomOverflowTop).
+    final iso = _isoBox(b.gridX, b.gridY, def.gridW, def.gridH);
     return Positioned(
-      left: b.gridX * kCellSize,
-      top: b.gridY * kCellSize,
-      width: def.gridW * kCellSize,
-      height: def.gridH * kCellSize,
+      left: iso.left,
+      top: iso.top,
+      width: iso.width,
+      height: iso.height,
       child: Opacity(
         opacity: isGhostSrc ? 0.3 : 1.0,
         child: Stack(
@@ -2723,23 +2772,23 @@ class SettlementMapState extends State<SettlementMap>
       gy,
       excludeId: _movingId,
     );
+    final iso = _isoBox(gx, gy, def.gridW, def.gridH);
     return Positioned(
-      left: gx * kCellSize,
-      top: gy * kCellSize,
-      width: def.gridW * kCellSize,
-      height: def.gridH * kCellSize,
+      left: iso.left,
+      top: iso.top,
+      width: iso.width,
+      height: iso.height,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Container(
-            margin: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: (free ? Colors.greenAccent : Colors.redAccent).withValues(
-                alpha: 0.22,
-              ),
-              border: Border.all(
+          // The validity mark is the footprint's own diamond — a rectangle here
+          // would promise a shape the placement rules do not use.
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _FootprintPainter(
+                w: def.gridW,
+                h: def.gridH,
                 color: free ? Colors.greenAccent : Colors.redAccent,
-                width: 2,
               ),
             ),
           ),
@@ -2751,7 +2800,7 @@ class SettlementMapState extends State<SettlementMap>
               bottom: 0,
               child: BuildingIcon(
                 imageUrl: def.imageUrl,
-                width: def.gridW * kCellSize,
+                width: iso.width,
                 anchorBottomOverflowTop: true,
               ),
             ),
@@ -2767,18 +2816,22 @@ class SettlementMapState extends State<SettlementMap>
     // Main building and build plots are permanent — no delete X.
     if (def.isMainBuilding || def.isBuildPlot) return null;
 
-    double mapX, mapY;
+    // The diamond's EAST corner: the right-hand point of the footprint, which
+    // is where a button beside the building belongs on an isometric map.
+    Offset east(int gx, int gy) =>
+        gridToScreen((gx + def.gridW).toDouble(), gy.toDouble());
+    final Offset anchor;
     if (_isDragging && _ghostX != null && _ghostY != null) {
-      mapX = (_ghostX! + def.gridW) * kCellSize;
-      mapY = (_ghostY! + def.gridH / 2) * kCellSize;
+      anchor = east(_ghostX!, _ghostY!);
     } else {
       final building = widget.ctrl.buildings
           .where((b) => b.id == _selectedId)
           .firstOrNull;
       if (building == null) return null;
-      mapX = (building.gridX + def.gridW) * kCellSize;
-      mapY = (building.gridY + def.gridH / 2) * kCellSize;
+      anchor = east(building.gridX, building.gridY);
     }
+    final mapX = anchor.dx;
+    final mapY = anchor.dy;
 
     final screen = MatrixUtils.transformPoint(
       _txCtrl.value,
@@ -3056,24 +3109,27 @@ class _BuildingTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (def.isRoad) {
-      // Dev-uploaded road art fills its 1×1 cell edge-to-edge (BoxFit.cover,
-      // no margin/border): roads tile into continuous paths, and the old
-      // colored box's margin+border would draw a visible grid across every
-      // one. Roads without art keep the flat color.
+      // Dev-uploaded road art fills its cell edge-to-edge (BoxFit.cover, no
+      // margin/border): roads tile into continuous paths, and a margin would
+      // draw a visible grid across every one.
+      //
+      // The cell is a DIAMOND now (2026-08-01), so the art is clipped to it and
+      // the plain-colour fallback is painted as one — a square road on an
+      // isometric grid is a tile that refuses to join its neighbours.
       if (def.imageUrl != null && def.imageUrl!.isNotEmpty) {
-        return BuildingIcon(
-          imageUrl: def.imageUrl,
-          width: kCellSize,
-          height: kCellSize,
-          fit: BoxFit.cover,
+        return ClipPath(
+          clipper: _CellDiamondClipper(),
+          child: BuildingIcon(
+            imageUrl: def.imageUrl,
+            width: kIsoTileW,
+            height: kIsoTileH,
+            fit: BoxFit.cover,
+          ),
         );
       }
-      return Container(
-        margin: const EdgeInsets.all(0.5),
-        decoration: BoxDecoration(
-          color: def.color,
-          border: Border.all(color: const Color(0xFF4A4438), width: 0.5),
-        ),
+      return CustomPaint(
+        size: const Size(kIsoTileW, kIsoTileH),
+        painter: _RoadDiamondPainter(color: def.color),
       );
     }
 
@@ -3119,7 +3175,9 @@ class _BuildingTile extends StatelessWidget {
             bottom: 0,
             child: BuildingIcon(
               imageUrl: def.imageUrl,
-              width: def.gridW * kCellSize,
+              // The BASE spans the whole diamond, so the art is as wide as the
+              // footprint's two axes together — see docs/building_art_prompt.md.
+              width: spriteWidth(def.gridW, def.gridH),
               anchorBottomOverflowTop: true,
               dimmed: !done,
             ),
@@ -3206,14 +3264,90 @@ class _GridPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
     for (final key in buildableRegion) {
       final x = key % kGridCols, y = key ~/ kGridCols;
-      canvas.drawRect(
-        Rect.fromLTWH(x * kCellSize, y * kCellSize, kCellSize, kCellSize),
-        paint,
-      );
+      // A cell is a diamond now, so the grid marks are too — a square here
+      // would draw a lattice that has nothing to do with where you can build.
+      canvas.drawPath(footprintPath(x, y, 1, 1), paint);
     }
   }
 
   @override
   bool shouldRepaint(_GridPainter old) =>
       old.buildableRegion != buildableRegion;
+}
+
+/// The footprint diamond, filled and outlined — the ghost preview's "can I
+/// build here" mark (2026-08-01).
+class _FootprintPainter extends CustomPainter {
+  final int w;
+  final int h;
+  final Color color;
+
+  const _FootprintPainter({
+    required this.w,
+    required this.h,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // The path is in MAP coordinates, so it is drawn relative to this box's own
+    // origin: shift it back by where the box starts.
+    final path = footprintPath(0, 0, w, h);
+    canvas
+      ..drawPath(path, Paint()..color = color.withValues(alpha: 0.22))
+      ..drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = color,
+      );
+  }
+
+  @override
+  bool shouldRepaint(_FootprintPainter old) =>
+      old.w != w || old.h != h || old.color != color;
+}
+
+/// One cell's diamond, for clipping road art to its tile.
+class _CellDiamondClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) => Path()
+    ..moveTo(size.width / 2, 0)
+    ..lineTo(size.width, size.height / 2)
+    ..lineTo(size.width / 2, size.height)
+    ..lineTo(0, size.height / 2)
+    ..close();
+
+  @override
+  bool shouldReclip(CustomClipper<Path> old) => false;
+}
+
+/// A road without art: its cell, filled flat, with the lit near edge every
+/// surface in this app wears.
+class _RoadDiamondPainter extends CustomPainter {
+  final Color color;
+  const _RoadDiamondPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(size.width, size.height / 2)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(0, size.height / 2)
+      ..close();
+    canvas
+      ..drawPath(path, Paint()..color = color)
+      ..drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.6
+          ..color = FoE.shade(color),
+      );
+  }
+
+  @override
+  bool shouldRepaint(_RoadDiamondPainter old) => old.color != color;
 }

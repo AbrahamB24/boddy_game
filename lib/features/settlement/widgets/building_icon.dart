@@ -14,7 +14,8 @@ class BuildingIcon extends StatelessWidget {
   // menu tiles, dialog headers, list rows). Pass `width`/`height` instead
   // when a building's actual (possibly non-square) grid footprint needs to
   // be matched exactly, e.g. the map tile — see widgets/settlement_map.dart's
-  // _BuildingTile, sized from def.gridW/gridH * kCellSize.
+  // _BuildingTile, sized from the footprint's diamond (spriteWidth in
+  // iso_grid.dart).
   final double? size;
   final double? width;
   final double? height;
