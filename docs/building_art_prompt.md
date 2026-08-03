@@ -102,14 +102,32 @@ BUILDING:
 
 ## After the image
 
-Scale it so the **base** is the width the table says (3 × 3 → 192 px). The
-height is whatever the building needed; do not crop the top or scale to a
-square.
+Ideally the base already fills the width and touches the bottom edge. It usually
+will not: a generator returns a square picture with the building somewhere
+inside it and air all round.
 
-**The one check before you generate thirty more:** drop it on the map and look
-at where the base meets the ground. Too wide and it overlaps its neighbours; too
-narrow and grass shows through between them. Everything else is fixable in the
-app — this is not, without redrawing.
+**You do not have to crop it.** Dev Mode ▸ the building ▸ under the PNG there are
+three numbers that tell the map where the base is:
+
+| | |
+|---|---|
+| **Base width** | how much of the picture's WIDTH the base spans — e.g. `0.62` |
+| **Anchor X** | where the base's front point sits across it — `0.5` if centred |
+| **Lift** | how far that point sits above the picture's bottom edge, in fractions of its width — e.g. `0.08` |
+
+`1 / 0.5 / 0` means "drawn exactly to the contract". Nudge Base width until the
+building sits on its own tiles, then Lift until its foot meets them.
+
+**Loose props are the usual culprit.** In the first test image the fences stood
+well outside the building's base, so the picture was much wider than the ground
+it occupies — the building then reads as pushed back. Either keep props inside
+the footprint, or set Base width to the building's real base and let the fences
+overhang, which is what the overhang is for.
+
+**The one check before you generate thirty more:** drop it on the map and look at
+where the base meets the ground. Too wide and it overlaps its neighbours; too
+narrow and grass shows through. That is fixable with the three numbers — a base
+drawn in the wrong SHAPE (a diamond where the footprint is oblong) is not.
 
 ## Checklist
 

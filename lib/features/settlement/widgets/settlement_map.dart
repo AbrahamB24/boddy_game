@@ -2823,15 +2823,26 @@ class SettlementMapState extends State<SettlementMap>
           ),
           // A Build Plot is a free area — no art, just the validity box.
           if (!def.isBuildPlot)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: BuildingIcon(
-                imageUrl: def.imageUrl,
-                width: iso.width,
-                anchorBottomOverflowTop: true,
-              ),
+            Builder(
+              builder: (_) {
+                final local = Rect.fromLTWH(0, 0, iso.width, iso.height);
+                final art = artPlacement(
+                  local,
+                  baseWidth: def.artBaseWidth,
+                  anchorX: def.artAnchorX,
+                  lift: def.artLift,
+                );
+                return Positioned(
+                  left: art.left,
+                  width: art.width,
+                  bottom: local.height - art.bottom,
+                  child: BuildingIcon(
+                    imageUrl: def.imageUrl,
+                    width: art.width,
+                    anchorBottomOverflowTop: true,
+                  ),
+                );
+              },
             ),
         ],
       ),
@@ -3195,18 +3206,30 @@ class _BuildingTile extends StatelessWidget {
     // decorative box (a bare emoji/placeholder needs one to read well at
     // map scale).
     if (hasImage) {
+      // PLACED BY ITS BASE (user 2026-08-01: "So ist das Gebäude zu weit
+      // hinten"). The picture is scaled so its GROUND BASE is as wide as the
+      // footprint and slid so that base's foot sits on the footprint's — which
+      // is not the same as fitting the image to the tile, because generated art
+      // comes back square with the building somewhere inside it.
+      final bounds = isoBounds(0, 0, def.gridW, def.gridH);
+      final art = artPlacement(
+        bounds,
+        baseWidth: def.artBaseWidth,
+        anchorX: def.artAnchorX,
+        lift: def.artLift,
+      );
       return Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
+            left: art.left,
+            width: art.width,
+            // The box is the footprint's; the picture may sit lower than its
+            // foot when the art has air under the base.
+            bottom: bounds.height - art.bottom,
             child: BuildingIcon(
               imageUrl: def.imageUrl,
-              // The BASE spans the whole diamond, so the art is as wide as the
-              // footprint's two axes together — see docs/building_art_prompt.md.
-              width: spriteWidth(def.gridW, def.gridH),
+              width: art.width,
               anchorBottomOverflowTop: true,
               dimmed: !done,
             ),

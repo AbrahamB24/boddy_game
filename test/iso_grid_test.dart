@@ -197,4 +197,48 @@ void main() {
       }
     });
   });
+
+  // ── Das Bild sitzt auf seiner Grundfläche (user 2026-08-01) ──
+  // "Ich habe das Bild jetzt als Quadrat, aber die Grundfläche ist natürlich
+  //  kleiner und weiter vorne … So ist das Gebäude zu weit hinten"
+  //
+  // The map used to fit the IMAGE to the tiles. Generated art is square with the
+  // building somewhere inside it, so that put the building wherever the
+  // generator left it. artPlacement matches the BASE instead.
+  group('art placement', () {
+    final bounds = isoBounds(3, 4, 2, 2);
+
+    test('art drawn to the contract is placed exactly on the footprint', () {
+      // base full width, touching the bottom edge — the defaults.
+      final a = artPlacement(bounds);
+      expect(a.width, bounds.width);
+      expect(a.left, bounds.left);
+      expect(a.bottom, bounds.bottom);
+    });
+
+    test('a base that fills half the picture doubles the picture', () {
+      final a = artPlacement(bounds, baseWidth: 0.5);
+      expect(a.width, bounds.width * 2);
+      // …and stays centred on the footprint, so the extra air is shared.
+      expect(a.left + a.width / 2, bounds.center.dx);
+    });
+
+    test('the lift pushes the picture DOWN, in fractions of its width', () {
+      // The base sits above the image's bottom edge, so the image has to hang
+      // lower for that base to land on the ground.
+      final a = artPlacement(bounds, lift: 0.1);
+      expect(a.bottom, bounds.bottom + a.width * 0.1);
+    });
+
+    test('an off-centre base slides the picture across', () {
+      final a = artPlacement(bounds, anchorX: 0.25);
+      expect(a.left + a.width * 0.25, bounds.center.dx);
+    });
+
+    test('a nonsense base width does not divide by zero', () {
+      // Dev Mode clamps to 0.05, but a hand-written row can say anything.
+      expect(artPlacement(bounds, baseWidth: 0).width, bounds.width);
+      expect(artPlacement(bounds, baseWidth: -1).width, bounds.width);
+    });
+  });
 }

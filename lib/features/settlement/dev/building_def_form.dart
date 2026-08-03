@@ -54,6 +54,15 @@ class _BuildingDefFormState extends State<BuildingDefForm>
   // Preserved but no longer edited here (user 2026-07-24): a building keeps its
   // colour, housing column and special flags; they are authored in code / other
   // screens, so the form just carries them through untouched on save.
+  // ── Wo die Grundfläche im Bild sitzt (user 2026-08-01) ──
+  // Generated art comes back square with the building somewhere inside it, so
+  // the map has to be told where the BASE is before it can stand the building
+  // on its tiles. Three numbers, edited right under the upload because they
+  // describe the PICTURE — change the PNG and they change with it.
+  late double _artBaseWidth;
+  late double _artAnchorX;
+  late double _artLift;
+
   late String _colorHex;
   late int _population;
   late bool _isMainBuilding;
@@ -135,6 +144,9 @@ class _BuildingDefFormState extends State<BuildingDefForm>
     _originalId = _id;
     _name = d?.name ?? '';
     _imageUrl = d?.imageUrl;
+    _artBaseWidth = d?.artBaseWidth ?? 1.0;
+    _artAnchorX = d?.artAnchorX ?? 0.5;
+    _artLift = d?.artLift ?? 0.0;
     _colorHex = d == null
         ? 'FF7C5CBF'
         : d.color.toARGB32().toRadixString(16).toUpperCase().padLeft(8, '0');
@@ -294,6 +306,9 @@ class _BuildingDefFormState extends State<BuildingDefForm>
       id: _id.trim(),
       name: _name.trim(),
       imageUrl: _imageUrl,
+      artBaseWidth: _artBaseWidth,
+      artAnchorX: _artAnchorX,
+      artLift: _artLift,
       color: Color(int.parse(_colorHex, radix: 16)),
       gridW: _gridW,
       gridH: _gridH,
@@ -1360,6 +1375,48 @@ class _BuildingDefFormState extends State<BuildingDefForm>
               ],
             ),
           ),
+          if (_imageUrl != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Where the base sits in the picture. 1 / 0.5 / 0 means it fills '
+              'the width and touches the bottom edge — what the art contract '
+              'asks for. Generated art usually needs less width and a lift.',
+              style: FoE.dim(size: 11),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: _numRow(
+                    'Base width (0–1)',
+                    _artBaseWidth,
+                    isDouble: true,
+                    onChanged: (v) =>
+                        _artBaseWidth = (v as double).clamp(0.05, 1.0),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _numRow(
+                    'Anchor X',
+                    _artAnchorX,
+                    isDouble: true,
+                    onChanged: (v) =>
+                        _artAnchorX = (v as double).clamp(0.0, 1.0),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _numRow(
+                    'Lift',
+                    _artLift,
+                    isDouble: true,
+                    onChanged: (v) => _artLift = (v as double).clamp(-1.0, 1.0),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

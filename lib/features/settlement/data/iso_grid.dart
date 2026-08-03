@@ -153,6 +153,40 @@ List<(Offset, Offset)> footprintSeams(int w, int h) {
 /// The width a building's art is drawn at: the full width of [isoBounds].
 double spriteWidth(int w, int h) => (w + h) * kIsoTileW / 2;
 
+/// Where to draw a building's PICTURE so that its BASE lands on [bounds].
+///
+/// The image is placed by its base, not by its own edges (user 2026-08-01: "So
+/// ist das Gebäude zu weit hinten"). Generated art comes back square with the
+/// building somewhere inside it and air all round, so matching the IMAGE to the
+/// tiles puts the BUILDING wherever the generator happened to leave it.
+///
+///  • [baseWidth] — how much of the image's width the ground base spans.
+///  • [anchorX] — where the base's bottom point sits across the image.
+///  • [lift] — how far that point sits ABOVE the image's bottom edge, in
+///    fractions of the image's WIDTH.
+///
+/// Measured in widths rather than heights on purpose: the art is drawn
+/// width-first (natural height, overflowing upward), so the height is not known
+/// until the picture has loaded. For the square images a generator returns the
+/// two are the same number anyway.
+///
+/// The defaults describe art drawn exactly to the contract — base full width,
+/// touching the bottom edge — and then this returns `bounds`' own width and
+/// foot, unchanged.
+({double left, double width, double bottom}) artPlacement(
+  Rect bounds, {
+  double baseWidth = 1.0,
+  double anchorX = 0.5,
+  double lift = 0.0,
+}) {
+  final w = bounds.width / (baseWidth <= 0 ? 1.0 : baseWidth);
+  return (
+    left: bounds.center.dx - w * anchorX,
+    width: w,
+    bottom: bounds.bottom + w * lift,
+  );
+}
+
 /// PAINTER'S ORDER. Sorts back to front, so a building nearer the viewer is
 /// drawn over the one behind it.
 ///

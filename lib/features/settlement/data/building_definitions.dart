@@ -741,6 +741,37 @@ class BuildingDef {
   // 'building-images', see widgets/building_icon.dart for rendering with a
   // placeholder fallback when null — buildings have no emoji anymore).
   final String? imageUrl;
+
+  // ── WHERE THE BASE IS IN THE IMAGE (user 2026-08-01) ──
+  // "Ich habe das Bild jetzt als Quadrat, aber die Grundfläche ist natürlich
+  //  kleiner und weiter vorne … So ist das Gebäude zu weit hinten"
+  //
+  // The map used to assume every sprite's ground base filled the image's width
+  // and touched its bottom edge. Generated art never does: it comes back square,
+  // with the building somewhere inside it and air all round. The app then
+  // matched the IMAGE to the tiles instead of the BASE, so the building sat
+  // back and to one side of the ground it stands on.
+  //
+  // Three numbers fix it, and they are properties of the picture, not of the
+  // building — which is why they live next to the URL and are edited wherever
+  // the PNG is uploaded:
+  //
+  //   [artBaseWidth]  how much of the image's WIDTH the base spans (0..1)
+  //   [artAnchorX]    where the base's bottom point sits across the image
+  //   [artAnchorY]    …and down it
+  //
+  // The defaults are the old assumption exactly (1.0, 0.5, 1.0), so a def that
+  // says nothing behaves as before.
+
+  /// The base's width as a fraction of the image's. 0.62 = the base covers 62 %
+  /// of the picture and the rest is air.
+  final double artBaseWidth;
+
+  /// Where the base's bottom (south) point sits across the image, and how far
+  /// above its bottom edge — both as fractions of the image's WIDTH.
+  final double artAnchorX;
+  final double artLift;
+
   final Color color;
   final int gridW;
   final int gridH;
@@ -830,6 +861,9 @@ class BuildingDef {
     required this.id,
     required this.name,
     this.imageUrl,
+    this.artBaseWidth = 1.0,
+    this.artAnchorX = 0.5,
+    this.artLift = 0.0,
     required this.color,
     required this.gridW,
     required this.gridH,
@@ -865,6 +899,9 @@ class BuildingDef {
     id: id,
     name: name,
     imageUrl: imageUrl,
+    artBaseWidth: artBaseWidth,
+    artAnchorX: artAnchorX,
+    artLift: artLift,
     color: color,
     gridW: gridW,
     gridH: gridH,
@@ -1112,6 +1149,9 @@ class BuildingDef {
       id: row['id'] as String,
       name: row['name'] as String,
       imageUrl: row['image_url'] as String?,
+      artBaseWidth: (row['art_base_width'] as num?)?.toDouble() ?? 1.0,
+      artAnchorX: (row['art_anchor_x'] as num?)?.toDouble() ?? 0.5,
+      artLift: (row['art_lift'] as num?)?.toDouble() ?? 0.0,
       color: Color(int.parse(row['color'] as String? ?? 'FF7C5CBF', radix: 16)),
       gridW: (row['grid_w'] as num).toInt(),
       gridH: (row['grid_h'] as num).toInt(),
@@ -1211,6 +1251,9 @@ class BuildingDef {
       'id': id,
       'name': name,
       'image_url': imageUrl,
+      'art_base_width': artBaseWidth,
+      'art_anchor_x': artAnchorX,
+      'art_lift': artLift,
       'color': color.toARGB32().toRadixString(16).toUpperCase().padLeft(8, '0'),
       'grid_w': gridW,
       'grid_h': gridH,
