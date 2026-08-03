@@ -46,3 +46,6 @@ app.*.map.json
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# Blender framing checks (--guides); regenerated on demand, never shipped
+docs/renders/_*.png
