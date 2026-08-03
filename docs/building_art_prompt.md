@@ -38,6 +38,22 @@ what makes a building look pasted on instead of built there.
 than the ground it occupies, and the building then reads as pushed back. Keep
 them inside the footprint.
 
+## Hand it the footprint guide
+
+`docs/footprint_guides/<W>x<H>.png` — the marked area is the ground the building
+gets. Attach it and say:
+
+> The building's ground base must fill the marked area on this grid exactly, and
+> nothing may hang over it except the roof. Draw only the building; do not draw
+> the grid, the marks or the background.
+
+A sentence like "the base covers 3 by 4 tiles" is something an image model nods
+at and then draws a diamond anyway. A reference image is not a request, it is a
+measurement.
+
+Regenerate them with `python tool/make_footprint_guides.py` — they are built
+from the app's own tile size, so they cannot drift from it.
+
 ## Sizes
 
 | Footprint | Base width | | Footprint | Base width |
