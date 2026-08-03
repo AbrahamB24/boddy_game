@@ -1390,7 +1390,8 @@ class _BuildingDefFormState extends State<BuildingDefForm>
             Text(
               'Where the base sits in the picture. 1 / 0.5 / 0 means it fills '
               'the width and touches the bottom edge — what the art contract '
-              'asks for. Generated art usually needs less width and a lift.',
+              'asks for. BELOW 1 draws the building bigger (the base is only '
+              'part of the picture), ABOVE 1 smaller.',
               style: FoE.dim(size: 11),
             ),
             const SizedBox(height: 8),
@@ -1414,11 +1415,18 @@ class _BuildingDefFormState extends State<BuildingDefForm>
               children: [
                 Expanded(
                   child: _numRow(
-                    'Base width (0–1)',
+                    'Base width',
                     _artBaseWidth,
                     isDouble: true,
+                    // ABOVE 1 IS ALLOWED (user 2026-08-01: "base with muss
+                    // mehr als bis 1 gehen, damit ich alles einstellen kann").
+                    // It was capped at 1 on the assumption that a base can only
+                    // be narrower than its picture. It can also be WIDER — art
+                    // whose base overshoots, or a building you simply want to
+                    // read smaller than its plot. 1.2 draws the image at five
+                    // sixths of the footprint; the geometry never cared.
                     onChanged: (v) => setState(
-                      () => _artBaseWidth = (v as double).clamp(0.05, 1.0),
+                      () => _artBaseWidth = (v as double).clamp(0.05, 4.0),
                     ),
                   ),
                 ),

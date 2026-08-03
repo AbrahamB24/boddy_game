@@ -56,7 +56,7 @@ Do not crop: Dev Mode ▸ the building ▸ under the PNG, three numbers place it
 
 | | |
 |---|---|
-| **Base width** | how much of the picture's width the base spans (`0.62`) |
+| **Base width** | how much of the picture's width the base spans (`0.62`). Below 1 draws the building **bigger**, above 1 **smaller** |
 | **Anchor X** | where its front point sits across the picture (`0.5` = centred) |
 | **Lift** | how far that point sits above the picture's bottom edge, in fractions of its width (`0.08`) |
 

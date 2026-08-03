@@ -235,6 +235,15 @@ void main() {
       expect(a.left + a.width * 0.25, bounds.center.dx);
     });
 
+    test('a base WIDER than the picture shrinks the building', () {
+      // User 2026-08-01: "base with muss mehr als bis 1 gehen". Above 1 the
+      // base overshoots the image, so the picture is drawn smaller than the
+      // footprint — the opposite direction, same one number.
+      final a = artPlacement(bounds, baseWidth: 2);
+      expect(a.width, bounds.width / 2);
+      expect(a.left + a.width / 2, bounds.center.dx, reason: 'still centred');
+    });
+
     test('a nonsense base width does not divide by zero', () {
       // Dev Mode clamps to 0.05, but a hand-written row can say anything.
       expect(artPlacement(bounds, baseWidth: 0).width, bounds.width);
