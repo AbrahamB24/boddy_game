@@ -71,6 +71,8 @@ PALETTE = {
     'dark': (0.11, 0.08, 0.07),        # an opening, read as depth
     'banner': (0.62, 0.13, 0.20),      # the one saturated cloth per building
     'sand': (0.84, 0.74, 0.56),        # trodden ground inside a court
+    'straw': (0.86, 0.72, 0.34),       # bedding, thatch, nests
+    'leaf': (0.28, 0.45, 0.22),        # the only green; use it sparingly
 }
 
 
@@ -248,43 +250,139 @@ def wall_box(name, x, y, z, along, thick, height, material, facing='y'):
 
 
 def pantiles(name, x, y, z, sx, sy, h, ridge=0.45, key='tile_dark',
-             overhang=0.3, pitch=0.16):
-    """Tile courses running down a hip roof's two long slopes.
+             overhang=0.3, courses=10, lip=0.04):
+    """Tile courses stepping up a hip roof, parallel to the eaves.
 
     The roof is the largest surface on any of these buildings, and flat it is a
-    plate of colour. Ribbed, it is a roof.
+    plate of colour.
 
-    Each rib is SHORTENED by how far out it sits, because a hip roof's slope is
-    a trapezoid: a rib of full length out near the corner would hang off the
-    side. Solving for that per rib is also what makes the tiling converge
-    towards the ridge the way a real hip roof does.
+    The first attempt ran ribs DOWN the slope, the way a real pantile does, and
+    it looked broken: on a hip the slope is a trapezoid, so each rib had to stop
+    at a different height, and their ends stood proud of the hip line in mid
+    air — a staircase of snapped sticks. Courses have no ends to leave hanging.
+    Each one is the roof's own horizontal cross-section at that height, so it
+    follows the hips exactly, for free, at any footprint.
     """
     sx += overhang * 2
     sy += overhang * 2
-    r = sx * ridge / 2
-    run = sy / 2
-    length = math.hypot(run, h)
-    alpha = math.atan2(h, run)                 # the pitch, off horizontal
+    long_y = sy >= sx
+    r = (sy if long_y else sx) * ridge / 2
 
-    n = max(3, int(sx / pitch) // 2)
-    for i in range(n + 1):
-        rx = -sx / 2 + sx * i / n
-        # How far up this rib may go before the trapezoid narrows past it.
-        span = sx / 2 - r
-        frac = 1.0 if span <= 0 else ((sx / 2 - abs(rx)) / span)
-        frac = max(0.0, min(1.0, frac))
-        if frac < 0.05:
-            continue
-        ell = length * frac
-        for sign in (-1, 1):
-            ob = box(f'{name}_{i}_{sign}', 0, 0, 0,
-                     pitch * 0.42, ell, 0.05, mat(key))
-            ob.rotation_euler = (sign * alpha, 0, 0)
-            ob.location = (
-                x + rx,
-                y + sign * (-sy / 2 + (ell / 2) * math.cos(alpha)),
-                z + (ell / 2) * math.sin(alpha) + 0.03,
-            )
+    for i in range(courses):
+        f = i / courses
+        # The roof's cross-section at this height: it narrows to the ridge on
+        # the short axis and to the ridge's own length on the long one.
+        if long_y:
+            hx = (sx / 2) * (1 - f)
+            hy = sy / 2 - (sy / 2 - r) * f
+        else:
+            hx = sx / 2 - (sx / 2 - r) * f
+            hy = (sy / 2) * (1 - f)
+        if hx <= 0.06 or hy <= 0.06:
+            break
+        box(f'{name}_{i}', x, y, z + f * h,
+            2 * hx + lip, 2 * hy + lip, 0.055, mat(key))
+
+
+def acroterion(name, x, y, z, sx, sy, ridge=0.45, overhang=0.3, key='gold'):
+    """The ornaments capping the ends of a ridge. Two of them, and the roofline
+    stops just ending and starts finishing."""
+    sx += overhang * 2
+    sy += overhang * 2
+    long_y = sy >= sx
+    r = (sy if long_y else sx) * ridge / 2
+    for sign in (-1, 1):
+        ax = x if long_y else x + sign * r
+        ay = y + sign * r if long_y else y
+        box(f'{name}_stem_{sign}', ax, ay, z - 0.06, 0.11, 0.11, 0.12,
+            mat('tile_dark'))
+        box(f'{name}_{sign}', ax, ay, z + 0.06, 0.07, 0.07, 0.08, mat(key))
+
+
+def column(name, x, y, z, r, h, key='travertine', sides=8):
+    """A round column, faceted. Eight sides: at six it reads as a post, at
+    sixteen the facets stop showing and it leaves the art style."""
+    bpy.ops.mesh.primitive_cylinder_add(vertices=sides, radius=r, depth=h,
+                                        location=(x, y, z + h / 2))
+    ob = bpy.context.object
+    ob.name = name
+    ob.data.materials.append(mat(key))
+    for p in ob.data.polygons:
+        p.use_smooth = False
+    box(f'{name}_base', x, y, z, r * 2.6, r * 2.6, 0.1, mat(key))
+    box(f'{name}_cap', x, y, z + h - 0.11, r * 2.7, r * 2.7, 0.13, mat(key))
+    return ob
+
+
+def pot(name, x, y, z, r=0.16, h=0.42, key='tile'):
+    """An amphora, in four blocks. Clutter with a job: it is the only thing in
+    the kit that says PEOPLE work here."""
+    box(f'{name}_foot', x, y, z, r * 0.9, r * 0.9, 0.05, mat('tile_dark'))
+    box(f'{name}_belly', x, y, z + 0.04, r * 2, r * 2, h * 0.55, mat(key))
+    box(f'{name}_neck', x, y, z + 0.04 + h * 0.55, r * 1.05, r * 1.05, h * 0.3,
+        mat(key))
+    box(f'{name}_rim', x, y, z + 0.02 + h * 0.85, r * 1.5, r * 1.5, 0.07,
+        mat('tile_dark'))
+
+
+def brazier(name, x, y, z, h=0.62, key='iron'):
+    """A standing fire. The only light source in the palette, and the reason a
+    doorway at dusk reads as somewhere you would actually walk in."""
+    # Stone stem, iron bowl. Iron is the coldest colour in the palette, and a
+    # whole brazier of it reads as a blue machine standing in a warm courtyard.
+    # Keep it to the one part that has to look like metal.
+    box(f'{name}_foot', x, y, z, 0.19, 0.19, 0.05, mat('travertine'))
+    box(f'{name}_stem', x, y, z + 0.04, 0.07, 0.07, h, mat('travertine'))
+    box(f'{name}_bowl', x, y, z + h, 0.22, 0.22, 0.09, mat(key))
+    box(f'{name}_fire', x, y, z + h + 0.07, 0.14, 0.14, 0.1, mat('gold'))
+
+
+def pergola(name, x, y, z, sx, sy, h=1.0, posts=2, key='oak'):
+    """Posts and cross-beams over a yard. Roofless on purpose: it shades the
+    court without hiding what is IN the court, which is the whole point of
+    having an open court in the first place."""
+    for sxs in (-1, 1):
+        for sys in (-1, 1):
+            box(f'{name}_post_{sxs}_{sys}', x + sxs * sx / 2, y + sys * sy / 2,
+                z, 0.14, 0.14, h, mat(key))
+    for sys in (-1, 1):
+        box(f'{name}_beam_{sys}', x, y + sys * sy / 2, z + h - 0.1,
+            sx + 0.4, 0.11, 0.12, mat(key))
+    for i in range(posts * 2 + 1):
+        bx = x - sx / 2 + sx * i / (posts * 2)
+        box(f'{name}_rafter_{i}', bx, y, z + h, 0.08, sy + 0.5, 0.08,
+            mat(key))
+
+
+def nest(name, x, y, z, r, key='straw'):
+    """A ring of straw. Eggs lying on bare ground are eggs someone dropped."""
+    n = 10
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        box(f'{name}_{i}', x + r * math.cos(a), y + r * math.sin(a), z,
+            0.19, 0.19, 0.1, mat(key))
+    box(f'{name}_bed', x, y, z, r * 1.7, r * 1.7, 0.05, mat(key))
+
+
+def plant(name, x, y, z, r=0.13, key='leaf'):
+    """A potted shrub. Green is the rarest colour in the palette on purpose —
+    two of these read as tended, five read as a garden centre."""
+    box(f'{name}_pot', x, y, z, r * 2, r * 2, 0.18, mat('tile'))
+    box(f'{name}_rim', x, y, z + 0.16, r * 2.3, r * 2.3, 0.05,
+        mat('tile_dark'))
+    box(f'{name}_bush', x, y, z + 0.2, r * 2.4, r * 2.4, 0.2, mat(key))
+    box(f'{name}_top', x, y, z + 0.38, r * 1.5, r * 1.5, 0.14, mat(key))
+
+
+def trough(name, x, y, z, sx, sy, key='ashlar'):
+    """A stone water trough. Livestock needs drinking, and a building that
+    shows the chore reads as used rather than as displayed."""
+    box(f'{name}_body', x, y, z, sx, sy, 0.22, mat(key))
+    box(f'{name}_water', x, y, z + 0.18, sx - 0.12, sy - 0.12, 0.05,
+        mat('iron'))
+    for sign in (-1, 1):
+        box(f'{name}_end_{sign}', x + sign * sx / 2, y, z,
+            0.07, sy + 0.04, 0.28, mat('travertine'))
 
 
 def dentils(name, x, y, z, sx, sy, key='travertine', pitch=0.2, size=0.09):
@@ -452,10 +550,14 @@ def breeding_hut(w, h):
         0.17, 0.1, 0.2, mat('travertine'))
     steps('steps', 0, face_y - 0.06, 0.0, door_w + 0.3)
 
+    box('plaque', 0, face_y - 0.01, 0.22 + door_h + 0.2, 0.52, 0.06, 0.18,
+        mat('travertine'))
+
     roof_z = 0.22 + wall_h
     hip_roof('roof', 0, body_y, roof_z, body_w, body_d, 0.85)
     pantiles('tiles', 0, body_y, roof_z, body_w, body_d, 0.85)
     antefixes('antefix', 0, body_y, roof_z - 0.02, body_w + 0.6, body_d + 0.6)
+    acroterion('acro', 0, body_y, roof_z + 0.85, body_w, body_d)
 
     # Corner pilasters — travertine, not timber. Timber corners drag the whole
     # thing back to a Northern hut; stone corners under a tile roof are Roman.
@@ -493,17 +595,33 @@ def breeding_hut(w, h):
             0.24, court_d, 0.07, mat('travertine'))
     front_y = court_y - court_d / 2 + 0.09
     for sx in (-1, 1):
-        box('gatepost', sx * (court_w / 2 - 0.09), front_y, 0,
-            0.26, 0.26, 0.72, mat('travertine'))
-        box('finial', sx * (court_w / 2 - 0.09), front_y, 0.72,
-            0.12, 0.12, 0.1, mat('gold'))
-    # The threshold between the posts stays LOW: the eggs are what the building
-    # says about itself, and nothing may stand in front of them.
+        column(f'gatecol{sx}', sx * (court_w / 2 - 0.09), front_y, 0,
+               0.13, 0.78)
+        box(f'finial{sx}', sx * (court_w / 2 - 0.09), front_y, 0.78,
+            0.11, 0.11, 0.1, mat('gold'))
+    # The threshold between the columns stays LOW: the eggs are what the
+    # building says about itself, and nothing may stand in front of them.
     box('threshold', 0, front_y, 0, court_w - 0.5, 0.18, 0.2, mat('ashlar'))
 
-    egg('egg_a', -0.42, court_y + 0.20, 0.16, 0.23, mat('stucco'))
-    egg('egg_b', 0.34, court_y + 0.32, 0.16, 0.26, mat('stucco'))
-    egg('egg_c', 0.06, court_y - 0.26, 0.16, 0.21, mat('stucco'))
+    # NO pergola here, though the kit has one. It fitted the court and covered
+    # the eggs and the doorway both — and the eggs are the entire reason this
+    # building is recognisable. More detail is only ever worth having while it
+    # costs nothing that already reads. Keep it for a building with room.
+    nest('nest', -0.12, court_y + 0.06, 0.16, 0.42)
+    egg('egg_a', -0.36, court_y + 0.18, 0.20, 0.23, mat('stucco'))
+    egg('egg_b', 0.06, court_y + 0.26, 0.20, 0.26, mat('stucco'))
+    egg('egg_c', -0.10, court_y - 0.20, 0.20, 0.21, mat('stucco'))
+
+    # The working clutter, kept to the edges so the middle stays the eggs.
+    pot('pot_a', court_w / 2 - 0.36, court_y + court_d * 0.32, 0.16)
+    plant('plant_a', court_w / 2 - 0.34, court_y - court_d * 0.10, 0.16)
+    # The brazier goes to the GATE, not beside the door: anything tall on the
+    # near-left stands directly across the line from the camera to the arch,
+    # and the arch is half of what makes this building legible.
+    trough('trough', -court_w / 2 + 0.46, court_y + court_d * 0.28, 0.16,
+           0.58, 0.28)
+    brazier('brazier', -court_w / 2 + 0.30, court_y - court_d * 0.34, 0.16,
+            h=0.46)
 
 
 PRESETS = {'breeding_hut': (breeding_hut, 3, 4)}
