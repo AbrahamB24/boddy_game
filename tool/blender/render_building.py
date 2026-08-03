@@ -87,6 +87,13 @@ PALETTE = {
     'sand': (0.90, 0.77, 0.52),        # trodden ground inside a court
     'straw': (0.94, 0.77, 0.30),       # bedding, thatch, nests
     'leaf': (0.37, 0.53, 0.22),        # the only green; use it sparingly
+    # Mid-steps. The monsters get four to six tones out of one hue; three is
+    # what a box gives you from lighting alone, so the rest has to be painted.
+    # Use these for coursing, joints and mouldings — never for a whole surface.
+    'tile_mid': (0.69, 0.24, 0.11),
+    'stucco_shade': (0.86, 0.75, 0.57),
+    'travertine_shade': (0.76, 0.59, 0.37),
+    'ashlar_dark': (0.50, 0.36, 0.22),
 }
 
 # How hard every edge is cut back. This is the OTHER half of matching the
@@ -94,8 +101,15 @@ PALETTE = {
 # none at all — it has three faces and three tones and that is the end of it.
 # A bevel gives every edge its own strip catching its own amount of light, which
 # is the same trick at building scale.
-BEVEL_WIDTH = 0.028
-BEVEL_SEGMENTS = 2
+#
+# Finer since the detail pass (user 2026-08-03: "viel detaillierter und
+# feiner"). At 0.028 the bevel was wider than the joints between the stones it
+# now has to sit between, and clamp_overlap quietly ate it — the detail was
+# there in the geometry and gone in the render. A finer cut with one more
+# segment reads as crisp instead of chunky, and leaves room for parts an order
+# of magnitude smaller than a wall.
+BEVEL_WIDTH = 0.014
+BEVEL_SEGMENTS = 3
 
 
 # ── Materials ──────────────────────────────────────────────
@@ -272,7 +286,7 @@ def wall_box(name, x, y, z, along, thick, height, material, facing='y'):
 
 
 def pantiles(name, x, y, z, sx, sy, h, ridge=0.45, key='tile_dark',
-             overhang=0.3, courses=10, lip=0.04):
+             overhang=0.3, courses=14, lip=0.032):
     """Tile courses stepping up a hip roof, parallel to the eaves.
 
     The roof is the largest surface on any of these buildings, and flat it is a
@@ -304,6 +318,150 @@ def pantiles(name, x, y, z, sx, sy, h, ridge=0.45, key='tile_dark',
             break
         box(f'{name}_{i}', x, y, z + f * h,
             2 * hx + lip, 2 * hy + lip, 0.055, mat(key))
+
+
+def ashlar_courses(name, x, y, z, sx, sy, h, key='ashlar', dark='ashlar_dark',
+                   course=0.19, block=0.42, joint=0.022):
+    """A wall built out of individual stones instead of as one slab.
+
+    The single biggest step from "a box painted stone" to "masonry". Courses
+    alternate their offset by half a block, the way any real wall does, so the
+    vertical joints never line up — and it is the broken joint line, more than
+    the joints themselves, that the eye reads as built by hand.
+
+    Emitted as a solid core plus a skin of blocks: the core stops daylight
+    showing through the joints, and it means the joint depth can be as fine as
+    it likes without the wall becoming a sieve.
+    """
+    box(f'{name}_core', x, y, z, sx - joint * 3, sy - joint * 3, h, mat(dark))
+    rows = max(1, int(round(h / course)))
+    ch = h / rows
+    for r in range(rows):
+        stagger = (r % 2) * block / 2
+        for axis, span, other in ((0, sx, sy), (1, sy, sx)):
+            n = max(1, int(round(span / block)))
+            bw = span / n
+            for i in range(n + 1):
+                t = -span / 2 + bw * i + stagger
+                if t - bw / 2 < -span / 2 - 0.001 or t + bw / 2 > span / 2:
+                    continue
+                for sign in (-1, 1):
+                    if axis == 0:
+                        bx, by = x + t, y + sign * (other / 2 - joint)
+                        dims = (bw - joint, joint * 2, ch - joint)
+                    else:
+                        bx, by = x + sign * (other / 2 - joint), y + t
+                        dims = (joint * 2, bw - joint, ch - joint)
+                    box(f'{name}_{r}_{axis}_{i}_{sign}', bx, by, z + r * ch,
+                        *dims, mat(key))
+
+
+def string_course(name, x, y, z, sx, sy, key='travertine'):
+    """A moulding running round a wall: three thin bands of different widths.
+
+    One band is a stripe. Three of stepped width is a PROFILE, and a profile is
+    what makes stone look cut rather than painted — for the price of two boxes.
+    """
+    box(f'{name}_a', x, y, z, sx + 0.02, sy + 0.02, 0.05, mat(key))
+    box(f'{name}_b', x, y, z + 0.05, sx + 0.10, sy + 0.10, 0.045, mat(key))
+    box(f'{name}_c', x, y, z + 0.095, sx + 0.05, sy + 0.05, 0.035,
+        mat('travertine_shade'))
+
+
+def flute_faces(ob, key='travertine', shade='travertine_shade'):
+    """Flute a column by ALTERNATING THE TONE of its side faces.
+
+    The first attempt laid thin boxes down the shaft. A groove modelled as an
+    applied box is a RIB — it stands proud — and eight pale ribs on a 0.26-wide
+    column stopped being a column at all and became a bundle of sticks poking
+    out of the gate. Diagnosed by measuring, after --no-bevel proved it was
+    geometry and not a modifier artefact.
+
+    Alternating a material costs no geometry, cannot protrude, and is how the
+    light/shadow of a real flute reads at this size anyway: a groove is not a
+    shape you can see at 224 px, it is a stripe.
+    """
+    ob.data.materials.clear()
+    ob.data.materials.append(mat(key))
+    ob.data.materials.append(mat(shade))
+    quad = 0
+    for p in ob.data.polygons:
+        if len(p.vertices) == 4:          # a side face; the caps are n-gons
+            p.material_index = quad % 2
+            quad += 1
+
+
+def imbrices(name, x, y, z, sx, sy, h, ridge=0.45, overhang=0.3,
+             key='tile_mid', courses=14, pitch=0.30):
+    """The cap tiles that cover the joints between the flat tiles below.
+
+    A Roman roof is two shapes, not one — a flat tegula with a rounded imbrex
+    over every seam. The courses alone gave the roof horizontal banding; these
+    cross it, and the grid of the two together is what reads as a tiled roof
+    from any distance rather than as a striped one.
+    """
+    sx += overhang * 2
+    sy += overhang * 2
+    long_y = sy >= sx
+    r = (sy if long_y else sx) * ridge / 2
+    for i in range(courses):
+        f = (i + 0.5) / courses
+        if long_y:
+            hx, hy = (sx / 2) * (1 - f), sy / 2 - (sy / 2 - r) * f
+        else:
+            hx, hy = sx / 2 - (sx / 2 - r) * f, (sy / 2) * (1 - f)
+        if hx <= 0.08 or hy <= 0.08:
+            break
+        span = 2 * (hx if long_y else hy)
+        n = max(1, int(span / pitch))
+        for j in range(n):
+            t = -span / 2 + span * (j + 0.5) / n
+            for sign in (-1, 1):
+                if long_y:
+                    bx, by = x + t, y + sign * hy
+                    dims = (0.1, 0.1, 0.07)
+                else:
+                    bx, by = x + sign * hx, y + t
+                    dims = (0.1, 0.1, 0.07)
+                box(f'{name}_{i}_{j}_{sign}', bx, by, z + f * h, *dims,
+                    mat(key))
+
+
+def plank_door(name, x, y, z, w, h, facing='y', planks=5):
+    """A boarded door: vertical planks, two ledges across them, iron studs.
+
+    A doorway is a hole. A DOOR is a made thing, and the studs are what say so —
+    they are two pixels each and they are the whole difference.
+    """
+    def at(into, along=0.0):
+        return (x + (along if facing == 'y' else -into),
+                y + (into if facing == 'y' else along))
+
+    for i in range(planks):
+        t = -w / 2 + w * (i + 0.5) / planks
+        bx, by = at(0.0, t)
+        wall_box(f'{name}_p{i}', bx, by, z, w / planks - 0.012, 0.07, h,
+                 mat('oak'), facing=facing)
+    for lz in (h * 0.22, h * 0.72):
+        bx, by = at(-0.02)
+        wall_box(f'{name}_ledge{lz:.2f}', bx, by, z + lz, w - 0.03, 0.05,
+                 0.06, mat('oak_light'), facing=facing)
+        for j in range(3):
+            sx_, sy_ = at(-0.05, -w / 2 + w * (j + 0.5) / 3)
+            box(f'{name}_stud{lz:.2f}_{j}', sx_, sy_, z + lz + 0.01,
+                0.05, 0.05, 0.04, mat('iron'))
+
+
+def grille(name, x, y, z, w, h, facing='y', bars=3):
+    """Iron bars across a window. Fine enough to be texture, present enough to
+    stop the opening reading as a rectangle of pure black."""
+    for i in range(bars):
+        t = -w / 2 + w * (i + 1) / (bars + 1)
+        wall_box(f'{name}_v{i}', x + (t if facing == 'y' else 0),
+                 y + (0 if facing == 'y' else t), z, 0.03, 0.05, h,
+                 mat('iron'), facing=facing)
+    wall_box(f'{name}_h', x, y, z + h * 0.45, w, 0.05, 0.03, mat('iron'),
+             facing=facing)
 
 
 def hip_ridges(name, x, y, z, sx, sy, h, ridge=0.45, overhang=0.3,
@@ -408,7 +566,7 @@ def garland(name, x, y, z, span, sag=0.16, key='leaf', facing='y'):
 
 
 def mosaic(name, x, y, z, sx, sy, key_a='travertine', key_b='tile',
-           tile=0.26):
+           tile=0.155):
     """A chequered court floor. Ground with a pattern on it reads as PAVED, and
     paved ground is the difference between a courtyard and a patch of dirt."""
     nx, ny = max(1, int(sx / tile)), max(1, int(sy / tile))
@@ -438,18 +596,25 @@ def acroterion(name, x, y, z, sx, sy, ridge=0.45, overhang=0.3, key='gold'):
         box(f'{name}_{sign}', ax, ay, z + 0.06, 0.07, 0.07, 0.08, mat(key))
 
 
-def column(name, x, y, z, r, h, key='travertine', sides=8):
-    """A round column, faceted. Eight sides: at six it reads as a post, at
-    sixteen the facets stop showing and it leaves the art style."""
+def column(name, x, y, z, r, h, key='travertine', sides=12):
+    """A round column, faceted and fluted. Twelve sides: six light faces and
+    six shaded ones, which is a fluted shaft — and still few enough that the
+    facets show, which is the whole art style."""
     bpy.ops.mesh.primitive_cylinder_add(vertices=sides, radius=r, depth=h,
                                         location=(x, y, z + h / 2))
     ob = bpy.context.object
     ob.name = name
-    ob.data.materials.append(mat(key))
     for p in ob.data.polygons:
         p.use_smooth = False
-    box(f'{name}_base', x, y, z, r * 2.6, r * 2.6, 0.1, mat(key))
-    box(f'{name}_cap', x, y, z + h - 0.11, r * 2.7, r * 2.7, 0.13, mat(key))
+    flute_faces(ob)
+    box(f'{name}_base', x, y, z, r * 2.6, r * 2.6, 0.07, mat(key))
+    box(f'{name}_torus', x, y, z + 0.07, r * 2.2, r * 2.2, 0.045,
+        mat('travertine_shade'))
+    box(f'{name}_neck', x, y, z + h - 0.17, r * 2.1, r * 2.1, 0.04,
+        mat('travertine_shade'))
+    box(f'{name}_cap', x, y, z + h - 0.13, r * 2.7, r * 2.7, 0.075, mat(key))
+    box(f'{name}_abacus', x, y, z + h - 0.055, r * 2.95, r * 2.95, 0.055,
+        mat(key))
     return ob
 
 
@@ -524,7 +689,7 @@ def trough(name, x, y, z, sx, sy, key='ashlar'):
             0.07, sy + 0.04, 0.28, mat('travertine'))
 
 
-def dentils(name, x, y, z, sx, sy, key='travertine', pitch=0.2, size=0.09):
+def dentils(name, x, y, z, sx, sy, key='travertine', pitch=0.115, size=0.055):
     """A course of small blocks under the eaves. The most Roman thing there is,
     and the cheapest scale cue in the whole kit."""
     for axis in (0, 1):
@@ -541,7 +706,7 @@ def dentils(name, x, y, z, sx, sy, key='travertine', pitch=0.2, size=0.09):
                     size, size, size * 1.1, mat(key))
 
 
-def antefixes(name, x, y, z, sx, sy, key='tile_dark', pitch=0.34):
+def antefixes(name, x, y, z, sx, sy, key='tile_dark', pitch=0.21):
     """Upright tile-ends standing along the eaves. Roman roofs are edged, not
     cut off, and the little row of them is what stops the roof's bottom edge
     reading as a straight machine cut."""
@@ -550,7 +715,7 @@ def antefixes(name, x, y, z, sx, sy, key='tile_dark', pitch=0.34):
         for i in range(n):
             bx = x - sx / 2 + sx * (i + 0.5) / n
             box(f'{name}_{i}_{sign}', bx, y + sign * sy / 2, z,
-                0.12, 0.07, 0.13, mat(key))
+                0.085, 0.055, 0.095, mat(key))
 
 
 def window(name, x, y, z, w, h, depth, shutters=True, facing='y'):
@@ -653,15 +818,18 @@ def breeding_hut(w, h):
     body_w = w - 0.35
     body_y = h / 2 - body_d / 2 - 0.18         # pushed to the back
 
-    plinth('plinth', 0, body_y, body_w + 0.26, body_d + 0.26)
-    box('plinth_cap', 0, body_y, 0.22, body_w + 0.18, body_d + 0.18, 0.07,
+    # The plinth is laid as STONES, not cast as a slab — see ashlar_courses.
+    ashlar_courses('plinth', 0, body_y, 0, body_w + 0.26, body_d + 0.26, 0.22)
+    box('plinth_cap', 0, body_y, 0.22, body_w + 0.18, body_d + 0.18, 0.05,
         mat('travertine'))
-    box('body', 0, body_y, 0.22, body_w, body_d, wall_h, mat('stucco'))
+    box('body', 0, body_y, 0.24, body_w, body_d, wall_h, mat('stucco'))
     # A course of cut stone at the base of the render: Roman walls change
     # material as they rise, and the change is what stops a wall reading as one
-    # blank rectangle of light.
-    box('course', 0, body_y, 0.22, body_w + 0.04, body_d + 0.04, 0.3,
-        mat('travertine'))
+    # blank rectangle of light. Coursed too, and capped with a moulding.
+    ashlar_courses('course', 0, body_y, 0.24, body_w + 0.04, body_d + 0.04,
+                   0.3, key='travertine', dark='travertine_shade',
+                   course=0.15, block=0.34)
+    string_course('sc', 0, body_y, 0.53, body_w + 0.02, body_d + 0.02)
     # The entablature: dentils, then the cornice they carry. Together they are
     # the line that separates wall from roof, and without it the roof looks set
     # down on the walls rather than built onto them.
@@ -683,6 +851,10 @@ def breeding_hut(w, h):
     arch('surround', 0, face_y + 0.17, 0.22,
          door_w + 0.20, door_h + 0.10, 0.22, key='travertine')
     arch('mouth', 0, face_y + 0.04, 0.22, door_w, door_h, 0.22)
+    # A stable door: boarded to hip height, open above. Exactly right for a
+    # place animals go in and out of, and it puts a made thing in the one
+    # opening that was a plain black hole.
+    plank_door('door', 0, face_y - 0.03, 0.24, door_w - 0.03, door_h * 0.46)
     # A keystone over the arch. One block, and the arch stops being a hole with
     # a rim and becomes something that was built.
     box('keystone', 0, face_y + 0.02, 0.22 + door_h - 0.02,
@@ -706,6 +878,7 @@ def breeding_hut(w, h):
     roof_z = 0.22 + wall_h
     hip_roof('roof', 0, body_y, roof_z, body_w, body_d, 0.85)
     pantiles('tiles', 0, body_y, roof_z, body_w, body_d, 0.85)
+    imbrices('caps', 0, body_y, roof_z, body_w, body_d, 0.85)
     hip_ridges('hips', 0, body_y, roof_z, body_w, body_d, 0.85)
     antefixes('antefix', 0, body_y, roof_z - 0.02, body_w + 0.6, body_d + 0.6)
     acroterion('acro', 0, body_y, roof_z + 0.85, body_w, body_d)
@@ -732,8 +905,11 @@ def breeding_hut(w, h):
     # Two arched windows on the long wall, which is otherwise the largest blank
     # surface the camera ever sees.
     for i, sy in enumerate((-1, 1)):
-        window(f'win{i}', body_w / 2 - 0.02, body_y + sy * body_d * 0.26, 0.68,
-               0.28, 0.4, 0.2, facing='x')
+        wy = body_y + sy * body_d * 0.26
+        window(f'win{i}', body_w / 2 - 0.02, wy, 0.68, 0.28, 0.4, 0.2,
+               facing='x')
+        grille(f'bars{i}', body_w / 2 - 0.06, wy, 0.68, 0.28, 0.36,
+               facing='x')
     banner('banner', body_w / 2 + 0.04, body_y, 1.14, 0.32, 0.42, facing='x')
     # A course of blocks under the windows, running the length of the long
     # wall — the largest surface the camera ever sees, and the one that most
@@ -751,10 +927,10 @@ def breeding_hut(w, h):
     # Low walls, not a fence: masonry on three sides, open to the front so the
     # eggs are visible. Capped in travertine so the top edge catches light.
     for sx in (-1, 1):
-        box('court_wall', sx * (court_w / 2 - 0.09), court_y, 0,
-            0.18, court_d, 0.46, mat('ashlar'))
-        box('court_cap', sx * (court_w / 2 - 0.09), court_y, 0.46,
-            0.24, court_d, 0.07, mat('travertine'))
+        ashlar_courses(f'court_wall{sx}', sx * (court_w / 2 - 0.09), court_y,
+                       0, 0.18, court_d, 0.46, course=0.155, block=0.34)
+        box(f'court_cap{sx}', sx * (court_w / 2 - 0.09), court_y, 0.46,
+            0.24, court_d, 0.055, mat('travertine'))
     front_y = court_y - court_d / 2 + 0.09
     for sx in (-1, 1):
         column(f'gatecol{sx}', sx * (court_w / 2 - 0.09), front_y, 0,
@@ -978,6 +1154,9 @@ def main():
                     help='image height as a multiple of the base width')
     ap.add_argument('--guides', action='store_true',
                     help='mark the footprint, to check the framing')
+    ap.add_argument('--no-bevel', action='store_true',
+                    help='skip the edge bevel — tells geometry bugs from '
+                         'modifier artefacts apart in one render')
     ap.add_argument('--no-render', action='store_true',
                     help='build the scene and stop — for opening it in the GUI')
     ap.add_argument('--blend', help='also save the scene to this .blend')
@@ -988,7 +1167,8 @@ def main():
     build(w, h)
     if args.guides:
         guide_plane(w, h)
-    bevel_everything()
+    if not args.no_bevel:
+        bevel_everything()
     light()
     frame(w, h, args.scale, args.headroom)
 
