@@ -1,33 +1,41 @@
 # Building art — the prompt
 
-The prompt for Gemini / Nano Banana that produces every building sprite for the
+The prompt for Gemini / Nano Banana that produces every building on the
 settlement map.
 
-The map is **isometric**, Forge of Empires shape (user 2026-08-01: "Ich will das
-Raster … um 45° gedreht"). That means **one image per building** — an isometric
-camera already shows two walls and the roof, so a single picture reads as a
-solid object. There is no second view to draw and no map rotation.
+Two things have to be true at once:
 
-The numbers below are not suggestions. They come from `iso_grid.dart`, and art
-that ignores them will not tile.
+1. **It belongs to the monsters.** Same faceted low-poly language, same flat
+   fills, same saturated palette — the STYLE block below is the monsters' one,
+   word for word (see [monster_art_prompt.md](monster_art_prompt.md)). Do not
+   reword it; a paraphrased style prompt is an inconsistent one.
+2. **It fits the grid.** The map is isometric (2:1, Forge of Empires shape), so
+   the base has to cover exactly the tiles the building occupies. That is the
+   one thing no amount of retouching fixes later.
 
-| | |
-|---|---|
-| Tile | **64 × 32 px** (2:1) |
-| Base width | `footprint_width_in_cells × 64 px` … see below |
-| Camera | fixed, parallel projection, ~30° above, front face toward the **bottom-right** |
-| Background | fully transparent |
-| Shadow | none — the map draws the tile the building stands on |
+You fill in **two** things per building: **what it is** and **how big**.
 
-**The base width is the footprint's width on screen, not the building's:** an
-area of `w × h` cells spans `(w + h) × 32 px`. A 2×2 building is therefore
-**128 px** wide at the base, a 3×2 building **160 px**.
+---
 
-**A square footprint gives a diamond; anything else gives a parallelogram.** A
-2×1 area is not a squashed diamond — it is a rhomboid whose near corner sits off
-to one side. Its bounding box is still 2:1, which is why the width rule works for
-every shape, but the base must be drawn for the actual `W × H` or the building
-will not sit on its own cells.
+## Pick the size first
+
+`W × H` is the footprint in tiles — `gridW` / `gridH` on the building's def. It
+decides the image's width, and nothing else about the picture.
+
+| Footprint | Base width | Used by |
+|---|---|---|
+| 1 × 1 | **64 px** | roads |
+| 2 × 2 | **128 px** | huts, small camps |
+| 3 × 2 · 2 × 3 | **160 px** | works, oblong yards |
+| 3 × 3 | **192 px** | the common production building |
+| 3 × 4 · 4 × 3 | **224 px** | larger works |
+| 4 × 4 | **256 px** | refineries, big halls |
+| 5 × 5 | **320 px** | the main hall, grand works |
+
+The rule behind the table: **base width = (W + H) × 32 px**, and its bounding box
+is always twice as wide as it is tall. A square footprint draws a diamond;
+anything else draws a parallelogram of that many tiles — a 3 × 2 is *not* a
+squashed diamond, and drawn as one it will not sit on its own cells.
 
 ---
 
@@ -36,61 +44,80 @@ will not sit on its own cells.
 ```text
 Isometric low-poly building for a city-builder game, single object.
 
-STYLE (do not deviate):
+STYLE (do not deviate — this is the same style sheet the creatures use):
 - Faceted low-poly illustration: the whole building is built from flat
   triangles and hard-edged polygons, like a papercraft model.
 - Every facet is ONE flat colour. No gradients, no soft shading, no airbrush,
-  no texture, no bricks drawn one by one.
+  no texture, no bricks or shingles drawn one by one.
 - No outlines, no black contour lines. Shapes are separated by colour alone.
-- 3 to 5 tones per colour family: a bright lit facet, a mid tone, a deep shadow
-  tone, in sharp angular patches. The two visible walls must differ in tone —
-  the one facing the light is clearly brighter.
-- Bold, saturated, warm-lit palette. Clean and toy-like, not gritty.
+- 3 to 5 tones per colour family: a bright highlight facet, a mid body tone, a
+  deep shadow tone, used in sharp angular patches. The two visible walls differ
+  clearly in tone — one faces the light, the other does not.
+- Bold, saturated, warm-lit palette. Clean and toy-like, not gritty, not
+  realistic, no weathering or dirt.
+- Crisp geometric silhouette with pointed, angular extremities.
+- Flat 2D presentation, no depth of field, no glow, no particles.
 
 CAMERA (identical for every building — this is what makes them tile):
 - True isometric / 2:1 dimetric projection. PARALLEL projection only: no
-  vanishing point, no perspective convergence, no lens distortion.
-- Seen from above at a shallow angle, the front corner of the building pointing
-  toward the bottom of the image; one wall faces bottom-left, the other
-  bottom-right, the roof is visible.
-- The building stands upright and is not rotated or tilted in the frame.
+  vanishing point, no perspective convergence, no lens distortion. Vertical
+  edges stay vertical; the two ground edges run at the same shallow angle.
+- Seen from above at a shallow angle, the near corner of the building pointing
+  toward the bottom of the image: one wall faces bottom-left, the other
+  bottom-right, and the roof is visible.
+- The building stands upright, not rotated or tilted in the frame.
 
 FOOTPRINT AND FRAMING:
-- The building's ground base covers exactly <W> by <H> tiles of an isometric
-  grid: a diamond when W equals H, otherwise a parallelogram of that many tiles.
-  Its bounding box is twice as wide as it is tall.
+- The building's ground base covers exactly <W> by <H> tiles of the isometric
+  grid — a diamond when <W> equals <H>, otherwise a parallelogram of that many
+  tiles. Its bounding box is twice as wide as it is tall.
 - The base fills the full width of the image and touches its bottom edge.
 - The building may be as tall as it needs; leave the space above it empty.
 - Fully TRANSPARENT background. No ground, no grass, no shadow under the
   building, no scene, no people, no props, no text, no labels, no borders.
 
 BUILDING:
-- <name>: <what it is, one line>.
-- Era / material: <primitive timber / clay brick / iron and glass / …>.
+- <TYPE>: <one line — what it is and what happens there>.
+- Era and materials: <primitive timber and thatch / clay brick and tile /
+  cut stone / iron and glass / …>.
 - Colours: <primary>, <secondary>, <accent>.
-- Features: <2 to 4 concrete shapes — a chimney, a waterwheel, drying racks>.
+- Features: <2 to 4 concrete shapes — a chimney, a waterwheel, drying racks,
+  stacked barrels, a crane arm>.
+- Show what the building DOES: a workplace has its work visible from outside.
 ```
 
-## Per building, fill in
+## Filling it in — an example
 
-- `<W>` × `<H>` — the footprint from the building's def (`gridW` / `gridH`).
-- Then scale the finished PNG so its **base diamond** is `(W + H) × 32 px`
-  wide. The image's own height is whatever the building needs.
+```text
+FOOTPRINT AND FRAMING:
+- … covers exactly 3 by 3 tiles …
 
-## The one thing to check before uploading
+BUILDING:
+- Wood Works: a timber yard where trunks are cut into planks.
+- Era and materials: primitive timber, thatch, rope.
+- Colours: warm brown, ochre, moss green accents.
+- Features: a saw frame under an open shelter, stacked logs, a plank rack,
+  a low fence along the near edge.
+```
 
-Put the sprite's bottom point on a cell's south corner and see whether the base
-covers exactly its footprint. If the diamond is too wide the building will
-overlap its neighbours; too narrow and the ground shows through between them.
-Everything else can be fixed later — this cannot, without redrawing.
+## After the image
+
+Scale it so the **base** is the width the table says (3 × 3 → 192 px). The
+height is whatever the building needed; do not crop the top or scale to a
+square.
+
+**The one check before you generate thirty more:** drop it on the map and look
+at where the base meets the ground. Too wide and it overlaps its neighbours; too
+narrow and grass shows through between them. Everything else is fixable in the
+app — this is not, without redrawing.
 
 ## Checklist
 
 - [ ] Transparent background (not white)
 - [ ] No shadow, no ground plane, no grass
-- [ ] Parallel projection — the top and bottom edges of a wall are PARALLEL
-- [ ] The base covers exactly W x H tiles (a diamond only when W == H)
-- [ ] Its bounding box is 2:1 and spans the full image width
-- [ ] Base touches the bottom edge of the image
+- [ ] Parallel projection — a wall's top and bottom edges are PARALLEL
+- [ ] Base covers exactly W × H tiles (a diamond only when W == H)
+- [ ] Base spans the full image width and touches the bottom edge
+- [ ] Flat facets only: no gradient, no texture, no outline
 - [ ] Nothing cropped at the sides
 - [ ] PNG
