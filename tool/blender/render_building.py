@@ -284,6 +284,123 @@ def pantiles(name, x, y, z, sx, sy, h, ridge=0.45, key='tile_dark',
             2 * hx + lip, 2 * hy + lip, 0.055, mat(key))
 
 
+def hip_ridges(name, x, y, z, sx, sy, h, ridge=0.45, overhang=0.3,
+               key='tile_dark', width=0.15, thick=0.09):
+    """Ridge tiles capping the four diagonal hips.
+
+    The last raw edge on the roof. Every other line had been finished — the
+    ridge is capped, the eaves are edged with antefixes, the slopes are
+    coursed — and the four corners were still bare geometry meeting at an
+    angle, which is exactly where the eye goes to check whether a thing was
+    built or generated.
+    """
+    sx += overhang * 2
+    sy += overhang * 2
+    long_y = sy >= sx
+    r = (sy if long_y else sx) * ridge / 2
+    for sxs in (-1, 1):
+        for sys in (-1, 1):
+            start = Vector((sxs * sx / 2, sys * sy / 2, 0))
+            end = (Vector((0, sys * r, h)) if long_y
+                   else Vector((sxs * r, 0, h)))
+            d = end - start
+            ob = box(f'{name}_{sxs}_{sys}', 0, 0, 0, width, d.length, thick,
+                     mat(key))
+            # to_track_quat aims the box's own +Y down the hip; doing this by
+            # euler means one angle per corner and four chances to get a sign
+            # wrong.
+            ob.rotation_euler = d.to_track_quat('Y', 'Z').to_euler()
+            mid = start + d / 2
+            ob.location = (x + mid.x, y + mid.y, z + mid.z + 0.04)
+
+
+def lantern(name, x, y, z, drop=0.3, key='iron'):
+    """A hanging lamp: chain, iron cage, a hot centre.
+
+    Small and worth it. A lit point at eye level is the one thing that tells
+    you a building is OCCUPIED, and occupancy is most of what separates a
+    settlement from a diorama."""
+    box(f'{name}_chain', x, y, z - drop, 0.035, 0.035, drop, mat(key))
+    box(f'{name}_cap', x, y, z - drop - 0.09, 0.15, 0.15, 0.05, mat(key))
+    box(f'{name}_glass', x, y, z - drop - 0.24, 0.13, 0.13, 0.16, mat('gold'))
+    box(f'{name}_frame', x, y, z - drop - 0.26, 0.16, 0.16, 0.05, mat(key))
+
+
+def sconce(name, x, y, z, reach=0.24, key='iron', facing='y'):
+    """A lamp on a bracket off a wall. Same job as the lantern where there is
+    nothing overhead to hang one from."""
+    ox = -reach if facing == 'x' else 0.0
+    oy = -reach if facing == 'y' else 0.0
+    wall_box(f'{name}_arm', x + ox / 2, y + oy / 2, z, 0.05, reach, 0.05,
+             mat(key), facing='y' if facing == 'y' else 'x')
+    box(f'{name}_arm2', x + ox / 2, y + oy / 2, z,
+        abs(ox) + 0.05 if ox else 0.05, abs(oy) + 0.05 if oy else 0.05,
+        0.05, mat(key))
+    box(f'{name}_glass', x + ox, y + oy, z - 0.13, 0.1, 0.1, 0.13,
+        mat('gold'))
+    box(f'{name}_hood', x + ox, y + oy, z - 0.02, 0.14, 0.14, 0.05, mat(key))
+
+
+def straw_bale(name, x, y, z, sx=0.44, sy=0.3, h=0.28, key='straw'):
+    """A bound bale. Two dark bands, and a yellow box becomes a bale."""
+    box(f'{name}_body', x, y, z, sx, sy, h, mat(key))
+    for t in (-0.25, 0.25):
+        box(f'{name}_band{t}', x + sx * t, y, z, 0.05, sy + 0.03, h + 0.02,
+            mat('oak'))
+
+
+def straw_scatter(name, x, y, z, r, n=14, key='straw'):
+    """Loose straw on the ground. Deterministic, not random: a render that
+    differs between runs cannot be compared against the one before it."""
+    for i in range(n):
+        a = 2.399963 * i                       # the golden angle, so it spreads
+        rad = r * math.sqrt((i + 0.5) / n)
+        ob = box(f'{name}_{i}', x + rad * math.cos(a), y + rad * math.sin(a),
+                 z, 0.17, 0.05, 0.025, mat(key))
+        ob.rotation_euler = (0, 0, a)
+
+
+def frieze(name, x, y, z, span, key='travertine', pitch=0.17, facing='y'):
+    """A running band of blocks along a wall — the plainest ornament there is,
+    and the one that most reliably reads as "decorated" at a distance."""
+    n = max(2, int(span / pitch))
+    for i in range(n):
+        t = -span / 2 + span * (i + 0.5) / n
+        wall_box(f'{name}_{i}', x + (t if facing == 'y' else 0),
+                 y + (0 if facing == 'y' else t), z,
+                 pitch * 0.5, 0.06, 0.1, mat(key), facing=facing)
+
+
+def garland(name, x, y, z, span, sag=0.16, key='leaf', facing='y'):
+    """A swag hung between two points. Built as a chain of blocks stepping down
+    and back up, because a real curve here would be smooth — and nothing else
+    in this world is."""
+    n = 7
+    for i in range(n):
+        t = i / (n - 1)
+        off = -span / 2 + span * t
+        dip = sag * math.sin(math.pi * t)
+        wall_box(f'{name}_{i}', x + (off if facing == 'y' else 0),
+                 y + (0 if facing == 'y' else off), z - dip,
+                 span / n * 1.15, 0.07, 0.11, mat(key), facing=facing)
+
+
+def mosaic(name, x, y, z, sx, sy, key_a='travertine', key_b='tile',
+           tile=0.26):
+    """A chequered court floor. Ground with a pattern on it reads as PAVED, and
+    paved ground is the difference between a courtyard and a patch of dirt."""
+    nx, ny = max(1, int(sx / tile)), max(1, int(sy / tile))
+    for i in range(nx):
+        for j in range(ny):
+            if (i + j) % 2:
+                continue
+            box(f'{name}_{i}_{j}',
+                x - sx / 2 + sx * (i + 0.5) / nx,
+                y - sy / 2 + sy * (j + 0.5) / ny,
+                z, sx / nx * 0.9, sy / ny * 0.9, 0.02,
+                mat(key_a if (i * 3 + j) % 4 else key_b))
+
+
 def acroterion(name, x, y, z, sx, sy, ridge=0.45, overhang=0.3, key='gold'):
     """The ornaments capping the ends of a ridge. Two of them, and the roofline
     stops just ending and starts finishing."""
@@ -552,12 +669,29 @@ def breeding_hut(w, h):
 
     box('plaque', 0, face_y - 0.01, 0.22 + door_h + 0.2, 0.52, 0.06, 0.18,
         mat('travertine'))
+    # Lamps either side of the door, with the swag slung between them. They are
+    # the reason the facade reads as an entrance rather than as a wall that
+    # happens to have a hole in it.
+    #
+    # The garland first hung above the plaque, which put it through the roof —
+    # there is no wall left up there. Hung BETWEEN two things that exist, it
+    # cannot drift: move the sconces and it follows.
+    lamp_x, lamp_z = door_w / 2 + 0.34, 1.10
+    for sign in (-1, 1):
+        sconce(f'sconce{sign}', sign * lamp_x, face_y, lamp_z)
+    garland('garland', 0, face_y - 0.05, lamp_z + 0.02, lamp_x * 2, sag=0.14)
 
     roof_z = 0.22 + wall_h
     hip_roof('roof', 0, body_y, roof_z, body_w, body_d, 0.85)
     pantiles('tiles', 0, body_y, roof_z, body_w, body_d, 0.85)
+    hip_ridges('hips', 0, body_y, roof_z, body_w, body_d, 0.85)
     antefixes('antefix', 0, body_y, roof_z - 0.02, body_w + 0.6, body_d + 0.6)
     acroterion('acro', 0, body_y, roof_z + 0.85, body_w, body_d)
+
+    # A bundle of thatch stored up under the eaves, where a farmyard keeps it.
+    for i, sy in enumerate((-0.3, 0.1)):
+        straw_bale(f'thatch{i}', -body_w / 2 + 0.34,
+                   body_y + body_d * sy, roof_z - 0.3, 0.3, 0.24, 0.2)
 
     # Corner pilasters — travertine, not timber. Timber corners drag the whole
     # thing back to a Northern hut; stone corners under a tile roof are Roman.
@@ -579,6 +713,11 @@ def breeding_hut(w, h):
         window(f'win{i}', body_w / 2 - 0.02, body_y + sy * body_d * 0.26, 0.68,
                0.28, 0.4, 0.2, facing='x')
     banner('banner', body_w / 2 + 0.04, body_y, 1.14, 0.32, 0.42, facing='x')
+    # A course of blocks under the windows, running the length of the long
+    # wall — the largest surface the camera ever sees, and the one that most
+    # needs something on it.
+    frieze('frieze', body_w / 2 + 0.02, body_y, 0.38, body_d * 0.92,
+           facing='x')
 
     # ── The court ──
     court_d = h - body_d - 0.35
@@ -586,6 +725,7 @@ def breeding_hut(w, h):
     court_w = w - 0.35
     box('sand', 0, court_y, 0, court_w - 0.3, court_d - 0.3, 0.16,
         mat('sand'))
+    mosaic('floor', 0, court_y, 0.16, court_w - 0.42, court_d - 0.42)
     # Low walls, not a fence: masonry on three sides, open to the front so the
     # eggs are visible. Capped in travertine so the top edge catches light.
     for sx in (-1, 1):
@@ -599,6 +739,12 @@ def breeding_hut(w, h):
                0.13, 0.78)
         box(f'finial{sx}', sx * (court_w / 2 - 0.09), front_y, 0.78,
             0.11, 0.11, 0.1, mat('gold'))
+        # A lamp hung off each gate column: the pair of them is what makes the
+        # gap between the columns read as a WAY IN after dark.
+        lantern(f'gatelamp{sx}', sx * (court_w / 2 - 0.30), front_y, 0.86,
+                drop=0.12)
+        box(f'gatearm{sx}', sx * (court_w / 2 - 0.20), front_y, 0.84,
+            0.24, 0.05, 0.05, mat('iron'))
     # The threshold between the columns stays LOW: the eggs are what the
     # building says about itself, and nothing may stand in front of them.
     box('threshold', 0, front_y, 0, court_w - 0.5, 0.18, 0.2, mat('ashlar'))
@@ -607,7 +753,10 @@ def breeding_hut(w, h):
     # the eggs and the doorway both — and the eggs are the entire reason this
     # building is recognisable. More detail is only ever worth having while it
     # costs nothing that already reads. Keep it for a building with room.
-    nest('nest', -0.12, court_y + 0.06, 0.16, 0.42)
+    nest('nest', -0.12, court_y + 0.06, 0.18, 0.42)
+    straw_scatter('litter', -0.12, court_y + 0.06, 0.18, 0.78)
+    straw_bale('bale', court_w / 2 - 0.42, court_y - court_d * 0.30, 0.18,
+               0.4, 0.28, 0.26)
     egg('egg_a', -0.36, court_y + 0.18, 0.20, 0.23, mat('stucco'))
     egg('egg_b', 0.06, court_y + 0.26, 0.20, 0.26, mat('stucco'))
     egg('egg_c', -0.10, court_y - 0.20, 0.20, 0.21, mat('stucco'))

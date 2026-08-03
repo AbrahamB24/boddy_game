@@ -92,14 +92,17 @@ Holz ist **Zierde, nicht Konstruktion** — Balken, Türen, Läden, Geländer. E
 
 ## Bauteile
 
-| Struktur | Ornament |
-|---|---|
-| `box()` Mitte-Boden | `pantiles()` Ziegelreihen aufs Dach |
-| `hip_roof()` Walmdach | `dentils()` Zahnschnitt unter dem Gesims |
-| `plinth()` Steinsockel | `antefixes()` Stirnziegel an der Traufe |
-| `arch()` Rundbogen | `window()` Bogenfenster mit Läden |
-| `wall_box()` Trimm an einer Wand | `steps()` Freitreppe |
-| `egg()` facettierte Kugel | `banner()` Wimpel |
+| Struktur | Dach | Wand | Hof |
+|---|---|---|---|
+| `box()` Mitte-Boden | `pantiles()` Ziegelreihen | `window()` Bogenfenster | `column()` Säule |
+| `hip_roof()` Walmdach | `hip_ridges()` Gratziegel | `frieze()` Zierband | `pot()` Amphore |
+| `plinth()` Steinsockel | `antefixes()` Stirnziegel | `dentils()` Zahnschnitt | `plant()` Kübelpflanze |
+| `arch()` Rundbogen | `acroterion()` Firstzier | `banner()` Wimpel | `trough()` Tränke |
+| `wall_box()` Wandtrimm | | `garland()` Girlande | `brazier()` Feuerschale |
+| `egg()` Facettenkugel | | `sconce()` Wandlampe | `nest()` Nest |
+| `steps()` Freitreppe | | `lantern()` Hängelampe | `straw_bale()` Strohballen |
+| `pergola()` Laube | | | `straw_scatter()` loses Stroh |
+| | | | `mosaic()` Bodenmuster |
 
 **Verzierung ist nicht Schmuck, sondern Massstab.** Eine leere Wand hat keine
 Grösse; eine Wand mit Zahnschnitt unter der Traufe ist unverkennbar ein Gebäude
