@@ -281,16 +281,40 @@ def frame(w, h, px_per_tile, headroom):
     cam.data.clip_end = 200
 
 
+def show_in_viewport():
+    """Open on the camera, shaded the way it will render.
+
+    Deferred through a timer on purpose: when Blender runs a --python script at
+    startup the window is not built yet, so there is no 3D view to talk to. The
+    timer fires once the UI exists, and returns None so it never fires again.
+    """
+    def once():
+        for area in bpy.context.screen.areas:
+            if area.type != 'VIEW_3D':
+                continue
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    space.region_3d.view_perspective = 'CAMERA'
+                    space.shading.type = 'RENDERED'
+                    space.overlay.show_overlays = False
+        return None
+
+    bpy.app.timers.register(once, first_interval=0.4)
+
+
 def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     ap = argparse.ArgumentParser()
     ap.add_argument('--preset', required=True, choices=sorted(PRESETS))
-    ap.add_argument('--out', required=True)
+    ap.add_argument('--out', help='PNG to write (not needed with --no-render)')
     ap.add_argument('--scale', type=int, default=SCALE)
     ap.add_argument('--headroom', type=float, default=1.25,
                     help='image height as a multiple of the base width')
     ap.add_argument('--guides', action='store_true',
                     help='mark the footprint, to check the framing')
+    ap.add_argument('--no-render', action='store_true',
+                    help='build the scene and stop — for opening it in the GUI')
+    ap.add_argument('--blend', help='also save the scene to this .blend')
     args = ap.parse_args(argv)
 
     build, w, h = PRESETS[args.preset]
@@ -308,6 +332,14 @@ def main():
         if name in engines:
             scene.render.engine = name
             break
+
+    if args.blend:
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(args.blend))
+    if args.no_render:
+        show_in_viewport()
+        return
+    if not args.out:
+        ap.error('--out is required unless --no-render is given')
     scene.render.image_settings.file_format = 'PNG'
     scene.render.image_settings.color_mode = 'RGBA'
     # Blender resolves a relative path against the .blend file, and in
