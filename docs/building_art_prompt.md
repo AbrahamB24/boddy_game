@@ -19,9 +19,15 @@ that ignores them will not tile.
 | Background | fully transparent |
 | Shadow | none — the map draws the tile the building stands on |
 
-**The base width is the diamond's width, not the building's:** a building that
-covers `w × h` cells has a base spanning `(w + h) × 32 px`. A 2×2 building is
-therefore **128 px** wide at the base, a 3×2 building **160 px**.
+**The base width is the footprint's width on screen, not the building's:** an
+area of `w × h` cells spans `(w + h) × 32 px`. A 2×2 building is therefore
+**128 px** wide at the base, a 3×2 building **160 px**.
+
+**A square footprint gives a diamond; anything else gives a parallelogram.** A
+2×1 area is not a squashed diamond — it is a rhomboid whose near corner sits off
+to one side. Its bounding box is still 2:1, which is why the width rule works for
+every shape, but the base must be drawn for the actual `W × H` or the building
+will not sit on its own cells.
 
 ---
 
@@ -50,9 +56,10 @@ CAMERA (identical for every building — this is what makes them tile):
 - The building stands upright and is not rotated or tilted in the frame.
 
 FOOTPRINT AND FRAMING:
-- The building's ground base is a DIAMOND (rhombus) twice as wide as it is
-  tall, drawn as if it covered exactly <W> by <H> tiles of an isometric grid.
-- The base diamond touches the bottom point of the image, centred horizontally.
+- The building's ground base covers exactly <W> by <H> tiles of an isometric
+  grid: a diamond when W equals H, otherwise a parallelogram of that many tiles.
+  Its bounding box is twice as wide as it is tall.
+- The base fills the full width of the image and touches its bottom edge.
 - The building may be as tall as it needs; leave the space above it empty.
 - Fully TRANSPARENT background. No ground, no grass, no shadow under the
   building, no scene, no people, no props, no text, no labels, no borders.
@@ -82,7 +89,8 @@ Everything else can be fixed later — this cannot, without redrawing.
 - [ ] Transparent background (not white)
 - [ ] No shadow, no ground plane, no grass
 - [ ] Parallel projection — the top and bottom edges of a wall are PARALLEL
-- [ ] Base diamond is 2:1 and the right width for the footprint
-- [ ] Base touches the bottom of the image, centred
+- [ ] The base covers exactly W x H tiles (a diamond only when W == H)
+- [ ] Its bounding box is 2:1 and spans the full image width
+- [ ] Base touches the bottom edge of the image
 - [ ] Nothing cropped at the sides
 - [ ] PNG

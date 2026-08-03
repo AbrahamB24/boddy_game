@@ -95,4 +95,52 @@ void main() {
       expect(cells.last, (5, 5));
     });
   });
+
+  // ── Der Rand muss auf den Kacheln liegen (user 2026-08-01) ──
+  // "jetzt habe ich einen grünen Rand um das Gebäude. Dieser entspricht aber
+  //  nicht den Kacheln."
+  //
+  // Two bugs made that outline miss: the box was centred on the footprint's
+  // SOUTH corner (only correct for a square footprint), and the path was drawn
+  // in map coordinates inside a local box. Both are geometry, so both are
+  // pinned here.
+  group('a footprint sits exactly on its cells', () {
+    test('the bounds hold all four corners, for any shape', () {
+      for (final (w, h) in [(1, 1), (2, 2), (2, 1), (1, 3), (3, 2)]) {
+        final b = isoBounds(4, 6, w, h);
+        for (final c in [
+          gridToScreen(4, 6),
+          gridToScreen((4 + w).toDouble(), 6),
+          gridToScreen((4 + w).toDouble(), (6 + h).toDouble()),
+          gridToScreen(4, (6 + h).toDouble()),
+        ]) {
+          expect(b.contains(c) || b.inflate(0.001).contains(c), isTrue,
+              reason: '$w x $h loses corner $c');
+        }
+        expect(b.width, spriteWidth(w, h), reason: '$w x $h width');
+        expect(b.width / b.height, 2.0, reason: '$w x $h is not 2:1');
+      }
+    });
+
+    test('the south corner is NOT the middle — except when square', () {
+      // The assumption that broke it. A 2x1 area is a parallelogram, and its
+      // near corner sits off to one side.
+      final square = isoBounds(0, 0, 2, 2);
+      expect(spriteAnchor(0, 0, 2, 2).dx, square.center.dx);
+      final oblong = isoBounds(0, 0, 2, 1);
+      expect(spriteAnchor(0, 0, 2, 1).dx, isNot(oblong.center.dx));
+    });
+
+    test('the local outline matches the real corners, shifted', () {
+      for (final (w, h) in [(1, 1), (2, 1), (3, 2)]) {
+        final b = isoBounds(5, 2, w, h);
+        final local = footprintPathLocal(w, h).getBounds();
+        expect(local.width, closeTo(b.width, 0.001), reason: '$w x $h');
+        expect(local.height, closeTo(b.height, 0.001), reason: '$w x $h');
+        expect(local.left, closeTo(0, 0.001),
+            reason: 'the local path must start at the box origin');
+        expect(local.top, closeTo(0, 0.001));
+      }
+    });
+  });
 }

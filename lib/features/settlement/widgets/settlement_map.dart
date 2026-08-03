@@ -2501,28 +2501,6 @@ class SettlementMapState extends State<SettlementMap>
     return lines;
   }
 
-  /// The screen box a footprint occupies: its diamond's bounding rectangle.
-  ///
-  /// The art hangs from the box's BOTTOM (the diamond's south corner) and is
-  /// free to overflow the top, which is how a two-storey building fits over a
-  /// 2×2 base.
-  ({double left, double top, double width, double height}) _isoBox(
-    int gx,
-    int gy,
-    int w,
-    int h,
-  ) {
-    final south = spriteAnchor(gx, gy, w, h);
-    final width = spriteWidth(w, h);
-    final height = width / 2; // the diamond is 2:1
-    return (
-      left: south.dx - width / 2,
-      top: south.dy - height,
-      width: width,
-      height: height,
-    );
-  }
-
   // ── Build ─────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -2694,12 +2672,16 @@ class SettlementMapState extends State<SettlementMap>
         !def.isMainBuilding &&
         !widget.ctrl.connectedBuildingIds.contains(b.id);
     // ── ISOMETRIC PLACEMENT (2026-08-01) ──
-    // The box is the footprint's DIAMOND, and the art hangs from its south
-    // corner — the point nearest the viewer — running upward as far as it
-    // likes. A tall building is tall; nothing about its footprint says so, so
-    // the box may not clip (Clip.none below, and BuildingIcon's
+    // The box is the footprint's own bounding rectangle (isoBounds), and the
+    // art fills its width and hangs from its bottom, running upward as far as
+    // it likes. A tall building is tall; nothing about its footprint says so,
+    // so the box may not clip (Clip.none below, and BuildingIcon's
     // anchorBottomOverflowTop).
-    final iso = _isoBox(b.gridX, b.gridY, def.gridW, def.gridH);
+    //
+    // The bounds, not "the south corner minus half the width": those two are
+    // the same thing only for a square footprint, and a 2×1 building placed
+    // that way sits half a tile off its own ground.
+    final iso = isoBounds(b.gridX, b.gridY, def.gridW, def.gridH);
     return Positioned(
       left: iso.left,
       top: iso.top,
@@ -2772,7 +2754,7 @@ class SettlementMapState extends State<SettlementMap>
       gy,
       excludeId: _movingId,
     );
-    final iso = _isoBox(gx, gy, def.gridW, def.gridH);
+    final iso = isoBounds(gx, gy, def.gridW, def.gridH);
     return Positioned(
       left: iso.left,
       top: iso.top,
@@ -3290,9 +3272,11 @@ class _FootprintPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // The path is in MAP coordinates, so it is drawn relative to this box's own
-    // origin: shift it back by where the box starts.
-    final path = footprintPath(0, 0, w, h);
+    // LOCAL coordinates. It used to draw footprintPath(0, 0, …), which is in
+    // MAP space and therefore landed a whole map-origin away from the box it
+    // was painting in — the outline the user saw beside the building rather
+    // than under it (2026-08-01).
+    final path = footprintPathLocal(w, h);
     canvas
       ..drawPath(path, Paint()..color = color.withValues(alpha: 0.22))
       ..drawPath(

@@ -93,15 +93,48 @@ Path footprintPath(int x, int y, int w, int h) {
     ..close();
 }
 
-/// Where a building's SPRITE hangs: the south corner of its footprint, i.e. the
-/// point of the diamond nearest the viewer.
+/// The point of the footprint nearest the viewer — its south corner.
 ///
-/// Art is anchored bottom-centre here and allowed to run upward as far as it
-/// likes — a tower is tall, and nothing about its footprint says so.
+/// NOT the middle of [isoBounds]: for a footprint that is not square the two
+/// differ, because a w×h area projects to a PARALLELOGRAM whose near corner
+/// sits off to one side. Anchoring art "bottom-centre" here is exactly the bug
+/// that put the placement outline a tile off (user 2026-08-01: "Dieser
+/// entspricht aber nicht den Kacheln").
 Offset spriteAnchor(int x, int y, int w, int h) =>
     gridToScreen((x + w).toDouble(), (y + h).toDouble());
 
-/// The width a building's art is drawn at: its base spans the full diamond.
+/// The screen box a footprint occupies: the bounding rectangle of its four
+/// corners. This is where a building's tile and its art go.
+///
+/// Always 2:1 — (w + h) tiles wide and half that tall — whatever the footprint's
+/// own proportions are.
+Rect isoBounds(int x, int y, int w, int h) {
+  final north = gridToScreen(x.toDouble(), y.toDouble());
+  final east = gridToScreen((x + w).toDouble(), y.toDouble());
+  final south = gridToScreen((x + w).toDouble(), (y + h).toDouble());
+  final west = gridToScreen(x.toDouble(), (y + h).toDouble());
+  return Rect.fromLTRB(west.dx, north.dy, east.dx, south.dy);
+}
+
+/// The footprint's outline in the coordinates of its own [isoBounds] — what a
+/// painter inside that box draws.
+///
+/// A w×h area is a RHOMBUS only when w == h; otherwise it is a parallelogram,
+/// and a diamond drawn in its place covers the wrong tiles.
+Path footprintPathLocal(int w, int h) {
+  final a = kIsoTileW / 2;
+  final b = kIsoTileH / 2;
+  // Local corners, derived from the bounds: west sits at the left edge, north
+  // at the top, east at the right, south at the bottom.
+  return Path()
+    ..moveTo(h * a, 0) // north
+    ..lineTo((h + w) * a, w * b) // east
+    ..lineTo(w * a, (w + h) * b) // south
+    ..lineTo(0, h * b) // west
+    ..close();
+}
+
+/// The width a building's art is drawn at: the full width of [isoBounds].
 double spriteWidth(int w, int h) => (w + h) * kIsoTileW / 2;
 
 /// PAINTER'S ORDER. Sorts back to front, so a building nearer the viewer is
