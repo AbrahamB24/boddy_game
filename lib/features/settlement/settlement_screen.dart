@@ -1246,11 +1246,11 @@ class _SettlementScreenState extends State<SettlementScreen>
         children: [
           Row(
             children: [
-              Text(era.emoji, style: const TextStyle(fontSize: 13)),
+              Text(era.displayEmoji, style: const TextStyle(fontSize: 13)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  '${_roman(era.order)} · ${era.name}',
+                  '${_roman(era.order)} · ${era.displayName}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: FoE.label(size: 11).copyWith(

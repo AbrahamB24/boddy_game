@@ -310,9 +310,10 @@ class _OverworldScreenState extends State<OverworldScreen>
     if (mounted) setState(() {});
   }
 
-  /// After an era boss falls the FIRST time: unlock the next region (rides on
-  /// dungeonMaxStage, same as before) and award the region legendary. Era
-  /// ASCENSION is still a manual step at the Tribal Center (unchanged).
+  /// After a region boss falls the FIRST time: unlock the next region (rides on
+  /// dungeonMaxStage, same as before) and award the region legendary. PUSHING
+  /// ON — moving the settlement's own tier up to match — is still a manual,
+  /// paid step at the Tribal Center (unchanged).
   Future<void> _grantBossRewards(AreaDef area, int battleNumber) async {
     final era = eraForBattle(battleNumber); // == area.battleStage
     final firstClear = _settlement.dungeonMaxStage <= era;
@@ -332,8 +333,8 @@ class _OverworldScreenState extends State<OverworldScreen>
     if (!mounted) return;
     context.snack(caught != null
         ? '👑 ${caught.displayName} joins you! The next region is open — '
-            'ascend at the Tribal Center.'
-        : 'The next region is open — ascend at the Tribal Center.');
+            'push on at the Tribal Center.'
+        : 'The next region is open — push on at the Tribal Center.');
   }
 
 }

@@ -757,7 +757,7 @@ class _BuildCard extends StatelessWidget {
     if (carry > 0) parts.add('+${(carry * 100).round()}% trip carry');
     if (travel > 0) parts.add('-${(travel * 100).round()}% travel time');
     if (goods > 0) parts.add('+${(goods * 100).round()}% goods hauls');
-    if (def.housingCapacity > 0) parts.add('houses ${def.housingCapacity}');
+    if (def.housingCapacity > 0) parts.add('shelters ${def.housingCapacity}');
     for (final w in def.workshops) {
       // Training roles read no stat — sell what the building actually does.
       // A system post is named by what it shortens, not by its internal key:

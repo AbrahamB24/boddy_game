@@ -1883,7 +1883,7 @@ class SettlementController extends ChangeNotifier {
     (x, y) = snapPlacement(typeId, x, y);
 
     if (def.eraIds.isNotEmpty && !def.eraIds.contains(currentEra?.id)) {
-      return 'Not available in the current era';
+      return 'Not available in this region';
     }
     // Map-progress gate (user 2026-07-24): buildings unlock as battles are won
     // on the linear path, not by research. The menu already hides locked ones;
@@ -2008,7 +2008,7 @@ class SettlementController extends ChangeNotifier {
     if (!b.isComplete) return 'Finish building it first';
     final maxLevel = maxBuildingLevelFor(def, settlement?.eraIndex ?? 1);
     if (b.level >= maxLevel) {
-      return 'Already at the maximum level ($maxLevel) for this era';
+      return 'Already at the maximum level ($maxLevel) for this region';
     }
 
     final target = b.level + 1;
@@ -2110,7 +2110,7 @@ class SettlementController extends ChangeNotifier {
     if (settlement == null || resources == null) return 'Not loaded';
     final nextEra = ascendableEra;
     if (nextEra == null) {
-      return 'Defeat this era\'s region boss first.';
+      return 'Defeat this region\'s boss first.';
     }
     _applyTick(DateTime.now().toUtc());
     final cost = eraAscensionCost(nextEra.order);
@@ -2151,7 +2151,8 @@ class SettlementController extends ChangeNotifier {
     }
     GameEventLog().add(
       GameEventKind.research,
-      '🏛 Ascended to ${nextEra.name}! Monsters can now reach '
+      '${nextEra.displayEmoji} You reach ${nextEra.displayName}! '
+      'Monsters can now reach '
       'Lv ${creatureLevelCap(nextEra.order)}.',
     );
     notifyListeners();

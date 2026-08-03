@@ -853,8 +853,8 @@ class SettlementMapState extends State<SettlementMap>
         } else {
           Navigator.pop(context);
           context.snack(
-            '🏛 Welcome to ${nextEra.name}! Monsters can now reach '
-            'Lv ${creatureLevelCap(nextEra.order)}.',
+            '${nextEra.displayEmoji} You reach ${nextEra.displayName}! '
+            'Monsters can now reach Lv ${creatureLevelCap(nextEra.order)}.',
           );
         }
       },
@@ -865,10 +865,10 @@ class SettlementMapState extends State<SettlementMap>
         child: Column(
           children: [
             Text(
-              // "Chapter", not a date: eras are stages of this settlement's
-              // rise, not centuries (see era_definitions.dart).
-              '${nextEra.emoji} Begin Chapter ${nextEra.order} · '
-              '${nextEra.name}',
+              // A PLACE and a distance, never a date: you have pushed further,
+              // nothing has elapsed (see era_definitions.dart).
+              '${nextEra.displayEmoji} Push on to Region ${nextEra.order} · '
+              '${nextEra.displayName}',
               style: FoE.label(size: 13).copyWith(
                 color: parchmentButtonInk(active: afford),
                 fontWeight: FontWeight.w800,
@@ -2481,7 +2481,7 @@ class SettlementMapState extends State<SettlementMap>
     }
     final lines = <String>[];
     if (def.housingCapacity > 0) {
-      lines.add('🏠 Shelters ${def.housingCapacity} creatures');
+      lines.add('🌿 Shelters ${def.housingCapacity} monsters');
     }
     if (def.buildSpeedBonus > 0) {
       lines.add('+${(def.buildSpeedBonus * 100).toInt()}% Build speed');

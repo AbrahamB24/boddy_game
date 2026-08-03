@@ -122,7 +122,10 @@ int maxBuildingLevelFor(BuildingDef def, int eraOrder) {
 enum BuildingCategory {
   production('production', 'Production', Icons.forest),
   goods('goods', 'Goods', Icons.diamond),
-  housing('housing', 'Housing', Icons.home),
+  // "Habitats", not "Housing" (user 2026-08-03): monsters live in ground you
+  // have made liveable, not in buildings. The KEY stays 'housing' — it is
+  // written to the metadata jsonb and to every existing row.
+  housing('housing', 'Habitats', Icons.grass),
   civic('civic', 'Civic', Icons.account_balance),
   military('military', 'Military', Icons.shield),
   // The odd-ones-out (user 2026-07-24): the Tribal Center (auto-placed,
@@ -1358,6 +1361,30 @@ const Map<int, int> _eraHousingCap = {
   1: 12, 2: 25, 3: 35, 4: 50, 5: 70, 6: 95, 7: 125, 8: 165,
 };
 
+// ── HABITATS, not houses (user 2026-08-03) ──
+// Monsters do not live in buildings. They were housed in a "Hut" and a
+// "Longhouse", and every later tier got the material prefix every other
+// building gets — a "Clay Den", an "Iron Roost". That prefix is right for a
+// thing you BUILD and wrong for a place something LIVES: a habitat is ground
+// you have taken and made liveable, so it is named for what the ground is.
+//
+// Deliberately NOT per element (user chose the neutral form): capacity stays
+// shared, so this is a rename and a reskin, not a new cost. A fire monster
+// needing its own building is a different, more expensive design.
+//
+// Two per tier, the second larger. Ids stay `hut`/`house`/`pen_*` — they are
+// referenced by DB rows and by kBuildingUnlockBattle, and an id is not a name.
+const Map<int, (String, String)> _habitatNames = {
+  1: ('Thicket', 'Grove'),
+  2: ('Outcrop', 'Crag'),
+  3: ('Ashfield', 'Caldera'),
+  4: ('Meadow', 'Downs'),
+  5: ('Gorge', 'Cavern'),
+  6: ('Marsh', 'Fen'),
+  7: ('Terrace', 'Basin'),
+  8: ('Summit', 'Sanctum'),
+};
+
 double _eraMult(int era) => math.pow(1.6, era - 1).toDouble();
 double _eraBuildHours(double seconds, int era) =>
     seconds * math.pow(1.2, era - 1).toDouble() / 3600;
@@ -1506,14 +1533,15 @@ List<BuildingDef> _buildRoster() {
     }
 
     final cap = _eraHousingCap[era]!;
+    final habitat = _habitatNames[era]!;
     final houseSpecs = era == 1
         ? [
-            ('hut', 'Hut', 2, 2, 0.7, cap),
-            ('house', 'Longhouse', 2, 5, 1.1, cap + 5),
+            ('hut', habitat.$1, 2, 2, 0.7, cap),
+            ('house', habitat.$2, 2, 5, 1.1, cap + 5),
           ]
         : [
-            ('pen_a_e$era', '$prefix Den', 3, 4, 0.9, cap),
-            ('pen_b_e$era', '$prefix Roost', 3, 5, 1.3, (cap * 1.4).round()),
+            ('pen_a_e$era', habitat.$1, 3, 4, 0.9, cap),
+            ('pen_b_e$era', habitat.$2, 3, 5, 1.3, (cap * 1.4).round()),
           ];
     for (final h in houseSpecs) {
       defs.add(BuildingDef(

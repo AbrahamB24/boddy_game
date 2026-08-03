@@ -418,7 +418,7 @@ class _ManagementScreenState extends State<ManagementScreen>
               child: Row(
                 children: [
                   Expanded(child: Text(def.name, style: FoE.label(size: 13))),
-                  Text('🛏 ${def.housingCapacity}',
+                  Text('🌿 ${def.housingCapacity}',
                       style: FoE.value(size: 12).copyWith(color: FoE.gold)),
                 ],
               ),

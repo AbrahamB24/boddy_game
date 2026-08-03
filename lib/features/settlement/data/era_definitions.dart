@@ -1,30 +1,52 @@
+import '../../creatures/models/area.dart';
+
 // ── Era definition ────────────────────────────────────────
 // Eras are the settlement's overall progression track — advancing consumes
 // resources (like a building) and, unlike buildings/tech, can also grant a
 // one-time resource gift plus a permanent, cumulative production bonus
 // the moment you reach it. See SettlementController.advanceEra().
 //
-// ── They are AGES after all (user 2026-08-03) ──
-// This reverses the chapter rule of 2026-07-22, knowingly and on request: "ich
-// will dennoch zeitalter wählen, auch wenn dies keinen Sinn ergibt". Era I is
-// the Stone Age.
+// ── There is no time here, only DISTANCE (user 2026-08-03) ──
+// "Es gibt nicht Äras oder Zeit, es gibt nur Fortschritt." This supersedes both
+// earlier rules — the chapters of 2026-07-22 and the ages of earlier the same
+// day. What a tier measures is HOW FAR YOU HAVE PUSHED, and that is a fact
+// about the map, not about a calendar.
 //
-// The tension the old rule protected against is real — a settlement crossing
-// millennia while the monsters you caught on day one are still on the team —
-// and naming the eras does not resolve it. What keeps it survivable is that an
-// age here names a BUILDING STYLE, not a span of time: what your walls are made
-// of and what the place looks like. Nothing else in the game measures years,
-// and monsters still do not age (see the breeding/hatching design).
+// The class keeps the name EraDef because renaming it would mean renaming a DB
+// column that no player will ever see. Everywhere a player CAN see it, the word
+// is "region", the verb is "push on", and the number is the region you have
+// reached. Do not write "era", "age", "chapter" or any unit of time into UI
+// copy — the whole point is that nothing in this game elapses.
 //
-// So: name eras for their material and craft, never for a date or a dynasty,
-// and never write elapsed time into UI copy ("centuries later", "generations
-// passed"). "Ascend" stays the verb — you are still climbing, not waiting.
+// ── Why this dissolves the problem the other two rules only managed ──
+// Both earlier rules were trying to explain why your first monster is still on
+// the team after eight tiers. Distance does not need the excuse: you walked
+// further, that is all. It also explains what neither could — why a later tier
+// has a resource an earlier one does not. Not because it was invented later.
+// Because the clay is in the hill country, and you had not reached the hill
+// country yet. Every resource in the game coexists; you are simply not
+// standing next to all of it yet.
 //
-// Only era I is named this way so far (user: "wir machen nur das stone age,
-// sonst noch nichts"). Eras II–VIII keep their settlement names below until
-// they are done one at a time.
+// ── ONE name per tier, and it is the region's ──
+// There used to be two: the area was "Verdant Hollow" while the same tier was
+// "The Clearing". Two names for one thing is what made the tiers read as a
+// separate axis running alongside the map. [displayName] resolves to the AREA
+// of the same order, so the settlement header and the overworld can no longer
+// disagree; [name] is only the fallback for a tier whose region is not
+// authored yet.
+/// The overworld region a tier corresponds to, or null when that region has
+/// not been authored yet. Order is the join: region N is tier N.
+AreaDef? _regionForOrder(int order) {
+  for (final a in kAreaDefs.values) {
+    if (a.order == order) return a;
+  }
+  return null;
+}
+
 class EraDef {
   final String id;
+
+  /// The AUTHORED name. Only a fallback — read [displayName] in UI.
   final String name;
   final String emoji;
   // 1-based, matches SettlementModel.eraIndex directly (Era I = order 1) —
@@ -60,6 +82,17 @@ class EraDef {
     this.allBonus = 0,
     this.buildSpeedBonus = 0,
   });
+
+  /// What the player is told this tier is called: the REGION's name, because
+  /// the tier IS the region. Falls back to [name] for a tier whose area has
+  /// not been authored yet (today: orders 4–8).
+  ///
+  /// Read this in UI, never [name] — that is the whole guarantee that the
+  /// settlement header and the overworld can no longer disagree.
+  String get displayName => _regionForOrder(order)?.name ?? name;
+
+  /// The region's glyph, same rule as [displayName].
+  String get displayEmoji => _regionForOrder(order)?.emoji ?? emoji;
 
   // ── Dev Mode: DB row <-> EraDef ──────────────────────────
   // Same translation-layer pattern as BuildingDef.fromDefRow — see
@@ -150,24 +183,31 @@ class EraDef {
 // Public (not `_`-prefixed) because GameDefsController reads it directly as
 // the base the DB rows are layered onto.
 const kFallbackEraDefs = <String, EraDef>{
-  // The starting age. Wood lashed to stone, thatch, no metal and no mortar —
-  // which is exactly what era I already builds with (wood and stone raw, no
-  // element; see kGoodsDefs). The name finally says out loud what the costs
-  // have said all along.
-  'era_1': EraDef(id: 'era_1', name: 'Stone Age', emoji: '🪨', order: 1),
+  // ── Orders 1–3 mirror the authored regions ──
+  // Verdant Hollow / Stone Reach / Emberwastes (see kFallbackAreaDefs). These
+  // strings are only a fallback — [displayName] reads the region itself, so
+  // renaming a region renames its tier and the two cannot drift. They are kept
+  // in step by hand purely so Dev Mode shows the right thing while editing.
+  //
+  // "Stone Age" stood here for about an hour on 2026-08-03 and is gone with the
+  // ages themselves: an age is a span of time, and there is no time here.
+  'era_1': EraDef(id: 'era_1', name: 'Verdant Hollow', emoji: '🌲', order: 1),
   'era_2': EraDef(
     id: 'era_2',
-    name: 'The Sawmill Vale',
-    emoji: '🌅',
+    name: 'Stone Reach',
+    emoji: '⛰️',
     order: 2,
     advancementCost: {'wood': 1000, 'stone': 800},
   ),
-  // Eras III–VIII (user 2026-07-24). Named for what the SETTLEMENT becomes, not
-  // a point in history (chapter, not century — see the note at the top). Only
-  // id/name/emoji/order: the ascension TOLL is formula-based in
+  // Orders 4–8 have NO region authored yet, so these names are what the player
+  // still sees. They are placeholders and they read like settlements-over-time
+  // ("The Plaster Rows", "The Furnace District") — the exact thing that is being
+  // undone. Replace each with a PLACE as its region is written; the tier will
+  // pick the name up on its own.
+  // Only id/name/emoji/order is needed: the toll is formula-based in
   // SettlementController.eraAscensionCost(order), and grants/bonuses are left
-  // for Dev Mode rather than invented here — same policy as era_2 above.
-  'era_3': EraDef(id: 'era_3', name: 'The Kiln Quarter', emoji: '🏺', order: 3),
+  // for Dev Mode rather than invented here.
+  'era_3': EraDef(id: 'era_3', name: 'Emberwastes', emoji: '🌋', order: 3),
   'era_4': EraDef(id: 'era_4', name: 'The Plaster Rows', emoji: '🏛️', order: 4),
   'era_5': EraDef(id: 'era_5', name: 'The Ironworks', emoji: '⚒️', order: 5),
   'era_6': EraDef(
