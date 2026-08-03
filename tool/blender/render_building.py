@@ -58,22 +58,44 @@ ELEVATION = math.degrees(math.asin(0.5))  # 30 — see the header
 #
 # Timber is trim, not structure: beams, posts, shutters, doors. A building that
 # is mostly timber has slid back to the Northern-European hut it came from.
+#
+# ── Matched to the monsters (user 2026-08-03) ──
+# Look at Blazeling and Droplet and the rule is not subtle: each is ONE hue in
+# four to six tonal steps, plus a single small accent — the whole orange
+# creature with one yellow flame, the whole cyan creature with two dark eyes.
+# No greys anywhere. Everything is saturated, and the range runs from near-white
+# to a deep, still-saturated shadow.
+#
+# The buildings were doing the opposite: ten independent hues, three of them
+# effectively grey. So the palette is now ONE warm earth family — terracotta
+# through ochre through cream — with green and the banner's red as the only
+# outsiders, kept to a few square pixels each. That is what makes a building
+# stand next to a monster and look like it came from the same world, and it
+# costs nothing but a retune.
 PALETTE = {
-    'tile': (0.72, 0.28, 0.16),        # terracotta pantile — the loudest note
-    'tile_dark': (0.55, 0.20, 0.12),   # its shadow side and the ridge
-    'stucco': (0.90, 0.85, 0.74),      # lime render, the wall default
-    'travertine': (0.82, 0.75, 0.62),  # cut stone, a shade warmer and darker
-    'ashlar': (0.58, 0.55, 0.50),      # the plinth and any heavy masonry
-    'oak': (0.35, 0.22, 0.13),         # beams, doors, shutters
-    'oak_light': (0.50, 0.34, 0.20),   # posts catching the sun
-    'iron': (0.24, 0.24, 0.27),        # fittings, hinges, grilles
-    'gold': (0.85, 0.66, 0.22),        # finials — a few square pixels, no more
-    'dark': (0.11, 0.08, 0.07),        # an opening, read as depth
-    'banner': (0.62, 0.13, 0.20),      # the one saturated cloth per building
-    'sand': (0.84, 0.74, 0.56),        # trodden ground inside a court
-    'straw': (0.86, 0.72, 0.34),       # bedding, thatch, nests
-    'leaf': (0.28, 0.45, 0.22),        # the only green; use it sparingly
+    'tile': (0.80, 0.30, 0.13),        # terracotta pantile — the loudest note
+    'tile_dark': (0.56, 0.18, 0.09),   # its shadow side and the ridge
+    'stucco': (0.96, 0.87, 0.69),      # lime render, the wall default
+    'travertine': (0.88, 0.71, 0.47),  # cut stone: ochre, NOT grey
+    'ashlar': (0.62, 0.46, 0.29),      # the plinth and any heavy masonry
+    'oak': (0.44, 0.24, 0.12),         # beams, doors, shutters
+    'oak_light': (0.63, 0.38, 0.18),   # posts catching the sun
+    'iron': (0.31, 0.22, 0.19),        # fittings — warm dark, not blue-black
+    'gold': (0.98, 0.77, 0.22),        # finials and lamp-light
+    'dark': (0.15, 0.07, 0.04),        # an opening, read as depth
+    'banner': (0.74, 0.13, 0.18),      # the one saturated cloth per building
+    'sand': (0.90, 0.77, 0.52),        # trodden ground inside a court
+    'straw': (0.94, 0.77, 0.30),       # bedding, thatch, nests
+    'leaf': (0.37, 0.53, 0.22),        # the only green; use it sparingly
 }
+
+# How hard every edge is cut back. This is the OTHER half of matching the
+# monsters: their surfaces are covered in small, irregular facets, and a box has
+# none at all — it has three faces and three tones and that is the end of it.
+# A bevel gives every edge its own strip catching its own amount of light, which
+# is the same trick at building scale.
+BEVEL_WIDTH = 0.028
+BEVEL_SEGMENTS = 2
 
 
 # ── Materials ──────────────────────────────────────────────
@@ -825,7 +847,7 @@ def light():
     # 2.6 blew the pale walls out to near-white, which cost the stucco exactly
     # the warmth it is chosen for. Flat colour has no highlight roll-off to
     # rescue it — what clips is simply gone.
-    sun.data.energy = 2.1
+    sun.data.energy = 2.4
     sun.data.angle = 0  # hard-edged shadows; a soft one is a gradient
 
     # The sun must be on the CAMERA's side of the building. The camera looks
@@ -839,10 +861,14 @@ def light():
 
     scene.world.use_nodes = True
     bg = scene.world.node_tree.nodes['Background']
-    # Cool fill against a warm sun, but weak: the fill lands hardest on exactly
-    # the faces the sun misses, so a strong one greys out the shadow side.
-    bg.inputs['Color'].default_value = (0.66, 0.72, 0.82, 1)
-    bg.inputs['Strength'].default_value = 0.32
+    # The fill lands hardest on exactly the faces the sun misses, so its
+    # strength IS the depth of every shadow in the picture. The monsters run
+    # from near-white to a deep, still-saturated dark within one hue; at 0.32
+    # the buildings only ran from pale to slightly less pale. Down to 0.18, and
+    # tinted warm rather than sky-blue, so the shadows stay in the family
+    # instead of turning grey.
+    bg.inputs['Color'].default_value = (0.55, 0.50, 0.58, 1)
+    bg.inputs['Strength'].default_value = 0.18
 
 
 def frame(w, h, px_per_tile, headroom):
@@ -898,6 +924,29 @@ def frame(w, h, px_per_tile, headroom):
     cam.data.clip_end = 200
 
 
+def bevel_everything():
+    """Cut every edge back a little, on every mesh in the scene.
+
+    Done once at the end rather than per part on purpose: a bevel is a property
+    of the STYLE, not of any one wall, and threading it through thirty
+    constructors would mean thirty places to forget it.
+
+    use_clamp_overlap is what makes a single width safe across parts that differ
+    by two orders of magnitude — a 0.028 bevel would otherwise consume a 0.05
+    roof tile whole. Blender shrinks it to fit instead.
+    """
+    for ob in bpy.data.objects:
+        if ob.type != 'MESH':
+            continue
+        m = ob.modifiers.new('facets', 'BEVEL')
+        m.width = BEVEL_WIDTH
+        m.segments = BEVEL_SEGMENTS
+        m.limit_method = 'ANGLE'
+        m.angle_limit = math.radians(30)
+        m.use_clamp_overlap = True
+        m.harden_normals = False
+
+
 def show_in_viewport():
     """Open on the camera, shaded the way it will render.
 
@@ -939,6 +988,7 @@ def main():
     build(w, h)
     if args.guides:
         guide_plane(w, h)
+    bevel_everything()
     light()
     frame(w, h, args.scale, args.headroom)
 

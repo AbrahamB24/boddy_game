@@ -18,6 +18,11 @@ limestone — on a cut-stone plinth, never straight on the ground. Round arches
 for doors and openings, stone pilasters at the corners. Dark oak is TRIM only:
 beams, doors, shutters, railings. Iron fittings, small gold finials.
 
+PALETTE: ONE warm earth family and nothing else — terracotta through ochre
+through cream, in five or six tonal steps from near-white to a deep, still
+saturated shadow. NO grey and NO cool blue anywhere, not even in the stone.
+One small saturated accent per building (a red banner, a lamp) and no more.
+
 VIEW: true 2:1 isometric, PARALLEL projection — no perspective, no vanishing
 point. The near corner points at the bottom of the image; one wall faces
 bottom-left, the other bottom-right, roof visible. Upright, not tilted.
@@ -38,6 +43,12 @@ BUILDING: <TYPE> — <one line: what it is, what happens there>. Features:
 **Why no material knob any more:** the materials ARE the style. A building that
 picks its own palette is a building that stops matching the other thirty. Say
 what it *is* and what happens there; the walls follow.
+
+**Why one hue family:** look at the monsters
+([monster_art_prompt.md](monster_art_prompt.md)). Blazeling is orange — only
+orange, in five tones, with one yellow flame. Droplet is cyan with two dark
+eyes. That single-hue discipline is what makes them a set, and it is what a
+building has to obey to look like it comes from the same world.
 
 **The three signals that carry it at 224 px:** a hot terracotta roof, pale walls
 under it, and a stone plinth it stands on. Get those and the style reads even
