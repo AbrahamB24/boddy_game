@@ -401,7 +401,7 @@ final List<Dial> kDials = [
     group: TuningGroup.campaign,
     section: 'Risiko',
     label: 'Bedrohung pro Gefahrenstufe',
-    help: 'Gefahr 1 ist immer risikofrei. Die Gruppenstärke (Σ Angriff + '
+    help: 'Gefahr 1 ist immer risikofrei. Die Gruppenstärke (Summe Angriff + '
         'Verteidigung) hält dagegen.',
     def: 60,
     felt: (v) => 'Gefahr 3 → 50 % Risiko bei Gruppenstärke ${_n(v * 2)}.',

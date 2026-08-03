@@ -995,7 +995,7 @@ class _BuildingsTabState extends State<_BuildingsTab> {
                     ),
                     decoration: FoE.panel(radius: 8),
                     child: Text(
-                      '↩ ${kFallbackBuildingDefs[id]?.name ?? id}',
+                      '⟵ ${kFallbackBuildingDefs[id]?.name ?? id}',
                       style: FoE.label(size: 12).copyWith(color: FoE.textDim),
                     ),
                   ),

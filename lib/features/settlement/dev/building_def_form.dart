@@ -1245,7 +1245,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
               'effects give (entered 1:1 as points).\n'
               '•  Stationed: construction stat × "Build points per stat '
               'point" (the post\'s mult) × the building\'s level factor.\n\n'
-              'Total points = passive + Σ monsters.\n\n'
+              'Total points = passive + sum monsters.\n\n'
               'Points cut the entered build time by a percentage:\n'
               '    cut = P / (P + ${kBuildPointsForHalfTime.toStringAsFixed(0)})\n\n'
               '0 points = −0 %, i.e. EXACTLY the entered time (an unstaffed '
@@ -1331,7 +1331,14 @@ class _BuildingDefFormState extends State<BuildingDefForm>
   Widget _imageRow() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
+      // A COLUMN holding the picture row and, under it, the three numbers that
+      // place its base. They were appended to the ROW itself, which put a Row
+      // of Expanded children inside another Row — unbounded width, and Flutter
+      // says so a hundred times over (2026-08-01).
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
@@ -1374,6 +1381,8 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                 ),
               ],
             ),
+          ),
+        ],
           ),
           if (_imageUrl != null) ...[
             const SizedBox(height: 10),

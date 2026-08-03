@@ -88,7 +88,7 @@ class _SpeciesMatrixViewState extends State<SpeciesMatrixView> {
           Expanded(
             child: Center(
               child: Text(
-                '▶ Run fights every species against every other — '
+                '▶️ Run fights every species against every other — '
                 '$kMatrixRuns seeded 1v1s per pairing, equal level, real '
                 'engine (abilities, buffs, AP banking).',
                 textAlign: TextAlign.center,
@@ -133,7 +133,7 @@ class _SpeciesMatrixViewState extends State<SpeciesMatrixView> {
                 backgroundColor: FoE.gold,
                 foregroundColor: Colors.black,
               ),
-              child: Text('▶ Run ($_doneLabel)'),
+              child: Text('▶️ Run ($_doneLabel)'),
             ),
           ],
         ],

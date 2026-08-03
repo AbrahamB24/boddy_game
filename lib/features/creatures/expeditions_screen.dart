@@ -316,7 +316,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
             children: [
               if (e.type == ExpeditionType.capture && ready)
                 ParchmentButton(
-                  label: '▶ Play the catch',
+                  label: '▶️ Play the catch',
                   primary: true,
                   onTap: () => _openEncounter(e),
                 ),

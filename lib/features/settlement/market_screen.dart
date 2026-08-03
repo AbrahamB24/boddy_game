@@ -1129,7 +1129,7 @@ class _MarketScreenState extends State<MarketScreen> {
           // money, and never in front of the thing you came here to do.
           if (back > 0 && owned > 0) ...[
             _miniPill(
-              '↩ $back',
+              '⟵ $back',
               _accent,
               busy ? null : () => _run(key, () => _ctrl.sellItem(def.id)),
             ),

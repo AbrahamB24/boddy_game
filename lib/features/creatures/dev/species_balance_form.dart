@@ -243,7 +243,7 @@ class _SpeciesBalanceFormState extends State<SpeciesBalanceForm> {
       const SizedBox(height: 6),
       Text(
         'The stationed workers shorten it through their breeding power = '
-        'Σ(breeding stat × role multiplier × level factor). Enter a wished-for '
+        'sum(breeding stat × role multiplier × level factor). Enter a wished-for '
         'duration on the right and it says how much power the building needs '
         'for it. There is no ceiling; the curve only flattens, so every '
         'further percent costs more power.',

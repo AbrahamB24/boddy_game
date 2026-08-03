@@ -278,7 +278,7 @@ class _PathEditorTabState extends State<PathEditorTab> {
                   child: Text(
                     // What the formula would field here — greyed, because there
                     // is nothing authored to change yet.
-                    'Σ ${enemyLevelForBattle(n.order) * enemyCountForBattle(n.order)}',
+                    'Lv ${enemyLevelForBattle(n.order) * enemyCountForBattle(n.order)}',
                     textAlign: TextAlign.center,
                     style: FoE.dim(size: 12),
                   ),
@@ -363,7 +363,9 @@ class _TotalLevelFieldState extends State<_TotalLevelField> {
       style: FoE.value(size: 13).copyWith(color: FoE.gold),
       decoration: InputDecoration(
         isDense: true,
-        prefixText: 'Σ',
+        // NOT 'Σ': the app's font has no Greek, and a glyph it cannot draw
+        // costs a Noto-fallback hunt and an exception per frame (2026-08-01).
+        prefixText: 'Lv ',
         prefixStyle: FoE.dim(size: 11),
         contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         enabledBorder: OutlineInputBorder(

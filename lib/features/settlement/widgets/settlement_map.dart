@@ -1075,7 +1075,10 @@ class SettlementMapState extends State<SettlementMap>
       // what a building is, not what it does, and they keep counting either way.
       if (b.isComplete && _canPause(def))
         _actionPill(
-          b.isPaused ? '▶' : '⏸',
+          // WITH the emoji variation selector: bare U+23F8/U+25B6 ask for a
+          // TEXT glyph, which the app's font does not have — Flutter then looks
+          // for a Noto fallback, fails, and throws on every frame (2026-08-01).
+          b.isPaused ? '▶️' : '⏸️',
           b.isPaused ? 'Resume' : 'Pause',
           () => widget.ctrl.setPaused(b.id, !b.isPaused),
         ),
@@ -1455,7 +1458,7 @@ class SettlementMapState extends State<SettlementMap>
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(
-            '⏸ Paused — producing and consuming nothing. Housing and storage '
+            '⏸️ Paused — producing and consuming nothing. Housing and storage '
             'still count.',
             style: FoE.dim(size: 11).copyWith(color: FoE.danger),
           ),
@@ -2784,7 +2787,7 @@ class SettlementMapState extends State<SettlementMap>
               const Positioned(
                 bottom: 1,
                 right: 1,
-                child: Text('⏸', style: TextStyle(fontSize: 12)),
+                child: Text('⏸️', style: TextStyle(fontSize: 12)),
               ),
             ],
           ],
