@@ -309,15 +309,14 @@ class _PodiumRim extends CustomPainter {
       ..color = c
       ..strokeWidth = _kGauge;
 
-    // The empty track first — without it a half-full bar has no end to be read
-    // against, and "half health" and "a short platform" look the same.
-    canvas.drawArc(
-      path,
-      0,
-      _front,
-      false,
-      stroke(const Color(0xFF11161A).withValues(alpha: 0.8)),
-    );
+    // ── NO EMPTY TRACK (user 2026-08-04) ──
+    // There used to be a dark arc across the whole front, with the coloured
+    // fill drawn on top of it. Its round cap sat just past the end of the fill
+    // and read as a stray dot trailing every health bar on the field — six of
+    // them at once. The argument for keeping it was that a half-full bar needs
+    // something to be read against, but the PLATFORM is that something: the
+    // rim follows the slab's own edge, so how far short of the corner the
+    // colour stops is exactly the reading.
     final v = frac.clamp(0.0, 1.0);
     if (v <= 0) return;
     // Filled from the LEFT end so it drains to the right the way every other bar
