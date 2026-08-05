@@ -2635,6 +2635,27 @@ class SettlementMapState extends State<SettlementMap>
               ),
             ),
 
+            // ── TURN THE MAP (user 2026-08-04) ──
+            // A quarter clockwise per press. It is a CAMERA, not game state:
+            // nothing is saved, nothing is sent, and reopening the settlement
+            // starts square again — which is also why the button lives here
+            // and not anywhere near the controller.
+            //
+            // LAST in the stack, because the first child of a Stack is the
+            // bottom one and a control under the map is a control nobody can
+            // press.
+            Positioned(
+              right: 12,
+              bottom: 12,
+              child: _MapTurnButton(
+                rotation: isoRotation,
+                // The selection survives the turn: it is a building id, and the
+                // building did not move — only the view of it did.
+                onTurn: () =>
+                    setState(() => isoRotation = (isoRotation + 1) % 4),
+              ),
+            ),
+
             // Drag-and-drop / road-paint overlay — blocks InteractiveViewer pan
             if (showOverlay)
               Positioned.fill(
@@ -3356,6 +3377,42 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GridPainter old) =>
       old.buildableRegion != buildableRegion;
+}
+
+/// The map's turn control (2026-08-04).
+///
+/// Shows WHICH WAY the map is facing, not just that it can be turned. A compass
+/// that only spins tells you nothing; the number is what lets a player say "I
+/// left it at 2" and find their village the same way round next time.
+class _MapTurnButton extends StatelessWidget {
+  final int rotation;
+  final VoidCallback onTurn;
+
+  const _MapTurnButton({required this.rotation, required this.onTurn});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTurn,
+    child: Container(
+      width: 46,
+      height: 46,
+      alignment: Alignment.center,
+      decoration: ShapeDecoration(
+        color: FoE.panelMid,
+        shape: FoE.facet(
+          radius: 23,
+          side: BorderSide(color: FoE.borderGold, width: 1.4),
+        ),
+        shadows: FoE.drop(dy: 2),
+      ),
+      child: Transform.rotate(
+        // The glyph turns with the map, so the control is a readout as much as
+        // a button.
+        angle: rotation * math.pi / 2,
+        child: const Icon(Icons.navigation, size: 22, color: FoE.gold),
+      ),
+    ),
+  );
 }
 
 /// Smoke and lamplight over one building, placed in the SPRITE's box rather
