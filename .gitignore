@@ -52,3 +52,6 @@ docs/renders/_*.png
 
 # Model exports: render models, not game assets — see the note in render_building.py
 docs/renders/*.glb
+
+# The all-buildings scene: output, and it is rebuilt in one command
+docs/renders/*.blend

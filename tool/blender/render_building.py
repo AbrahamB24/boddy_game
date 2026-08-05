@@ -2517,4 +2517,8 @@ def main():
           f'{scene.render.resolution_y}')
 
 
-main()
+# Guarded so another script can IMPORT this one for its parts — the palette,
+# box(), the presets — without also rendering a building. Blender runs a
+# --python file as __main__, so nothing changes for the normal path.
+if __name__ == '__main__':
+    main()
