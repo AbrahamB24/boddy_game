@@ -1652,485 +1652,172 @@ def breeding_hut(w, h):
     vine('hvine', hx - hw / 2 - 0.01, hy + 0.9, base_h, 0.7, facing='x')
 
 
-def breeding_hut_spore(w, h):
-    """Sporehollow: a hatchery grown under fungus, not built out of stone.
+def main_hall(w, h):
+    """The Tribal Center: the hall the whole settlement is arranged around.
 
-    ── Why fungus ──
-    A cap is one of the very few silhouettes a player recognises WHOLE, before
-    any detail resolves — which is the only kind that survives at 256 px. A tile
-    roof has to be read (pitch, ridge, eaves) before it says "building". And it
-    is the right shape for this particular building: eggs are kept somewhere
-    warm, damp and dark, and a fungus is all three by nature. The Roman version
-    had to explain itself with a courtyard and a dovecote; this one does not.
+    ── What makes it the MAIN building ──
+    Not detail — the Hatchery already has as much of that, and more would only
+    make the two compete. Three things, and all of them are about SIZE relative
+    to its neighbours rather than about ornament:
 
-    ── The rules it keeps ──
-    Everything else carries over, because none of it was Roman — it was just
-    good. One hue family (coral through cream) with exactly one outsider, and
-    here that outsider is COLD: a spore-light, which cannot be mistaken for
-    flesh. Nothing tall between the camera and the eggs. Detail concentrated
-    where the eye lands, which for a cap is the underside of the rim — hence
-    the gills, which are the band a tiled roof can never give you.
+      * A TOWER that clears every roofline on the map. On a settlement seen
+        from above, the tallest thing is the centre, and no label is needed.
+      * A great hall with its long side turned to the viewer, where every other
+        building shows a gable end. It reads as wide where they read as tall.
+      * A forecourt with a well: the one public, walkable space in the village.
+        Everything else has a working yard behind a fence; this has a square.
 
-    Three caps at three heights, not one: a single mushroom is a prop, and a
-    cluster at different scales is a settlement.
+    Everything else is the Hatchery's kit unchanged — timber frame, jetty,
+    shingles, stone base, leaded windows. That is the point of a kit, and it is
+    also why these two will look like the same village rather than like two
+    good buildings.
     """
     half = w / 2.0
-    inset = 0.15
 
-    # ── The great cap ──
-    gx, gy = -0.5, 0.5
-    g_stalk_h, g_r = 1.32, 1.34
-    roots('groots', gx, gy, 0, 0.8, count=8, reach=0.62)
-    stalk('gstalk', gx, gy, 0, 0.86, 0.6, g_stalk_h)
-    # The way in, facing the court. Set into the flesh, not applied to it.
-    doorway('gdoor', gx + 0.16, gy - 0.72, 0.06, 0.6, 0.78)
-    plank_door('gleaf', gx + 0.16, gy - 0.79, 0.08, 0.54, 0.36, planks=4)
-    for i, (wx, wy, f) in enumerate(((gx + 0.72, gy + 0.1, 'x'),
-                                     (gx - 0.5, gy - 0.6, 'y'))):
-        doorway(f'gwin{i}', wx, wy, 0.66, 0.26, 0.3, facing=f, rim=0.13)
-    gprof = cap('gcap', gx, gy, g_stalk_h, g_r, 0.92)
-    warts('gwart', gprof, gx, gy, g_stalk_h, count=13)
-    moss('gmoss', gx, gy, g_stalk_h - 0.1, g_r * 0.9, g_r * 0.9, 0.5,
-         overhang=0.0, patches=7)
+    # ── The hall ──
+    hx, hy = -0.35, 1.0
+    hw, hd = 3.5, 2.5
+    base_h, floor_h, upper_h = 0.34, 1.1, 0.9
+    ashlar_courses('mbase', hx, hy, 0, hw + 0.14, hd + 0.14, base_h,
+                   course=0.16, block=0.32)
+    half_timber('mlow', hx, hy, base_h, hw, hd, floor_h, bays=5)
+    jetty('mjet', hx, hy, base_h + floor_h, hw, hd, out=0.19)
+    up_w, up_d = hw + 0.38, hd + 0.38
+    half_timber('mup', hx, hy, base_h + floor_h + 0.11, up_w, up_d, upper_h,
+                bays=5)
+    roof_z = base_h + floor_h + 0.11 + upper_h
+    # Ridge along X, so the LONG side faces the camera — the opposite of the
+    # Hatchery, and the cheapest way to make the centre read as the centre.
+    shingle_gable('mroof', hx, hy, roof_z, up_w, up_d, 1.15, overhang=0.3,
+                  rows=12, ridge_along='x')
+    moss('mmoss', hx, hy, roof_z, up_w * 0.8, up_d * 0.8, 0.6,
+         overhang=0.0, patches=9)
+    for s in (-1, 1):
+        gable_boards(f'mgab{s}', hx + s * (up_w / 2 + 0.24), hy, roof_z,
+                     up_d + 0.6, 1.12, axis='y', sign=s)
+    chimney('mchim', hx - 1.4, hy + 0.6, 0, 0.44, roof_z + 1.5)
 
-    # ── The second cap, lower and behind ──
-    sx_, sy_ = 0.95, 1.12
-    s_h, s_r = 0.86, 0.82
-    roots('sroots', sx_, sy_, 0, 0.44, count=5, reach=0.34)
-    stalk('sstalk', sx_, sy_, 0, 0.48, 0.36, s_h, sides=8)
-    doorway('swin', sx_ - 0.02, sy_ - 0.5, 0.34, 0.24, 0.28, rim=0.12)
-    sprof = cap('scap', sx_, sy_, s_h, s_r, 0.6, sides=10, rings=4)
-    warts('swart', sprof, sx_, sy_, s_h, count=8)
-
-    # ── The third, a stub at the front — the smallest of the three, and the
-    #    one that keeps the near corner from being empty ground.
-    tx, ty = -1.32, -0.62
-    t_h, t_r = 0.44, 0.5
-    roots('troots', tx, ty, 0, 0.26, count=4, reach=0.22)
-    stalk('tstalk', tx, ty, 0, 0.3, 0.22, t_h, sides=8)
-    tprof = cap('tcap', tx, ty, t_h, t_r, 0.36, sides=9, rings=3)
-    warts('twart', tprof, tx, ty, t_h, count=5)
-
-    # ── The nesting court, in the near corner ──
-    cx0, cx1 = -0.72, half - inset
-    cy0, cy1 = -half + inset, 0.12
-    cxc, cyc = (cx0 + cx1) / 2, (cy0 + cy1) / 2
-    cw, cd = cx1 - cx0, cy1 - cy0
-
-    box('yard', cxc, cyc, 0, cw - 0.1, cd - 0.1, 0.12, mat('sand'))
-    # Trodden earth, not paving: nothing here was cut, so nothing is laid out.
-    straw_scatter('yfloor', cxc, cyc, 0.12, cw * 0.46, n=26, key='straw')
-
-    withy_fence('fx', cx1 - 0.07, cyc, 0, cd, 0.52, axis='y')
-    withy_fence('fy', cxc, cy0 + 0.07, 0, cw, 0.52, axis='x')
-    # The gate: two root-posts and a pair of spore-lights at the near corner.
-    for i, (px, py) in enumerate(((cx1 - 0.07, cy0 + 0.62),
-                                  (cx1 - 0.66, cy0 + 0.07))):
-        box(f'gpost{i}', px, py, 0, 0.16, 0.16, 0.78, mat('root_dark'))
-        box(f'gknob{i}', px, py, 0.78, 0.13, 0.13, 0.1, mat('root'))
-        spore_lamp(f'glamp{i}', px, py, 0.88, h=0.24)
-
-    nx, ny = cxc + 0.12, cyc - 0.12
-    nest('nest', nx, ny, 0.12, 0.48)
-    straw_scatter('litter', nx, ny, 0.12, 0.86)
-    egg('egg_a', nx - 0.24, ny + 0.1, 0.14, 0.26, mat('stalk'))
-    egg('egg_b', nx + 0.26, ny + 0.17, 0.14, 0.29, mat('stalk'))
-    egg('egg_c', nx + 0.05, ny - 0.3, 0.14, 0.24, mat('stalk'))
-
-    spore_lamp('lamp_a', cx0 + 0.2, cy1 - 0.28, 0.12, h=0.78)
-    straw_bale('bale', cx0 + 0.24, cy0 + 0.42, 0.12, 0.4, 0.28, 0.26)
-    trough('trough', cx1 - 0.36, cyc + 0.42, 0.12, 0.26, 0.56, key='root')
-    pot('pot', cx1 - 0.34, cy0 + 0.46, 0.12, r=0.14, h=0.36)
-    plant('plant_a', cx0 - 0.18, cy0 + 0.9, 0.0)
-
-    tufts('grass_g', gx, gy, 1.9, 1.9)
-    tufts('grass_s', sx_, sy_, 1.1, 1.1)
-
-
-def breeding_hut_roman(w, h):
-    """An L of two wings around a court that opens towards the camera.
-
-    ── Why 4x4, and why an L ──
-    A square footprint projects to a true rhombus, and its near corner sits at
-    the bottom of the picture. Wrap the FAR corner with two wings and leave the
-    near one open, and the camera looks between them INTO the court: two
-    facades, a colonnade, and the yard's floor, all at once. The old 3x4 could
-    only ever show one front with things standing in front of it.
-
-    The portico is the piece doing the most work. A wall is a plane whatever
-    you decorate it with; a row of columns has a lit front, shaded shafts and a
-    dark space behind, so the eye reads three layers of depth from a camera
-    that cannot move.
-
-    ── The read at 256 px ──
-    Roof mass, then the pale colonnade against the dark under-porch, then three
-    white eggs on straw in the middle of an open court. Everything else is
-    texture. Nothing tall stands between the camera and the eggs — that rule
-    has cost two features already (a pergola and a brazier) and it still holds.
-    """
-    half = w / 2.0
-    hall_d = 1.5                       # the back wing's depth
-    wing_w = 1.3                       # the left wing's width
-    inset = 0.15                       # air between building and plot edge
-    wall_h = 1.28
-
-    x0, x1 = -half + inset, half - inset
-    y0, y1 = -half + inset, half - inset
-
-    hall_y = y1 - hall_d / 2
-    hall_w = x1 - x0
-    wing_x = x0 + wing_w / 2
-    wing_y0, wing_y1 = y0, y1 - hall_d
-    wing_d = wing_y1 - wing_y0
-    wing_yc = (wing_y0 + wing_y1) / 2
-    wing_h = wall_h * 0.82
-
-    court_x0, court_x1 = x0 + wing_w, x1
-    court_y0, court_y1 = y0, y1 - hall_d
-    court_xc = (court_x0 + court_x1) / 2
-    court_yc = (court_y0 + court_y1) / 2
-    court_w, court_d = court_x1 - court_x0, court_y1 - court_y0
-
-    # ── The hall, along the back ──
-    ashlar_courses('hall_p', 0, hall_y, 0, hall_w + 0.22, hall_d + 0.22, 0.2)
-    box('hall_pc', 0, hall_y, 0.2, hall_w + 0.14, hall_d + 0.14, 0.05,
+    # ── The tower, on the corner the camera can SEE ──
+    # It first stood on the back-left, where the hall's own roof hid everything
+    # but its spire — which read as a dormer, not a landmark. A tower that is
+    # the tallest thing on the map is worth nothing if the map cannot see it.
+    # Front-right: two of its faces are the two faces a player ever looks at.
+    tx, ty = hx + hw / 2 - 0.35, hy - hd / 2 + 0.35
+    tw, tower_h = 1.05, 3.5
+    ashlar_courses('tow', tx, ty, 0, tw, tw, tower_h, course=0.19, block=0.34)
+    box('tow_band', tx, ty, tower_h * 0.55, tw + 0.07, tw + 0.07, 0.09,
         mat('travertine'))
-    box('hall', 0, hall_y, 0.22, hall_w, hall_d, wall_h, mat('stucco'))
-    ashlar_courses('hall_c', 0, hall_y, 0.22, hall_w + 0.03, hall_d + 0.03,
-                   0.3, key='travertine', dark='travertine_shade',
-                   course=0.15, block=0.34)
-    string_course('hall_sc', 0, hall_y, 0.52, hall_w, hall_d)
-    dentils('hall_d', 0, hall_y, 0.22 + wall_h - 0.15, hall_w + 0.03,
-            hall_d + 0.03)
-    box('hall_cor', 0, hall_y, 0.22 + wall_h - 0.05, hall_w + 0.2,
-        hall_d + 0.2, 0.1, mat('travertine'))
-    for sxs in (-1, 1):
-        for sys in (-1, 1):
-            px, py = sxs * (hall_w / 2 - 0.07), hall_y + sys * (hall_d / 2 - 0.07)
-            box('hall_pil', px, py, 0.22, 0.22, 0.22, wall_h, mat('travertine'))
-            box('hall_pilb', px, py, 0.22, 0.31, 0.31, 0.11, mat('travertine'))
-            box('hall_pilc', px, py, 0.22 + wall_h - 0.16, 0.32, 0.32, 0.16,
-                mat('travertine'))
-
-    hall_rz = 0.22 + wall_h
-    hall_rh = 0.92
-    hip_roof('hall_r', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
-    pantiles('hall_t', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
-    imbrices('hall_i', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
-    hip_ridges('hall_h', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
-    antefixes('hall_a', 0, hall_y, hall_rz - 0.02, hall_w + 0.6, hall_d + 0.6)
-    acroterion('hall_ac', 0, hall_y, hall_rz + hall_rh, hall_w, hall_d)
-    moss('hall_m', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
-
-    # ── The west wing, lower, at right angles ──
-    ashlar_courses('wing_p', wing_x, wing_yc, 0, wing_w + 0.22, wing_d + 0.22,
-                   0.2)
-    box('wing', wing_x, wing_yc, 0.22, wing_w, wing_d, wing_h, mat('stucco'))
-    ashlar_courses('wing_c', wing_x, wing_yc, 0.22, wing_w + 0.03,
-                   wing_d + 0.03, 0.26, key='travertine',
-                   dark='travertine_shade', course=0.13, block=0.3)
-    dentils('wing_d', wing_x, wing_yc, 0.22 + wing_h - 0.13, wing_w + 0.03,
-            wing_d + 0.03)
-    box('wing_cor', wing_x, wing_yc, 0.22 + wing_h - 0.04, wing_w + 0.17,
-        wing_d + 0.17, 0.09, mat('travertine'))
-    wing_rz, wing_rh = 0.22 + wing_h, 0.7
-    hip_roof('wing_r', wing_x, wing_yc, wing_rz, wing_w, wing_d, wing_rh,
-             overhang=0.26, ridge=0.5)
-    pantiles('wing_t', wing_x, wing_yc, wing_rz, wing_w, wing_d, wing_rh,
-             overhang=0.26, ridge=0.5, courses=12)
-    imbrices('wing_i', wing_x, wing_yc, wing_rz, wing_w, wing_d, wing_rh,
-             overhang=0.26, ridge=0.5, courses=12)
-    hip_ridges('wing_h', wing_x, wing_yc, wing_rz, wing_w, wing_d, wing_rh,
-               overhang=0.26, ridge=0.5)
-    antefixes('wing_a', wing_x, wing_yc, wing_rz - 0.02, wing_w + 0.52,
-              wing_d + 0.52)
-    moss('wing_m', wing_x, wing_yc, wing_rz, wing_w, wing_d, wing_rh,
-         overhang=0.26, ridge=0.5, patches=6)
-
-    # The wing's court-facing wall: a stable door and a shuttered window, both
-    # looking in at the yard, because that is the wall the camera sees.
-    wf_x = wing_x + wing_w / 2
-    doorway('wdoorway', wf_x - 0.02, wing_yc - 0.42, 0.22, 0.5, 0.72,
-            facing='x')
-    plank_door('wdoor', wf_x - 0.03, wing_yc - 0.42, 0.24, 0.46, 0.34,
-               facing='x')
-    window('wwin', wf_x - 0.02, wing_yc + 0.5, 0.68, 0.28, 0.38, 0.2,
-           facing='x')
-    grille('wbars', wf_x - 0.06, wing_yc + 0.5, 0.68, 0.28, 0.34, facing='x')
-    sconce('wsc', wf_x, wing_yc - 0.02, 1.02, facing='x')
-    vine('wvine', wf_x - 0.02, wing_yc + 1.0, 0.28, 0.86, facing='x')
-
-    # ── The portico across the hall's court side ──
-    # Shallower than it wants to be. At 0.7 deep its roof reached out over the
-    # middle of the court and put the eggs in shade — the same mistake the
-    # pergola made on the old hut, in a new shape.
-    port_y = hall_y - hall_d / 2 - 0.26
-    colonnade('port', 0, port_y, 0.22, hall_w - 0.5, 0.52, 1.22, count=5)
-    box('port_step', 0, port_y - 0.36, 0, hall_w - 0.3, 0.3, 0.22,
+    for i, tz in enumerate((1.3, 2.3)):
+        leaded_window(f'tw{i}', tx, ty - tw / 2, tz, 0.26, 0.34)
+        leaded_window(f'tx{i}', tx + tw / 2, ty, tz, 0.26, 0.34, facing='x')
+    # A corbelled parapet, then the spire. The overhang is what stops a tower
+    # being a chimney: it says the top is a PLACE, not just the end of a wall.
+    box('tow_corbel', tx, ty, tower_h, tw + 0.22, tw + 0.22, 0.12,
         mat('travertine'))
-    # Behind the columns: the way in, kept dark so the colonnade has something
-    # to stand against.
-    hf_y = hall_y - hall_d / 2
-    doorway('halldoor', -0.5, hf_y + 0.03, 0.22, 0.72, 0.84)
-    box('keystone', -0.5, hf_y + 0.01, 0.22 + 0.84 - 0.02, 0.17, 0.1, 0.2,
-        mat('travertine'))
-    plank_door('door', -0.5, hf_y - 0.04, 0.24, 0.68, 0.4)
-    for i, wx in enumerate((0.62, 1.28)):
-        window(f'hwin{i}', wx, hf_y, 0.66, 0.26, 0.36, 0.2)
-        grille(f'hbars{i}', wx, hf_y - 0.04, 0.66, 0.26, 0.32)
+    for s in (-1, 1):
+        for a in (-1, 1):
+            box(f'merlon{s}{a}', tx + s * (tw / 2 + 0.04),
+                ty + a * (tw / 2 + 0.04), tower_h + 0.12,
+                0.2, 0.2, 0.22, mat('ashlar'))
+    shingle_gable('tow_roof', tx, ty, tower_h + 0.34, tw * 0.8, tw * 0.8, 1.1,
+                  overhang=0.16, rows=7, ridge_along='y')
+    box('tow_finial', tx, ty, tower_h + 1.44, 0.1, 0.1, 0.22, mat('gold'))
+    banner('tow_flag', tx, ty - tw / 2 - 0.02, tower_h - 0.3, 0.3, 0.5)
 
-    # ── The dovecote in the angle of the L ──
-    cote_w = 0.72
-    dovecote('cote', x0 + cote_w / 2 + 0.06, y1 - hall_d - cote_w / 2 - 0.06,
-             0, cote_w, 2.35)
+    # ── The porch: how you get in, and where the sign hangs ──
+    face_y = hy - up_d / 2
+    low_face = hy - hd / 2
+    px = hx + 0.25
+    doorway('mdoor', px, low_face, base_h, 0.86, 1.02)
+    plank_door('mleaf', px, low_face - 0.07, base_h + 0.02, 0.78, 0.62,
+               planks=6)
+    steps('msteps', px, low_face - 0.14, 0, 1.3, count=3, rise=0.1)
+    for s in (-1, 1):
+        box(f'porchpost{s}', px + s * 0.62, low_face - 0.5, 0, 0.16, 0.16,
+            1.15, mat('oak'))
+        sconce(f'mlamp{s}', px + s * 0.78, low_face, base_h + 1.02)
+    box('porchbeam', px, low_face - 0.5, 1.15, 1.44, 0.14, 0.14, mat('oak'))
+    shingle_gable('porchroof', px, low_face - 0.26, 1.24, 1.3, 0.62, 0.42,
+                  overhang=0.16, rows=5, ridge_along='x')
+    for i, ox in enumerate((-1.05, 1.35)):
+        leaded_window(f'mw{i}', hx + ox, low_face, base_h + 0.46, 0.34, 0.42)
+    uz = base_h + floor_h + 0.38
+    for i, ox in enumerate((-1.2, -0.4, 0.4, 1.2)):
+        leaded_window(f'mu{i}', hx + ox, face_y, uz, 0.3, 0.36)
+    # Two banners flanking the door — the settlement's own colours, and the
+    # only place on the map two of them hang together.
+    for s in (-1, 1):
+        banner(f'mflag{s}', px + s * 1.02, face_y - 0.02, roof_z - 0.1,
+               0.34, 0.52)
 
-    # ── The court ──
-    box('yard', court_xc, court_yc, 0, court_w - 0.16, court_d - 0.16, 0.16,
-        mat('sand'))
-    mosaic('yfloor', court_xc, court_yc, 0.16, court_w - 0.42, court_d - 0.42)
-    # Low walls on the two OPEN sides only; the wings close the other two.
-    ashlar_courses('yw_x', court_x1 - 0.09, court_yc, 0, 0.18, court_d, 0.44,
-                   course=0.15, block=0.32)
-    box('yw_xc', court_x1 - 0.09, court_yc, 0.44, 0.24, court_d, 0.055,
-        mat('travertine'))
-    ashlar_courses('yw_y', court_xc, court_y0 + 0.09, 0, court_w, 0.18, 0.44,
-                   course=0.15, block=0.32)
-    box('yw_yc', court_xc, court_y0 + 0.09, 0.44, court_w, 0.24, 0.055,
-        mat('travertine'))
-    # The gate is cut into the near corner, where the two low walls meet.
-    gx, gy = court_x1 - 0.09, court_y0 + 0.09
-    for i, (cx, cy) in enumerate(((gx, gy + 0.62), (gx - 0.62, gy))):
-        column(f'gcol{i}', cx, cy, 0, 0.14, 0.82)
-        box(f'gfin{i}', cx, cy, 0.82, 0.12, 0.12, 0.1, mat('gold'))
-        lantern(f'glamp{i}', cx, cy, 0.92, drop=0.1)
+    # ── The square ──
+    yx0, yx1 = -half + 0.2, half - 0.2
+    yy0, yy1 = -half + 0.2, low_face - 0.72
+    yxc, yyc = (yx0 + yx1) / 2, (yy0 + yy1) / 2
+    yw, yd = yx1 - yx0, yy1 - yy0
+    box('square', yxc, yyc, 0, yw, yd, 0.1, mat('ashlar'))
+    mosaic('paving', yxc, yyc, 0.1, yw - 0.2, yd - 0.2,
+           key_a='travertine', key_b='ashlar', tile=0.34)
 
-    well('well', court_x0 + 0.52, court_y1 - 0.52, 0.16)
-    # The nest sits in the OPEN half, towards the near corner: the portico
-    # shades the back of the court and nothing may shade the eggs.
-    nx, ny = court_xc + 0.05, court_y0 + court_d * 0.34
-    nest('nest', nx, ny, 0.18, 0.46)
-    straw_scatter('litter', nx, ny, 0.18, 0.84)
-    egg('egg_a', nx - 0.22, ny + 0.1, 0.2, 0.25, mat('stucco'))
-    egg('egg_b', nx + 0.24, ny + 0.16, 0.2, 0.28, mat('stucco'))
-    egg('egg_c', nx + 0.04, ny - 0.28, 0.2, 0.23, mat('stucco'))
+    # The well: the one thing a village square always has, and a shape nobody
+    # has to be told the meaning of.
+    wx, wy = yxc - 1.0, yyc + 0.1
+    ashlar_courses('well', wx, wy, 0.1, 0.72, 0.72, 0.44, course=0.15,
+                   block=0.26)
+    box('well_cap', wx, wy, 0.54, 0.82, 0.82, 0.07, mat('travertine'))
+    box('well_dark', wx, wy, 0.5, 0.5, 0.5, 0.06, mat('dark'))
+    for s in (-1, 1):
+        box(f'well_post{s}', wx + s * 0.3, wy, 0.61, 0.11, 0.11, 0.62,
+            mat('oak'))
+    box('well_beam', wx, wy, 1.19, 0.78, 0.12, 0.12, mat('oak'))
+    box('well_rope', wx, wy, 0.92, 0.04, 0.04, 0.28, mat('iron'))
+    box('well_bucket', wx, wy, 0.82, 0.2, 0.2, 0.16, mat('oak_light'))
+    shingle_gable('well_roof', wx, wy, 1.25, 0.8, 0.8, 0.36, overhang=0.16,
+                  rows=4, ridge_along='x')
 
-    straw_bale('bale', court_x0 + 0.36, court_y0 + 0.46, 0.16, 0.42, 0.3, 0.28)
-    pot('pot', court_x1 - 0.34, court_y1 - 0.44, 0.16)
-    plant('plant', court_x0 + 0.32, court_y1 - 0.34, 0.16)
-    trough('trough', court_x1 - 0.42, court_yc - 0.2, 0.16, 0.28, 0.6)
-    brazier('brz', court_x0 + 0.3, court_y0 + 1.02, 0.16, h=0.46)
+    # Market clutter on the far side, so the square reads as used.
+    for i, (ox, oy) in enumerate(((1.15, 0.25), (1.5, -0.2))):
+        pot(f'mpot{i}', yxc + ox, yyc + oy, 0.1, r=0.15, h=0.4)
+    straw_bale('mbale', yxc + 0.55, yy0 + 0.3, 0.1, 0.44, 0.3, 0.28)
+    trough('mtrough', yx1 - 0.34, yyc + 0.6, 0.1, 0.26, 0.6, key='oak')
+    for i, ox in enumerate((-1.7, 1.7)):
+        plant(f'mplant{i}', yxc + ox, yy0 + 0.34, 0.1)
+        lantern(f'msqlamp{i}', yxc + ox, yy0 + 0.34, 1.05, drop=0.14)
+        box(f'msqpost{i}', yxc + ox, yy0 + 0.34, 0.1, 0.12, 0.12, 0.95,
+            mat('oak'))
 
-    tufts('grass_h', 0, hall_y, hall_w + 0.22, hall_d + 0.22)
-    tufts('grass_w', wing_x, wing_yc, wing_w + 0.22, wing_d + 0.22)
-
-
-def _breeding_hut_old(w, h):
-    """A stuccoed hall under a terracotta roof, with a walled nesting court.
-
-    The read has to survive being 224 px wide on a phone, so the identity is
-    carried by SILHOUETTE and contrast, not by detail: a hot tile roof over pale
-    walls, an arched mouth of pure black under it, and three white eggs on warm
-    sand in an open court where nothing else competes for attention.
-
-    The court is the Roman part that does the most work here — a building with a
-    walled forecourt is legible as one property from any angle, where a hut with
-    things scattered in front of it is legible as a hut with clutter.
-    """
-    wall_h = 1.15
-    body_d = h * 0.52
-    body_w = w - 0.35
-    body_y = h / 2 - body_d / 2 - 0.18         # pushed to the back
-
-    # The plinth is laid as STONES, not cast as a slab — see ashlar_courses.
-    ashlar_courses('plinth', 0, body_y, 0, body_w + 0.26, body_d + 0.26, 0.22)
-    tufts('grass', 0, body_y, body_w + 0.26, body_d + 0.26)
-    box('plinth_cap', 0, body_y, 0.22, body_w + 0.18, body_d + 0.18, 0.05,
-        mat('travertine'))
-    box('body', 0, body_y, 0.24, body_w, body_d, wall_h, mat('stucco'))
-    # A course of cut stone at the base of the render: Roman walls change
-    # material as they rise, and the change is what stops a wall reading as one
-    # blank rectangle of light. Coursed too, and capped with a moulding.
-    ashlar_courses('course', 0, body_y, 0.24, body_w + 0.04, body_d + 0.04,
-                   0.3, key='travertine', dark='travertine_shade',
-                   course=0.15, block=0.34)
-    string_course('sc', 0, body_y, 0.53, body_w + 0.02, body_d + 0.02)
-    # The entablature: dentils, then the cornice they carry. Together they are
-    # the line that separates wall from roof, and without it the roof looks set
-    # down on the walls rather than built onto them.
-    dentils('dentils', 0, body_y, 0.22 + wall_h - 0.15, body_w + 0.04,
-            body_d + 0.04)
-    box('cornice', 0, body_y, 0.22 + wall_h - 0.05, body_w + 0.2,
-        body_d + 0.2, 0.1, mat('travertine'))
-    # The doorway. Two arches, not one: the travertine surround is what makes
-    # the dark shape read as an OPENING. On its own the hole is a black blob
-    # leaning on the wall, because a pale wall and a dark patch share no edge
-    # the eye can call a frame. It also stands ON the plinth — an opening that
-    # floats above the floor is the other half of that same illusion.
-    # arch() builds a SOLID body, not a ring, so the surround must sit BEHIND
-    # the mouth and be larger — it is seen only as the rim that survives around
-    # the dark shape. Put it in front, as I first did, and it simply plugs the
-    # hole and the doorway disappears.
-    # ── The door is OFF CENTRE (user 2026-08-03: "noch schöner") ──
-    # A centred door under a centred roof between mirrored windows is a
-    # building that is correct and lifeless. Everything hung off the doorway —
-    # steps, lamps, garland, keystone — takes its x from door_x, so moving the
-    # door moves the whole composition and nothing has to be re-measured.
-    door_w, door_h = body_w * 0.30, wall_h * 0.66
-    door_x = -body_w * 0.16
-    face_y = body_y - body_d / 2
-    arch('surround', door_x, face_y + 0.17, 0.22,
-         door_w + 0.20, door_h + 0.10, 0.22, key='travertine')
-    arch('mouth', door_x, face_y + 0.04, 0.22, door_w, door_h, 0.22)
-    # A stable door: boarded to hip height, open above. Exactly right for a
-    # place animals go in and out of, and it puts a made thing in the one
-    # opening that was a plain black hole.
-    plank_door('door', door_x, face_y - 0.03, 0.24, door_w - 0.03,
-               door_h * 0.46)
-    # A keystone over the arch. One block, and the arch stops being a hole with
-    # a rim and becomes something that was built.
-    box('keystone', door_x, face_y + 0.02, 0.22 + door_h - 0.02,
-        0.17, 0.1, 0.2, mat('travertine'))
-    steps('steps', door_x, face_y - 0.06, 0.0, door_w + 0.3)
-
-    box('plaque', door_x, face_y - 0.01, 0.22 + door_h + 0.2, 0.52, 0.06, 0.18,
-        mat('travertine'))
-    # Lamps either side of the door, with the swag slung between them. They are
-    # the reason the facade reads as an entrance rather than as a wall that
-    # happens to have a hole in it.
-    #
-    # The garland first hung above the plaque, which put it through the roof —
-    # there is no wall left up there. Hung BETWEEN two things that exist, it
-    # cannot drift: move the sconces and it follows.
-    lamp_x, lamp_z = door_w / 2 + 0.34, 1.10
-    for sign in (-1, 1):
-        sconce(f'sconce{sign}', door_x + sign * lamp_x, face_y, lamp_z)
-    garland('garland', door_x, face_y - 0.05, lamp_z + 0.02, lamp_x * 2,
-            sag=0.14)
-
-    roof_z = 0.22 + wall_h
-    hip_roof('roof', 0, body_y, roof_z, body_w, body_d, 0.85)
-    pantiles('tiles', 0, body_y, roof_z, body_w, body_d, 0.85)
-    imbrices('caps', 0, body_y, roof_z, body_w, body_d, 0.85)
-    hip_ridges('hips', 0, body_y, roof_z, body_w, body_d, 0.85)
-    antefixes('antefix', 0, body_y, roof_z - 0.02, body_w + 0.6, body_d + 0.6)
-    acroterion('acro', 0, body_y, roof_z + 0.85, body_w, body_d)
-    moss('moss', 0, body_y, roof_z, body_w, body_d, 0.85)
-
-    # A bundle of thatch stored up under the eaves, where a farmyard keeps it.
-    for i, sy in enumerate((-0.3, 0.1)):
-        straw_bale(f'thatch{i}', -body_w / 2 + 0.34,
-                   body_y + body_d * sy, roof_z - 0.3, 0.3, 0.24, 0.2)
-
-    # Corner pilasters — travertine, not timber. Timber corners drag the whole
-    # thing back to a Northern hut; stone corners under a tile roof are Roman.
-    # Base and capital both: a plain post is a post, a post with a foot and a
-    # head is a column, and that difference is four small boxes.
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            px = sx * (body_w / 2 - 0.07)
-            py = body_y + sy * (body_d / 2 - 0.07)
-            box('pilaster', px, py, 0.22, 0.22, 0.22, wall_h,
-                mat('travertine'))
-            box('pil_base', px, py, 0.22, 0.31, 0.31, 0.12, mat('travertine'))
-            box('pil_cap', px, py, 0.22 + wall_h - 0.16, 0.32, 0.32, 0.16,
-                mat('travertine'))
-
-    # Two arched windows on the long wall, which is otherwise the largest blank
-    # surface the camera ever sees.
-    # ONE window, not a mirrored pair — the tower takes the other end of the
-    # wall, and a tower opposite a window is a composition where two windows
-    # were only a pattern.
-    wy = body_y + body_d * 0.28
-    window('win', body_w / 2 - 0.02, wy, 0.68, 0.28, 0.4, 0.2, facing='x')
-    grille('bars', body_w / 2 - 0.06, wy, 0.68, 0.28, 0.36, facing='x')
-    banner('banner', body_w / 2 + 0.04, body_y - body_d * 0.06, 1.14, 0.32,
-           0.42, facing='x')
-    vine('vine', body_w / 2 - 0.02, body_y + body_d * 0.44, 0.28, 1.0,
-         facing='x')
-
-    # The dovecote as a CORNER tower, its two outer faces flush with the two
-    # walls the camera can see. Placed inside the block it simply rose through
-    # the main roof and its whole shaft — the nest holes, the ledges, the point
-    # of it — was buried. Flush with the corner, all of that is on show and the
-    # tower still breaks the roofline.
-    cote_w = 0.62
-    dovecote('cote', body_w / 2 - cote_w / 2, face_y + cote_w / 2, 0,
-             cote_w, 1.95)
-    # A course of blocks under the windows, running the length of the long
-    # wall — the largest surface the camera ever sees, and the one that most
-    # needs something on it.
-    frieze('frieze', body_w / 2 + 0.02, body_y, 0.38, body_d * 0.92,
-           facing='x')
-
-    # ── The court ──
-    court_d = h - body_d - 0.35
-    court_y = body_y - body_d / 2 - court_d / 2
-    court_w = w - 0.35
-    box('sand', 0, court_y, 0, court_w - 0.3, court_d - 0.3, 0.16,
-        mat('sand'))
-    mosaic('floor', 0, court_y, 0.16, court_w - 0.42, court_d - 0.42)
-    # Low walls, not a fence: masonry on three sides, open to the front so the
-    # eggs are visible. Capped in travertine so the top edge catches light.
-    for sx in (-1, 1):
-        ashlar_courses(f'court_wall{sx}', sx * (court_w / 2 - 0.09), court_y,
-                       0, 0.18, court_d, 0.46, course=0.155, block=0.34)
-        box(f'court_cap{sx}', sx * (court_w / 2 - 0.09), court_y, 0.46,
-            0.24, court_d, 0.055, mat('travertine'))
-    front_y = court_y - court_d / 2 + 0.09
-    for sx in (-1, 1):
-        column(f'gatecol{sx}', sx * (court_w / 2 - 0.09), front_y, 0,
-               0.13, 0.78)
-        box(f'finial{sx}', sx * (court_w / 2 - 0.09), front_y, 0.78,
-            0.11, 0.11, 0.1, mat('gold'))
-        # A lamp hung off each gate column: the pair of them is what makes the
-        # gap between the columns read as a WAY IN after dark.
-        lantern(f'gatelamp{sx}', sx * (court_w / 2 - 0.30), front_y, 0.86,
-                drop=0.12)
-        box(f'gatearm{sx}', sx * (court_w / 2 - 0.20), front_y, 0.84,
-            0.24, 0.05, 0.05, mat('iron'))
-    # The threshold between the columns stays LOW: the eggs are what the
-    # building says about itself, and nothing may stand in front of them.
-    box('threshold', 0, front_y, 0, court_w - 0.5, 0.18, 0.2, mat('ashlar'))
-
-    # NO pergola here, though the kit has one. It fitted the court and covered
-    # the eggs and the doorway both — and the eggs are the entire reason this
-    # building is recognisable. More detail is only ever worth having while it
-    # costs nothing that already reads. Keep it for a building with room.
-    # A shelter over the LEFT of the court only. The nest moves right to meet
-    # it, so the court has a covered half and an open half instead of one even
-    # rectangle — and nothing stands in front of the eggs, which was the lesson
-    # the pergola taught.
-    lean_to('shelter', -court_w * 0.31, court_y + 0.02, 0.16, 0.84, 0.9, 0.96,
-            key='straw')
-
-    nest('nest', court_w * 0.16, court_y + 0.02, 0.18, 0.40)
-    straw_scatter('litter', court_w * 0.16, court_y + 0.02, 0.18, 0.72)
-    straw_bale('bale', -court_w * 0.30, court_y + 0.24, 0.18, 0.4, 0.28, 0.26)
-    ex = court_w * 0.16
-    egg('egg_a', ex - 0.24, court_y + 0.14, 0.20, 0.23, mat('stucco'))
-    egg('egg_b', ex + 0.18, court_y + 0.22, 0.20, 0.26, mat('stucco'))
-    egg('egg_c', ex + 0.02, court_y - 0.24, 0.20, 0.21, mat('stucco'))
-
-    # The working clutter, kept to the edges so the middle stays the eggs.
-    pot('pot_a', court_w / 2 - 0.34, court_y + court_d * 0.30, 0.16)
-    plant('plant_a', court_w / 2 - 0.32, court_y - court_d * 0.14, 0.16)
-    # The brazier goes to the GATE, not beside the door: anything tall on the
-    # near-left stands directly across the line from the camera to the arch,
-    # and the arch is half of what makes this building legible.
-    trough('trough', -court_w / 2 + 0.46, court_y + court_d * 0.28, 0.16,
-           0.58, 0.28)
-    brazier('brazier', -court_w / 2 + 0.30, court_y - court_d * 0.34, 0.16,
-            h=0.46)
+    # ── Behind: the same standard as the front ──
+    back_y = hy + up_d / 2
+    for i, ox in enumerate((-0.9, 0.1, 1.1)):
+        leaded_window(f'mb{i}', hx + ox, back_y, uz, 0.3, 0.36)
+    doorway('mbdoor', hx + 1.2, hy + hd / 2, base_h, 0.52, 0.68, rim=0.13)
+    plank_door('mbleaf', hx + 1.2, hy + hd / 2 + 0.05, base_h + 0.02, 0.46,
+               0.4, planks=3)
+    sconce('mblamp', hx + 1.72, hy + hd / 2, base_h + 0.84)
+    lx = hx + hw / 2 + 0.16
+    for i in range(7):
+        ob = box(f'mlogs{i}', lx, hy + 0.7 - i * 0.12, 0.02, 0.34, 0.1, 0.1,
+                 mat('oak' if i % 2 else 'oak_light'))
+        ob.rotation_euler = (0, math.radians(8 if i % 2 else -6), 0)
+    box('mbutt', lx + 0.02, hy - 0.7, 0, 0.38, 0.38, 0.44, mat('oak'))
+    box('mbutt_hoop', lx + 0.02, hy - 0.7, 0.15, 0.41, 0.41, 0.05, mat('iron'))
+    vine('mvine', hx - hw / 2 - 0.01, hy - 0.5, base_h, 0.9, facing='x')
+    tufts('mgrass', hx, hy, hw + 0.6, hd + 0.6)
 
 
+# ── ONE WORLD (user 2026-08-04: "behalte nur das mittelalterliche Gebäude") ──
+# The Roman and the fungal Hatcheries are gone. Both were finished designs and
+# both are in the history if they are ever wanted, but a roster is not a
+# portfolio: three buildings from three worlds is worse than three from one,
+# however good each is on its own.
+#
+# Their PARTS stay in the kit above — hip roofs, pantiles, colonnades, caps,
+# gills. Some now have no caller. That is deliberate: they are a vocabulary,
+# not a building, and the next stone or fungal thing this settlement needs will
+# want them. Anything that has no caller AND no plausible one should go.
 PRESETS = {
     'breeding_hut': (breeding_hut, 4, 4),
-    'breeding_hut_spore': (breeding_hut_spore, 4, 4),
-    # Kept, not deleted. It is a finished design in a different world, and the
-    # kit that built it (hip roofs, pantiles, colonnades, ashlar) is the same
-    # kit every stone building will use. Throwing it away would throw away the
-    # only worked example of that half of the vocabulary.
-    'breeding_hut_roman': (breeding_hut_roman, 4, 4),
+    'main_hall': (main_hall, 5, 5),
 }
 
 
