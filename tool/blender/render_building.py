@@ -1759,9 +1759,12 @@ def main_hall(w, h):
     # width: a castle that spreads reads as a compound, one that rises reads as
     # a stronghold. The keep's wall alone is now taller than the whole
     # Hatchery, which is the comparison that does the work on the map.
-    kx, ky = -0.2, 1.5
-    kw, kd = 3.6, 2.8
-    wall_h = 3.2
+    # Wider and one step taller again: the woodpile's corner and the slack
+    # around the bailey go into the KEEP, which is the only part of this
+    # building whose size a player reads from across the map.
+    kx, ky = -0.1, 1.45
+    kw, kd = 4.35, 3.1
+    wall_h = 3.45
     ashlar_courses('kbase', kx, ky, 0, kw + 0.2, kd + 0.2, 0.36,
                    course=0.18, block=0.36)
     ashlar_courses('kwall', kx, ky, 0.36, kw, kd, wall_h,
@@ -1868,10 +1871,12 @@ def main_hall(w, h):
     trough('ktrough', yx1 - 0.36, yyc + 0.55, 0.1, 0.26, 0.6, key='oak')
     for i, ox in enumerate((-1.75, 1.75)):
         plant(f'kplant{i}', yxc + ox, yy0 + 0.36, 0.1)
-    for i in range(6):
-        ob = box(f'klogs{i}', yx0 + 0.45, yyc - 0.55 - i * 0.12, 0.12,
-                 0.32, 0.1, 0.1, mat('oak' if i % 2 else 'oak_light'))
-        ob.rotation_euler = (0, math.radians(8 if i % 2 else -6), 0)
+    # No woodpile (user 2026-08-04: "das kleine Holzelement entfernen"). It sat
+    # at the far left of the bailey, past the curtain wall's line, and a loose
+    # stack of timber on the ground is farmyard clutter — right for the
+    # Hatchery, wrong for the seat of the settlement. Its corner goes into the
+    # keep, which is the only part of this building whose size a player reads
+    # from across the map.
 
     # ── The donjon: the tallest thing on the map ──
     # A pair of matched towers is a gate. What makes a castle read as a SEAT
