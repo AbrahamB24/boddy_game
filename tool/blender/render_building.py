@@ -1823,26 +1823,26 @@ def main_hall(w, h):
     battlements('gatecrown', kx, gate_y, 2.5, gw, 0.9, h=0.28, merlon=0.22,
                 gap=0.17)
     doorway('gatearch', kx, gate_y - 0.45, 0.08, 1.15, 1.5, rim=0.2)
-    # ── The portcullis has to be LIGHTER than the hole it hangs in ──
-    # Iron bars in a black archway are iron bars nobody can see: the grid was
-    # there all along and read as nothing. Same lesson as the doorway surround
-    # — a shape is read against its background, not against its own material.
-    #
-    # Oak with iron shoes, which is what most of them actually were, and which
-    # gives bars a tone that stands out of the dark instead of joining it. Set
-    # forward of the arch as well, so the arch's own depth cannot swallow them.
-    for i in range(5):
-        box(f'pcv{i}', kx - 0.44 + i * 0.22, gate_y - 0.66, 0.1,
-            0.07, 0.08, 1.42, mat('oak_light'))
-    for i in range(4):
-        box(f'pch{i}', kx, gate_y - 0.66, 0.24 + i * 0.34, 1.06, 0.08, 0.07,
-            mat('oak_light'))
-    # The iron shoes at the foot of each bar — the detail that says the thing
-    # comes DOWN, and the only place the metal belongs.
-    for i in range(5):
-        box(f'pcs{i}', kx - 0.44 + i * 0.22, gate_y - 0.66, 0.1,
-            0.09, 0.1, 0.13, mat('iron'))
-    steps('gsteps', kx, gate_y - 0.95, 0, 1.5, count=3, rise=0.1)
+    # ── A STUDDED DOOR, not a portcullis (user 2026-08-04) ──
+    # The grid was a lattice of thin bars in front of a dark hole, and at any
+    # size a lattice is a texture rather than a shape: it filled the one opening
+    # in the facade with noise. A boarded door is one solid silhouette with
+    # rivets on it — the same read at 256 px as at 1000, and the rivets are the
+    # part that says a smith worked on it.
+    gate_w, gate_dh = 1.16, 1.44
+    plank_door('gdoor', kx, gate_y - 0.62, 0.1, gate_w, gate_dh, planks=7)
+    # Studs of its own, bigger than plank_door's and in a grid — a castle gate
+    # is armoured where a house door is merely made.
+    for r in range(4):
+        for c in range(4):
+            box(f'gstud{r}{c}', kx - 0.42 + c * 0.28,
+                gate_y - 0.68, 0.28 + r * 0.32,
+                0.09, 0.07, 0.09, mat('iron'))
+    # The iron straps across it, and the ring you pull.
+    for hz in (0.42, 1.14):
+        box(f'gstrap{hz}', kx, gate_y - 0.68, hz, gate_w - 0.05, 0.06, 0.07,
+            mat('iron'))
+    box('gring', kx + 0.3, gate_y - 0.7, 0.76, 0.14, 0.05, 0.14, mat('iron'))
     for s in (-1, 1):
         sconce(f'gatelamp{s}', kx + s * 0.78, gate_y - 0.45, 1.75)
 
@@ -1863,18 +1863,26 @@ def main_hall(w, h):
                     yd * 0.8, h=0.2, merlon=0.2, gap=0.16)
 
     # The well: the one shape in a bailey nobody has to be told the meaning of.
-    wx, wy = yxc - 1.15, yyc + 0.15
-    ashlar_courses('well', wx, wy, 0.1, 0.7, 0.7, 0.44, course=0.15,
-                   block=0.26)
-    box('well_cap', wx, wy, 0.54, 0.8, 0.8, 0.07, mat('travertine'))
-    box('well_dark', wx, wy, 0.5, 0.48, 0.48, 0.06, mat('dark'))
+    # ── SMALLER, AND NO PALE LID (user 2026-08-04) ──
+    # It was nearly as wide as the gate and capped in travertine, which made a
+    # bright horizontal plate sitting in the middle of the bailey — the lightest
+    # thing in the picture, on the least important object in it. A well is
+    # furniture; it may say "someone lives here" and nothing louder.
+    #
+    # The coping is the same ashlar as the shaft now, one course proud, so the
+    # rim reads as the top of a wall rather than as a lid laid on one.
+    wx, wy = yxc - 1.2, yyc + 0.2
+    ashlar_courses('well', wx, wy, 0.1, 0.52, 0.52, 0.36, course=0.13,
+                   block=0.22)
+    box('well_rim', wx, wy, 0.46, 0.58, 0.58, 0.06, mat('ashlar_dark'))
+    box('well_dark', wx, wy, 0.43, 0.38, 0.38, 0.05, mat('dark'))
     for s in (-1, 1):
-        box(f'well_post{s}', wx + s * 0.29, wy, 0.61, 0.11, 0.11, 0.62,
+        box(f'well_post{s}', wx + s * 0.22, wy, 0.5, 0.09, 0.09, 0.5,
             mat('oak'))
-    box('well_beam', wx, wy, 1.19, 0.76, 0.12, 0.12, mat('oak'))
-    box('well_rope', wx, wy, 0.92, 0.04, 0.04, 0.28, mat('iron'))
-    box('well_bucket', wx, wy, 0.82, 0.2, 0.2, 0.16, mat('oak_light'))
-    shingle_gable('well_roof', wx, wy, 1.25, 0.78, 0.78, 0.36, overhang=0.16,
+    box('well_beam', wx, wy, 0.98, 0.6, 0.1, 0.1, mat('oak'))
+    box('well_rope', wx, wy, 0.76, 0.035, 0.035, 0.22, mat('iron'))
+    box('well_bucket', wx, wy, 0.68, 0.16, 0.16, 0.13, mat('oak_light'))
+    shingle_gable('well_roof', wx, wy, 1.04, 0.6, 0.6, 0.28, overhang=0.13,
                   rows=4, ridge_along='x')
 
     # Garrison clutter: what a bailey actually has in it.
