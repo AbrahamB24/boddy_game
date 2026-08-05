@@ -36,6 +36,12 @@ class BestiaryScreen extends StatefulWidget {
   State<BestiaryScreen> createState() => _BestiaryScreenState();
 }
 
+/// Evolution stages every species has. The tile row and the completion figures
+/// both need it, and when it lived as a bare `3` in the row only, the header
+/// counted SPECIES while the grid showed stages — "1/15" under forty-five
+/// pictures (user 2026-08-04).
+const int kBestiaryStages = 3;
+
 class _BestiaryScreenState extends State<BestiaryScreen> {
   final _ctrl = CreaturesController();
 
@@ -77,16 +83,25 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
           final r = a.rarity.index.compareTo(b.rarity.index);
           return r != 0 ? r : a.name.compareTo(b.name);
         });
-      final discovered =
-          species.where((s) => _progressFor(s.id).owned > 0).length;
-      final mastered =
-          species.where((s) => _progressFor(s.id).bestStage >= 2).length;
+      // STAGES, not species. The grid shows every species at all three of its
+      // stages, so counting species made the header disagree with what is on
+      // screen underneath it. A stage counts as seen once your best of that
+      // species has reached it — the same rule the tiles use to un-silhouette.
+      final totalStages = species.length * kBestiaryStages;
+      final discovered = species.fold<int>(
+        0,
+        (n, s) => n + (_progressFor(s.id).bestStage + 1)
+            .clamp(0, kBestiaryStages),
+      );
+      final mastered = species
+          .where((s) => _progressFor(s.id).bestStage >= kBestiaryStages - 1)
+          .length;
       return ParchmentPage(
         title: 'Bestiary',
         trailing: Text(
           species.isEmpty
               ? ''
-              : '${(discovered / species.length * 100).round()}%',
+              : '${(discovered / totalStages * 100).round()}%',
           style: FoE.value(size: 13).copyWith(color: FoE.gold),
         ),
         child: Column(
@@ -97,14 +112,14 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
                 child: Column(
                   children: [
                     RecessBar(
-                      value: discovered / species.length,
+                      value: discovered / totalStages,
                       color: FoE.gold,
                       height: 12,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$discovered/${species.length} discovered · '
-                      '$mastered/${species.length} at final stage',
+                      '$discovered/$totalStages stages seen · '
+                      '$mastered/${species.length} species fully evolved',
                       style: FoE.dim(size: 10),
                     ),
                   ],
@@ -206,7 +221,7 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (var stage = 0; stage < 3; stage++) ...[
+                for (var stage = 0; stage < kBestiaryStages; stage++) ...[
                   if (stage > 0) const SizedBox(width: 8),
                   Expanded(
                     child: _stageTile(

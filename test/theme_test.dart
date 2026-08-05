@@ -13,11 +13,17 @@ void main() {
     // ── LOW POLY (user 2026-07-31) ──
     // "alles soll im low poly flatdesign sein, so wie dieses Monster"
     //
-    // Faceted means three things, and all three are properties of the tokens
-    // rather than of any screen: corners are CUT, surfaces are ONE flat tone,
-    // and a shadow is a hard offset rather than a blur.
-    BeveledRectangleBorder shapeOf(ShapeDecoration d) =>
-        d.shape as BeveledRectangleBorder;
+    // Faceted meant three things: corners CUT, surfaces ONE flat tone, and a
+    // shadow a hard offset rather than a blur.
+    //
+    // ── The corners went back to curves (user 2026-08-04) ──
+    // "Bringe wieder mehr Rundungen ins UI, so ist es zu extrem." The other two
+    // properties are untouched and still pinned below — flat fills and hard
+    // shadows were never the problem. What did not survive was the chamfer at
+    // panel scale: on a monster it is one facet among dozens, on a full-width
+    // card it is two long diagonals repeated down the screen.
+    RoundedRectangleBorder shapeOf(ShapeDecoration d) =>
+        d.shape as RoundedRectangleBorder;
 
     test('panels and buttons are flat — no decorative shadow', () {
       expect(FoE.panel().shadows, anyOf(isNull, isEmpty));
@@ -26,12 +32,13 @@ void main() {
       expect(FoE.btn(active: true).shadows, anyOf(isNull, isEmpty));
     });
 
-    test('every corner is a CUT, not a curve', () {
-      // The single most recognisable low-poly move — and the reason the radius
-      // tokens could stay: a bevel takes the same number a round would.
-      expect(FoE.panel().shape, isA<BeveledRectangleBorder>());
-      expect(FoE.btn().shape, isA<BeveledRectangleBorder>());
-      expect(FoE.facet(), isA<BeveledRectangleBorder>());
+    test('every corner is a CURVE, not a cut', () {
+      // One shape for the whole app, whichever shape that is. The value of
+      // pinning it has never been the bevel — it is that a single screen
+      // cannot quietly pick a different corner from everything around it.
+      expect(FoE.panel().shape, isA<RoundedRectangleBorder>());
+      expect(FoE.btn().shape, isA<RoundedRectangleBorder>());
+      expect(FoE.facet(), isA<RoundedRectangleBorder>());
     });
 
     test('a panel is ONE tone — a gradient cannot be flat shading', () {
@@ -55,10 +62,11 @@ void main() {
       expect(r.topLeft.x, 18);
     });
 
-    test('the cut is sharp, and the default is the shared token', () {
-      // Smaller than the rounded values they replaced: a 16-px CUT is a
-      // dramatic chamfer where a 16-px round was a soft pill.
-      expect(FoE.radius, lessThanOrEqualTo(12));
+    test('the curve is generous, and the default is the shared token', () {
+      // The radii went back UP with the shape. A 10-px cut is a dramatic
+      // chamfer; a 10-px round is barely visible, so carrying the bevel's
+      // numbers over would have read as square rather than as soft.
+      expect(FoE.radius, greaterThanOrEqualTo(14));
       expect(FoE.radiusSmall, lessThan(FoE.radius));
       final r = shapeOf(FoE.panel()).borderRadius as BorderRadius;
       expect(r.topLeft.x, FoE.radius);

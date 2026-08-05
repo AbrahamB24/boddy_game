@@ -25,9 +25,11 @@ void main() {
 
   test('the chrome takes its shapes from the app, not its own', () {
     // Everything the redesign draws — tiles, plates, queue cards, AP chips —
-    // is cut with FoE.facet and lifted with FoE.drop. Pinning the tokens is
+    // is shaped with FoE.facet and lifted with FoE.drop. Pinning the tokens is
     // what keeps the battle screen from drifting into a private style again.
-    expect(FoE.facet(), isA<BeveledRectangleBorder>());
+    // (The shape became a curve on 2026-08-04; what is pinned is that the
+    // screen takes the app's shape, not which shape that happens to be.)
+    expect(FoE.facet(), isA<RoundedRectangleBorder>());
     for (final s in FoE.drop()) {
       expect(s.blurRadius, 0, reason: 'a faceted world casts no fog');
     }

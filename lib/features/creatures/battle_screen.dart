@@ -971,29 +971,53 @@ class _BattleScreenState extends State<BattleScreen>
                 bottom: isEnemy ? seam : reserve,
                 left: 2,
                 right: 2,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    for (var i = 0; i < CombatEngine.kFieldSlots; i++)
-                      Expanded(
-                        child: Transform.translate(
-                          // FORWARD is toward the seam: down for the enemy rank,
-                          // up for mine. The flanks give way by half a step in
-                          // the other direction.
-                          offset: Offset(
-                            0,
-                            (_isCentreSlot(i) ? step : -step * 0.5) *
-                                (isEnemy ? 1 : -1),
-                          ),
-                          child: _fieldSlot(
-                            field[i],
-                            slot: i,
-                            isEnemy: isEnemy,
+                // ── ONLY THE OCCUPIED SLOTS, CENTRED (user 2026-08-04) ──
+                // Three Expanded cells were laid out whether or not anyone
+                // stood in them, so a lone survivor kept the seat it started
+                // in — a single monster stranded on the left of an empty rank.
+                //
+                // The WEDGE only means anything with three: it says "the middle
+                // one has stepped forward", and with two there is no middle,
+                // just two monsters at different heights for no reason. So the
+                // step applies at three and the pair stands level.
+                child: Builder(
+                  builder: (_) {
+                    final live = [
+                      for (var i = 0; i < CombatEngine.kFieldSlots; i++)
+                        if (field[i] != null && field[i]!.alive) i,
+                    ];
+                    final wedge = live.length == CombatEngine.kFieldSlots;
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        for (final i in live)
+                          SizedBox(
+                            // The slot keeps its full-rank width, so a monster
+                            // is the same size whether one stands or three do.
                             width: w / CombatEngine.kFieldSlots,
+                            child: Transform.translate(
+                              // FORWARD is toward the seam: down for the enemy
+                              // rank, up for mine.
+                              offset: Offset(
+                                0,
+                                !wedge
+                                    ? 0
+                                    : (_isCentreSlot(i) ? step : -step * 0.5) *
+                                        (isEnemy ? 1 : -1),
+                              ),
+                              child: _fieldSlot(
+                                field[i],
+                                slot: i,
+                                isEnemy: isEnemy,
+                                width: w / CombatEngine.kFieldSlots,
+                                back: wedge && !_isCentreSlot(i),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                  ],
+                      ],
+                    );
+                  },
                 ),
               ),
               if (bench.isNotEmpty)
@@ -1041,14 +1065,17 @@ class _BattleScreenState extends State<BattleScreen>
     required int slot,
     required bool isEnemy,
     required double width,
+    // A flank stands further back, so it is drawn a little smaller: the size
+    // difference is what makes the wedge read as DEPTH rather than as a rank
+    // that failed to line up. Passed IN rather than derived from the slot,
+    // because there is no wedge unless all three are standing — and a lone
+    // monster in slot 0 must not be drawn as if it were hanging back from
+    // company that is no longer there.
+    required bool back,
   }) {
     if (c == null || !c.alive) return const SizedBox.shrink();
     final acting = identical(c, _engine.currentActor) && _engine.outcome == null;
     final targeted = isEnemy && identical(c, _target);
-    // A flank stands further back, so it is drawn a little smaller. The size
-    // difference is what makes the wedge read as DEPTH rather than as a rank
-    // that failed to line up.
-    final back = !_isCentreSlot(slot);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: isEnemy ? () => setState(() => _targetId = c.id) : null,
@@ -1850,11 +1877,11 @@ class _BattleScreenState extends State<BattleScreen>
                   color: enabled
                       ? FoE.bg.withValues(alpha: 0.55)
                       : Colors.transparent,
-                  shape: const BeveledRectangleBorder(
-                    // Cut on the inner corner only: the chip is a piece of the
-                    // tile's own edge, not a sticker on it.
+                  shape: const RoundedRectangleBorder(
+                    // Rounded on the inner corner only: the chip is a piece of
+                    // the tile's own edge, not a sticker on it.
                     borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(9),
+                      bottomLeft: Radius.circular(12),
                     ),
                   ),
                 ),

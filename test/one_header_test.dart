@@ -86,7 +86,7 @@ void main() {
   // snackbars, buttons — are faceted by the THEME. That is the same lever the
   // dark flip used, and the same failure mode: one shape left rounded in here
   // and the app has a single soft corner nobody can find.
-  testWidgets('every themed surface is cut, not curved', (tester) async {
+  testWidgets('every themed surface takes the app shape', (tester) async {
     late ThemeData t;
     await tester.pumpWidget(
       MaterialApp(
@@ -99,10 +99,10 @@ void main() {
         ),
       ),
     );
-    expect(t.cardTheme.shape, isA<BeveledRectangleBorder>());
-    expect(t.dialogTheme.shape, isA<BeveledRectangleBorder>());
-    expect(t.popupMenuTheme.shape, isA<BeveledRectangleBorder>());
-    expect(t.snackBarTheme.shape, isA<BeveledRectangleBorder>());
+    expect(t.cardTheme.shape, isA<RoundedRectangleBorder>());
+    expect(t.dialogTheme.shape, isA<RoundedRectangleBorder>());
+    expect(t.popupMenuTheme.shape, isA<RoundedRectangleBorder>());
+    expect(t.snackBarTheme.shape, isA<RoundedRectangleBorder>());
   });
 
   testWidgets('a sheet wears the band, but no grab handle', (tester) async {

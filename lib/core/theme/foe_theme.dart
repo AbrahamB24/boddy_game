@@ -98,30 +98,38 @@ class FoE {
   // the same thing, and it says it in these tokens so a screen does not have to
   // know about it.
   //
-  // [radius] is a CUT, not a curve. Flutter's BeveledRectangleBorder takes the
-  // same number a rounded corner would and slices the corner off instead —
-  // which is the single most recognisable low-poly move, and it costs every
-  // caller nothing because they already pass a radius.
+  // ── ROUNDED AGAIN (user 2026-08-04: "bringe wieder mehr Rundungen ins UI,
+  //    so ist es zu extrem") ──
+  // The corners were CUT — BeveledRectangleBorder, which takes the number a
+  // rounded corner would and slices the corner off instead. On a monster that
+  // chamfer is one facet among dozens and reads as carved. On a full-width
+  // panel it is two long diagonals across the screen, and every stacked card
+  // repeats them until the layout looks like it was trimmed with scissors.
   //
-  // The numbers are smaller than the rounded ones they replace: a 16-px cut is a
-  // dramatic chamfer where a 16-px round was a soft pill.
-  static const double radius = 10;
-  static const double radiusSmall = 7;
+  // Low poly still holds where it belongs: flat fills, hard drop shadows, and
+  // shading by neighbouring facets ([lit]/[shade]) — none of that changed. Only
+  // the outline is soft again.
+  //
+  // The numbers go back UP with the shape. A 10-px cut is a dramatic chamfer;
+  // a 10-px round is barely visible, so keeping the bevel's radii would have
+  // read as square rather than as soft.
+  static const double radius = 16;
+  static const double radiusSmall = 11;
 
-  /// A faceted corner — the app's one shape. Pass it to [ShapeDecoration] or to
-  /// any Material `shape:`.
-  static BeveledRectangleBorder facet({
+  /// The app's one shape. Pass it to [ShapeDecoration] or any Material
+  /// `shape:`. Still called `facet` because every caller says `FoE.facet(...)`
+  /// and the name is about WHICH shape, not about its corners.
+  static RoundedRectangleBorder facet({
     double radius = FoE.radius,
     BorderSide side = BorderSide.none,
-  }) => BeveledRectangleBorder(
+  }) => RoundedRectangleBorder(
     borderRadius: BorderRadius.circular(radius),
     side: side,
   );
 
-  /// The same cut as a [BorderRadius], for the many places that take one
-  /// directly (ClipRRect, InkWell, BoxDecoration). A BorderRadius cannot bevel
-  /// on its own — this keeps the RADIUS consistent so a clip lines up with the
-  /// shape under it.
+  /// The same corner as a [BorderRadius], for the many places that take one
+  /// directly (ClipRRect, InkWell, BoxDecoration). Keeps the RADIUS consistent
+  /// so a clip lines up with the shape under it.
   static BorderRadius cut([double r = FoE.radius]) => BorderRadius.circular(r);
 
   /// ── THE FACET STEPS ──

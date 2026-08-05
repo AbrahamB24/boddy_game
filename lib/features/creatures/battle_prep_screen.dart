@@ -4,6 +4,7 @@ import '../../core/theme/foe_theme.dart';
 import '../common/widgets/parchment_page.dart';
 import 'models/combatant.dart';
 import 'models/creature_instance.dart';
+import 'widgets/creature_backdrop.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/creature_sprite.dart';
 import 'services/battle_rewards.dart';
@@ -131,47 +132,130 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
       Text(text, style: FoE.label(size: 14).copyWith(color: FoE.gold));
 
   // ── Enemies ────────────────────────────────────────────────
-  Widget _enemyRow() {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [for (final e in widget.enemies) _enemyCard(e)],
-    );
-  }
+  /// ── THE ENEMY LOOKS LIKE A MONSTER (user 2026-08-04) ──
+  /// It was a 96-px bordered box with a small sprite, a name and a level, laid
+  /// out beside a grid of full monster tiles. Two ways of drawing the same kind
+  /// of thing on one screen, and the comparison you are about to make — my six
+  /// against their three — was the one thing the layout made hard.
+  ///
+  /// So the enemies use the monster tile's geometry: the same grid, the same
+  /// aspect, the same element backdrop under the art, the same deepened strip
+  /// carrying the name, the same rounded shape and the same pop-out band above
+  /// the tile for the sprite to break into.
+  ///
+  /// It is a MATCHED tile, not literally [CreatureCard]: that widget is built
+  /// on a CreatureInstance with a species, XP and HP behind it, and an enemy
+  /// has none of those. Faking an instance to reuse the widget would put a lie
+  /// in the model to save a hundred lines in the view. What is shared instead
+  /// is the vocabulary — [CreatureBackdrop], [FoE.facet], the strip tones —
+  /// so the two cannot drift apart on the things a player actually sees.
+  Widget _enemyRow() => GridView.builder(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    padding: const EdgeInsets.only(top: 2),
+    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 3,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 0.70,
+    ),
+    itemCount: widget.enemies.length,
+    itemBuilder: (_, i) => _enemyCard(widget.enemies[i]),
+  );
 
   Widget _enemyCard(Combatant e) {
-    final color = e.element.color;
-    return Container(
-      width: 96,
-      padding: const EdgeInsets.all(8),
-      decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 12, side: BorderSide(color: e.isBoss ? FoE.gold : color.withValues(alpha: 0.6),
-          width: e.isBoss ? 2 : 1.4))),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 52,
-            child: e.imageUrl == null
-                ? const Icon(Icons.pets, color: FoE.gold, size: 34)
-                : CreatureSprite(
-                    url: e.imageUrl!,
-                    fallback: const Icon(Icons.pets, color: FoE.gold, size: 34),
+    final element = e.element.color;
+    final stripDark = Color.lerp(element, Colors.black, 0.46)!;
+    return LayoutBuilder(
+      builder: (context, c) {
+        // The same three numbers the monster tile uses, for the same reasons:
+        // a strip tall enough for two lines, and a band above the tile the art
+        // is allowed to break into so the sprite reads as standing in front of
+        // its card rather than boxed inside it.
+        const stripH = 44.0;
+        final topReserve = c.maxHeight * 0.17;
+        return Stack(
+          children: [
+            Positioned(
+              top: topReserve,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: ShapeDecoration(
+                  color: stripDark,
+                  shape: FoE.facet(
+                    radius: 22,
+                    // A boss is the one enemy worth a frame. Everything else
+                    // says what it is by its element alone, exactly as my own
+                    // monsters do.
+                    side: e.isBoss
+                        ? const BorderSide(color: FoE.goldBright, width: 2)
+                        : BorderSide.none,
                   ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${e.element.emoji} ${e.name}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: FoE.label(size: 11).copyWith(color: FoE.parchment),
-          ),
-          Text(
-            e.isBoss ? '👑 Boss · Lv ${e.level}' : 'Lv ${e.level}',
-            style: FoE.dim(size: 10).copyWith(
-              color: e.isBoss ? FoE.goldBright : FoE.textDim,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: CreatureBackdrop(
+                        element: e.element,
+                        radius: 0,
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                    SizedBox(
+                      height: stripH,
+                      child: Padding(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              e.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: FoE.label(size: 12).copyWith(
+                                color: FoE.parchment,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            Text(
+                              e.isBoss ? '👑 Boss · Lv ${e.level}'
+                                  : '${e.element.emoji} Lv ${e.level}',
+                              maxLines: 1,
+                              style: FoE.dim(size: 10).copyWith(
+                                color: e.isBoss ? FoE.goldBright : FoE.textDim,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ],
-      ),
+            // The sprite, breaking up out of the tile.
+            Positioned(
+              left: 4,
+              right: 4,
+              top: 0,
+              bottom: stripH + 4,
+              child: e.imageUrl == null
+                  ? const Icon(Icons.pets, color: FoE.gold, size: 34)
+                  : CreatureSprite(
+                      url: e.imageUrl!,
+                      fallback:
+                          const Icon(Icons.pets, color: FoE.gold, size: 34),
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 
