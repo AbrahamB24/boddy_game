@@ -1823,12 +1823,25 @@ def main_hall(w, h):
     battlements('gatecrown', kx, gate_y, 2.5, gw, 0.9, h=0.28, merlon=0.22,
                 gap=0.17)
     doorway('gatearch', kx, gate_y - 0.45, 0.08, 1.15, 1.5, rim=0.2)
+    # ── The portcullis has to be LIGHTER than the hole it hangs in ──
+    # Iron bars in a black archway are iron bars nobody can see: the grid was
+    # there all along and read as nothing. Same lesson as the doorway surround
+    # — a shape is read against its background, not against its own material.
+    #
+    # Oak with iron shoes, which is what most of them actually were, and which
+    # gives bars a tone that stands out of the dark instead of joining it. Set
+    # forward of the arch as well, so the arch's own depth cannot swallow them.
     for i in range(5):
-        box(f'pcv{i}', kx - 0.44 + i * 0.22, gate_y - 0.5, 0.1,
-            0.05, 0.06, 1.42, mat('iron'))
+        box(f'pcv{i}', kx - 0.44 + i * 0.22, gate_y - 0.66, 0.1,
+            0.07, 0.08, 1.42, mat('oak_light'))
     for i in range(4):
-        box(f'pch{i}', kx, gate_y - 0.5, 0.24 + i * 0.34, 1.02, 0.06, 0.05,
-            mat('iron'))
+        box(f'pch{i}', kx, gate_y - 0.66, 0.24 + i * 0.34, 1.06, 0.08, 0.07,
+            mat('oak_light'))
+    # The iron shoes at the foot of each bar — the detail that says the thing
+    # comes DOWN, and the only place the metal belongs.
+    for i in range(5):
+        box(f'pcs{i}', kx - 0.44 + i * 0.22, gate_y - 0.66, 0.1,
+            0.09, 0.1, 0.13, mat('iron'))
     steps('gsteps', kx, gate_y - 0.95, 0, 1.5, count=3, rise=0.1)
     for s in (-1, 1):
         sconce(f'gatelamp{s}', kx + s * 0.78, gate_y - 0.45, 1.75)

@@ -1935,6 +1935,7 @@ final Map<String, BuildingDef> kBuildingDefs = Map.of(kFallbackBuildingDefs);
 /// the chimney's mouth as a fraction of the image.
 const Map<String, (double, double)> kChimneyAnchor = {
   'breeding_hut': (0.395, 0.185),
+  'main_hall': (0.552, 0.232),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {
