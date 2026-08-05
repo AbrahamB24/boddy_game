@@ -2644,8 +2644,13 @@ class SettlementMapState extends State<SettlementMap>
             // LAST in the stack, because the first child of a Stack is the
             // bottom one and a control under the map is a control nobody can
             // press.
+            //
+            // BOTTOM LEFT (user 2026-08-04: "ev. ist er hinter einen button").
+            // Being last in the map's own stack only wins against the map —
+            // the screen puts its own chrome over the whole widget, and the
+            // bottom-right is where that chrome lives. Left is the empty corner.
             Positioned(
-              right: 12,
+              left: 12,
               bottom: 12,
               child: _MapTurnButton(
                 rotation: isoRotation,
