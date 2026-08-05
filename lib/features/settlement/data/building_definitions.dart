@@ -1686,7 +1686,13 @@ List<BuildingDef> _buildRoster() {
         id: 'breeding_hut',
         name: 'Breeding Hut',
         color: const Color(0xFFE91E63),
-        gridW: 3,
+        // 4x4, not 3x4 (user 2026-08-04). The art was rebuilt as two wings
+        // round a court, and a SQUARE footprint is what makes that read: the
+        // plan projects to a true rhombus with its near corner at the bottom
+        // of the picture, so a court left open at that corner is looked INTO
+        // rather than past. The plot has to agree with the picture — the map
+        // scales art to the footprint's width, so a 3x4 def would squash it.
+        gridW: 4,
         gridH: 4,
         resourceCost: _rosterCost(1, 0.9),
         constructionHours: _eraBuildHours(300, 1),

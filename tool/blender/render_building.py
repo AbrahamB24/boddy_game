@@ -228,6 +228,24 @@ def plinth(name, x, y, sx, sy, h=0.22, key='ashlar'):
     return box(name, x, y, 0, sx, sy, h, mat(key))
 
 
+def doorway(name, x, y, z, w, h, facing='y', depth=0.22, rim=0.2):
+    """A dark opening with a stone surround, placed correctly by construction.
+
+    Use this instead of two bare arch() calls. arch() builds a SOLID body, so a
+    surround has to sit BEHIND the mouth and be larger — only its rim survives
+    — and "behind" points opposite ways on the two facings: +y for a wall drawn
+    towards -y, but -x for one on +x. Getting that backwards plugs the hole and
+    yields a pale panel where a doorway should be, and it has now cost three
+    separate openings. Here the sign is written down once.
+    """
+    into = 1.0 if facing == 'y' else -1.0
+    sx = x + (0 if facing == 'y' else into * 0.13)
+    sy = y + (into * 0.13 if facing == 'y' else 0)
+    arch(f'{name}_surround', sx, sy, z, w + rim, h + rim / 2, depth,
+         key='travertine', facing=facing)
+    arch(f'{name}_mouth', x, y, z, w, h, depth, facing=facing)
+
+
 def arch(name, x, y, z, w, h, depth, key='dark', segments=4, facing='y'):
     """An opening with a rounded head, faceted like everything else.
 
@@ -582,6 +600,50 @@ def mosaic(name, x, y, z, sx, sy, key_a='travertine', key_b='tile',
                 mat(key_a if (i * 3 + j) % 4 else key_b))
 
 
+def colonnade(name, x, y, z, span, depth, h, count=4, axis='x'):
+    """A row of columns carrying an architrave and a mono-pitch roof.
+
+    The most Roman thing that can be built and the best value in the whole kit:
+    a portico is the one element that reads as DEPTH from a fixed camera. A flat
+    wall is a plane whatever you put on it; a colonnade has a lit front, shaded
+    columns, and a dark space behind them, and the eye reads three layers.
+    """
+    for i in range(count):
+        t = -span / 2 + span * (i + 0.5) / count
+        cx, cy = (x + t, y) if axis == 'x' else (x, y + t)
+        column(f'{name}_c{i}', cx, cy, z, 0.115, h - 0.26)
+    # Architrave, then the frieze band it carries, then the roof.
+    sx, sy = (span + 0.3, depth) if axis == 'x' else (depth, span + 0.3)
+    box(f'{name}_arch', x, y, z + h - 0.26, sx, sy, 0.13, mat('travertine'))
+    box(f'{name}_frieze', x, y, z + h - 0.13, sx - 0.06, sy - 0.06, 0.09,
+        mat('stucco'))
+    dentils(f'{name}_dent', x, y, z + h - 0.05, sx - 0.1, sy - 0.1)
+    lean_to(f'{name}_roof', x, y, z + h - 0.04, sx - 0.1, sy - 0.1, 0.34,
+            drop=0.22, courses=7)
+
+
+def well(name, x, y, z, r=0.36):
+    """A round stone well with a timber winch. Every settlement has one, and it
+    is the single prop that most says PEOPLE LIVE HERE rather than "storage"."""
+    bpy.ops.mesh.primitive_cylinder_add(vertices=10, radius=r, depth=0.42,
+                                        location=(x, y, z + 0.21))
+    ob = bpy.context.object
+    ob.name = f'{name}_ring'
+    for p in ob.data.polygons:
+        p.use_smooth = False
+    flute_faces(ob, key='ashlar', shade='ashlar_dark')
+    box(f'{name}_water', x, y, z + 0.34, r * 1.3, r * 1.3, 0.04, mat('dark'))
+    box(f'{name}_rim', x, y, z + 0.38, r * 1.75, r * 1.75, 0.06,
+        mat('travertine'))
+    for sign in (-1, 1):
+        box(f'{name}_post{sign}', x + sign * (r - 0.02), y, z + 0.45,
+            0.09, 0.09, 0.62, mat('oak'))
+    box(f'{name}_beam', x, y, z + 1.05, r * 2.4, 0.1, 0.1, mat('oak'))
+    box(f'{name}_roller', x, y, z + 0.86, r * 1.9, 0.11, 0.11, mat('oak_light'))
+    box(f'{name}_rope', x, y, z + 0.62, 0.035, 0.035, 0.25, mat('straw'))
+    box(f'{name}_bucket', x, y, z + 0.5, 0.17, 0.17, 0.16, mat('oak'))
+
+
 def moss(name, x, y, z, sx, sy, h, ridge=0.45, overhang=0.3, patches=9,
          key='moss'):
     """Moss creeping up a roof from the eaves.
@@ -684,7 +746,7 @@ def dovecote(name, x, y, z, w, h, holes=3):
     box(f'{name}_finial', x, y, top + w * 0.55, 0.08, 0.08, 0.11, mat('gold'))
 
 
-def lean_to(name, x, y, z, sx, sy, h, drop=0.28, key='tile'):
+def lean_to(name, x, y, z, sx, sy, h, drop=0.28, key='tile', courses=0):
     """A mono-pitch shelter on posts: high at the back, low at the front.
 
     The other half of breaking symmetry. A second roof at a different pitch and
@@ -713,6 +775,16 @@ def lean_to(name, x, y, z, sx, sy, h, drop=0.28, key='tile'):
     ob.data.materials.append(mat(key))
     for p in ob.data.polygons:
         p.use_smooth = False
+
+    # Courses across the slope, low edge to high. Without them a mono-pitch is
+    # the one big untextured plane left in the whole kit, and on a portico it
+    # sits right in the middle of the picture.
+    if courses:
+        for i in range(courses):
+            f = (i + 0.5) / courses
+            box(f'{name}_t{i}', x, y - sy / 2 + sy * f,
+                z + h - drop + drop * f - 0.02,
+                sx + 0.24, sy / courses * 0.62, 0.05, mat('tile_dark'))
     return ob
 
 
@@ -937,6 +1009,183 @@ def egg(name, x, y, z, r, mat):
 
 
 def breeding_hut(w, h):
+    """An L of two wings around a court that opens towards the camera.
+
+    ── Why 4x4, and why an L ──
+    A square footprint projects to a true rhombus, and its near corner sits at
+    the bottom of the picture. Wrap the FAR corner with two wings and leave the
+    near one open, and the camera looks between them INTO the court: two
+    facades, a colonnade, and the yard's floor, all at once. The old 3x4 could
+    only ever show one front with things standing in front of it.
+
+    The portico is the piece doing the most work. A wall is a plane whatever
+    you decorate it with; a row of columns has a lit front, shaded shafts and a
+    dark space behind, so the eye reads three layers of depth from a camera
+    that cannot move.
+
+    ── The read at 256 px ──
+    Roof mass, then the pale colonnade against the dark under-porch, then three
+    white eggs on straw in the middle of an open court. Everything else is
+    texture. Nothing tall stands between the camera and the eggs — that rule
+    has cost two features already (a pergola and a brazier) and it still holds.
+    """
+    half = w / 2.0
+    hall_d = 1.5                       # the back wing's depth
+    wing_w = 1.3                       # the left wing's width
+    inset = 0.15                       # air between building and plot edge
+    wall_h = 1.28
+
+    x0, x1 = -half + inset, half - inset
+    y0, y1 = -half + inset, half - inset
+
+    hall_y = y1 - hall_d / 2
+    hall_w = x1 - x0
+    wing_x = x0 + wing_w / 2
+    wing_y0, wing_y1 = y0, y1 - hall_d
+    wing_d = wing_y1 - wing_y0
+    wing_yc = (wing_y0 + wing_y1) / 2
+    wing_h = wall_h * 0.82
+
+    court_x0, court_x1 = x0 + wing_w, x1
+    court_y0, court_y1 = y0, y1 - hall_d
+    court_xc = (court_x0 + court_x1) / 2
+    court_yc = (court_y0 + court_y1) / 2
+    court_w, court_d = court_x1 - court_x0, court_y1 - court_y0
+
+    # ── The hall, along the back ──
+    ashlar_courses('hall_p', 0, hall_y, 0, hall_w + 0.22, hall_d + 0.22, 0.2)
+    box('hall_pc', 0, hall_y, 0.2, hall_w + 0.14, hall_d + 0.14, 0.05,
+        mat('travertine'))
+    box('hall', 0, hall_y, 0.22, hall_w, hall_d, wall_h, mat('stucco'))
+    ashlar_courses('hall_c', 0, hall_y, 0.22, hall_w + 0.03, hall_d + 0.03,
+                   0.3, key='travertine', dark='travertine_shade',
+                   course=0.15, block=0.34)
+    string_course('hall_sc', 0, hall_y, 0.52, hall_w, hall_d)
+    dentils('hall_d', 0, hall_y, 0.22 + wall_h - 0.15, hall_w + 0.03,
+            hall_d + 0.03)
+    box('hall_cor', 0, hall_y, 0.22 + wall_h - 0.05, hall_w + 0.2,
+        hall_d + 0.2, 0.1, mat('travertine'))
+    for sxs in (-1, 1):
+        for sys in (-1, 1):
+            px, py = sxs * (hall_w / 2 - 0.07), hall_y + sys * (hall_d / 2 - 0.07)
+            box('hall_pil', px, py, 0.22, 0.22, 0.22, wall_h, mat('travertine'))
+            box('hall_pilb', px, py, 0.22, 0.31, 0.31, 0.11, mat('travertine'))
+            box('hall_pilc', px, py, 0.22 + wall_h - 0.16, 0.32, 0.32, 0.16,
+                mat('travertine'))
+
+    hall_rz = 0.22 + wall_h
+    hall_rh = 0.92
+    hip_roof('hall_r', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
+    pantiles('hall_t', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
+    imbrices('hall_i', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
+    hip_ridges('hall_h', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
+    antefixes('hall_a', 0, hall_y, hall_rz - 0.02, hall_w + 0.6, hall_d + 0.6)
+    acroterion('hall_ac', 0, hall_y, hall_rz + hall_rh, hall_w, hall_d)
+    moss('hall_m', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
+
+    # ── The west wing, lower, at right angles ──
+    ashlar_courses('wing_p', wing_x, wing_yc, 0, wing_w + 0.22, wing_d + 0.22,
+                   0.2)
+    box('wing', wing_x, wing_yc, 0.22, wing_w, wing_d, wing_h, mat('stucco'))
+    ashlar_courses('wing_c', wing_x, wing_yc, 0.22, wing_w + 0.03,
+                   wing_d + 0.03, 0.26, key='travertine',
+                   dark='travertine_shade', course=0.13, block=0.3)
+    dentils('wing_d', wing_x, wing_yc, 0.22 + wing_h - 0.13, wing_w + 0.03,
+            wing_d + 0.03)
+    box('wing_cor', wing_x, wing_yc, 0.22 + wing_h - 0.04, wing_w + 0.17,
+        wing_d + 0.17, 0.09, mat('travertine'))
+    wing_rz, wing_rh = 0.22 + wing_h, 0.7
+    hip_roof('wing_r', wing_x, wing_yc, wing_rz, wing_w, wing_d, wing_rh,
+             overhang=0.26, ridge=0.5)
+    pantiles('wing_t', wing_x, wing_yc, wing_rz, wing_w, wing_d, wing_rh,
+             overhang=0.26, ridge=0.5, courses=12)
+    imbrices('wing_i', wing_x, wing_yc, wing_rz, wing_w, wing_d, wing_rh,
+             overhang=0.26, ridge=0.5, courses=12)
+    hip_ridges('wing_h', wing_x, wing_yc, wing_rz, wing_w, wing_d, wing_rh,
+               overhang=0.26, ridge=0.5)
+    antefixes('wing_a', wing_x, wing_yc, wing_rz - 0.02, wing_w + 0.52,
+              wing_d + 0.52)
+    moss('wing_m', wing_x, wing_yc, wing_rz, wing_w, wing_d, wing_rh,
+         overhang=0.26, ridge=0.5, patches=6)
+
+    # The wing's court-facing wall: a stable door and a shuttered window, both
+    # looking in at the yard, because that is the wall the camera sees.
+    wf_x = wing_x + wing_w / 2
+    doorway('wdoorway', wf_x - 0.02, wing_yc - 0.42, 0.22, 0.5, 0.72,
+            facing='x')
+    plank_door('wdoor', wf_x - 0.03, wing_yc - 0.42, 0.24, 0.46, 0.34,
+               facing='x')
+    window('wwin', wf_x - 0.02, wing_yc + 0.5, 0.68, 0.28, 0.38, 0.2,
+           facing='x')
+    grille('wbars', wf_x - 0.06, wing_yc + 0.5, 0.68, 0.28, 0.34, facing='x')
+    sconce('wsc', wf_x, wing_yc - 0.02, 1.02, facing='x')
+    vine('wvine', wf_x - 0.02, wing_yc + 1.0, 0.28, 0.86, facing='x')
+
+    # ── The portico across the hall's court side ──
+    # Shallower than it wants to be. At 0.7 deep its roof reached out over the
+    # middle of the court and put the eggs in shade — the same mistake the
+    # pergola made on the old hut, in a new shape.
+    port_y = hall_y - hall_d / 2 - 0.26
+    colonnade('port', 0, port_y, 0.22, hall_w - 0.5, 0.52, 1.22, count=5)
+    box('port_step', 0, port_y - 0.36, 0, hall_w - 0.3, 0.3, 0.22,
+        mat('travertine'))
+    # Behind the columns: the way in, kept dark so the colonnade has something
+    # to stand against.
+    hf_y = hall_y - hall_d / 2
+    doorway('halldoor', -0.5, hf_y + 0.03, 0.22, 0.72, 0.84)
+    box('keystone', -0.5, hf_y + 0.01, 0.22 + 0.84 - 0.02, 0.17, 0.1, 0.2,
+        mat('travertine'))
+    plank_door('door', -0.5, hf_y - 0.04, 0.24, 0.68, 0.4)
+    for i, wx in enumerate((0.62, 1.28)):
+        window(f'hwin{i}', wx, hf_y, 0.66, 0.26, 0.36, 0.2)
+        grille(f'hbars{i}', wx, hf_y - 0.04, 0.66, 0.26, 0.32)
+
+    # ── The dovecote in the angle of the L ──
+    cote_w = 0.72
+    dovecote('cote', x0 + cote_w / 2 + 0.06, y1 - hall_d - cote_w / 2 - 0.06,
+             0, cote_w, 2.35)
+
+    # ── The court ──
+    box('yard', court_xc, court_yc, 0, court_w - 0.16, court_d - 0.16, 0.16,
+        mat('sand'))
+    mosaic('yfloor', court_xc, court_yc, 0.16, court_w - 0.42, court_d - 0.42)
+    # Low walls on the two OPEN sides only; the wings close the other two.
+    ashlar_courses('yw_x', court_x1 - 0.09, court_yc, 0, 0.18, court_d, 0.44,
+                   course=0.15, block=0.32)
+    box('yw_xc', court_x1 - 0.09, court_yc, 0.44, 0.24, court_d, 0.055,
+        mat('travertine'))
+    ashlar_courses('yw_y', court_xc, court_y0 + 0.09, 0, court_w, 0.18, 0.44,
+                   course=0.15, block=0.32)
+    box('yw_yc', court_xc, court_y0 + 0.09, 0.44, court_w, 0.24, 0.055,
+        mat('travertine'))
+    # The gate is cut into the near corner, where the two low walls meet.
+    gx, gy = court_x1 - 0.09, court_y0 + 0.09
+    for i, (cx, cy) in enumerate(((gx, gy + 0.62), (gx - 0.62, gy))):
+        column(f'gcol{i}', cx, cy, 0, 0.14, 0.82)
+        box(f'gfin{i}', cx, cy, 0.82, 0.12, 0.12, 0.1, mat('gold'))
+        lantern(f'glamp{i}', cx, cy, 0.92, drop=0.1)
+
+    well('well', court_x0 + 0.52, court_y1 - 0.52, 0.16)
+    # The nest sits in the OPEN half, towards the near corner: the portico
+    # shades the back of the court and nothing may shade the eggs.
+    nx, ny = court_xc + 0.05, court_y0 + court_d * 0.34
+    nest('nest', nx, ny, 0.18, 0.46)
+    straw_scatter('litter', nx, ny, 0.18, 0.84)
+    egg('egg_a', nx - 0.22, ny + 0.1, 0.2, 0.25, mat('stucco'))
+    egg('egg_b', nx + 0.24, ny + 0.16, 0.2, 0.28, mat('stucco'))
+    egg('egg_c', nx + 0.04, ny - 0.28, 0.2, 0.23, mat('stucco'))
+
+    straw_bale('bale', court_x0 + 0.36, court_y0 + 0.46, 0.16, 0.42, 0.3, 0.28)
+    pot('pot', court_x1 - 0.34, court_y1 - 0.44, 0.16)
+    plant('plant', court_x0 + 0.32, court_y1 - 0.34, 0.16)
+    trough('trough', court_x1 - 0.42, court_yc - 0.2, 0.16, 0.28, 0.6)
+    brazier('brz', court_x0 + 0.3, court_y0 + 1.02, 0.16, h=0.46)
+
+    tufts('grass_h', 0, hall_y, hall_w + 0.22, hall_d + 0.22)
+    tufts('grass_w', wing_x, wing_yc, wing_w + 0.22, wing_d + 0.22)
+
+
+def _breeding_hut_old(w, h):
     """A stuccoed hall under a terracotta roof, with a walled nesting court.
 
     The read has to survive being 224 px wide on a phone, so the identity is
@@ -1135,7 +1384,7 @@ def breeding_hut(w, h):
             h=0.46)
 
 
-PRESETS = {'breeding_hut': (breeding_hut, 3, 4)}
+PRESETS = {'breeding_hut': (breeding_hut, 4, 4)}
 
 
 def guide_plane(w, h):
