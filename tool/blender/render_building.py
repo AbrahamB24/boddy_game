@@ -1729,9 +1729,14 @@ def main_hall(w, h):
     half = w / 2.0
 
     # ── The keep ──
-    kx, ky = -0.2, 1.15
-    kw, kd = 3.0, 2.3
-    wall_h = 2.35
+    # ── BIGGER AND GRANDER (user 2026-08-04) ──
+    # 6 x 6 rather than 5 x 5, and the extra tile goes into HEIGHT more than
+    # width: a castle that spreads reads as a compound, one that rises reads as
+    # a stronghold. The keep's wall alone is now taller than the whole
+    # Hatchery, which is the comparison that does the work on the map.
+    kx, ky = -0.2, 1.5
+    kw, kd = 3.6, 2.8
+    wall_h = 3.2
     ashlar_courses('kbase', kx, ky, 0, kw + 0.2, kd + 0.2, 0.36,
                    course=0.18, block=0.36)
     ashlar_courses('kwall', kx, ky, 0.36, kw, kd, wall_h,
@@ -1761,8 +1766,8 @@ def main_hall(w, h):
     banner('kflag', kx, face_y - 0.02, 0.36 + wall_h - 0.18, 0.36, 0.62)
 
     # ── The two towers, and the gate between them ──
-    tw, tower_h = 1.0, 3.3
-    gate_y = face_y - 0.72
+    tw, tower_h = 1.15, 4.5
+    gate_y = face_y - 0.85
     for s in (-1, 1):
         tx = kx + s * (kw / 2 - 0.1)
         ty = gate_y + 0.1
@@ -1843,6 +1848,45 @@ def main_hall(w, h):
                  0.32, 0.1, 0.1, mat('oak' if i % 2 else 'oak_light'))
         ob.rotation_euler = (0, math.radians(8 if i % 2 else -6), 0)
 
+    # ── The donjon: the tallest thing on the map ──
+    # A pair of matched towers is a gate. What makes a castle read as a SEAT
+    # rather than as a fortification is one tower that is plainly the master of
+    # the others — so this one is taller, wider, and set BEHIND the keep, where
+    # its height is the only part of it you see over the roof. Height read
+    # against a roof you can measure is what makes it feel high; a tall thing
+    # standing alone just looks close.
+    dx_, dy_ = kx + 0.55, ky + kd / 2 - 0.15
+    dw, don_h = 1.55, 5.6
+    ashlar_courses('don', dx_, dy_, 0, dw, dw, don_h, course=0.22, block=0.4)
+    for f in (0.34, 0.66):
+        box(f'donband{f}', dx_, dy_, don_h * f, dw + 0.09, dw + 0.09, 0.1,
+            mat('travertine'))
+    battlements('doncrown', dx_, dy_, don_h, dw, dw, h=0.38, merlon=0.26,
+                gap=0.2)
+    # Bartizans — the little turrets corbelled off the corners. Four small
+    # shapes, and they are most of the difference between a tall box and a
+    # castle: they break the vertical line exactly where it is longest.
+    for sx_ in (-1, 1):
+        for sy_ in (-1, 1):
+            bx = dx_ + sx_ * (dw / 2 + 0.04)
+            by = dy_ + sy_ * (dw / 2 + 0.04)
+            box(f'bart{sx_}{sy_}', bx, by, don_h - 1.15, 0.34, 0.34, 0.12,
+                mat('travertine'))
+            ashlar_courses(f'bartb{sx_}{sy_}', bx, by, don_h - 1.03, 0.4, 0.4,
+                           0.6, course=0.15, block=0.24)
+            battlements(f'bartc{sx_}{sy_}', bx, by, don_h - 0.43, 0.4, 0.4,
+                        h=0.16, merlon=0.14, gap=0.11)
+            shingle_gable(f'bartr{sx_}{sy_}', bx, by, don_h - 0.15, 0.32, 0.32,
+                          0.46, overhang=0.1, rows=4, ridge_along='y')
+    shingle_gable('donroof', dx_, dy_, don_h + 0.5, dw * 0.78, dw * 0.78, 1.5,
+                  overhang=0.18, rows=8, ridge_along='y')
+    box('donfin', dx_, dy_, don_h + 2.0, 0.12, 0.12, 0.3, mat('gold'))
+    for s in (-1, 1):
+        arrow_slit(f'dons{s}', dx_ + s * 0.4, dy_ - dw / 2, don_h - 2.2, 0.6)
+        arrow_slit(f'donsu{s}', dx_ + s * 0.4, dy_ - dw / 2, don_h - 1.3, 0.6)
+    arrow_slit('donsx', dx_ + dw / 2, dy_, don_h - 1.7, 0.6, facing='x')
+    banner('donflag', dx_, dy_ - dw / 2 - 0.02, don_h - 0.55, 0.42, 0.72)
+
     vine('kvine', kx - kw / 2 - 0.01, ky + 0.3, 0.36, 1.1, facing='x')
     tufts('kgrass', kx, ky, kw + 0.5, kd + 0.5)
 
@@ -1850,7 +1894,7 @@ def main_hall(w, h):
 # want them. Anything that has no caller AND no plausible one should go.
 PRESETS = {
     'breeding_hut': (breeding_hut, 4, 4),
-    'main_hall': (main_hall, 5, 5),
+    'main_hall': (main_hall, 6, 6),
 }
 
 
