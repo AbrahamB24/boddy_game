@@ -862,6 +862,53 @@ def jetty(name, x, y, z, sx, sy, out=0.2, key='oak', count=4):
                     mat(key))
 
 
+def battlements(name, x, y, z, sx, sy, key='ashlar', merlon=0.26, gap=0.2,
+                h=0.3):
+    """Crenellations round the top of a wall — THE castle signal.
+
+    Nothing else says fortress so cheaply. A wall is a wall until its top is
+    notched, and then it is a wall someone expected to be shot at from.
+
+    The corbel course under them matters as much as the teeth: a parapet that
+    grows straight out of the wall reads as a wall with holes in it, while one
+    that steps OUT first reads as something built on top for a purpose.
+    """
+    box(f'{name}_corbel', x, y, z, sx + 0.16, sy + 0.16, 0.1,
+        mat('travertine'))
+    step = merlon + gap
+    for axis, span, other in ((0, sx, sy), (1, sy, sx)):
+        n = max(1, int(span / step))
+        for i in range(n + 1):
+            t = -span / 2 + span * i / n
+            for sign in (-1, 1):
+                if axis == 0:
+                    bx, by = x + t, y + sign * (other / 2 + 0.05)
+                    dims = (merlon, 0.16, h)
+                else:
+                    bx, by = x + sign * (other / 2 + 0.05), y + t
+                    dims = (0.16, merlon, h)
+                box(f'{name}_{axis}{sign}{i}', bx, by, z + 0.1, *dims,
+                    mat(key))
+
+
+def arrow_slit(name, x, y, z, h=0.5, facing='y', key='dark'):
+    """A tall thin opening with a stone surround. The castle's window.
+
+    Narrow on purpose, and not only for the fiction: at 256 px a slit is one
+    dark pixel-wide line, which reads as a slit, where a scaled-down leaded
+    window reads as a smudge.
+    """
+    def at(into, along=0.0):
+        return (x + (along if facing == 'y' else -into),
+                y + (into if facing == 'y' else along))
+
+    fx, fy = at(0.03)
+    wall_box(f'{name}_frame', fx, fy, z - 0.07, 0.26, 0.1, h + 0.14,
+             mat('travertine'), facing=facing)
+    hx, hy = at(-0.02)
+    wall_box(f'{name}_slit', hx, hy, z, 0.08, 0.07, h, mat(key), facing=facing)
+
+
 def chimney(name, x, y, z, w, h, key='ashlar'):
     """A stone stack. Its vertical is what keeps the roofline from being one
     unbroken triangle, and smoke is the cheapest sign of someone home."""
@@ -1653,167 +1700,153 @@ def breeding_hut(w, h):
 
 
 def main_hall(w, h):
-    """The Tribal Center: the hall the whole settlement is arranged around.
+    """The Keep: the settlement's stronghold, and the middle of its map.
 
-    ── What makes it the MAIN building ──
-    Not detail — the Hatchery already has as much of that, and more would only
-    make the two compete. Three things, and all of them are about SIZE relative
-    to its neighbours rather than about ornament:
+    ── Why it is a CASTLE and not a big house (user 2026-08-04) ──
+    The first version was the Hatchery's kit at twice the size, and that is
+    exactly how it read: a large half-timbered house. Scale alone does not make
+    a landmark, because every building on the map is the same style and the eye
+    has nothing to measure against except the others.
 
-      * A TOWER that clears every roofline on the map. On a settlement seen
-        from above, the tallest thing is the centre, and no label is needed.
-      * A great hall with its long side turned to the viewer, where every other
-        building shows a gable end. It reads as wide where they read as tall.
-      * A forecourt with a well: the one public, walkable space in the village.
-        Everything else has a working yard behind a fence; this has a square.
+    Four changes carry it, in order of how much work they do:
 
-    Everything else is the Hatchery's kit unchanged — timber frame, jetty,
-    shingles, stone base, leaded windows. That is the point of a kit, and it is
-    also why these two will look like the same village rather than like two
-    good buildings.
+      * STONE, not timber. A frame says farm; coursed ashlar says fortress, and
+        it is the same ashlar_courses the Hatchery uses for its plinth — the
+        material is shared, the amount of it is not.
+      * BATTLEMENTS. Nothing else says fortress so cheaply: a wall is a wall
+        until its top is notched.
+      * TWO towers flanking a GATEHOUSE. One tower is a manor; a pair with a
+        gate between them is the front of a castle, and the gap is what the
+        eye reads as "the way in".
+      * ARROW SLITS instead of windows. Narrow is not only fiction: at 256 px a
+        slit is a dark line that reads as a slit, where a shrunken leaded
+        window is a smudge.
+
+    What is deliberately kept from the Hatchery: the palette, the shingles, the
+    oak trim, the moss, the tufts of grass. A castle in a DIFFERENT colour
+    family would be a second world again — the thing that was just cleaned up.
     """
     half = w / 2.0
 
-    # ── The hall ──
-    hx, hy = -0.35, 1.0
-    hw, hd = 3.5, 2.5
-    base_h, floor_h, upper_h = 0.34, 1.1, 0.9
-    ashlar_courses('mbase', hx, hy, 0, hw + 0.14, hd + 0.14, base_h,
-                   course=0.16, block=0.32)
-    half_timber('mlow', hx, hy, base_h, hw, hd, floor_h, bays=5)
-    jetty('mjet', hx, hy, base_h + floor_h, hw, hd, out=0.19)
-    up_w, up_d = hw + 0.38, hd + 0.38
-    half_timber('mup', hx, hy, base_h + floor_h + 0.11, up_w, up_d, upper_h,
-                bays=5)
-    roof_z = base_h + floor_h + 0.11 + upper_h
-    # Ridge along X, so the LONG side faces the camera — the opposite of the
-    # Hatchery, and the cheapest way to make the centre read as the centre.
-    shingle_gable('mroof', hx, hy, roof_z, up_w, up_d, 1.15, overhang=0.3,
-                  rows=12, ridge_along='x')
-    moss('mmoss', hx, hy, roof_z, up_w * 0.8, up_d * 0.8, 0.6,
-         overhang=0.0, patches=9)
-    for s in (-1, 1):
-        gable_boards(f'mgab{s}', hx + s * (up_w / 2 + 0.24), hy, roof_z,
-                     up_d + 0.6, 1.12, axis='y', sign=s)
-    chimney('mchim', hx - 1.4, hy + 0.6, 0, 0.44, roof_z + 1.5)
+    # ── The keep ──
+    kx, ky = -0.2, 1.15
+    kw, kd = 3.0, 2.3
+    wall_h = 2.35
+    ashlar_courses('kbase', kx, ky, 0, kw + 0.2, kd + 0.2, 0.36,
+                   course=0.18, block=0.36)
+    ashlar_courses('kwall', kx, ky, 0.36, kw, kd, wall_h,
+                   course=0.21, block=0.42)
+    # A string course two thirds up: the same trick as the Hatchery's, and the
+    # only thing that stops three metres of masonry reading as one grey slab.
+    string_course('kband', kx, ky, 0.36 + wall_h * 0.62, kw + 0.02, kd + 0.02)
+    battlements('kcrown', kx, ky, 0.36 + wall_h, kw, kd, h=0.34)
 
-    # ── The tower, on the corner the camera can SEE ──
-    # It first stood on the back-left, where the hall's own roof hid everything
-    # but its spire — which read as a dormer, not a landmark. A tower that is
-    # the tallest thing on the map is worth nothing if the map cannot see it.
-    # Front-right: two of its faces are the two faces a player ever looks at.
-    tx, ty = hx + hw / 2 - 0.35, hy - hd / 2 + 0.35
-    tw, tower_h = 1.05, 3.5
-    ashlar_courses('tow', tx, ty, 0, tw, tw, tower_h, course=0.19, block=0.34)
-    box('tow_band', tx, ty, tower_h * 0.55, tw + 0.07, tw + 0.07, 0.09,
-        mat('travertine'))
-    for i, tz in enumerate((1.3, 2.3)):
-        leaded_window(f'tw{i}', tx, ty - tw / 2, tz, 0.26, 0.34)
-        leaded_window(f'tx{i}', tx + tw / 2, ty, tz, 0.26, 0.34, facing='x')
-    # A corbelled parapet, then the spire. The overhang is what stops a tower
-    # being a chimney: it says the top is a PLACE, not just the end of a wall.
-    box('tow_corbel', tx, ty, tower_h, tw + 0.22, tw + 0.22, 0.12,
-        mat('travertine'))
-    for s in (-1, 1):
-        for a in (-1, 1):
-            box(f'merlon{s}{a}', tx + s * (tw / 2 + 0.04),
-                ty + a * (tw / 2 + 0.04), tower_h + 0.12,
-                0.2, 0.2, 0.22, mat('ashlar'))
-    shingle_gable('tow_roof', tx, ty, tower_h + 0.34, tw * 0.8, tw * 0.8, 1.1,
-                  overhang=0.16, rows=7, ridge_along='y')
-    box('tow_finial', tx, ty, tower_h + 1.44, 0.1, 0.1, 0.22, mat('gold'))
-    banner('tow_flag', tx, ty - tw / 2 - 0.02, tower_h - 0.3, 0.3, 0.5)
+    roof_z = 0.36 + wall_h + 0.44
+    shingle_gable('kroof', kx, ky, roof_z, kw - 0.5, kd - 0.5, 1.05,
+                  overhang=0.18, rows=11, ridge_along='x')
+    moss('kmoss', kx, ky, roof_z, kw * 0.7, kd * 0.7, 0.6, overhang=0.0,
+         patches=8)
+    chimney('kchim', kx - 1.15, ky + 0.55, 0, 0.42, roof_z + 1.15)
 
-    # ── The porch: how you get in, and where the sign hangs ──
-    face_y = hy - up_d / 2
-    low_face = hy - hd / 2
-    px = hx + 0.25
-    doorway('mdoor', px, low_face, base_h, 0.86, 1.02)
-    plank_door('mleaf', px, low_face - 0.07, base_h + 0.02, 0.78, 0.62,
-               planks=6)
-    steps('msteps', px, low_face - 0.14, 0, 1.3, count=3, rise=0.1)
-    for s in (-1, 1):
-        box(f'porchpost{s}', px + s * 0.62, low_face - 0.5, 0, 0.16, 0.16,
-            1.15, mat('oak'))
-        sconce(f'mlamp{s}', px + s * 0.78, low_face, base_h + 1.02)
-    box('porchbeam', px, low_face - 0.5, 1.15, 1.44, 0.14, 0.14, mat('oak'))
-    shingle_gable('porchroof', px, low_face - 0.26, 1.24, 1.3, 0.62, 0.42,
-                  overhang=0.16, rows=5, ridge_along='x')
-    for i, ox in enumerate((-1.05, 1.35)):
-        leaded_window(f'mw{i}', hx + ox, low_face, base_h + 0.46, 0.34, 0.42)
-    uz = base_h + floor_h + 0.38
-    for i, ox in enumerate((-1.2, -0.4, 0.4, 1.2)):
-        leaded_window(f'mu{i}', hx + ox, face_y, uz, 0.3, 0.36)
-    # Two banners flanking the door — the settlement's own colours, and the
-    # only place on the map two of them hang together.
-    for s in (-1, 1):
-        banner(f'mflag{s}', px + s * 1.02, face_y - 0.02, roof_z - 0.1,
-               0.34, 0.52)
+    face_y = ky - kd / 2
+    for i, ox in enumerate((-1.0, -0.35, 0.35, 1.0)):
+        arrow_slit(f'ks{i}', kx + ox, face_y, 1.5, 0.58)
+    for i, oy in enumerate((-0.55, 0.25)):
+        arrow_slit(f'kse{i}', kx + kw / 2, ky + oy, 1.5, 0.58, facing='x')
+    for i, ox in enumerate((-0.7, 0.7)):
+        arrow_slit(f'ksb{i}', kx + ox, ky + kd / 2, 1.5, 0.58)
+    # One real window, high and central: the hall behind it is where the
+    # settlement is run from, and a keep with NO glass reads as a ruin.
+    leaded_window('kwin', kx, face_y, 2.05, 0.36, 0.44)
+    banner('kflag', kx, face_y - 0.02, 0.36 + wall_h - 0.18, 0.36, 0.62)
 
-    # ── The square ──
-    yx0, yx1 = -half + 0.2, half - 0.2
-    yy0, yy1 = -half + 0.2, low_face - 0.72
+    # ── The two towers, and the gate between them ──
+    tw, tower_h = 1.0, 3.3
+    gate_y = face_y - 0.72
+    for s in (-1, 1):
+        tx = kx + s * (kw / 2 - 0.1)
+        ty = gate_y + 0.1
+        ashlar_courses(f'tow{s}', tx, ty, 0, tw, tw, tower_h,
+                       course=0.19, block=0.34)
+        box(f'towband{s}', tx, ty, tower_h * 0.5, tw + 0.08, tw + 0.08, 0.09,
+            mat('travertine'))
+        battlements(f'towcrown{s}', tx, ty, tower_h, tw, tw, h=0.3,
+                    merlon=0.22, gap=0.17)
+        shingle_gable(f'towroof{s}', tx, ty, tower_h + 0.42, tw * 0.72,
+                      tw * 0.72, 1.0, overhang=0.14, rows=6, ridge_along='y')
+        box(f'towfin{s}', tx, ty, tower_h + 1.42, 0.09, 0.09, 0.2, mat('gold'))
+        arrow_slit(f'tows{s}', tx, ty - tw / 2, 1.35, 0.55)
+        arrow_slit(f'towsu{s}', tx, ty - tw / 2, 2.3, 0.55)
+        arrow_slit(f'towsx{s}', tx + s * tw / 2, ty, 1.8, 0.55, facing='x')
+        banner(f'towflag{s}', tx, ty - tw / 2 - 0.02, 2.95, 0.28, 0.46)
+        lantern(f'towlamp{s}', tx - s * 0.1, ty - tw / 2 - 0.16, 1.05,
+                drop=0.14)
+
+    # The gatehouse itself: a deep arch between the towers, with a portcullis
+    # in it. The grid is what makes the opening read as a GATE rather than as a
+    # doorway — a hole you could ride through, that someone can close.
+    gw = kw - tw - 0.5
+    ashlar_courses('gate', kx, gate_y, 0, gw, 0.9, 2.5, course=0.2, block=0.4)
+    battlements('gatecrown', kx, gate_y, 2.5, gw, 0.9, h=0.28, merlon=0.22,
+                gap=0.17)
+    doorway('gatearch', kx, gate_y - 0.45, 0.08, 1.15, 1.5, rim=0.2)
+    for i in range(5):
+        box(f'pcv{i}', kx - 0.44 + i * 0.22, gate_y - 0.5, 0.1,
+            0.05, 0.06, 1.42, mat('iron'))
+    for i in range(4):
+        box(f'pch{i}', kx, gate_y - 0.5, 0.24 + i * 0.34, 1.02, 0.06, 0.05,
+            mat('iron'))
+    steps('gsteps', kx, gate_y - 0.95, 0, 1.5, count=3, rise=0.1)
+    for s in (-1, 1):
+        sconce(f'gatelamp{s}', kx + s * 0.78, gate_y - 0.45, 1.75)
+
+    # ── The bailey: a walled yard, not an open square ──
+    yx0, yx1 = -half + 0.22, half - 0.22
+    yy0, yy1 = -half + 0.22, gate_y - 1.15
     yxc, yyc = (yx0 + yx1) / 2, (yy0 + yy1) / 2
     yw, yd = yx1 - yx0, yy1 - yy0
-    box('square', yxc, yyc, 0, yw, yd, 0.1, mat('ashlar'))
+    box('bailey', yxc, yyc, 0, yw, yd, 0.1, mat('ashlar'))
     mosaic('paving', yxc, yyc, 0.1, yw - 0.2, yd - 0.2,
            key_a='travertine', key_b='ashlar', tile=0.34)
-
-    # The well: the one thing a village square always has, and a shape nobody
-    # has to be told the meaning of.
-    wx, wy = yxc - 1.0, yyc + 0.1
-    ashlar_courses('well', wx, wy, 0.1, 0.72, 0.72, 0.44, course=0.15,
-                   block=0.26)
-    box('well_cap', wx, wy, 0.54, 0.82, 0.82, 0.07, mat('travertine'))
-    box('well_dark', wx, wy, 0.5, 0.5, 0.5, 0.06, mat('dark'))
+    # A low curtain wall with its own battlements, open at the near corner so
+    # the yard is still walkable rather than a box.
     for s in (-1, 1):
-        box(f'well_post{s}', wx + s * 0.3, wy, 0.61, 0.11, 0.11, 0.62,
+        ashlar_courses(f'curt{s}', yxc + s * (yw / 2 - 0.09), yyc, 0.1,
+                       0.18, yd * 0.8, 0.62, course=0.16, block=0.3)
+        battlements(f'curtc{s}', yxc + s * (yw / 2 - 0.09), yyc, 0.72, 0.18,
+                    yd * 0.8, h=0.2, merlon=0.2, gap=0.16)
+
+    # The well: the one shape in a bailey nobody has to be told the meaning of.
+    wx, wy = yxc - 1.15, yyc + 0.15
+    ashlar_courses('well', wx, wy, 0.1, 0.7, 0.7, 0.44, course=0.15,
+                   block=0.26)
+    box('well_cap', wx, wy, 0.54, 0.8, 0.8, 0.07, mat('travertine'))
+    box('well_dark', wx, wy, 0.5, 0.48, 0.48, 0.06, mat('dark'))
+    for s in (-1, 1):
+        box(f'well_post{s}', wx + s * 0.29, wy, 0.61, 0.11, 0.11, 0.62,
             mat('oak'))
-    box('well_beam', wx, wy, 1.19, 0.78, 0.12, 0.12, mat('oak'))
+    box('well_beam', wx, wy, 1.19, 0.76, 0.12, 0.12, mat('oak'))
     box('well_rope', wx, wy, 0.92, 0.04, 0.04, 0.28, mat('iron'))
     box('well_bucket', wx, wy, 0.82, 0.2, 0.2, 0.16, mat('oak_light'))
-    shingle_gable('well_roof', wx, wy, 1.25, 0.8, 0.8, 0.36, overhang=0.16,
+    shingle_gable('well_roof', wx, wy, 1.25, 0.78, 0.78, 0.36, overhang=0.16,
                   rows=4, ridge_along='x')
 
-    # Market clutter on the far side, so the square reads as used.
-    for i, (ox, oy) in enumerate(((1.15, 0.25), (1.5, -0.2))):
-        pot(f'mpot{i}', yxc + ox, yyc + oy, 0.1, r=0.15, h=0.4)
-    straw_bale('mbale', yxc + 0.55, yy0 + 0.3, 0.1, 0.44, 0.3, 0.28)
-    trough('mtrough', yx1 - 0.34, yyc + 0.6, 0.1, 0.26, 0.6, key='oak')
-    for i, ox in enumerate((-1.7, 1.7)):
-        plant(f'mplant{i}', yxc + ox, yy0 + 0.34, 0.1)
-        lantern(f'msqlamp{i}', yxc + ox, yy0 + 0.34, 1.05, drop=0.14)
-        box(f'msqpost{i}', yxc + ox, yy0 + 0.34, 0.1, 0.12, 0.12, 0.95,
-            mat('oak'))
-
-    # ── Behind: the same standard as the front ──
-    back_y = hy + up_d / 2
-    for i, ox in enumerate((-0.9, 0.1, 1.1)):
-        leaded_window(f'mb{i}', hx + ox, back_y, uz, 0.3, 0.36)
-    doorway('mbdoor', hx + 1.2, hy + hd / 2, base_h, 0.52, 0.68, rim=0.13)
-    plank_door('mbleaf', hx + 1.2, hy + hd / 2 + 0.05, base_h + 0.02, 0.46,
-               0.4, planks=3)
-    sconce('mblamp', hx + 1.72, hy + hd / 2, base_h + 0.84)
-    lx = hx + hw / 2 + 0.16
-    for i in range(7):
-        ob = box(f'mlogs{i}', lx, hy + 0.7 - i * 0.12, 0.02, 0.34, 0.1, 0.1,
-                 mat('oak' if i % 2 else 'oak_light'))
+    # Garrison clutter: what a bailey actually has in it.
+    for i, (ox, oy) in enumerate(((1.2, 0.3), (1.55, -0.15))):
+        pot(f'kpot{i}', yxc + ox, yyc + oy, 0.1, r=0.15, h=0.4)
+    straw_bale('kbale', yxc + 0.6, yy0 + 0.32, 0.1, 0.44, 0.3, 0.28)
+    trough('ktrough', yx1 - 0.36, yyc + 0.55, 0.1, 0.26, 0.6, key='oak')
+    for i, ox in enumerate((-1.75, 1.75)):
+        plant(f'kplant{i}', yxc + ox, yy0 + 0.36, 0.1)
+    for i in range(6):
+        ob = box(f'klogs{i}', yx0 + 0.45, yyc - 0.55 - i * 0.12, 0.12,
+                 0.32, 0.1, 0.1, mat('oak' if i % 2 else 'oak_light'))
         ob.rotation_euler = (0, math.radians(8 if i % 2 else -6), 0)
-    box('mbutt', lx + 0.02, hy - 0.7, 0, 0.38, 0.38, 0.44, mat('oak'))
-    box('mbutt_hoop', lx + 0.02, hy - 0.7, 0.15, 0.41, 0.41, 0.05, mat('iron'))
-    vine('mvine', hx - hw / 2 - 0.01, hy - 0.5, base_h, 0.9, facing='x')
-    tufts('mgrass', hx, hy, hw + 0.6, hd + 0.6)
+
+    vine('kvine', kx - kw / 2 - 0.01, ky + 0.3, 0.36, 1.1, facing='x')
+    tufts('kgrass', kx, ky, kw + 0.5, kd + 0.5)
 
 
-# ── ONE WORLD (user 2026-08-04: "behalte nur das mittelalterliche Gebäude") ──
-# The Roman and the fungal Hatcheries are gone. Both were finished designs and
-# both are in the history if they are ever wanted, but a roster is not a
-# portfolio: three buildings from three worlds is worse than three from one,
-# however good each is on its own.
-#
-# Their PARTS stay in the kit above — hip roofs, pantiles, colonnades, caps,
-# gills. Some now have no caller. That is deliberate: they are a vocabulary,
-# not a building, and the next stone or fungal thing this settlement needs will
 # want them. Anything that has no caller AND no plausible one should go.
 PRESETS = {
     'breeding_hut': (breeding_hut, 4, 4),
