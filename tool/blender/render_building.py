@@ -1,23 +1,23 @@
-﻿"""Render one low-poly building, isometric, straight onto its footprint.
+"""Render one low-poly building, isometric, straight onto its footprint.
 
     blender --background --python tool/blender/render_building.py -- \
         --preset breeding_hut --out docs/renders/breeding_hut.png
 
-â”€â”€ Why Blender and not a prompt â”€â”€
+── Why Blender and not a prompt ──
 The two things an image model gets wrong every time are the two things geometry
 gets right for free: PARALLEL projection (an orthographic camera cannot invent a
 vanishing point) and the BASE covering exactly W x H tiles. Render it and the
 three art-fit numbers in Dev Mode stay 1 / 0.5 / 0 forever.
 
-â”€â”€ The camera â”€â”€
+── The camera ──
 2:1 dimetric, the app's own shape. A horizontal unit square must come out twice
 as wide as it is tall, and that alone fixes the elevation. Seen from 45 deg of
-azimuth, a unit tile is cos(45) wide on screen and sin(e) * cos(45) tall â€” the
+azimuth, a unit tile is cos(45) wide on screen and sin(e) * cos(45) tall — the
 cos(45) is in BOTH, because the tile's edges are themselves at 45 deg to the
 view. It cancels, and 2 * sin(e) = 1 leaves e = 30 deg. Camera X rotation 60,
 Z rotation 45: the numbers everyone quotes, for a reason.
 
-â”€â”€ The framing â”€â”€
+── The framing ──
 Nothing here is eyeballed. The four ground corners are PROJECTED through the
 camera and the ortho scale and shift are solved so that they land exactly on the
 image's left and right edges with the near corner on the bottom edge. That is
@@ -34,14 +34,14 @@ from mathutils import Euler, Vector
 # The app's grid, from iso_grid.dart. One tile = one Blender unit.
 TILE_W = 64
 TILE_H = 32
-# Pixels per tile in the render. 4 gives a 3x4 building 896 px of base â€” plenty
+# Pixels per tile in the render. 4 gives a 3x4 building 896 px of base — plenty
 # to downscale from, and the app scales to the footprint anyway.
 SCALE = 4
 
-ELEVATION = math.degrees(math.asin(0.5))  # 30 â€” see the header
+ELEVATION = math.degrees(math.asin(0.5))  # 30 — see the header
 
 
-# â”€â”€ The style: fantasy Roman-medieval (user 2026-08-03) â”€â”€â”€â”€
+# ── The style: fantasy Roman-medieval (user 2026-08-03) ────
 # Roman gives the ROOF and the arch, medieval gives the timber and the pitch,
 # fantasy gives permission to saturate all of it. In practice three signals do
 # almost all the work, and a building that has them reads correctly even at
@@ -50,7 +50,7 @@ ELEVATION = math.degrees(math.asin(0.5))  # 30 â€” see the header
 #   1. A TERRACOTTA roof. The single loudest signal, and the reason this style
 #      suits the game: the material ladder already refines clay in tier II, so
 #      the roofs literally are what the settlement learns to make.
-#   2. PALE walls â€” limestone, travertine, lime stucco â€” under that roof. The
+#   2. PALE walls — limestone, travertine, lime stucco — under that roof. The
 #      contrast between hot roof and cool wall IS the look.
 #   3. A STONE PLINTH the building stands on. Romans never set a wall on soil,
 #      and it also solves an art problem: the base reads as deliberately
@@ -59,49 +59,55 @@ ELEVATION = math.degrees(math.asin(0.5))  # 30 â€” see the header
 # Timber is trim, not structure: beams, posts, shutters, doors. A building that
 # is mostly timber has slid back to the Northern-European hut it came from.
 #
-# â”€â”€ Matched to the monsters (user 2026-08-03) â”€â”€
+# ── Matched to the monsters (user 2026-08-03) ──
 # Look at Blazeling and Droplet and the rule is not subtle: each is ONE hue in
-# four to six tonal steps, plus a single small accent â€” the whole orange
+# four to six tonal steps, plus a single small accent — the whole orange
 # creature with one yellow flame, the whole cyan creature with two dark eyes.
 # No greys anywhere. Everything is saturated, and the range runs from near-white
 # to a deep, still-saturated shadow.
 #
 # The buildings were doing the opposite: ten independent hues, three of them
-# effectively grey. So the palette is now ONE warm earth family â€” terracotta
-# through ochre through cream â€” with green and the banner's red as the only
+# effectively grey. So the palette is now ONE warm earth family — terracotta
+# through ochre through cream — with green and the banner's red as the only
 # outsiders, kept to a few square pixels each. That is what makes a building
 # stand next to a monster and look like it came from the same world, and it
 # costs nothing but a retune.
 PALETTE = {
-    'tile': (0.80, 0.30, 0.13),        # terracotta pantile â€” the loudest note
+    'tile': (0.80, 0.30, 0.13),        # terracotta pantile — the loudest note
     'tile_dark': (0.56, 0.18, 0.09),   # its shadow side and the ridge
     'stucco': (0.96, 0.87, 0.69),      # lime render, the wall default
     'travertine': (0.88, 0.71, 0.47),  # cut stone: ochre, NOT grey
     'ashlar': (0.62, 0.46, 0.29),      # the plinth and any heavy masonry
     'oak': (0.44, 0.24, 0.12),         # beams, doors, shutters
     'oak_light': (0.63, 0.38, 0.18),   # posts catching the sun
-    'iron': (0.31, 0.22, 0.19),        # fittings â€” warm dark, not blue-black
+    'iron': (0.31, 0.22, 0.19),        # fittings — warm dark, not blue-black
     'gold': (0.98, 0.77, 0.22),        # finials and lamp-light
     'dark': (0.15, 0.07, 0.04),        # an opening, read as depth
     'banner': (0.74, 0.13, 0.18),      # the one saturated cloth per building
     'sand': (0.90, 0.77, 0.52),        # trodden ground inside a court
     'straw': (0.94, 0.77, 0.30),       # bedding, thatch, nests
     'leaf': (0.37, 0.53, 0.22),        # the only green; use it sparingly
-    'moss': (0.44, 0.50, 0.26),        # duller and yellower â€” it is on a roof
+    'moss': (0.44, 0.50, 0.26),        # duller and yellower — it is on a roof
     # Mid-steps. The monsters get four to six tones out of one hue; three is
     # what a box gives you from lighting alone, so the rest has to be painted.
-    # Use these for coursing, joints and mouldings â€” never for a whole surface.
-    # â”€â”€ Sporehollow: the fungal set (user 2026-08-04, free choice) â”€â”€
-    # Same discipline as the Roman one and the monsters: a single hue family â€”
-    # coral through cream â€” plus exactly one outsider, and here it is a cold
+    # Use these for coursing, joints and mouldings — never for a whole surface.
+    # ── Sporehollow: the fungal set (user 2026-08-04, free choice) ──
+    # Same discipline as the Roman one and the monsters: a single hue family —
+    # coral through cream — plus exactly one outsider, and here it is a cold
     # spore-light. Cold is the right accent because everything else in the
     # building is warm and damp; one teal glow reads instantly and cannot be
     # mistaken for part of the flesh.
     'cap': (0.80, 0.26, 0.21),         # the great cap: the whole silhouette
     'cap_dark': (0.55, 0.15, 0.13),    # its underside and shaded facets
-    'cap_spot': (0.98, 0.92, 0.82),    # pale warts â€” THE fungus signal
+    'cap_spot': (0.98, 0.92, 0.82),    # pale warts — THE fungus signal
     'stalk': (0.94, 0.88, 0.75),       # flesh, standing in for a wall
     'stalk_shade': (0.82, 0.73, 0.58),
+    # ── The medieval set (user 2026-08-04) ──
+    # Shingles instead of pantiles, and the beams of a timber frame. Still one
+    # warm family: the frame is the DARK end of the same brown the shingles
+    # are, so half-timbering is a value contrast rather than a second hue.
+    'shingle': (0.47, 0.28, 0.18),
+    'shingle_dark': (0.33, 0.19, 0.12),
     'root': (0.50, 0.34, 0.22),        # buttress roots, withies, fences
     'root_dark': (0.36, 0.23, 0.15),
     'glow': (0.42, 0.93, 0.84),        # the one cold thing in the building
@@ -113,13 +119,13 @@ PALETTE = {
 
 # How hard every edge is cut back. This is the OTHER half of matching the
 # monsters: their surfaces are covered in small, irregular facets, and a box has
-# none at all â€” it has three faces and three tones and that is the end of it.
+# none at all — it has three faces and three tones and that is the end of it.
 # A bevel gives every edge its own strip catching its own amount of light, which
 # is the same trick at building scale.
 #
 # Finer since the detail pass (user 2026-08-03: "viel detaillierter und
 # feiner"). At 0.028 the bevel was wider than the joints between the stones it
-# now has to sit between, and clamp_overlap quietly ate it â€” the detail was
+# now has to sit between, and clamp_overlap quietly ate it — the detail was
 # there in the geometry and gone in the render. A finer cut with one more
 # segment reads as crisp instead of chunky, and leaves room for parts an order
 # of magnitude smaller than a wall.
@@ -127,9 +133,9 @@ BEVEL_WIDTH = 0.014
 BEVEL_SEGMENTS = 3
 
 
-# â”€â”€ Materials â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Materials ──────────────────────────────────────────────
 def flat(name, rgb):
-    """One flat colour. No specular, no roughness games â€” a facet is a facet."""
+    """One flat colour. No specular, no roughness games — a facet is a facet."""
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes['Principled BSDF']
@@ -145,12 +151,27 @@ def flat(name, rgb):
 
 
 def box(name, x, y, z, sx, sy, sz, mat):
-    """A box by its CENTRE-BOTTOM, because buildings stand on the ground."""
+    """A box by its CENTRE-BOTTOM, because buildings stand on the ground.
+
+    ── location=False, rotation=False, and they are not optional ──
+    transform_apply's parameters ALL default to True, so `transform_apply(
+    scale=True)` quietly applies location and rotation as well: the box's
+    position gets baked into its mesh and its object origin snaps to the world
+    origin. Nothing looks wrong until something is rotated afterwards — and
+    then it turns about the world origin instead of about itself, and flies off
+    across the map.
+
+    That one default is the root cause of every stray stick in this file's
+    history: the gills that speared through the mushroom caps, the column
+    flutes that became a bundle of poles, the pantile ribs, and the timber
+    braces. Each was diagnosed separately, three of them were redesigned around
+    the symptom, and all four were the same line.
+    """
     bpy.ops.mesh.primitive_cube_add(size=1, location=(x, y, z + sz / 2))
     ob = bpy.context.object
     ob.name = name
     ob.scale = (sx, sy, sz)
-    bpy.ops.object.transform_apply(scale=True)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     ob.data.materials.append(mat)
     for p in ob.data.polygons:
         p.use_smooth = False
@@ -195,7 +216,7 @@ def hip_roof(name, x, y, z, sx, sy, h, key='tile', overhang=0.3, ridge=0.45):
 
     A gable shows one big triangle to whichever side you face, which at this
     camera angle is a blank wall of colour. A hip roof always shows two slopes
-    at different angles to the sun, so it shades itself â€” which is the whole
+    at different angles to the sun, so it shades itself — which is the whole
     reason low-poly reads as solid rather than as coloured paper.
 
     [ridge] is the ridge's length as a fraction of the long side. At 0 this is
@@ -246,8 +267,8 @@ def doorway(name, x, y, z, w, h, facing='y', depth=0.22, rim=0.2):
     """A dark opening with a stone surround, placed correctly by construction.
 
     Use this instead of two bare arch() calls. arch() builds a SOLID body, so a
-    surround has to sit BEHIND the mouth and be larger â€” only its rim survives
-    â€” and "behind" points opposite ways on the two facings: +y for a wall drawn
+    surround has to sit BEHIND the mouth and be larger — only its rim survives
+    — and "behind" points opposite ways on the two facings: +y for a wall drawn
     towards -y, but -x for one on +x. Getting that backwards plugs the hole and
     yields a pale panel where a doorway should be, and it has now cost three
     separate openings. Here the sign is written down once.
@@ -302,15 +323,15 @@ def arch(name, x, y, z, w, h, depth, key='dark', segments=4, facing='y'):
 def wall_box(name, x, y, z, along, thick, height, material, facing='y'):
     """A box measured ALONG a wall and THROUGH it, whichever way the wall runs.
 
-    Every piece of trim â€” sills, shutters, rails â€” is naturally described that
+    Every piece of trim — sills, shutters, rails — is naturally described that
     way, and writing it as sx/sy means writing each one twice.
     """
     sx, sy = (along, thick) if facing == 'y' else (thick, along)
     return box(name, x, y, z, sx, sy, height, material)
 
 
-# â”€â”€ Ornament â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Detail here is not decoration for its own sake â€” it is what tells the eye how
+# ── Ornament ───────────────────────────────────────────────
+# Detail here is not decoration for its own sake — it is what tells the eye how
 # BIG something is. A blank wall has no scale; a wall with a course of dentils
 # under its eaves is unmistakably a building rather than a box. Everything below
 # is sized so it still contributes at 224 px, where it stops being readable as
@@ -328,7 +349,7 @@ def pantiles(name, x, y, z, sx, sy, h, ridge=0.45, key='tile_dark',
     The first attempt ran ribs DOWN the slope, the way a real pantile does, and
     it looked broken: on a hip the slope is a trapezoid, so each rib had to stop
     at a different height, and their ends stood proud of the hip line in mid
-    air â€” a staircase of snapped sticks. Courses have no ends to leave hanging.
+    air — a staircase of snapped sticks. Courses have no ends to leave hanging.
     Each one is the roof's own horizontal cross-section at that height, so it
     follows the hips exactly, for free, at any footprint.
     """
@@ -359,7 +380,7 @@ def ashlar_courses(name, x, y, z, sx, sy, h, key='ashlar', dark='ashlar_dark',
 
     The single biggest step from "a box painted stone" to "masonry". Courses
     alternate their offset by half a block, the way any real wall does, so the
-    vertical joints never line up â€” and it is the broken joint line, more than
+    vertical joints never line up — and it is the broken joint line, more than
     the joints themselves, that the eye reads as built by hand.
 
     Emitted as a solid core plus a skin of blocks: the core stops daylight
@@ -393,7 +414,7 @@ def string_course(name, x, y, z, sx, sy, key='travertine'):
     """A moulding running round a wall: three thin bands of different widths.
 
     One band is a stripe. Three of stepped width is a PROFILE, and a profile is
-    what makes stone look cut rather than painted â€” for the price of two boxes.
+    what makes stone look cut rather than painted — for the price of two boxes.
     """
     box(f'{name}_a', x, y, z, sx + 0.02, sy + 0.02, 0.05, mat(key))
     box(f'{name}_b', x, y, z + 0.05, sx + 0.10, sy + 0.10, 0.045, mat(key))
@@ -405,7 +426,7 @@ def flute_faces(ob, key='travertine', shade='travertine_shade'):
     """Flute a column by ALTERNATING THE TONE of its side faces.
 
     The first attempt laid thin boxes down the shaft. A groove modelled as an
-    applied box is a RIB â€” it stands proud â€” and eight pale ribs on a 0.26-wide
+    applied box is a RIB — it stands proud — and eight pale ribs on a 0.26-wide
     column stopped being a column at all and became a bundle of sticks poking
     out of the gate. Diagnosed by measuring, after --no-bevel proved it was
     geometry and not a modifier artefact.
@@ -428,7 +449,7 @@ def imbrices(name, x, y, z, sx, sy, h, ridge=0.45, overhang=0.3,
              key='tile_mid', courses=14, pitch=0.30):
     """The cap tiles that cover the joints between the flat tiles below.
 
-    A Roman roof is two shapes, not one â€” a flat tegula with a rounded imbrex
+    A Roman roof is two shapes, not one — a flat tegula with a rounded imbrex
     over every seam. The courses alone gave the roof horizontal banding; these
     cross it, and the grid of the two together is what reads as a tiled roof
     from any distance rather than as a striped one.
@@ -463,7 +484,7 @@ def imbrices(name, x, y, z, sx, sy, h, ridge=0.45, overhang=0.3,
 def plank_door(name, x, y, z, w, h, facing='y', planks=5):
     """A boarded door: vertical planks, two ledges across them, iron studs.
 
-    A doorway is a hole. A DOOR is a made thing, and the studs are what say so â€”
+    A doorway is a hole. A DOOR is a made thing, and the studs are what say so —
     they are two pixels each and they are the whole difference.
     """
     def at(into, along=0.0):
@@ -501,9 +522,9 @@ def hip_ridges(name, x, y, z, sx, sy, h, ridge=0.45, overhang=0.3,
                key='tile_dark', width=0.15, thick=0.09):
     """Ridge tiles capping the four diagonal hips.
 
-    The last raw edge on the roof. Every other line had been finished â€” the
+    The last raw edge on the roof. Every other line had been finished — the
     ridge is capped, the eaves are edged with antefixes, the slopes are
-    coursed â€” and the four corners were still bare geometry meeting at an
+    coursed — and the four corners were still bare geometry meeting at an
     angle, which is exactly where the eye goes to check whether a thing was
     built or generated.
     """
@@ -574,7 +595,7 @@ def straw_scatter(name, x, y, z, r, n=14, key='straw'):
 
 
 def frieze(name, x, y, z, span, key='travertine', pitch=0.17, facing='y'):
-    """A running band of blocks along a wall â€” the plainest ornament there is,
+    """A running band of blocks along a wall — the plainest ornament there is,
     and the one that most reliably reads as "decorated" at a distance."""
     n = max(2, int(span / pitch))
     for i in range(n):
@@ -586,7 +607,7 @@ def frieze(name, x, y, z, span, key='travertine', pitch=0.17, facing='y'):
 
 def garland(name, x, y, z, span, sag=0.16, key='leaf', facing='y'):
     """A swag hung between two points. Built as a chain of blocks stepping down
-    and back up, because a real curve here would be smooth â€” and nothing else
+    and back up, because a real curve here would be smooth — and nothing else
     in this world is."""
     n = 7
     for i in range(n):
@@ -614,12 +635,184 @@ def mosaic(name, x, y, z, sx, sy, key_a='travertine', key_b='tile',
                 mat(key_a if (i * 3 + j) % 4 else key_b))
 
 
-# â”€â”€ Sporehollow parts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Medieval parts ─────────────────────────────────────────
+def half_timber(name, x, y, z, sx, sy, h, bays=3, beam=0.115,
+                panel='stucco', wood='oak'):
+    """A timber frame with plaster between it — THE medieval signal.
+
+    Nothing else says the period so fast, and it costs almost nothing: a pale
+    box, then a dark frame laid on all four faces — sill and head plates, a
+    post at every corner, studs dividing the wall into bays, and one diagonal
+    brace per face.
+
+    The brace is the part that matters. A grid of verticals reads as
+    panelling; it is the DIAGONAL that reads as carpentry, because a diagonal
+    is the one line you cut only when a building has to stand up. One per face
+    and not one per bay: a real frame braces where the racking is worst, and
+    bracing everywhere turns the wall back into a pattern.
+    """
+    box(f'{name}_panel', x, y, z, sx, sy, h, mat(panel))
+    for axis, span, other in ((0, sx, sy), (1, sy, sx)):
+        for sign in (-1, 1):
+            def put(nm, along, zz, ln, hh, ang=None):
+                if axis == 0:
+                    bx, by = x + along, y + sign * other / 2
+                    dims = (ln, beam, hh)
+                else:
+                    bx, by = x + sign * other / 2, y + along
+                    dims = (beam, ln, hh)
+                ob = box(f'{name}_{nm}_{axis}{sign}', bx, by, zz, *dims,
+                         mat(wood))
+                if ang:
+                    ob.rotation_euler = ((0, ang, 0) if axis == 0
+                                         else (-ang, 0, 0))
+                return ob
+
+            put('sill', 0, z, span + beam, beam)
+            put('head', 0, z + h - beam, span + beam, beam)
+            for i in range(bays + 1):
+                put(f'stud{i}', -span / 2 + span * i / bays, z, beam, h)
+            bw, bh = span / bays, h * 0.66
+            b = put('brace', 0, z, beam, math.hypot(bw, bh),
+                    math.atan2(bw, bh) * (1 if sign > 0 else -1))
+            b.location = (x + (-span / 2 + bw / 2 if axis == 0
+                               else sign * other / 2),
+                          y + (sign * other / 2 if axis == 0
+                               else -span / 2 + bw / 2),
+                          z + h / 2)
+
+
+def shingle_gable(name, x, y, z, sx, sy, h, overhang=0.22, rows=9,
+                  key='shingle', dark='shingle_dark', ridge_along='y'):
+    """A steep gabled roof laid in courses of shingles.
+
+    Simpler than the Roman hip and better for it: a gable's slopes are
+    RECTANGLES, so a course is one box the full length of the roof — no
+    trapezoid to solve, no ends left hanging where the plane narrows. The
+    lesson from the pantiles holds either way: courses parallel to the eaves
+    have no ends to leave in mid air.
+
+    Steep on purpose. A medieval roof is nearly as tall as the wall beneath
+    it, and that proportion is most of what separates it from a Roman one.
+    """
+    sx += overhang * 2
+    sy += overhang * 2
+    if ridge_along == 'y':
+        span, run = sy, sx / 2
+        verts = [(-sx / 2, -sy / 2, 0), (sx / 2, -sy / 2, 0),
+                 (sx / 2, sy / 2, 0), (-sx / 2, sy / 2, 0),
+                 (0, -sy / 2, h), (0, sy / 2, h)]
+        faces = [(0, 1, 4), (2, 3, 5), (0, 4, 5, 3), (1, 2, 5, 4),
+                 (0, 3, 2, 1)]
+    else:
+        span, run = sx, sy / 2
+        verts = [(-sx / 2, -sy / 2, 0), (sx / 2, -sy / 2, 0),
+                 (sx / 2, sy / 2, 0), (-sx / 2, sy / 2, 0),
+                 (-sx / 2, 0, h), (sx / 2, 0, h)]
+        faces = [(0, 4, 3), (1, 2, 5), (0, 1, 5, 4), (3, 2, 5, 4),
+                 (0, 3, 2, 1)]
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    ob = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(ob)
+    ob.location = (x, y, z)
+    ob.data.materials.append(mat(dark))
+    for p in ob.data.polygons:
+        p.use_smooth = False
+
+    for i in range(rows):
+        f = (i + 0.3) / rows
+        off = run * (1 - f)
+        for sign in (-1, 1):
+            if ridge_along == 'y':
+                bx, by = x + sign * off, y
+                dims = (run / rows * 1.6, span, 0.055)
+            else:
+                bx, by = x, y + sign * off
+                dims = (span, run / rows * 1.6, 0.055)
+            box(f'{name}_c{i}_{sign}', bx, by, z + h * f, *dims,
+                mat(key if i % 2 else dark))
+    if ridge_along == 'y':
+        box(f'{name}_ridge', x, y, z + h - 0.05, 0.15, span + 0.05, 0.1,
+            mat('oak'))
+    else:
+        box(f'{name}_ridge', x, y, z + h - 0.05, span + 0.05, 0.15, 0.1,
+            mat('oak'))
+    return ob
+
+
+def jetty(name, x, y, z, sx, sy, out=0.2, key='oak', count=4):
+    """Brackets under an overhanging upper floor.
+
+    A jetty — the first floor pushed out past the ground floor — is the second
+    medieval signal after the frame, and it earns its geometry because it
+    BREAKS THE WALL LINE. An unbroken face from ground to eaves reads as a box
+    no matter what is painted on it.
+    """
+    box(f'{name}_plate', x, y, z, sx + out * 2, sy + out * 2, 0.1, mat(key))
+    for axis, span, other in ((0, sx, sy), (1, sy, sx)):
+        for sign in (-1, 1):
+            for i in range(count):
+                t = -span / 2 + span * (i + 0.5) / count
+                if axis == 0:
+                    bx, by = x + t, y + sign * (other / 2 + out / 2)
+                    dims = (0.11, out, 0.14)
+                else:
+                    bx, by = x + sign * (other / 2 + out / 2), y + t
+                    dims = (out, 0.11, 0.14)
+                box(f'{name}_b{axis}{sign}{i}', bx, by, z - 0.13, *dims,
+                    mat(key))
+
+
+def chimney(name, x, y, z, w, h, key='ashlar'):
+    """A stone stack. Its vertical is what keeps the roofline from being one
+    unbroken triangle, and smoke is the cheapest sign of someone home."""
+    ashlar_courses(f'{name}_stack', x, y, z, w, w, h, key=key,
+                   dark='ashlar_dark', course=0.17, block=0.26)
+    box(f'{name}_corbel', x, y, z + h, w + 0.13, w + 0.13, 0.07,
+        mat('travertine'))
+    box(f'{name}_cap', x, y, z + h + 0.07, w + 0.02, w + 0.02, 0.09, mat(key))
+    box(f'{name}_pot', x, y, z + h + 0.16, w * 0.4, w * 0.4, 0.14, mat('tile'))
+
+
+def leaded_window(name, x, y, z, w, h, facing='y', shutters=True):
+    """A small window with a cross of mullions and a pair of shutters.
+
+    Small on purpose. Glass was dear: a wall of it reads as a shopfront, two
+    little lit panes read as a home. The pane is the gold — a window that is
+    not LIT is a hole, and a hole says nobody is in.
+    """
+    def at(into, along=0.0):
+        return (x + (along if facing == 'y' else -into),
+                y + (into if facing == 'y' else along))
+
+    fx, fy = at(0.05)
+    wall_box(f'{name}_frame', fx, fy, z - 0.06, w + 0.15, 0.11, h + 0.15,
+             mat('oak'), facing=facing)
+    gx, gy = at(-0.01)
+    wall_box(f'{name}_glass', gx, gy, z, w, 0.07, h, mat('gold'),
+             facing=facing)
+    mx, my = at(-0.045)
+    wall_box(f'{name}_mv', mx, my, z, 0.04, 0.05, h, mat('oak'), facing=facing)
+    wall_box(f'{name}_mh', mx, my, z + h / 2 - 0.02, w, 0.05, 0.04,
+             mat('oak'), facing=facing)
+    sx_, sy_ = at(0.02)
+    wall_box(f'{name}_sill', sx_, sy_, z - 0.13, w + 0.32, 0.17, 0.07,
+             mat('oak_light'), facing=facing)
+    if shutters:
+        for sign in (-1, 1):
+            bx, by = at(-0.07, sign * (w / 2 + 0.13))
+            wall_box(f'{name}_sh{sign}', bx, by, z - 0.03, 0.21, 0.07,
+                     h + 0.08, mat('oak_light'), facing=facing)
+
+
+# ── Sporehollow parts ──────────────────────────────────────
 def cap(name, x, y, z, r, h, sides=12, rings=5, key='cap', flare=0.13):
     """A faceted mushroom cap: rings of an n-gon, shrinking and rising.
 
-    The strongest silhouette available at 256 px. A tile roof has to be READ â€”
-    pitch, ridge, eaves â€” before it says "building"; a cap is recognised whole,
+    The strongest silhouette available at 256 px. A tile roof has to be READ —
+    pitch, ridge, eaves — before it says "building"; a cap is recognised whole,
     before any detail resolves, which is exactly what a sprite that small needs.
 
     The profile is deliberately not a hemisphere. `flare` pushes the widest
@@ -660,22 +853,22 @@ def cap(name, x, y, z, r, h, sides=12, rings=5, key='cap', flare=0.13):
     return prof
 
 
-# â”€â”€ There are no gills, and there is a reason â”€â”€
+# ── There are no gills, and there is a reason ──
 # I built them twice and cut them both times. The argument for them was that
 # the underside of a cap is always in view and would carry fine detail the way
 # a tiled roof cannot. That argument is simply false for this camera: at 30
 # degrees above the horizon you look at the TOP of a cap, never under it. So a
-# ring of blades can only ever stick OUT past the silhouette â€” as a fan inside
+# ring of blades can only ever stick OUT past the silhouette — as a fan inside
 # the shell it escaped through the rim, and hung below the rim it read as
 # spokes on a wheel, because nothing overhangs them from that angle.
 #
 # The finding generalises past mushrooms: detail that lives on a downward-
 # facing surface is invisible here and can only cost you. Put it on the top,
-# the two visible walls, or the ground â€” nowhere else earns its geometry.
+# the two visible walls, or the ground — nowhere else earns its geometry.
 def warts(name, prof, x, y, z, count=11, key='cap_spot'):
     """Pale warts scattered over a cap, sitting ON its profile.
 
-    Two colours of dome is a dome. A dome with warts is a MUSHROOM â€” this is
+    Two colours of dome is a dome. A dome with warts is a MUSHROOM — this is
     the single cheapest piece of recognition in the whole building, and it only
     works because each one is placed against the same profile the cap was built
     from instead of guessed at.
@@ -694,7 +887,7 @@ def warts(name, prof, x, y, z, count=11, key='cap_spot'):
 
 
 def stalk(name, x, y, z, r_bot, r_top, h, sides=10, key='stalk'):
-    """A tapered, faceted stalk â€” the wall of a fungal building.
+    """A tapered, faceted stalk — the wall of a fungal building.
 
     Tapered on purpose: a straight cylinder under a cap reads as a lamp post.
     Living things are thicker where they carry weight.
@@ -730,8 +923,8 @@ def stalk(name, x, y, z, r_bot, r_top, h, sides=10, key='stalk'):
 def roots(name, x, y, z, r, count=7, reach=0.5, key='root'):
     """Buttress roots splaying from the foot of a stalk.
 
-    They do the job the stone plinth did on the Roman set â€” join the building
-    to its ground so it is not standing on a line â€” and they do it in a way
+    They do the job the stone plinth did on the Roman set — join the building
+    to its ground so it is not standing on a line — and they do it in a way
     that says GROWN rather than founded.
     """
     for i in range(count):
@@ -849,7 +1042,7 @@ def moss(name, x, y, z, sx, sy, h, ridge=0.45, overhang=0.3, patches=9,
 def vine(name, x, y, z, h, key='leaf', facing='y', leaves=9):
     """A creeper up a wall: one stem and a scatter of leaves either side.
 
-    Green is the rarest colour in this palette, so a vine is a strong move â€”
+    Green is the rarest colour in this palette, so a vine is a strong move —
     one per building, on the wall that has the least going on."""
     def at(into, along=0.0):
         return (x + (along if facing == 'y' else -into),
@@ -979,7 +1172,7 @@ def acroterion(name, x, y, z, sx, sy, ridge=0.45, overhang=0.3, key='gold'):
 
 def column(name, x, y, z, r, h, key='travertine', sides=12):
     """A round column, faceted and fluted. Twelve sides: six light faces and
-    six shaded ones, which is a fluted shaft â€” and still few enough that the
+    six shaded ones, which is a fluted shaft — and still few enough that the
     facets show, which is the whole art style."""
     bpy.ops.mesh.primitive_cylinder_add(vertices=sides, radius=r, depth=h,
                                         location=(x, y, z + h / 2))
@@ -1050,7 +1243,7 @@ def nest(name, x, y, z, r, key='straw'):
 
 
 def plant(name, x, y, z, r=0.13, key='leaf'):
-    """A potted shrub. Green is the rarest colour in the palette on purpose â€”
+    """A potted shrub. Green is the rarest colour in the palette on purpose —
     two of these read as tended, five read as a garden centre."""
     box(f'{name}_pot', x, y, z, r * 2, r * 2, 0.18, mat('tile'))
     box(f'{name}_rim', x, y, z + 0.16, r * 2.3, r * 2.3, 0.05,
@@ -1103,14 +1296,14 @@ def window(name, x, y, z, w, h, depth, shutters=True, facing='y'):
     """An arched window: dark opening, travertine surround, oak shutters.
 
     [depth] is how far the surround stands behind the hole. Same rule as the
-    doorway â€” the surround is BEHIND and larger, so only its rim survives.
+    doorway — the surround is BEHIND and larger, so only its rim survives.
     """
     def at(into, along=0.0):
         """A point `into` the wall (positive = deeper) and `along` it.
 
         The two facings point OPPOSITE ways: a wall drawn for -Y goes deeper as
         y grows, a wall on +X goes deeper as x SHRINKS. Getting that sign wrong
-        puts the surround in front of the hole, which plugs it â€” the same
+        puts the surround in front of the hole, which plugs it — the same
         failure as the doorway, mirrored, and it looks like a pale panel
         instead of a window.
         """
@@ -1154,7 +1347,7 @@ def banner(name, x, y, z, w, h, key='banner', facing='y'):
     cx, cy = at(-0.015)
     wall_box(f'{name}_cloth', cx, cy, z - h, w, 0.04, h, mat(key),
              facing=facing)
-    # The swallow-tail, faked with two blocks â€” a notch at this size is two
+    # The swallow-tail, faked with two blocks — a notch at this size is two
     # pixels, and two pixels of silhouette is what a pennant IS.
     for sign in (-1, 1):
         tx, ty = at(-0.015, sign * w / 4)
@@ -1162,9 +1355,9 @@ def banner(name, x, y, z, w, h, key='banner', facing='y'):
                  0.1, mat(key), facing=facing)
 
 
-# â”€â”€ The buildings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── The buildings ──────────────────────────────────────────
 # Each preset gets the footprint it has in the roster and builds itself inside
-# it. NOTHING may cross the base except a roof overhang â€” the same rule the art
+# it. NOTHING may cross the base except a roof overhang — the same rule the art
 # contract states, here enforced by the modelling rather than hoped for.
 def egg(name, x, y, z, r, mat):
     """A faceted egg. Two subdivisions: at one it reads as a cut gem, at three
@@ -1183,22 +1376,155 @@ def egg(name, x, y, z, r, mat):
 
 
 def breeding_hut(w, h):
+    """The Hatchery: fantasy medieval — timber frame, jetty, steep shingles.
+
+    ── What carries the period ──
+    Three things, in order of how much work they do. The HALF-TIMBERING, which
+    no other style shares and which the eye reads before anything else. The
+    JETTY, because an upper floor pushed out past a lower one breaks the wall
+    line, and an unbroken face from ground to eaves reads as a box whatever is
+    painted on it. And the ROOF PITCH: a medieval roof is nearly as tall as the
+    wall beneath it, where a Roman one is a lid.
+
+    Everything the last three versions taught is kept. One warm family, and the
+    frame is the dark end of the same brown the shingles are, so half-timbering
+    is a value contrast rather than a second hue. Nothing tall between the
+    camera and the eggs. Courses parallel to the eaves. Detail only on the top,
+    the two visible walls and the ground — never on a downward-facing surface,
+    which this camera cannot see.
+
+    ── The plan is an L, and that is the whole composition ──
+    A tall house at the back left, a lower wing at the right with its gable
+    turned across it, and the yard filling the near corner between them. The
+    turned gable is what makes it read as a building someone extended rather
+    than a shape someone chose.
+    """
+    half = w / 2.0
+
+    # ── The house ──
+    hx, hy = -0.66, 0.82
+    hw, hd = 2.06, 1.86
+    base_h, floor_h, upper_h = 0.3, 0.98, 0.82
+    ashlar_courses('hbase', hx, hy, 0, hw + 0.12, hd + 0.12, base_h,
+                   course=0.15, block=0.3)
+    half_timber('hlow', hx, hy, base_h, hw, hd, floor_h, bays=3)
+    jetty('hjet', hx, hy, base_h + floor_h, hw, hd, out=0.17)
+    up_w, up_d = hw + 0.34, hd + 0.34
+    half_timber('hup', hx, hy, base_h + floor_h + 0.1, up_w, up_d, upper_h,
+                bays=3)
+    roof_z = base_h + floor_h + 0.1 + upper_h
+    shingle_gable('hroof', hx, hy, roof_z, up_w, up_d, 1.24, overhang=0.26,
+                  rows=11, ridge_along='y')
+    moss('hmoss', hx, hy, roof_z, up_w * 0.8, up_d * 0.8, 0.7,
+         overhang=0.0, patches=8)
+    chimney('chim', hx - hw / 2 + 0.16, hy + 0.34, 0, 0.4, roof_z + 1.5)
+
+    # The gable end faces the camera, so it gets the sign and the pennant.
+    face_y = hy - up_d / 2
+    banner('flag', hx, face_y - 0.02, roof_z + 0.72, 0.3, 0.44)
+    box('gsign', hx + 0.52, face_y - 0.14, roof_z + 0.02, 0.34, 0.06, 0.26,
+        mat('oak_light'))
+    box('gsignarm', hx + 0.52, face_y - 0.08, roof_z + 0.28, 0.42, 0.05, 0.05,
+        mat('iron'))
+
+    # ── Ground floor: the way in, off centre ──
+    door_x = hx - 0.34
+    low_face = hy - hd / 2
+    doorway('hdoor', door_x, low_face, base_h, 0.62, 0.8)
+    plank_door('hleaf', door_x, low_face - 0.06, base_h + 0.02, 0.56, 0.5,
+               planks=4)
+    steps('hsteps', door_x, low_face - 0.12, 0, 0.9, count=2, rise=0.09)
+    for sign in (-1, 1):
+        sconce(f'hlamp{sign}', door_x + sign * 0.52, low_face, base_h + 0.86)
+    leaded_window('hw0', hx + 0.56, low_face, base_h + 0.4, 0.3, 0.38)
+    leaded_window('hw1', hx + hw / 2, hy + 0.3, base_h + 0.4, 0.3, 0.38,
+                  facing='x')
+    # Upper floor windows sit on the jetty, where the overhang shades them.
+    uz = base_h + floor_h + 0.34
+    for i, ox in enumerate((-0.5, 0.42)):
+        leaded_window(f'hu{i}', hx + ox, face_y, uz, 0.28, 0.34)
+    leaded_window('hu2', hx + up_w / 2, hy + 0.24, uz, 0.28, 0.34, facing='x')
+
+    # ── The wing, its gable turned across the house's ──
+    wx, wy = 1.06, 0.96
+    ww, wd = 1.42, 1.5
+    ashlar_courses('wbase', wx, wy, 0, ww + 0.1, wd + 0.1, 0.26,
+                   course=0.14, block=0.28)
+    half_timber('wlow', wx, wy, 0.26, ww, wd, 1.02, bays=2)
+    w_roof_z = 1.28
+    shingle_gable('wroof', wx, wy, w_roof_z, ww, wd, 0.86, overhang=0.24,
+                  rows=8, ridge_along='x')
+    moss('wmoss', wx, wy, w_roof_z, ww * 0.8, wd * 0.8, 0.5, overhang=0.0,
+         patches=5)
+    w_face = wy - wd / 2
+    doorway('wdoor', wx + 0.1, w_face, 0.26, 0.5, 0.62, rim=0.13)
+    plank_door('wleaf', wx + 0.1, w_face - 0.05, 0.28, 0.44, 0.36, planks=3)
+    leaded_window('ww0', wx + ww / 2, wy + 0.3, 0.72, 0.28, 0.34, facing='x')
+    lantern('wlamp', wx - 0.44, w_face - 0.12, 1.02, drop=0.16)
+    box('wlamparm', wx - 0.36, w_face - 0.06, 1.0, 0.24, 0.06, 0.05,
+        mat('iron'))
+    vine('wvine', wx + ww / 2 - 0.02, wy - 0.42, 0.26, 0.78, facing='x')
+
+    # ── The yard, filling the near corner ──
+    yx0, yx1 = -half + 0.16, half - 0.16
+    yy0, yy1 = -half + 0.16, -0.28
+    yxc, yyc = (yx0 + yx1) / 2, (yy0 + yy1) / 2
+    yw, yd = yx1 - yx0, yy1 - yy0
+    box('yard', yxc, yyc, 0, yw, yd, 0.1, mat('sand'))
+    # The scatter is a DISC, so it is sized off the yard's short side. Off the
+    # long one it spills through the fence and litters the map's own ground.
+    straw_scatter('yfloor', yxc, yyc, 0.1, yd * 0.46, n=26, key='straw')
+    straw_scatter('yfloor2', yxc - yw * 0.22, yyc, 0.1, yd * 0.4, n=14,
+                  key='straw')
+    straw_scatter('yfloor3', yxc + yw * 0.22, yyc, 0.1, yd * 0.4, n=14,
+                  key='straw')
+
+    withy_fence('fy', yxc, yy0 + 0.06, 0, yw, 0.5, axis='x')
+    withy_fence('fx', yx1 - 0.06, yyc + 0.05, 0, yd, 0.5, axis='y')
+    withy_fence('fl', yx0 + 0.06, yyc + 0.05, 0, yd, 0.5, axis='y')
+    for i, (px, py) in enumerate(((yx1 - 0.06, yy0 + 0.06),
+                                  (yx0 + 0.06, yy0 + 0.06))):
+        box(f'ypost{i}', px, py, 0, 0.16, 0.16, 0.76, mat('oak'))
+        box(f'ycap{i}', px, py, 0.76, 0.13, 0.13, 0.09, mat('oak_light'))
+        lantern(f'ylamp{i}', px, py, 0.84, drop=0.1)
+
+    # A shingled lean-to against the house, over the LEFT of the yard only:
+    # covered half and open half, and nothing in front of the eggs.
+    lean_to('shed', yx0 + 0.62, yyc + 0.16, 0.1, 0.94, 0.86, 0.98,
+            key='shingle')
+
+    nx, ny = yxc + 0.52, yyc - 0.06
+    nest('nest', nx, ny, 0.1, 0.44)
+    straw_scatter('litter', nx, ny, 0.1, 0.8)
+    egg('egg_a', nx - 0.26, ny + 0.12, 0.12, 0.25, mat('stucco'))
+    egg('egg_b', nx + 0.2, ny + 0.2, 0.12, 0.28, mat('stucco'))
+    egg('egg_c', nx + 0.02, ny - 0.26, 0.12, 0.23, mat('stucco'))
+
+    straw_bale('bale', yx0 + 0.56, yy0 + 0.44, 0.1, 0.4, 0.28, 0.26)
+    trough('trough', yx1 - 0.42, yyc + 0.3, 0.1, 0.24, 0.5, key='oak')
+    pot('pot', yx0 + 0.3, yy1 - 0.22, 0.1, r=0.14, h=0.36)
+    plant('plant', yx1 - 0.28, yy0 + 0.5, 0.1)
+    tufts('grass_h', hx, hy, hw + 0.5, hd + 0.5)
+    tufts('grass_w', wx, wy, ww + 0.4, wd + 0.4)
+
+
+def breeding_hut_spore(w, h):
     """Sporehollow: a hatchery grown under fungus, not built out of stone.
 
-    â”€â”€ Why fungus â”€â”€
+    ── Why fungus ──
     A cap is one of the very few silhouettes a player recognises WHOLE, before
-    any detail resolves â€” which is the only kind that survives at 256 px. A tile
+    any detail resolves — which is the only kind that survives at 256 px. A tile
     roof has to be read (pitch, ridge, eaves) before it says "building". And it
     is the right shape for this particular building: eggs are kept somewhere
     warm, damp and dark, and a fungus is all three by nature. The Roman version
     had to explain itself with a courtyard and a dovecote; this one does not.
 
-    â”€â”€ The rules it keeps â”€â”€
-    Everything else carries over, because none of it was Roman â€” it was just
+    ── The rules it keeps ──
+    Everything else carries over, because none of it was Roman — it was just
     good. One hue family (coral through cream) with exactly one outsider, and
     here that outsider is COLD: a spore-light, which cannot be mistaken for
     flesh. Nothing tall between the camera and the eggs. Detail concentrated
-    where the eye lands, which for a cap is the underside of the rim â€” hence
+    where the eye lands, which for a cap is the underside of the rim — hence
     the gills, which are the band a tiled roof can never give you.
 
     Three caps at three heights, not one: a single mushroom is a prop, and a
@@ -1207,7 +1533,7 @@ def breeding_hut(w, h):
     half = w / 2.0
     inset = 0.15
 
-    # â”€â”€ The great cap â”€â”€
+    # ── The great cap ──
     gx, gy = -0.5, 0.5
     g_stalk_h, g_r = 1.32, 1.34
     roots('groots', gx, gy, 0, 0.8, count=8, reach=0.62)
@@ -1223,7 +1549,7 @@ def breeding_hut(w, h):
     moss('gmoss', gx, gy, g_stalk_h - 0.1, g_r * 0.9, g_r * 0.9, 0.5,
          overhang=0.0, patches=7)
 
-    # â”€â”€ The second cap, lower and behind â”€â”€
+    # ── The second cap, lower and behind ──
     sx_, sy_ = 0.95, 1.12
     s_h, s_r = 0.86, 0.82
     roots('sroots', sx_, sy_, 0, 0.44, count=5, reach=0.34)
@@ -1232,7 +1558,7 @@ def breeding_hut(w, h):
     sprof = cap('scap', sx_, sy_, s_h, s_r, 0.6, sides=10, rings=4)
     warts('swart', sprof, sx_, sy_, s_h, count=8)
 
-    # â”€â”€ The third, a stub at the front â€” the smallest of the three, and the
+    # ── The third, a stub at the front — the smallest of the three, and the
     #    one that keeps the near corner from being empty ground.
     tx, ty = -1.32, -0.62
     t_h, t_r = 0.44, 0.5
@@ -1241,7 +1567,7 @@ def breeding_hut(w, h):
     tprof = cap('tcap', tx, ty, t_h, t_r, 0.36, sides=9, rings=3)
     warts('twart', tprof, tx, ty, t_h, count=5)
 
-    # â”€â”€ The nesting court, in the near corner â”€â”€
+    # ── The nesting court, in the near corner ──
     cx0, cx1 = -0.72, half - inset
     cy0, cy1 = -half + inset, 0.12
     cxc, cyc = (cx0 + cx1) / 2, (cy0 + cy1) / 2
@@ -1280,7 +1606,7 @@ def breeding_hut(w, h):
 def breeding_hut_roman(w, h):
     """An L of two wings around a court that opens towards the camera.
 
-    â”€â”€ Why 4x4, and why an L â”€â”€
+    ── Why 4x4, and why an L ──
     A square footprint projects to a true rhombus, and its near corner sits at
     the bottom of the picture. Wrap the FAR corner with two wings and leave the
     near one open, and the camera looks between them INTO the court: two
@@ -1292,10 +1618,10 @@ def breeding_hut_roman(w, h):
     dark space behind, so the eye reads three layers of depth from a camera
     that cannot move.
 
-    â”€â”€ The read at 256 px â”€â”€
+    ── The read at 256 px ──
     Roof mass, then the pale colonnade against the dark under-porch, then three
     white eggs on straw in the middle of an open court. Everything else is
-    texture. Nothing tall stands between the camera and the eggs â€” that rule
+    texture. Nothing tall stands between the camera and the eggs — that rule
     has cost two features already (a pergola and a brazier) and it still holds.
     """
     half = w / 2.0
@@ -1321,7 +1647,7 @@ def breeding_hut_roman(w, h):
     court_yc = (court_y0 + court_y1) / 2
     court_w, court_d = court_x1 - court_x0, court_y1 - court_y0
 
-    # â”€â”€ The hall, along the back â”€â”€
+    # ── The hall, along the back ──
     ashlar_courses('hall_p', 0, hall_y, 0, hall_w + 0.22, hall_d + 0.22, 0.2)
     box('hall_pc', 0, hall_y, 0.2, hall_w + 0.14, hall_d + 0.14, 0.05,
         mat('travertine'))
@@ -1352,7 +1678,7 @@ def breeding_hut_roman(w, h):
     acroterion('hall_ac', 0, hall_y, hall_rz + hall_rh, hall_w, hall_d)
     moss('hall_m', 0, hall_y, hall_rz, hall_w, hall_d, hall_rh)
 
-    # â”€â”€ The west wing, lower, at right angles â”€â”€
+    # ── The west wing, lower, at right angles ──
     ashlar_courses('wing_p', wing_x, wing_yc, 0, wing_w + 0.22, wing_d + 0.22,
                    0.2)
     box('wing', wing_x, wing_yc, 0.22, wing_w, wing_d, wing_h, mat('stucco'))
@@ -1390,9 +1716,9 @@ def breeding_hut_roman(w, h):
     sconce('wsc', wf_x, wing_yc - 0.02, 1.02, facing='x')
     vine('wvine', wf_x - 0.02, wing_yc + 1.0, 0.28, 0.86, facing='x')
 
-    # â”€â”€ The portico across the hall's court side â”€â”€
+    # ── The portico across the hall's court side ──
     # Shallower than it wants to be. At 0.7 deep its roof reached out over the
-    # middle of the court and put the eggs in shade â€” the same mistake the
+    # middle of the court and put the eggs in shade — the same mistake the
     # pergola made on the old hut, in a new shape.
     port_y = hall_y - hall_d / 2 - 0.26
     colonnade('port', 0, port_y, 0.22, hall_w - 0.5, 0.52, 1.22, count=5)
@@ -1409,12 +1735,12 @@ def breeding_hut_roman(w, h):
         window(f'hwin{i}', wx, hf_y, 0.66, 0.26, 0.36, 0.2)
         grille(f'hbars{i}', wx, hf_y - 0.04, 0.66, 0.26, 0.32)
 
-    # â”€â”€ The dovecote in the angle of the L â”€â”€
+    # ── The dovecote in the angle of the L ──
     cote_w = 0.72
     dovecote('cote', x0 + cote_w / 2 + 0.06, y1 - hall_d - cote_w / 2 - 0.06,
              0, cote_w, 2.35)
 
-    # â”€â”€ The court â”€â”€
+    # ── The court ──
     box('yard', court_xc, court_yc, 0, court_w - 0.16, court_d - 0.16, 0.16,
         mat('sand'))
     mosaic('yfloor', court_xc, court_yc, 0.16, court_w - 0.42, court_d - 0.42)
@@ -1462,7 +1788,7 @@ def _breeding_hut_old(w, h):
     walls, an arched mouth of pure black under it, and three white eggs on warm
     sand in an open court where nothing else competes for attention.
 
-    The court is the Roman part that does the most work here â€” a building with a
+    The court is the Roman part that does the most work here — a building with a
     walled forecourt is legible as one property from any angle, where a hut with
     things scattered in front of it is legible as a hut with clutter.
     """
@@ -1471,7 +1797,7 @@ def _breeding_hut_old(w, h):
     body_w = w - 0.35
     body_y = h / 2 - body_d / 2 - 0.18         # pushed to the back
 
-    # The plinth is laid as STONES, not cast as a slab â€” see ashlar_courses.
+    # The plinth is laid as STONES, not cast as a slab — see ashlar_courses.
     ashlar_courses('plinth', 0, body_y, 0, body_w + 0.26, body_d + 0.26, 0.22)
     tufts('grass', 0, body_y, body_w + 0.26, body_d + 0.26)
     box('plinth_cap', 0, body_y, 0.22, body_w + 0.18, body_d + 0.18, 0.05,
@@ -1494,16 +1820,16 @@ def _breeding_hut_old(w, h):
     # The doorway. Two arches, not one: the travertine surround is what makes
     # the dark shape read as an OPENING. On its own the hole is a black blob
     # leaning on the wall, because a pale wall and a dark patch share no edge
-    # the eye can call a frame. It also stands ON the plinth â€” an opening that
+    # the eye can call a frame. It also stands ON the plinth — an opening that
     # floats above the floor is the other half of that same illusion.
     # arch() builds a SOLID body, not a ring, so the surround must sit BEHIND
-    # the mouth and be larger â€” it is seen only as the rim that survives around
+    # the mouth and be larger — it is seen only as the rim that survives around
     # the dark shape. Put it in front, as I first did, and it simply plugs the
     # hole and the doorway disappears.
-    # â”€â”€ The door is OFF CENTRE (user 2026-08-03: "noch schÃ¶ner") â”€â”€
+    # ── The door is OFF CENTRE (user 2026-08-03: "noch schöner") ──
     # A centred door under a centred roof between mirrored windows is a
-    # building that is correct and lifeless. Everything hung off the doorway â€”
-    # steps, lamps, garland, keystone â€” takes its x from door_x, so moving the
+    # building that is correct and lifeless. Everything hung off the doorway —
+    # steps, lamps, garland, keystone — takes its x from door_x, so moving the
     # door moves the whole composition and nothing has to be re-measured.
     door_w, door_h = body_w * 0.30, wall_h * 0.66
     door_x = -body_w * 0.16
@@ -1528,7 +1854,7 @@ def _breeding_hut_old(w, h):
     # the reason the facade reads as an entrance rather than as a wall that
     # happens to have a hole in it.
     #
-    # The garland first hung above the plaque, which put it through the roof â€”
+    # The garland first hung above the plaque, which put it through the roof —
     # there is no wall left up there. Hung BETWEEN two things that exist, it
     # cannot drift: move the sconces and it follows.
     lamp_x, lamp_z = door_w / 2 + 0.34, 1.10
@@ -1551,7 +1877,7 @@ def _breeding_hut_old(w, h):
         straw_bale(f'thatch{i}', -body_w / 2 + 0.34,
                    body_y + body_d * sy, roof_z - 0.3, 0.3, 0.24, 0.2)
 
-    # Corner pilasters â€” travertine, not timber. Timber corners drag the whole
+    # Corner pilasters — travertine, not timber. Timber corners drag the whole
     # thing back to a Northern hut; stone corners under a tile roof are Roman.
     # Base and capital both: a plain post is a post, a post with a foot and a
     # head is a column, and that difference is four small boxes.
@@ -1567,7 +1893,7 @@ def _breeding_hut_old(w, h):
 
     # Two arched windows on the long wall, which is otherwise the largest blank
     # surface the camera ever sees.
-    # ONE window, not a mirrored pair â€” the tower takes the other end of the
+    # ONE window, not a mirrored pair — the tower takes the other end of the
     # wall, and a tower opposite a window is a composition where two windows
     # were only a pattern.
     wy = body_y + body_d * 0.28
@@ -1580,19 +1906,19 @@ def _breeding_hut_old(w, h):
 
     # The dovecote as a CORNER tower, its two outer faces flush with the two
     # walls the camera can see. Placed inside the block it simply rose through
-    # the main roof and its whole shaft â€” the nest holes, the ledges, the point
-    # of it â€” was buried. Flush with the corner, all of that is on show and the
+    # the main roof and its whole shaft — the nest holes, the ledges, the point
+    # of it — was buried. Flush with the corner, all of that is on show and the
     # tower still breaks the roofline.
     cote_w = 0.62
     dovecote('cote', body_w / 2 - cote_w / 2, face_y + cote_w / 2, 0,
              cote_w, 1.95)
     # A course of blocks under the windows, running the length of the long
-    # wall â€” the largest surface the camera ever sees, and the one that most
+    # wall — the largest surface the camera ever sees, and the one that most
     # needs something on it.
     frieze('frieze', body_w / 2 + 0.02, body_y, 0.38, body_d * 0.92,
            facing='x')
 
-    # â”€â”€ The court â”€â”€
+    # ── The court ──
     court_d = h - body_d - 0.35
     court_y = body_y - body_d / 2 - court_d / 2
     court_w = w - 0.35
@@ -1623,12 +1949,12 @@ def _breeding_hut_old(w, h):
     box('threshold', 0, front_y, 0, court_w - 0.5, 0.18, 0.2, mat('ashlar'))
 
     # NO pergola here, though the kit has one. It fitted the court and covered
-    # the eggs and the doorway both â€” and the eggs are the entire reason this
+    # the eggs and the doorway both — and the eggs are the entire reason this
     # building is recognisable. More detail is only ever worth having while it
     # costs nothing that already reads. Keep it for a building with room.
     # A shelter over the LEFT of the court only. The nest moves right to meet
     # it, so the court has a covered half and an open half instead of one even
-    # rectangle â€” and nothing stands in front of the eggs, which was the lesson
+    # rectangle — and nothing stands in front of the eggs, which was the lesson
     # the pergola taught.
     lean_to('shelter', -court_w * 0.31, court_y + 0.02, 0.16, 0.84, 0.9, 0.96,
             key='straw')
@@ -1655,6 +1981,7 @@ def _breeding_hut_old(w, h):
 
 PRESETS = {
     'breeding_hut': (breeding_hut, 4, 4),
+    'breeding_hut_spore': (breeding_hut_spore, 4, 4),
     # Kept, not deleted. It is a finished design in a different world, and the
     # kit that built it (hip roofs, pantiles, colonnades, ashlar) is the same
     # kit every stone building will use. Throwing it away would throw away the
@@ -1683,7 +2010,7 @@ def guide_plane(w, h):
     ob.data.materials.append(mat)
 
 
-# â”€â”€ Scene â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Scene ──────────────────────────────────────────────────
 def clear():
     bpy.ops.object.select_all(action='SELECT')
     bpy.ops.object.delete()
@@ -1696,7 +2023,7 @@ def light():
     """One sun, one soft sky fill, and NO film look.
 
     The colour transform is the whole ballgame here. Blender defaults to AgX,
-    which rolls saturated colour towards grey on purpose â€” it makes photographic
+    which rolls saturated colour towards grey on purpose — it makes photographic
     renders believable and makes flat-colour assets look like they were left in
     the rain. The first render came out uniformly beige because of it. Standard
     means the colour that goes in is the colour that comes out, which is the
@@ -1711,13 +2038,13 @@ def light():
     sun = bpy.context.object
     # 2.6 blew the pale walls out to near-white, which cost the stucco exactly
     # the warmth it is chosen for. Flat colour has no highlight roll-off to
-    # rescue it â€” what clips is simply gone.
+    # rescue it — what clips is simply gone.
     sun.data.energy = 2.5
     sun.data.angle = math.radians(2.2)   # a hair of softness, not a gradient
     sun.data.color = (1.0, 0.95, 0.86)   # warm key against the cool fill
 
-    # â”€â”€ Why the sun is LOW â”€â”€
-    # It has to stay on the camera's side â€” the camera looks from +x/-y, so
+    # ── Why the sun is LOW ──
+    # It has to stay on the camera's side — the camera looks from +x/-y, so
     # those two walls are the only ones a player ever sees, and lighting the
     # other pair leaves them to the ambient and turns the stucco grey.
     #
@@ -1734,7 +2061,7 @@ def light():
     sun.rotation_euler = (math.radians(62), 0, math.radians(28))
 
     # A fill from the opposite side so the shadow side keeps its colour instead
-    # of dying. Weak and cool â€” its whole job is to stop black, not to light.
+    # of dying. Weak and cool — its whole job is to stop black, not to light.
     bpy.ops.object.light_add(type='SUN')
     fill = bpy.context.object
     fill.name = 'fill'
@@ -1743,10 +2070,10 @@ def light():
     fill.data.angle = math.radians(30)
     fill.rotation_euler = (math.radians(58), 0, math.radians(-150))
 
-    # â”€â”€ Contact darkening â”€â”€
+    # ── Contact darkening ──
     # The one thing missing that no amount of ornament could supply: every part
     # sat ON the next one without ever getting DARKER where they meet. Under
-    # the eaves, in the court corners, where the nest touches the floor â€” all
+    # the eaves, in the court corners, where the nest touches the floor — all
     # of it was lit as if nothing was in the way, which is exactly what makes a
     # render read as flat colour rather than as a solid object.
     #
@@ -1795,8 +2122,8 @@ def frame(w, h, px_per_tile, headroom):
       * `ortho_scale` measures the LARGER of the two render dimensions. Ours is
         the height, so setting it to the base's width zooms in by exactly the
         aspect ratio.
-      * The camera's position still matters. Distance does not â€” that is what
-        orthographic means â€” but sliding it sideways slides the whole picture.
+      * The camera's position still matters. Distance does not — that is what
+        orthographic means — but sliding it sideways slides the whole picture.
         So instead of nudging `shift`, the camera is PLACED on the axis that
         already frames the base, and shift stays zero.
     """
@@ -1857,8 +2184,8 @@ def vary_tones(spread=0.075):
 
     A roof of two hundred tiles painted in ONE orange is the giveaway. No two
     real tiles fired the same, no two stones came off the same bed, and the eye
-    knows it long before it can say why. Varying the colour per PIECE â€” not per
-    material â€” turns a flat plate into a surface, and it is the cheapest beauty
+    knows it long before it can say why. Varying the colour per PIECE — not per
+    material — turns a flat plate into a surface, and it is the cheapest beauty
     in the whole kit: no geometry, no light, one pass at the end.
 
     The spread is small on purpose. Past about a tenth the pieces stop reading
@@ -1896,7 +2223,7 @@ def bevel_everything():
     constructors would mean thirty places to forget it.
 
     use_clamp_overlap is what makes a single width safe across parts that differ
-    by two orders of magnitude â€” a 0.028 bevel would otherwise consume a 0.05
+    by two orders of magnitude — a 0.028 bevel would otherwise consume a 0.05
     roof tile whole. Blender shrinks it to fit instead.
     """
     for ob in bpy.data.objects:
@@ -1950,10 +2277,10 @@ def main():
                          'shading, at the cost of render time')
     ap.add_argument('--samples', type=int, default=96)
     ap.add_argument('--no-bevel', action='store_true',
-                    help='skip the edge bevel â€” tells geometry bugs from '
+                    help='skip the edge bevel — tells geometry bugs from '
                          'modifier artefacts apart in one render')
     ap.add_argument('--no-render', action='store_true',
-                    help='build the scene and stop â€” for opening it in the GUI')
+                    help='build the scene and stop — for opening it in the GUI')
     ap.add_argument('--blend', help='also save the scene to this .blend')
     args = ap.parse_args(argv)
 
@@ -1972,7 +2299,7 @@ def main():
     engines = scene.render.bl_rna.properties['engine'].enum_items.keys()
     if args.pathtrace and 'CYCLES' in engines:
         # Cycles for the real contact shading. EEVEE's fast GI only occludes
-        # INDIRECT light, and this scene is lit almost entirely by one sun â€”
+        # INDIRECT light, and this scene is lit almost entirely by one sun —
         # there was barely any indirect light left to occlude, which is why the
         # corners stayed as bright as the open court.
         scene.render.engine = 'CYCLES'
@@ -1997,7 +2324,7 @@ def main():
     scene.render.image_settings.file_format = 'PNG'
     scene.render.image_settings.color_mode = 'RGBA'
     # Blender resolves a relative path against the .blend file, and in
-    # --background there is none â€” it lands on the drive root. Always absolute.
+    # --background there is none — it lands on the drive root. Always absolute.
     scene.render.filepath = os.path.abspath(args.out)
     bpy.ops.render.render(write_still=True)
     print(f'wrote {args.out}  {scene.render.resolution_x}x'
