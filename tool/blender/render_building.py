@@ -745,6 +745,31 @@ def shingle_gable(name, x, y, z, sx, sy, h, overhang=0.22, rows=9,
                 dims = (span, run / rows * 1.6, 0.055)
             box(f'{name}_c{i}_{sign}', bx, by, z + h * f, *dims,
                 mat(key if i % 2 else dark))
+    # ── THE ENDS GET COURSES TOO (user 2026-08-04: "diese sind zu flach") ──
+    # The slopes were coursed and the two triangular ends were left as one
+    # plain face — which is exactly the surface that faces the camera on a
+    # small roof (a porch, a spire, a turret), so those read as flat plates of
+    # colour while the big roofs read as roofs.
+    #
+    # A triangle narrows towards its apex, so each course is shorter than the
+    # one below by the same fraction the triangle has closed. That is the same
+    # solve as the hip roof's, one dimension simpler — and like it, a course
+    # parallel to the eaves has no end to leave hanging.
+    for i in range(rows):
+        f = (i + 0.3) / rows
+        half_span = run * (1 - f)
+        if half_span <= 0.04:
+            break
+        for sign in (-1, 1):
+            if ridge_along == 'y':
+                bx, by = x, y + sign * (span / 2 + 0.015)
+                dims = (2 * half_span, 0.05, run / rows * 1.5)
+            else:
+                bx, by = x + sign * (span / 2 + 0.015), y
+                dims = (0.05, 2 * half_span, run / rows * 1.5)
+            box(f'{name}_e{i}_{sign}', bx, by, z + h * f, *dims,
+                mat(key if i % 2 else dark))
+
     if ridge_along == 'y':
         box(f'{name}_ridge', x, y, z + h - 0.05, 0.15, span + 0.05, 0.1,
             mat('oak'))
