@@ -2,8 +2,6 @@ import '../../../core/ui/feel.dart';
 import 'dart:async';
 import 'dart:math' show max;
 import 'dart:math' as math;
-
-import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
 import '../../../core/ui/duration_format.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -194,52 +192,6 @@ class SettlementMapState extends State<SettlementMap>
   final _txCtrl = TransformationController();
   bool _txInitialized = false;
 
-  // ── TURNING BY HAND (user 2026-08-04) ───────────────────────
-  // "Frei drehen" is what was asked for, and free is the one thing sprites
-  // cannot do: a picture of a house cannot be turned 17 degrees, it can only be
-  // swapped for a picture taken from 17 degrees. So the GESTURE is continuous
-  // and the RESULT snaps to the angles that exist as renders.
-  //
-  // That is not a workaround, it is how the genre has always done it — Age of
-  // Empires and Diablo both turn in fixed steps for exactly this reason. Render
-  // eight or sixteen azimuths instead of four (--azimuth already takes any
-  // number) and the steps get small enough that the snap stops being felt.
-  //
-  // The accumulator is what makes it feel continuous: a drag builds up angle
-  // and only tips the view over once it has crossed half a step, so a small
-  // wobble does nothing and a real turn happens where the hand expects it.
-  double _turnAccum = 0;
-
-  /// True while the right mouse button is held — see the Listener in build().
-  bool _rightDown = false;
-
-  /// How far the view must be twisted before it steps, in radians — half of a
-  /// quarter turn.
-  static const double _kTurnStep = math.pi / 4;
-
-  /// Pixels of horizontal right-drag that count as a full quarter turn. Sized
-  /// so a comfortable thumb-sweep is about one step, not four.
-  static const double _kDragPerQuarter = 140;
-
-  void _turnBy(double radians) {
-    _turnAccum += radians;
-    var steps = 0;
-    while (_turnAccum > _kTurnStep) {
-      _turnAccum -= _kTurnStep * 2;
-      steps++;
-    }
-    while (_turnAccum < -_kTurnStep) {
-      _turnAccum += _kTurnStep * 2;
-      steps--;
-    }
-    if (steps == 0) return;
-    setState(
-      () => isoRotation = (isoRotation + steps) % 4 < 0
-          ? (isoRotation + steps) % 4 + 4
-          : (isoRotation + steps) % 4,
-    );
-  }
-
   // ── Bringing something into view (user 2026-07-30) ──────────
   // A building you just BUILT is placed for you, and the map is pannable and
   // zoomable — so it could easily land off-screen, leaving a "placed — drag it
@@ -280,10 +232,9 @@ class SettlementMapState extends State<SettlementMap>
         .toDouble();
     final target = Matrix4.diagonal3Values(scale, scale, 1)
       ..setTranslationRaw(tx, ty, 0);
-    _panAnim = Matrix4Tween(
-      begin: _txCtrl.value,
-      end: target,
-    ).animate(CurvedAnimation(parent: _panCtrl, curve: Curves.easeOutCubic));
+    _panAnim = Matrix4Tween(begin: _txCtrl.value, end: target).animate(
+      CurvedAnimation(parent: _panCtrl, curve: Curves.easeOutCubic),
+    );
     _panCtrl
       ..reset()
       ..forward();
@@ -648,17 +599,9 @@ class SettlementMapState extends State<SettlementMap>
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          decoration: ShapeDecoration(
-            color: danger
+          decoration: ShapeDecoration(color: danger
                 ? Colors.red.shade900.withValues(alpha: 0.4)
-                : FoE.panelMid,
-            shape: FoE.facet(
-              radius: 6,
-              side: BorderSide(
-                color: danger ? Colors.red.shade700 : FoE.border,
-              ),
-            ),
-          ),
+                : FoE.panelMid, shape: FoE.facet(radius: 6, side: BorderSide(color: danger ? Colors.red.shade700 : FoE.border))),
           child: Text(
             label,
             style: FoE.label().copyWith(
@@ -864,7 +807,10 @@ class SettlementMapState extends State<SettlementMap>
                                     liveB,
                                     def,
                                     functional,
-                                  )) ...[const SizedBox(height: 12), action],
+                                  )) ...[
+                                    const SizedBox(height: 12),
+                                    action,
+                                  ],
                                   const SizedBox(height: 2),
                                 ],
                               ),
@@ -1323,6 +1269,7 @@ class SettlementMapState extends State<SettlementMap>
     ];
   }
 
+
   /// The prominent form: full width, tall, the settlement's action green, with
   /// a chevron so it reads as "this opens something".
   ///
@@ -1413,9 +1360,10 @@ class SettlementMapState extends State<SettlementMap>
     String res,
     double power, {
     bool withGlyph = false,
-  }) => withGlyph
-      ? '${workshopRoleEffect(res, power)} ${workshopRoleEmoji(res)}'
-      : workshopRoleEffect(res, power);
+  }) =>
+      withGlyph
+          ? '${workshopRoleEffect(res, power)} ${workshopRoleEmoji(res)}'
+          : workshopRoleEffect(res, power);
 
   /// One resource/role glyph — kResourceEmoji is the app-wide source, goods
   /// bring their own, and the three non-resource role keys get their own icon.
@@ -1583,14 +1531,19 @@ class SettlementMapState extends State<SettlementMap>
       for (final key in storageKeys) {
         if (def.effectEntry('storage', key, era) == null) continue;
         final v = buildingEffectValueAt(def, 'storage', key, era, b.level);
-        final posted = functional ? widget.ctrl.storageRoomPosted(b, key) : 0.0;
+        final posted =
+            functional ? widget.ctrl.storageRoomPosted(b, key) : 0.0;
         rows.add(
-          headline(_resLabel(key), [
-            formatBuildingEffect('storage', key, v + posted),
-            if (posted > 0)
-              '${formatBuildingEffect('storage', key, v)} + '
-                  '${shortNumberAbove(posted)} 👷',
-          ], color: functional ? _dlgInk : _dlgInkFaint),
+          headline(
+            _resLabel(key),
+            [
+              formatBuildingEffect('storage', key, v + posted),
+              if (posted > 0)
+                '${formatBuildingEffect('storage', key, v)} + '
+                    '${shortNumberAbove(posted)} 👷',
+            ],
+            color: functional ? _dlgInk : _dlgInkFaint,
+          ),
         );
       }
     }
@@ -1603,9 +1556,11 @@ class SettlementMapState extends State<SettlementMap>
       if (def.effectAt('production', res, era, level: b.level) != 0) continue;
       final at = firstLevelWithEffect(def, 'production', res, era);
       rows.add(
-        headline(_resLabel(res), [
-          at != null ? 'from Lv $at ${_resEmoji(res)}' : '—',
-        ], color: _dlgInkFaint),
+        headline(
+          _resLabel(res),
+          [at != null ? 'from Lv $at ${_resEmoji(res)}' : '—'],
+          color: _dlgInkFaint,
+        ),
       );
     }
     // Housing capacity (a count, not a /h rate — its own row; icon after the
@@ -1619,9 +1574,11 @@ class SettlementMapState extends State<SettlementMap>
     } else if (def.hasEffect('housing', era)) {
       final at = firstLevelWithEffect(def, 'housing', '', era);
       rows.add(
-        headline('Housing', [
-          at != null ? 'from Lv $at 🏠' : '0 🏠',
-        ], color: _dlgInkFaint),
+        headline(
+          'Housing',
+          [at != null ? 'from Lv $at 🏠' : '0 🏠'],
+          color: _dlgInkFaint,
+        ),
       );
     }
 
@@ -1638,9 +1595,11 @@ class SettlementMapState extends State<SettlementMap>
     // Storage has its own grouped block above, so it is left out here.
     for (final row in buildingEffectCardRows(def, era, b.level)) {
       rows.add(
-        headline(row.label, [
-          row.value,
-        ], color: !functional || row.pending ? _dlgInkFaint : _dlgInk),
+        headline(
+          row.label,
+          [row.value],
+          color: !functional || row.pending ? _dlgInkFaint : _dlgInk,
+        ),
       );
     }
 
@@ -1740,7 +1699,7 @@ class SettlementMapState extends State<SettlementMap>
           for (final p in role.parts.entries)
             if ((role.mults[p.key] ?? 0) != 0)
               '${workshopRoleEmoji(p.value)} '
-                  '${workshopRoleName(p.value) ?? p.value}',
+              '${workshopRoleName(p.value) ?? p.value}',
         ];
         if (parts.isNotEmpty) {
           rows.add(
@@ -1766,7 +1725,9 @@ class SettlementMapState extends State<SettlementMap>
       // Gebäude, welches Monster anstellt soll EP geben") — a legendary parked
       // in a special building is stationed like anyone else and earns like
       // anyone else, and this row was the one that used to deny it.
-      final postXp = training ? kTrainingXpPerHour : workXpPerHourAt(b.level);
+      final postXp = training
+          ? kTrainingXpPerHour
+          : workXpPerHourAt(b.level);
       rows.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 2),
@@ -1865,7 +1826,11 @@ class SettlementMapState extends State<SettlementMap>
         // uses — one breeder's 25 % and another's 25 % are not 50 %.
         if (functional)
           for (final e in systemPower.entries)
-            _systemRoleValue(e.key, e.value, withGlyph: systemPower.length > 1),
+            _systemRoleValue(
+              e.key,
+              e.value,
+              withGlyph: systemPower.length > 1,
+            ),
       ];
       // AN EMPTY TANK PRODUCES NOTHING (user 2026-07-30: "fur lodge produziert
       // 3.5 pro Stunde, oben wird mir dies aber nicht angezeigt").
@@ -1876,15 +1841,13 @@ class SettlementMapState extends State<SettlementMap>
       // card promised +3.5/h and never mentioned why the two disagreed. The
       // figures above stay (they are what the building CAN do); the Total says
       // what it currently banks, which is nothing.
-      final halted =
-          functional &&
-          parts.isNotEmpty &&
+      final halted = functional && parts.isNotEmpty &&
           (b.isPaused || !widget.ctrl.hasEnergy || starved.isNotEmpty);
       final haltReason = b.isPaused
           ? '0/h · paused'
           : !widget.ctrl.hasEnergy
-          ? '0/h · no energy'
-          : '0/h · no ${starved.map(_resLabel).join(' / ')}';
+              ? '0/h · no energy'
+              : '0/h · no ${starved.map(_resLabel).join(' / ')}';
       rows
         ..add(const SizedBox(height: 8))
         ..add(
@@ -1933,7 +1896,7 @@ class SettlementMapState extends State<SettlementMap>
             child: Text(
               '${e.value.entries.map((i) => '${_num(i.value)} '
                   '${_resEmoji(i.key)}').join(' + ')}'
-              ' → 1 ${_resEmoji(e.key)}',
+                  ' → 1 ${_resEmoji(e.key)}',
               textAlign: TextAlign.end,
               style: FoE.dim(size: 11),
             ),
@@ -1946,7 +1909,7 @@ class SettlementMapState extends State<SettlementMap>
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               'Out of ${starved.map(_resLabel).join(' and ')} — nothing is '
-              'being refined.',
+                  'being refined.',
               style: FoE.dim(size: 11).copyWith(color: FoE.danger),
             ),
           ),
@@ -1973,7 +1936,6 @@ class SettlementMapState extends State<SettlementMap>
     int level,
     bool training, [
     bool boost = false,
-
     /// The resources this building STORES — what a store post's per-resource
     /// dials are read for (user 2026-07-30). Empty for every other post.
     List<String> storageKeys = const [],
@@ -2026,29 +1988,28 @@ class SettlementMapState extends State<SettlementMap>
                   '${_resEmoji(key)}',
           ]
         : const <String>[];
-    final value =
-        absence ??
+    final value = absence ??
         (storeRoom.isNotEmpty
-            ? storeRoom.first
-            : boost
-            ? (legendary
-                  ? '⭐ ×${(1 + role.mult).toStringAsFixed(1)}'
-                  : '⚠ not legendary')
-            : training
-            ? '+${kTrainingXpPerHour.toStringAsFixed(0)} XP/h'
-            : construction
-            ? '+${contrib.toStringAsFixed(0)} points 🔨'
-            // A system role's contribution is a cut or a bonus, not an hourly
-            // amount — and it is only meaningful TOGETHER with its colleagues'
-            // (the cut is soft-capped over the summed power), so the row shows
-            // what this one monster is worth ALONE and the Total line adds them up.
-            : workshopRoleFeedsSystem(role.resource)
-            // A combined post says all three of its parts, each with its glyph —
-            // that IS the row's content, and one bare percentage could only be one
-            // of the three (user 2026-07-29). They are STACKED below, not joined.
-            ? workshopPowerLabel(contribution, withGlyph: role.isCombined)
-            // Icon after the value (user 2026-07-24).
-            : '+${contrib.toStringAsFixed(1)}/h ${_resEmoji(role.resource)}');
+        ? storeRoom.first
+        : boost
+        ? (legendary
+              ? '⭐ ×${(1 + role.mult).toStringAsFixed(1)}'
+              : '⚠ not legendary')
+        : training
+        ? '+${kTrainingXpPerHour.toStringAsFixed(0)} XP/h'
+        : construction
+        ? '+${contrib.toStringAsFixed(0)} points 🔨'
+        // A system role's contribution is a cut or a bonus, not an hourly
+        // amount — and it is only meaningful TOGETHER with its colleagues'
+        // (the cut is soft-capped over the summed power), so the row shows
+        // what this one monster is worth ALONE and the Total line adds them up.
+        : workshopRoleFeedsSystem(role.resource)
+        // A combined post says all three of its parts, each with its glyph —
+        // that IS the row's content, and one bare percentage could only be one
+        // of the three (user 2026-07-29). They are STACKED below, not joined.
+        ? workshopPowerLabel(contribution, withGlyph: role.isCombined)
+        // Icon after the value (user 2026-07-24).
+        : '+${contrib.toStringAsFixed(1)}/h ${_resEmoji(role.resource)}');
     // The stacked form of that same value. A combined post and a STORE post have
     // more than one line; every other row keeps its single [value] string.
     final lines = absent || training || boost || construction
@@ -2091,7 +2052,10 @@ class SettlementMapState extends State<SettlementMap>
               mainAxisSize: MainAxisSize.min,
               children: [
                 for (final l in lines)
-                  Text(l, style: FoE.value(size: 11).copyWith(color: _dlgInk)),
+                  Text(
+                    l,
+                    style: FoE.value(size: 11).copyWith(color: _dlgInk),
+                  ),
               ],
             )
           else
@@ -2607,134 +2571,67 @@ class SettlementMapState extends State<SettlementMap>
 
         return Stack(
           children: [
-            // ── THE HAND ON THE MAP ──
-            // Pan and zoom are the InteractiveViewer's own (drag, pinch, and
-            // the scroll wheel it already handles). Turning is layered on top:
-            //
-            //   * two fingers twisting  → onInteractionUpdate's rotation
-            //   * right mouse dragged sideways → the Listener below
-            //
-            // panEnabled goes OFF while the right button is down. Flutter's
-            // scale recogniser accepts any pointer, secondary included, so
-            // without this a right-drag would turn the map AND drag it out from
-            // under itself at the same time.
-            Listener(
-              onPointerDown: (e) {
-                if (e.buttons & kSecondaryMouseButton != 0) {
-                  setState(() => _rightDown = true);
-                  _turnAccum = 0;
-                }
-              },
-              onPointerMove: (e) {
-                if (!_rightDown) return;
-                _turnBy(e.delta.dx / _kDragPerQuarter * _kTurnStep * 2);
-              },
-              onPointerUp: (_) {
-                if (_rightDown) setState(() => _rightDown = false);
-              },
-              onPointerCancel: (_) {
-                if (_rightDown) setState(() => _rightDown = false);
-              },
-              child: InteractiveViewer(
-                constrained: false,
-                minScale: minScale,
-                maxScale: maxScale,
-                panEnabled: !_rightDown,
-                transformationController: _txCtrl,
-                onInteractionStart: (_) => _turnAccum = 0,
-                onInteractionUpdate: (d) {
-                  // Only a genuine twist — two fingers actually rotating. A
-                  // single finger reports 0 here, so a pan can never turn the map
-                  // by accident.
-                  if (d.pointerCount >= 2 && d.rotation != 0) {
-                    _turnBy(-d.rotation);
-                  }
-                },
-                child: MouseRegion(
-                  onHover: (e) => _handleHover(e.localPosition),
-                  child: GestureDetector(
-                    onTapUp: (d) => _handleTap(d.localPosition),
-                    onLongPressStart: (d) => _handleLongPress(d.localPosition),
-                    child: SizedBox(
-                      width: mapW,
-                      height: mapH,
-                      child: Stack(
-                        children: [
+            InteractiveViewer(
+              constrained: false,
+              minScale: minScale,
+              maxScale: maxScale,
+              transformationController: _txCtrl,
+              child: MouseRegion(
+                onHover: (e) => _handleHover(e.localPosition),
+                child: GestureDetector(
+                  onTapUp: (d) => _handleTap(d.localPosition),
+                  onLongPressStart: (d) => _handleLongPress(d.localPosition),
+                  child: SizedBox(
+                    width: mapW,
+                    height: mapH,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: RepaintBoundary(
+                            child: Image.asset(
+                              'assets/images/map_background.png',
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.medium,
+                            ),
+                          ),
+                        ),
+                        if (_inMoveMode ||
+                            _inPlaceMode ||
+                            widget.editMode ||
+                            widget.roadMode)
                           Positioned.fill(
-                            child: RepaintBoundary(
-                              child: Image.asset(
-                                'assets/images/map_background.png',
-                                fit: BoxFit.cover,
-                                filterQuality: FilterQuality.medium,
+                            child: CustomPaint(
+                              painter: _GridPainter(
+                                buildableRegion: widget.ctrl.buildableRegion,
                               ),
                             ),
                           ),
-                          if (_inMoveMode ||
-                              _inPlaceMode ||
-                              widget.editMode ||
-                              widget.roadMode)
-                            Positioned.fill(
-                              child: CustomPaint(
-                                painter: _GridPainter(
-                                  buildableRegion: widget.ctrl.buildableRegion,
-                                ),
-                              ),
-                            ),
-                          // ── GROUND FIRST, THEN WHAT STANDS ON IT ──
-                          // (user 2026-08-01: "die Strasse ist jetzt über dem
-                          // Gebäude").
-                          //
-                          // Depth alone cannot fix that. A road one tile in FRONT
-                          // of a building is genuinely nearer the viewer, so it
-                          // sorts later — and then its flat tile paints over the
-                          // wall that leans into that space, because a tall sprite
-                          // occupies tiles its footprint does not.
-                          //
-                          // So roads are a LAYER, not a competitor: they are
-                          // ground, and nothing that lies on the ground may cover
-                          // something standing on it.
-                          ..._sortedForPainting(
-                            roads: true,
-                          ).map((b) => _buildingTile(b)),
-                          // BACK TO FRONT among themselves.
-                          ..._sortedForPainting(
-                            roads: false,
-                          ).map((b) => _buildingTile(b)),
-                          if (ghostTypeId != null &&
-                              _ghostX != null &&
-                              _ghostY != null)
-                            _ghost(ghostTypeId, _ghostX!, _ghostY!),
-                        ],
-                      ),
+                        // ── GROUND FIRST, THEN WHAT STANDS ON IT ──
+                        // (user 2026-08-01: "die Strasse ist jetzt über dem
+                        // Gebäude").
+                        //
+                        // Depth alone cannot fix that. A road one tile in FRONT
+                        // of a building is genuinely nearer the viewer, so it
+                        // sorts later — and then its flat tile paints over the
+                        // wall that leans into that space, because a tall sprite
+                        // occupies tiles its footprint does not.
+                        //
+                        // So roads are a LAYER, not a competitor: they are
+                        // ground, and nothing that lies on the ground may cover
+                        // something standing on it.
+                        ..._sortedForPainting(roads: true)
+                            .map((b) => _buildingTile(b)),
+                        // BACK TO FRONT among themselves.
+                        ..._sortedForPainting(roads: false)
+                            .map((b) => _buildingTile(b)),
+                        if (ghostTypeId != null &&
+                            _ghostX != null &&
+                            _ghostY != null)
+                          _ghost(ghostTypeId, _ghostX!, _ghostY!),
+                      ],
                     ),
                   ),
                 ),
-              ),
-            ),
-
-            // ── TURN THE MAP (user 2026-08-04) ──
-            // A quarter clockwise per press. It is a CAMERA, not game state:
-            // nothing is saved, nothing is sent, and reopening the settlement
-            // starts square again — which is also why the button lives here
-            // and not anywhere near the controller.
-            //
-            // LAST in the stack, because the first child of a Stack is the
-            // bottom one and a control under the map is a control nobody can
-            // press.
-            //
-            // BOTTOM LEFT (user 2026-08-04: "ev. ist er hinter einen button").
-            // Being last in the map's own stack only wins against the map —
-            // the screen puts its own chrome over the whole widget, and the
-            // bottom-right is where that chrome lives. Left is the empty corner.
-            Positioned(
-              left: 12,
-              bottom: 12,
-              child: _MapTurnButton(
-                rotation: isoRotation,
-                // The selection survives the turn: it is a building id, and the
-                // building did not move — only the view of it did.
-                onTurn: () =>
-                    setState(() => isoRotation = (isoRotation + 1) % 4),
               ),
             ),
 
@@ -3059,13 +2956,7 @@ class SettlementMapState extends State<SettlementMap>
           onTap: widget.onExitRoadMode,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: ShapeDecoration(
-              color: FoE.panelDark,
-              shape: FoE.facet(
-                radius: 5,
-                side: BorderSide(color: Colors.greenAccent.shade400),
-              ),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 5, side: BorderSide(color: Colors.greenAccent.shade400))),
             child: Text(
               'Done',
               style: FoE.label(size: 11).copyWith(color: Colors.greenAccent),
@@ -3102,13 +2993,7 @@ class SettlementMapState extends State<SettlementMap>
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: ShapeDecoration(
-              color: FoE.panelDark,
-              shape: FoE.facet(
-                radius: 5,
-                side: BorderSide(color: FoE.accentBlue),
-              ),
-            ),
+            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 5, side: BorderSide(color: FoE.accentBlue))),
             child: Text(
               'Done',
               style: FoE.label(size: 11).copyWith(color: FoE.accentBlue),
@@ -3435,7 +3320,7 @@ class _BuildingTile extends StatelessWidget {
         left: 2,
         right: 2,
         child: ClipPath(
-          clipper: ShapeBorderClipper(shape: FoE.facet(radius: 2)),
+      clipper: ShapeBorderClipper(shape: FoE.facet(radius: 2)),
           child: LinearProgressIndicator(
             value: building.constructionProgress,
             minHeight: 3,
@@ -3471,42 +3356,6 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GridPainter old) =>
       old.buildableRegion != buildableRegion;
-}
-
-/// The map's turn control (2026-08-04).
-///
-/// Shows WHICH WAY the map is facing, not just that it can be turned. A compass
-/// that only spins tells you nothing; the number is what lets a player say "I
-/// left it at 2" and find their village the same way round next time.
-class _MapTurnButton extends StatelessWidget {
-  final int rotation;
-  final VoidCallback onTurn;
-
-  const _MapTurnButton({required this.rotation, required this.onTurn});
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTurn,
-    child: Container(
-      width: 46,
-      height: 46,
-      alignment: Alignment.center,
-      decoration: ShapeDecoration(
-        color: FoE.panelMid,
-        shape: FoE.facet(
-          radius: 23,
-          side: BorderSide(color: FoE.borderGold, width: 1.4),
-        ),
-        shadows: FoE.drop(dy: 2),
-      ),
-      child: Transform.rotate(
-        // The glyph turns with the map, so the control is a readout as much as
-        // a button.
-        angle: rotation * math.pi / 2,
-        child: const Icon(Icons.navigation, size: 22, color: FoE.gold),
-      ),
-    ),
-  );
 }
 
 /// Smoke and lamplight over one building, placed in the SPRITE's box rather

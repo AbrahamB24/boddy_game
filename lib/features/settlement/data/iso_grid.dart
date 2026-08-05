@@ -39,78 +39,21 @@ const double kIsoTileW = 64;
 /// ground rather than as a floor tile seen from above.
 const double kIsoTileH = kIsoTileW / 2;
 
-// ── TURNING THE MAP (user 2026-08-04) ───────────────────────
-// Same principle as the isometric change itself, one level further in: the
-// GRID DOES NOT TURN. A building stays at gridX/gridY covering gridW × gridH
-// for as long as it exists; what turns is the way those numbers are projected.
-// Nothing is saved, nothing is migrated, and a rotation is not a game state —
-// it is a camera.
-//
-// The whole rotation lives in [isoTurn], which every corner passes through on
-// its way to the screen. That is why the functions below did not have to
-// change: they were already written in terms of grid CORNERS, and a corner that
-// has been turned projects exactly like a corner that has not.
-//
-// The two things that DO have to know are the two that cannot be expressed as a
-// corner — the map's own dimensions (60 × 40 becomes 40 × 60 on an odd quarter)
-// and the painter's depth order, which is about which footprint is nearer the
-// viewer and therefore about the turned position.
-
-/// Quarter turns clockwise, 0..3. A camera, not game state: never persisted.
-int isoRotation = 0;
-
-/// The grid as SEEN. Swapped on an odd quarter turn, because a 60 × 40 map
-/// viewed from the side is 40 × 60.
-int get isoViewCols => isoRotation.isEven ? kGridCols : kGridRows;
-int get isoViewRows => isoRotation.isEven ? kGridRows : kGridCols;
-
-/// A grid CORNER moved into view space. Corners, not cells: the whole
-/// projection is written in corners, so the turn has to be too — turning cell
-/// centres and then deriving corners is how a footprint ends up half a tile off
-/// its own ground.
-(double, double) isoTurn(double gx, double gy) => switch (isoRotation) {
-  1 => (kGridRows - gy, gx),
-  2 => (kGridCols - gx, kGridRows - gy),
-  3 => (gy, kGridCols - gx),
-  _ => (gx, gy),
-};
-
-/// A footprint's origin and extents in view space. On an odd quarter turn a
-/// 3 × 4 building presents as 4 × 3 — ON SCREEN. In the data it is 3 × 4 for
-/// ever, and mixing those two up is the single most likely way this breaks.
-(int, int, int, int) isoViewRect(int x, int y, int w, int h) =>
-    switch (isoRotation) {
-      1 => (kGridRows - y - h, x, h, w),
-      2 => (kGridCols - x - w, kGridRows - y - h, w, h),
-      3 => (y, kGridCols - x - w, h, w),
-      _ => (x, y, w, h),
-    };
-
-/// A footprint's extents as seen — the swap alone, for the local-space helpers.
-(int, int) isoViewWH(int w, int h) =>
-    isoRotation.isEven ? (w, h) : (h, w);
-
 /// How far right the whole map has to be pushed so nothing lands at a negative
 /// x: the westernmost point is the grid's south-west corner, at (0, rows).
-double get isoOriginX => isoViewRows * kIsoTileW / 2;
+double get isoOriginX => kGridRows * kIsoTileW / 2;
 
 /// The screen box the whole diamond needs.
-///
-/// Unchanged by rotation, and that is not luck: the diamond is
-/// (cols + rows) tiles across, and cols + rows survives a quarter turn.
 Size get isoCanvasSize => Size(
-  (isoViewCols + isoViewRows) * kIsoTileW / 2,
-  (isoViewCols + isoViewRows) * kIsoTileH / 2,
+  (kGridCols + kGridRows) * kIsoTileW / 2,
+  (kGridCols + kGridRows) * kIsoTileH / 2,
 );
 
-/// Grid CORNER (gx, gy) → its point on screen, through the current turn.
-Offset gridToScreen(double gx, double gy) {
-  final (vx, vy) = isoTurn(gx, gy);
-  return Offset(
-    (vx - vy) * kIsoTileW / 2 + isoOriginX,
-    (vx + vy) * kIsoTileH / 2,
-  );
-}
+/// Grid CORNER (gx, gy) → its point on screen.
+Offset gridToScreen(double gx, double gy) => Offset(
+  (gx - gy) * kIsoTileW / 2 + isoOriginX,
+  (gx + gy) * kIsoTileH / 2,
+);
 
 /// Screen point → the CELL under it, clamped to the map.
 ///
@@ -118,18 +61,10 @@ Offset gridToScreen(double gx, double gy) {
 /// outside the diamond (clamped to the nearest edge) — a tap on the void beside
 /// the map is a tap on the map's edge, not an error the caller has to handle.
 (int, int) screenToGrid(Offset p) {
-  final a = (p.dx - isoOriginX) / kIsoTileW; // (vx − vy) / 2
-  final b = p.dy / kIsoTileH; // (vx + vy) / 2
-  final vx = (b + a).floor();
-  final vy = (b - a).floor();
-  // Back out of the turn, in CELLS. The corner map turned inside out: for a
-  // quarter clockwise, view cell (vx, vy) is grid cell (vy, rows − 1 − vx).
-  final (gx, gy) = switch (isoRotation) {
-    1 => (vy, kGridRows - 1 - vx),
-    2 => (kGridCols - 1 - vx, kGridRows - 1 - vy),
-    3 => (kGridCols - 1 - vy, vx),
-    _ => (vx, vy),
-  };
+  final a = (p.dx - isoOriginX) / kIsoTileW; // (gx − gy) / 2
+  final b = p.dy / kIsoTileH; // (gx + gy) / 2
+  final gx = (b + a).floor();
+  final gy = (b - a).floor();
   return (gx.clamp(0, kGridCols - 1), gy.clamp(0, kGridRows - 1));
 }
 
@@ -138,11 +73,9 @@ Offset gridToScreen(double gx, double gy) {
 bool isoContains(Offset p) {
   final a = (p.dx - isoOriginX) / kIsoTileW;
   final b = p.dy / kIsoTileH;
-  final vx = b + a;
-  final vy = b - a;
-  // Tested in VIEW space, against the turned dimensions — the diamond on
-  // screen is the one the tap has to be inside of.
-  return vx >= 0 && vy >= 0 && vx <= isoViewCols && vy <= isoViewRows;
+  final gx = b + a;
+  final gy = b - a;
+  return gx >= 0 && gy >= 0 && gx <= kGridCols && gy <= kGridRows;
 }
 
 /// The diamond a footprint covers, as a path — the ghost preview, the selection
@@ -176,24 +109,11 @@ Offset spriteAnchor(int x, int y, int w, int h) =>
 /// Always 2:1 — (w + h) tiles wide and half that tall — whatever the footprint's
 /// own proportions are.
 Rect isoBounds(int x, int y, int w, int h) {
-  // From the MIN and MAX of the four projected corners, not from "west is the
-  // left one". Which corner lands where depends on the turn, and naming them
-  // was only ever true at rotation 0.
-  final pts = [
-    gridToScreen(x.toDouble(), y.toDouble()),
-    gridToScreen((x + w).toDouble(), y.toDouble()),
-    gridToScreen((x + w).toDouble(), (y + h).toDouble()),
-    gridToScreen(x.toDouble(), (y + h).toDouble()),
-  ];
-  var l = pts.first.dx, r = pts.first.dx;
-  var t = pts.first.dy, b = pts.first.dy;
-  for (final p in pts) {
-    if (p.dx < l) l = p.dx;
-    if (p.dx > r) r = p.dx;
-    if (p.dy < t) t = p.dy;
-    if (p.dy > b) b = p.dy;
-  }
-  return Rect.fromLTRB(l, t, r, b);
+  final north = gridToScreen(x.toDouble(), y.toDouble());
+  final east = gridToScreen((x + w).toDouble(), y.toDouble());
+  final south = gridToScreen((x + w).toDouble(), (y + h).toDouble());
+  final west = gridToScreen(x.toDouble(), (y + h).toDouble());
+  return Rect.fromLTRB(west.dx, north.dy, east.dx, south.dy);
 }
 
 /// The footprint's outline in the coordinates of its own [isoBounds] — what a
@@ -201,11 +121,7 @@ Rect isoBounds(int x, int y, int w, int h) {
 ///
 /// A w×h area is a RHOMBUS only when w == h; otherwise it is a parallelogram,
 /// and a diamond drawn in its place covers the wrong tiles.
-Path footprintPathLocal(int gw, int gh) {
-  // The SWAP happens here rather than at the call sites. Every caller passes
-  // def.gridW/gridH — the building's real footprint — and none of them should
-  // have to remember that the picture of it turns.
-  final (w, h) = isoViewWH(gw, gh);
+Path footprintPathLocal(int w, int h) {
   final a = kIsoTileW / 2;
   final b = kIsoTileH / 2;
   // Local corners, derived from the bounds: west sits at the left edge, north
@@ -223,8 +139,7 @@ Path footprintPathLocal(int gw, int gh) {
 /// wash the size of four.
 ///
 /// Each entry is a line from one edge of the footprint to the other.
-List<(Offset, Offset)> footprintSeams(int gw, int gh) {
-  final (w, h) = isoViewWH(gw, gh);
+List<(Offset, Offset)> footprintSeams(int w, int h) {
   final a = kIsoTileW / 2;
   final b = kIsoTileH / 2;
   Offset corner(int gx, int gy) =>
@@ -236,12 +151,7 @@ List<(Offset, Offset)> footprintSeams(int gw, int gh) {
 }
 
 /// The width a building's art is drawn at: the full width of [isoBounds].
-/// Unaffected by rotation — (w + h) is the same after a quarter turn — but
-/// written through the swap anyway so it cannot drift from its siblings.
-double spriteWidth(int gw, int gh) {
-  final (w, h) = isoViewWH(gw, gh);
-  return (w + h) * kIsoTileW / 2;
-}
+double spriteWidth(int w, int h) => (w + h) * kIsoTileW / 2;
 
 /// A footprint's box in ITS OWN coordinates — origin at (0, 0).
 ///
@@ -305,12 +215,6 @@ Rect isoLocalBounds(int w, int h) =>
 /// an unstable sort makes two neighbours swap between frames and flicker.
 int isoDrawOrder(int ax, int ay, int aw, int ah, int bx, int by, int bw,
     int bh) {
-  // In VIEW space. Depth is about which footprint is nearer the VIEWER, so it
-  // is the one thing here that genuinely has to know about the turn — leave it
-  // in grid space and turning the map paints the far side of the village over
-  // the near side.
-  final (vax, vay, vaw, vah) = isoViewRect(ax, ay, aw, ah);
-  final (vbx, vby, vbw, vbh) = isoViewRect(bx, by, bw, bh);
-  final byDepth = (vax + vaw + vay + vah).compareTo(vbx + vbw + vby + vbh);
-  return byDepth != 0 ? byDepth : vax.compareTo(vbx);
+  final byDepth = (ax + aw + ay + ah).compareTo(bx + bw + by + bh);
+  return byDepth != 0 ? byDepth : ax.compareTo(bx);
 }
