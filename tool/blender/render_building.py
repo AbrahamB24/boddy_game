@@ -2163,7 +2163,7 @@ def clear():
             block.remove(b)
 
 
-def light():
+def light(azimuth=0.0):
     """One sun, one soft sky fill, and NO film look.
 
     The colour transform is the whole ballgame here. Blender defaults to AgX,
@@ -2202,7 +2202,15 @@ def light():
     # deep band down the wall, every pilaster and dentil casts, the court walls
     # throw across the floor, and the columns reach over the paving. That, and
     # not the renderer, is what makes it look solid.
-    sun.rotation_euler = (math.radians(62), 0, math.radians(28))
+    # The sun TURNS WITH THE CAMERA. It has to: the whole lighting argument is
+    # that the two walls a player sees are lit and the others are not, and a
+    # fixed sun would light the front of one view and the back of the next —
+    # the same building would go dark when you turned the map a quarter.
+    #
+    # It is the same reason a sprite sheet works at all. Each view is its own
+    # picture of the same object, so each is allowed its own light; what must
+    # not change between them is which RELATIVE side the light comes from.
+    sun.rotation_euler = (math.radians(62), 0, math.radians(28 + azimuth))
 
     # A fill from the opposite side so the shadow side keeps its colour instead
     # of dying. Weak and cool — its whole job is to stop black, not to light.
@@ -2212,7 +2220,7 @@ def light():
     fill.data.energy = 0.55
     fill.data.color = (0.72, 0.80, 1.0)
     fill.data.angle = math.radians(30)
-    fill.rotation_euler = (math.radians(58), 0, math.radians(-150))
+    fill.rotation_euler = (math.radians(58), 0, math.radians(-150 + azimuth))
 
     # ── Contact darkening ──
     # The one thing missing that no amount of ornament could supply: every part
@@ -2257,7 +2265,7 @@ def light():
     bg.inputs['Strength'].default_value = 0.22
 
 
-def frame(w, h, px_per_tile, headroom):
+def frame(w, h, px_per_tile, headroom, azimuth=0.0):
     """Point the camera and SOLVE its framing from the four ground corners.
 
     Two things about an orthographic camera that are easy to get wrong, and both
@@ -2280,7 +2288,19 @@ def frame(w, h, px_per_tile, headroom):
     bpy.ops.object.camera_add()
     cam = bpy.context.object
     cam.data.type = 'ORTHO'
-    cam.rotation_euler = (math.radians(90 - ELEVATION), 0, math.radians(45))
+    # ── TURNING THE VILLAGE (user 2026-08-04) ──
+    # [azimuth] spins the camera round the building in 90-degree steps. Two
+    # things make this nearly free, and both are properties of the projection
+    # rather than of any building:
+    #
+    #   * The framing already SOLVES from the projected ground corners, so it
+    #     re-solves for the turned view without a line changing.
+    #   * The image size does not move. A footprint's base spans (w + h) tiles
+    #     on screen, and w + h is the same after a quarter turn — a 3x4 seen
+    #     from the side is a 4x3, and 7 is 7. All four views come out the same
+    #     size, on the same base, which is exactly what a sprite swap needs.
+    cam.rotation_euler = (math.radians(90 - ELEVATION), 0,
+                          math.radians(45 + azimuth))
     scene.camera = cam
 
     # From the euler, NOT from cam.matrix_world: the matrix is evaluated lazily
@@ -2411,6 +2431,9 @@ def main():
     ap.add_argument('--scale', type=int, default=SCALE)
     ap.add_argument('--headroom', type=float, default=1.25,
                     help='image height as a multiple of the base width')
+    ap.add_argument('--azimuth', type=float, default=0.0,
+                    help='turn the camera round the building, in degrees. '
+                         'Use 0/90/180/270 for the four map views.')
     ap.add_argument('--guides', action='store_true',
                     help='mark the footprint, to check the framing')
     # NOT --cycles: the Cycles add-on parses sys.argv itself and claims every
@@ -2436,8 +2459,8 @@ def main():
     vary_tones()
     if not args.no_bevel:
         bevel_everything()
-    light()
-    frame(w, h, args.scale, args.headroom)
+    light(args.azimuth)
+    frame(w, h, args.scale, args.headroom, args.azimuth)
 
     scene = bpy.context.scene
     engines = scene.render.bl_rna.properties['engine'].enum_items.keys()

@@ -58,6 +58,32 @@ Legt den Render in Originalgrösse auf den Ära-I-Boden über seine eigene
 Grundfläche, daneben dasselbe in 3×. **Beurteile bei 224 px**, nicht bei 672 —
 ein Render in voller Grösse sieht immer gut aus.
 
+## Vier Ansichten für eine drehbare Karte
+
+```powershell
+foreach ($a in 0,90,180,270) {
+  & $blender --background --python tool/blender/render_building.py -- `
+      --preset breeding_hut --out "docs/renders/breeding_hut_$a.png" `
+      --scale 4 --azimuth $a
+}
+```
+
+**Zwei Eigenschaften der Projektion machen das fast gratis**, und beide gehören
+der Projektion, nicht dem Gebäude:
+
+- Die Rahmung **löst** aus den projizierten Bodenecken — sie löst für die
+  gedrehte Ansicht neu, ohne dass eine Zeile sich ändert.
+- **Die Bildgrösse bleibt gleich.** Eine Grundfläche belegt auf dem Schirm
+  `(W + H)` Kacheln Breite, und `W + H` überlebt eine Vierteldrehung: eine 3×4
+  von der Seite ist eine 4×3, und 7 bleibt 7. Alle vier Ansichten kommen in
+  derselben Grösse und auf derselben Basis heraus — genau das, was ein
+  Sprite-Wechsel braucht.
+
+**Die Sonne dreht mit.** Sie muss: das ganze Lichtargument ist, dass die zwei
+sichtbaren Wände beleuchtet sind. Eine feste Sonne würde die Vorderseite der
+einen Ansicht beleuchten und die Rückseite der nächsten — dasselbe Gebäude
+ginge beim Drehen aus.
+
 ## Weitere Schalter
 
 | | |
