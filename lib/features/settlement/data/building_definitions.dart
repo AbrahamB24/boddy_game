@@ -569,8 +569,20 @@ double? buildPointsForCut(double cut) {
 /// locked until something opens it.
 int get kBaseQueueSlots => GameTuning.i.count(Dials.baseQueueSlots);
 
-const kGridCols = 60;
-const kGridRows = 40;
+// ── TEN TIMES THE LAND (user 2026-08-06) ──
+// 200 x 120 = 24 000 cells, against 60 x 40 = 2 400. Ten times the area, and
+// the proportions are kept so the diamond keeps its shape on screen.
+//
+// The grid is a CAMERA-side number in the same sense the projection is: a
+// building stores gridX/gridY and nothing else, so growing the map cannot
+// invalidate a saved row — every old coordinate still names the same cell it
+// always did. What DOES move is anything defined relative to the map's middle,
+// and the starting zone below is exactly that: it is centred on the grid, so an
+// existing settlement built around the old centre (30, 20) now sits in the
+// far north-west of a much larger world with its buildable zone somewhere else
+// entirely. That needs a migration before this ships to anyone who has played.
+const kGridCols = 200;
+const kGridRows = 120;
 const kCellSize = 12.0;
 
 // Starting buildable territory: a zone centred on the map, containing the
