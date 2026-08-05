@@ -2449,6 +2449,8 @@ def main():
     ap.add_argument('--no-render', action='store_true',
                     help='build the scene and stop — for opening it in the GUI')
     ap.add_argument('--blend', help='also save the scene to this .blend')
+    ap.add_argument('--glb', help='also export the model to this .glb — the '
+                                  'geometry itself, for a 3D renderer')
     args = ap.parse_args(argv)
 
     build, w, h = PRESETS[args.preset]
@@ -2481,6 +2483,23 @@ def main():
                 scene.render.engine = name
                 break
 
+    if args.glb:
+        # ── The model itself, not a picture of it ──
+        # export_apply bakes the modifiers, which for this kit means the bevel:
+        # without it every edge comes out sharp and the export looks like a
+        # different building from the render.
+        #
+        # No camera and no lights. They are decisions about how to PHOTOGRAPH
+        # this thing, and a model that carries its own lighting fights whatever
+        # engine loads it.
+        bpy.ops.export_scene.gltf(
+            filepath=os.path.abspath(args.glb),
+            export_format='GLB',
+            export_apply=True,
+            export_cameras=False,
+            export_lights=False,
+        )
+        print(f'exported {args.glb}')
     if args.blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(args.blend))
     if args.no_render:

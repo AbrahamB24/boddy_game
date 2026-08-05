@@ -49,3 +49,6 @@ app.*.map.json
 
 # Blender framing checks (--guides); regenerated on demand, never shipped
 docs/renders/_*.png
+
+# Model exports: render models, not game assets — see the note in render_building.py
+docs/renders/*.glb
