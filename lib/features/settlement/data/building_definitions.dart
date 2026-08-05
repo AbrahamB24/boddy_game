@@ -770,6 +770,9 @@ class BuildingDef {
   /// of the picture and the rest is air.
   final double artBaseWidth;
 
+  // (see [kChimneyAnchor] below for where a building's smoke comes out)
+
+
   /// Where the base's bottom (south) point sits across the image, and how far
   /// above its bottom edge — both as fractions of the image's WIDTH.
   final double artAnchorX;
@@ -1917,6 +1920,23 @@ final Map<String, BuildingDef> kBuildingDefs = Map.of(kFallbackBuildingDefs);
 // The ORDER matches the user's brief ("nach dem 1. Kampf die Healing Hut, dann
 // im Verlauf der ersten Ära die anderen"). A building not listed here is seeded
 // onto no node and is buildable as soon as its era is reached.
+/// Where a building's chimney mouth sits inside its own sprite, as fractions of
+/// the picture's width and height, measured from its top-left (user 2026-08-04:
+/// "kleinere Animationen hinzufügen wie Licht, Rauch, Wind").
+///
+/// A LOOKUP rather than two more BuildingDef fields, deliberately. These are
+/// properties of one PNG, they only exist for the handful of buildings that
+/// have a chimney, and every field added to BuildingDef has to be threaded
+/// through the constructor, withEffects, both DB translations and the Dev-Mode
+/// form — four places to keep in step for a number that describes a picture.
+/// A building not listed here simply does not smoke.
+///
+/// Measured off the render, not guessed: open `docs/renders/<id>.png` and read
+/// the chimney's mouth as a fraction of the image.
+const Map<String, (double, double)> kChimneyAnchor = {
+  'breeding_hut': (0.395, 0.185),
+};
+
 const Map<String, int> kBuildingUnlockBattle = {
   'healing_hut': 1, // "Nach dem 1. Kampf" — heal up right after the first win.
   'house': 3, // the Longhouse (more housing than the starting Hut)

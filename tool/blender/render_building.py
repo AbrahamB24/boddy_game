@@ -108,6 +108,18 @@ PALETTE = {
     # are, so half-timbering is a value contrast rather than a second hue.
     'shingle': (0.47, 0.28, 0.18),
     'shingle_dark': (0.33, 0.19, 0.12),
+    # ── The egg colours are the APP's (user 2026-08-04) ──
+    # CreatureRarity's own values, so a nest on the map and an egg in the
+    # Hatchery screen are the same object. They are the one place the single
+    # warm family is broken on purpose: the eggs ARE the message this building
+    # carries, and a message has to be allowed to be the loudest thing on it.
+    # Lifted a little towards the shell so they read as eggs rather than as
+    # billiard balls — the app's chips sit on dark UI, these sit in straw.
+    'egg_common': (0.78, 0.78, 0.76),
+    'egg_uncommon': (0.47, 0.78, 0.47),
+    'egg_rare': (0.36, 0.68, 0.95),
+    'egg_epic': (0.70, 0.36, 0.78),
+    'egg_legendary': (1.00, 0.78, 0.28),
     'root': (0.50, 0.34, 0.22),        # buttress roots, withies, fences
     'root_dark': (0.36, 0.23, 0.15),
     'glow': (0.42, 0.93, 0.84),        # the one cold thing in the building
@@ -740,6 +752,91 @@ def shingle_gable(name, x, y, z, sx, sy, h, overhang=0.22, rows=9,
         box(f'{name}_ridge', x, y, z + h - 0.05, span + 0.05, 0.15, 0.1,
             mat('oak'))
     return ob
+
+
+def gable_boards(name, x, y, z, span, h, thick=0.06, count=9, key='oak',
+                 axis='x', sign=-1):
+    """Boarding across a gable's triangle, plus the rake trim down its edges.
+
+    The triangular end wall was the one big blank surface left on the building.
+    A gable is where a roof's structure is EXPOSED — it is the one wall with no
+    floor behind it — so leaving it as flat plaster reads as a wall that was
+    never finished, exactly where the eye goes first because it is the tallest
+    thing in the silhouette.
+
+    Boards, not another timber frame: a frame is what the walls below already
+    say, and a gable that repeats it has nothing of its own. Vertical boarding
+    on the triangle and a frame beneath is how these were actually built.
+    """
+    for i in range(count):
+        t = -span / 2 + span * (i + 0.5) / count
+        bh = h * (1 - abs(t) / (span / 2)) * 0.94
+        if bh <= 0.06:
+            continue
+        w = span / count * 0.86
+        bx, by = (x + t, y) if axis == 'x' else (x, y + t)
+        dims = (w, thick, bh) if axis == 'x' else (thick, w, bh)
+        box(f'{name}_{i}', bx, by, z, *dims,
+            mat(key if i % 2 else 'oak_light'))
+    # The rake boards down both slopes, and the collar tie across the middle.
+    ln = math.hypot(span / 2, h)
+    ang = math.atan2(span / 2, h)
+    for s in (-1, 1):
+        dims = (0.11, thick, ln) if axis == 'x' else (thick, 0.11, ln)
+        ob = box(f'{name}_rake{s}', 0, 0, 0, *dims, mat('oak'))
+        ob.rotation_euler = ((0, -s * ang, 0) if axis == 'x'
+                             else (s * ang, 0, 0))
+        off = s * span / 4
+        ob.location = ((x + off, y, z + h / 2) if axis == 'x'
+                       else (x, y + off, z + h / 2))
+    tie = (span * 0.52, thick + 0.02, 0.12) if axis == 'x' \
+        else (thick + 0.02, span * 0.52, 0.12)
+    box(f'{name}_tie', x, y, z + h * 0.38, *tie, mat('oak'))
+    _ = sign
+
+
+def egg_banner(name, x, y, z, w, h, facing='y', shell='egg_legendary'):
+    """A hanging cloth with an EGG on it — the building's sign.
+
+    A banner in a plain colour says "someone lives here". A banner with the
+    thing you came for painted on it says WHICH building this is, and at 256 px
+    a single bold shape on a flat field is the only kind of sign that survives.
+    Same reason shop signs were pictures: nobody could read either.
+    """
+    def at(into, along=0.0):
+        return (x + (along if facing == 'y' else -into),
+                y + (into if facing == 'y' else along))
+
+    rx, ry = at(0.0)
+    wall_box(f'{name}_rail', rx, ry, z, w + 0.2, 0.07, 0.07, mat('iron'),
+             facing=facing)
+    for s in (-1, 1):
+        hx, hy = at(0.0, s * (w / 2 + 0.06))
+        wall_box(f'{name}_ring{s}', hx, hy, z - 0.06, 0.05, 0.06, 0.08,
+                 mat('iron'), facing=facing)
+    cx, cy = at(-0.02)
+    wall_box(f'{name}_cloth', cx, cy, z - h, w, 0.04, h, mat('banner'),
+             facing=facing)
+    # The swallow tail.
+    for s in (-1, 1):
+        tx, ty = at(-0.02, s * w / 4)
+        wall_box(f'{name}_tail{s}', tx, ty, z - h - 0.1, w / 2.4, 0.04, 0.11,
+                 mat('banner'), facing=facing)
+    # The egg: three stacked slabs, widest in the middle. A faceted lozenge
+    # rather than a circle, so it belongs to the same world as the eggs in the
+    # yard instead of looking like a printed logo.
+    #
+    # Five steps, not three. At three the silhouette is a stack of blocks and
+    # reads as a crate; the shape only becomes an EGG once it narrows at both
+    # ends and does it faster at the top than the bottom. It also has to be
+    # BIG — an emblem that leaves a margin round itself is a logo, and a sign
+    # this far up the gable has one job.
+    ex, ey = at(-0.05)
+    steps = ((0.34, 0.13, 0.74), (0.52, 0.13, 0.61), (0.62, 0.16, 0.45),
+             (0.58, 0.16, 0.29), (0.42, 0.13, 0.16))
+    for i, (dw, dh, dz) in enumerate(steps):
+        wall_box(f'{name}_egg{i}', ex, ey, z - h + h * dz,
+                 w * dw, 0.03, h * dh, mat(shell), facing=facing)
 
 
 def jetty(name, x, y, z, sx, sy, out=0.2, key='oak', count=4):
@@ -1419,13 +1516,15 @@ def breeding_hut(w, h):
          overhang=0.0, patches=8)
     chimney('chim', hx - hw / 2 + 0.16, hy + 0.34, 0, 0.4, roof_z + 1.5)
 
-    # The gable end faces the camera, so it gets the sign and the pennant.
+    # BOTH gables get boarded, not just the one on show: the map lets a
+    # building be seen from any side once the camera is anywhere but here.
     face_y = hy - up_d / 2
-    banner('flag', hx, face_y - 0.02, roof_z + 0.72, 0.3, 0.44)
-    box('gsign', hx + 0.52, face_y - 0.14, roof_z + 0.02, 0.34, 0.06, 0.26,
-        mat('oak_light'))
-    box('gsignarm', hx + 0.52, face_y - 0.08, roof_z + 0.28, 0.42, 0.05, 0.05,
-        mat('iron'))
+    for s, gy in ((-1, face_y - 0.24), (1, hy + up_d / 2 + 0.24)):
+        gable_boards(f'hgab{s}', hx, gy, roof_z, up_w + 0.5, 1.2,
+                     axis='x', sign=s)
+    # THE SIGN: an egg on a banner, hung on the gable that faces the camera.
+    # This is what tells you which building you are looking at.
+    egg_banner('flag', hx, face_y - 0.32, roof_z + 0.94, 0.56, 0.72)
 
     # ── Ground floor: the way in, off centre ──
     door_x = hx - 0.34
@@ -1488,24 +1587,69 @@ def breeding_hut(w, h):
         box(f'ycap{i}', px, py, 0.76, 0.13, 0.13, 0.09, mat('oak_light'))
         lantern(f'ylamp{i}', px, py, 0.84, drop=0.1)
 
-    # A shingled lean-to against the house, over the LEFT of the yard only:
-    # covered half and open half, and nothing in front of the eggs.
-    lean_to('shed', yx0 + 0.62, yyc + 0.16, 0.1, 0.94, 0.86, 0.98,
-            key='shingle')
+    # No lean-to (user 2026-08-04: "das Vordach bitte löschen"). It shaded half
+    # the yard and shaded the half the eggs are in — and the eggs are the whole
+    # reason this building is recognisable. lean_to() stays in the kit.
 
-    nx, ny = yxc + 0.52, yyc - 0.06
-    nest('nest', nx, ny, 0.1, 0.44)
-    straw_scatter('litter', nx, ny, 0.1, 0.8)
-    egg('egg_a', nx - 0.26, ny + 0.12, 0.12, 0.25, mat('stucco'))
-    egg('egg_b', nx + 0.2, ny + 0.2, 0.12, 0.28, mat('stucco'))
-    egg('egg_c', nx + 0.02, ny - 0.26, 0.12, 0.23, mat('stucco'))
+    # The nest moves to the MIDDLE of the yard with the shed gone, and the eggs
+    # take the app's own rarity colours so a nest here and an egg in the
+    # Hatchery screen are the same object.
+    nx, ny = yxc + 0.1, yyc - 0.02
+    nest('nest', nx, ny, 0.1, 0.5)
+    straw_scatter('litter', nx, ny, 0.1, 0.86)
+    egg('egg_a', nx - 0.34, ny + 0.14, 0.12, 0.26, mat('egg_rare'))
+    egg('egg_b', nx + 0.24, ny + 0.22, 0.12, 0.29, mat('egg_legendary'))
+    egg('egg_c', nx + 0.02, ny - 0.28, 0.12, 0.24, mat('egg_uncommon'))
+    # A fourth, tucked at the edge — three in a triangle is an arrangement,
+    # four is a clutch.
+    egg('egg_d', nx - 0.58, ny - 0.18, 0.12, 0.22, mat('egg_epic'))
 
     straw_bale('bale', yx0 + 0.56, yy0 + 0.44, 0.1, 0.4, 0.28, 0.26)
     trough('trough', yx1 - 0.42, yyc + 0.3, 0.1, 0.24, 0.5, key='oak')
     pot('pot', yx0 + 0.3, yy1 - 0.22, 0.1, r=0.14, h=0.36)
     plant('plant', yx1 - 0.28, yy0 + 0.5, 0.1)
+    # ── THE BACK AND THE FAR SIDE (user 2026-08-04) ──
+    # Detailed to the same level as the front, and not because the map shows
+    # them: it does not, from this one camera. It is because a building that is
+    # only finished on two faces is a stage flat, and the first time a preset is
+    # reused, mirrored, or looked at in Blender, the empty half is all you see.
+    # It also costs almost nothing — the parts already exist.
+    back_y = hy + up_d / 2
+    leaded_window('hb0', hx - 0.5, back_y, uz, 0.28, 0.34, facing='y')
+    leaded_window('hb1', hx + 0.5, back_y, uz, 0.28, 0.34, facing='y')
+    leaded_window('hb2', hx + 0.3, hy + hd / 2, base_h + 0.4, 0.3, 0.38)
+    # A back door onto the yard behind, with its own step and lamp.
+    back_door_x = hx - 0.62
+    doorway('hbdoor', back_door_x, hy + hd / 2, base_h, 0.5, 0.66, rim=0.13)
+    plank_door('hbleaf', back_door_x, hy + hd / 2 + 0.05, base_h + 0.02,
+               0.44, 0.4, planks=3)
+    sconce('hblamp', back_door_x + 0.46, hy + hd / 2, base_h + 0.8)
+
+    # The far wall of the house: a lean of firewood and a water butt, the two
+    # things every one of these had and the two that read at any size.
+    lx = hx - hw / 2 - 0.16
+    for i in range(6):
+        ob = box(f'logs{i}', lx, hy + 0.5 - i * 0.115, 0.02,
+                 0.34, 0.1, 0.1, mat('oak' if i % 2 else 'oak_light'))
+        ob.rotation_euler = (0, math.radians(9 if i % 2 else -6), 0)
+    box('lograck', lx - 0.14, hy + 0.5 - 2.5 * 0.115, 0, 0.07, 0.85, 0.42,
+        mat('oak'))
+    box('butt', lx - 0.02, hy - 0.62, 0, 0.36, 0.36, 0.42, mat('oak'))
+    box('butt_hoop', lx - 0.02, hy - 0.62, 0.14, 0.39, 0.39, 0.05, mat('iron'))
+    box('butt_water', lx - 0.02, hy - 0.62, 0.38, 0.28, 0.28, 0.05,
+        mat('iron'))
+
+    # Behind the wing: a compost heap and a pair of barrels, so the far corner
+    # of the plot is used rather than mown.
+    box('heap', wx + 0.2, wy + wd / 2 + 0.3, 0, 0.7, 0.42, 0.22, mat('straw'))
+    straw_scatter('heaptop', wx + 0.2, wy + wd / 2 + 0.3, 0.22, 0.3, n=10)
+    for i, ox in enumerate((-0.5, -0.16)):
+        pot(f'barrel{i}', wx + ox, wy + wd / 2 + 0.34, 0, r=0.15, h=0.4,
+            key='oak')
+
     tufts('grass_h', hx, hy, hw + 0.5, hd + 0.5)
     tufts('grass_w', wx, wy, ww + 0.4, wd + 0.4)
+    vine('hvine', hx - hw / 2 - 0.01, hy + 0.9, base_h, 0.7, facing='x')
 
 
 def breeding_hut_spore(w, h):

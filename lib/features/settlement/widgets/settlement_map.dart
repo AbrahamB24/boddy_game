@@ -49,6 +49,7 @@ import '../market_screen.dart';
 import '../management_screen.dart';
 import '../settlement_controller.dart';
 import 'building_icon.dart';
+import 'building_life.dart';
 import 'meander_strip.dart';
 import '../../common/widgets/recess_bar.dart';
 import 'scroll_paper.dart'
@@ -2751,6 +2752,16 @@ class SettlementMapState extends State<SettlementMap>
             RepaintBoundary(
               child: _BuildingTile(def: def, building: b),
             ),
+            // ── SIGNS OF LIFE (user 2026-08-04) ──
+            // Smoke and lamplight, over the sprite and inside its own box.
+            // Only on a FINISHED, RUNNING building: a site under construction
+            // has nobody in it, and a paused one has been told to stop — a
+            // chimney still smoking would say the opposite of what the pause
+            // overlay says, and the player would believe the smoke.
+            if (b.isComplete && !b.isPaused && !def.isRoad && !def.isBuildPlot)
+              Positioned.fill(
+                child: _LifeOverlay(def: def, seed: b.id.hashCode),
+              ),
             // SELECTED = ITS CELLS, LIT (user 2026-08-01: "jetzt noch den
             // grünen Rahmen entfernen. Wenn das gebäude markiert ist, will ich
             // nur die gehighlighteten Kachel sehen").
@@ -3345,6 +3356,62 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GridPainter old) =>
       old.buildableRegion != buildableRegion;
+}
+
+/// Smoke and lamplight over one building, placed in the SPRITE's box rather
+/// than the tile's (2026-08-04).
+///
+/// That distinction is the whole widget. The tile's box is the footprint's
+/// bounding rectangle; the art hangs from its bottom edge and runs upward as
+/// far as it likes, so a chimney measured as a fraction of the PICTURE lands
+/// nowhere near the same fraction of the tile. Reusing [artPlacement] here is
+/// what keeps the smoke on the chimney when a building's three art numbers are
+/// retuned in Dev Mode.
+class _LifeOverlay extends StatelessWidget {
+  final BuildingDef def;
+  final int seed;
+
+  const _LifeOverlay({required this.def, required this.seed});
+
+  @override
+  Widget build(BuildContext context) {
+    final chimney = kChimneyAnchor[def.id];
+    final local = isoLocalBounds(def.gridW, def.gridH);
+    final art = artPlacement(
+      local,
+      baseWidth: def.artBaseWidth,
+      anchorX: def.artAnchorX,
+      lift: def.artLift,
+    );
+    // The sprite is scaled to art.width and keeps its aspect; the map does not
+    // know the image's true height, so the overlay box uses the same square-ish
+    // reach the art gets and anchors to the art's bottom. Smoke sized off the
+    // WIDTH (see the painter) is unaffected by that approximation.
+    final h = art.width * 1.25;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: art.left,
+          width: art.width,
+          height: h,
+          bottom: local.height - art.bottom,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              LampGlow(phaseSeed: seed),
+              if (chimney != null)
+                ChimneySmoke(
+                  anchorX: chimney.$1,
+                  anchorY: chimney.$2,
+                  phaseSeed: seed,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// A soft pool of shade on the ground a building occupies (2026-08-03).
