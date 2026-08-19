@@ -5808,8 +5808,14 @@ def builder_camp(w, h):
     # holds it, but the crane itself is meant to stick out through the
     # roof, the way the roof-mounted versions did, just launched off this
     # wall gantry instead of a dormer.
+    # deck_z raised from 1.85 (window-band height — the beam was crossing
+    # right through bcwinB3) up past the eave (roof_z=2.3): the platform
+    # itself needs to read as coming out of the ROOF, not the wall, which
+    # a window-height deck can't do regardless of how tall the mast above
+    # it is (user 2026-08-19, a photo of exactly this: "Die Plattform soll
+    # doch aus dem Dach kommen und nicht aus der Wand/Fenster").
     gan_x, gan_y = face_b, -1.1
-    deck_z = 1.85
+    deck_z = 2.55
     deck_out = 0.4
     deck_cx = gan_x - deck_out
     hw = 0.32
