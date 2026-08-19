@@ -3983,7 +3983,7 @@ def mine_cart(name, x, y, z, axis='y', load='rock'):
 
 
 def jib_crane(name, x, y, z, hh=2.6, reach=1.5, load='rock', foot=True,
-             flag=True):
+             flag=True, head_bolts=2):
     """A treadle-less quarry derrick, built the way one is built.
 
     ── Twenty-five boxes was not a crane (user 2026-08-12) ──
@@ -4102,7 +4102,7 @@ def jib_crane(name, x, y, z, hh=2.6, reach=1.5, load='rock', foot=True,
     # ── The head: a block, a sheave, and the rope over it ──
     hx_, _, hz_ = along(length, 0.0)
     box(f'{name}_headb', hx_, y, hz_ - 0.02, 0.26, 0.3, 0.2, mat('oak'))
-    strap(f'{name}_headbd', hx_, y, hz_ + 0.16, 0.28, 0.32, bolts=2)
+    strap(f'{name}_headbd', hx_, y, hz_ + 0.16, 0.28, 0.32, bolts=head_bolts)
     sheave(f'{name}_hsh', hx_ - 0.02, y, hz_ - 0.28, r=0.11)
 
     # ── The tail: a counterweight of rubble in a slung crate ──
@@ -5769,17 +5769,17 @@ def builder_camp(w, h):
     # table top, the barrel and the bottom stair tier all read as one
     # tangle from this camera angle (user 2026-08-18, a photo of exactly
     # this corner: "einige Sachen ineinanderclippen").
+    # Sawhorse tabletop and the flat saw blade on it deleted outright, along
+    # with the s_=1,t_=-1 leg (user 2026-08-20, editing directly in
+    # all_buildings.blend) — the other three legs stay standing.
     sh_x = wx + 0.15
     for s_ in (-1, 1):
         for t_ in (-1, 1):
+            if s_ == 1 and t_ == -1:
+                continue
             leg = box(f'bchl{s_}{t_}', sh_x + s_ * 0.55, wy - 0.6 + t_ * 0.13,
                       z0, 0.06, 0.06, 0.38, mat('oak'))
             leg.rotation_euler = (t_ * 0.2, -s_ * 0.2, 0)
-    box('bchtop', sh_x + 0.55, wy - 0.6, z0 + 0.36, 0.55, 0.14, 0.07,
-        mat('oak_light'))
-    saw = box('bcsaw', sh_x + 0.55, wy - 0.7, z0 + 0.42, 0.45, 0.03, 0.22,
-             mat('iron'))
-    saw.rotation_euler = (0, 0.08, 0)
     straw_scatter('bcchip', sh_x - 0.05, wy - 0.35, z0, 0.4, n=9,
                   key='oak_light')
 
@@ -5870,9 +5870,12 @@ def builder_camp(w, h):
     # Full-height mast again: the shorter hh=0.7 that once kept the whole
     # thing tucked under the eave is exactly what this round undoes. Still
     # no foot (no ground pad, winch or guy-wires — nothing here to plant
-    # them in) and no flag (user 2026-08-16: "Kran ohne Flagge").
+    # them in) and no flag (user 2026-08-16: "Kran ohne Flagge"). No bolts
+    # on the head band either (user 2026-08-20, editing directly in
+    # all_buildings.blend) — the band itself stays, same idea as the gusset
+    # plates already dropped from the jib.
     jib_crane('bccrane', crane_x, crane_y, crane_top - 0.2, hh=1.3,
-              reach=1.0, foot=False, flag=False)
+              reach=1.0, foot=False, flag=False, head_bolts=0)
 
     # ── A second, dedicated saw — a circular blade on its own bench, not
     # the hand-saw already leaning at the shed's workbench (user
