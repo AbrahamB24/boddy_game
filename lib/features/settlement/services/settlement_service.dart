@@ -48,7 +48,7 @@ class SettlementService {
       }),
       supabase.from('placed_buildings').insert({
         'settlement_id': model.id,
-        'building_type_id': 'main_hall',
+        'building_type_id': 'castle',
         // Centred in the starting plot, derived from the hall's own footprint
         // — see kMainHallStartX/Y. This used to be a hardcoded `- 3` and the
         // hall silently sat off-centre once the def wasn't 3x3.
@@ -313,7 +313,7 @@ class SettlementService {
 
     await supabase.from('placed_buildings').insert({
       'settlement_id': settlementId,
-      'building_type_id': 'main_hall',
+      'building_type_id': 'castle',
       'grid_x': kMainHallStartX,
       'grid_y': kMainHallStartY,
       'construction_seconds_required': 0,

@@ -128,7 +128,7 @@ enum BuildingCategory {
   housing('housing', 'Habitats', Icons.grass),
   civic('civic', 'Civic', Icons.account_balance),
   military('military', 'Military', Icons.shield),
-  // The odd-ones-out (user 2026-07-24): the Tribal Center (auto-placed,
+  // The odd-ones-out (user 2026-07-24): the Castle (auto-placed,
   // unique), Building Plots (expand territory, occupy no space) and Roads
   // (painted, free, unlimited) all work differently from a placed building.
   special('special', 'Special', Icons.hub);
@@ -586,7 +586,7 @@ const kGridRows = 120;
 const kCellSize = 12.0;
 
 // Starting buildable territory: a zone centred on the map, containing the
-// Tribal Center. 20×20 (user request 2026-07-17: "mache das Anfangsgebiet
+// Castle. 20×20 (user request 2026-07-17: "mache das Anfangsgebiet
 // 4x so gross" — 4× the former 10×10 area): the era-I roster now fits
 // without expanding first, so Expansion/Building Plots are about the LATER
 // eras' space needs rather than era I's squeeze. Still a small fraction
@@ -596,11 +596,11 @@ const kInitialPlotX = 20;
 const kInitialPlotY = 10;
 const kInitialPlotSize = 20;
 
-/// Top-left cell of the auto-placed Tribal Center — centred in the starting
+/// Top-left cell of the auto-placed Castle — centred in the starting
 /// plot, derived from the hall's OWN footprint.
 ///
 /// SettlementService used to hardcode `(kInitialPlotSize - 3) ~/ 2` here with
-/// a "main_hall is 3x3" comment. It drifted the moment the def wasn't 3x3
+/// a "castle is 3x3" comment. It drifted the moment the def wasn't 3x3
 /// anymore and the hall silently sat off-centre. Don't reintroduce a literal.
 int get kMainHallStartX =>
     kInitialPlotX + (kInitialPlotSize - _mainHallDef.gridW) ~/ 2;
@@ -610,7 +610,7 @@ int get kMainHallStartY =>
 /// Live def when loaded, bundled fallback before that — placement happens in
 /// getOrCreate, which runs BEFORE GameDefsController().load().
 BuildingDef get _mainHallDef =>
-    kBuildingDefs['main_hall'] ?? kFallbackBuildingDefs['main_hall']!;
+    kBuildingDefs['castle'] ?? kFallbackBuildingDefs['castle']!;
 
 // ── Building effect (dev-mode authorable, per era) ─────────
 // The rich, per-era effect palette that lives in the `effects` jsonb alongside
@@ -797,7 +797,7 @@ class BuildingDef {
   resourceCost; // keys: 'wood', 'stone' (no food — food is now a good)
   final double constructionHours;
   // Eras this building is buildable in. Empty = available in every era
-  // (used by main_hall/road, which must always be placeable). A building
+  // (used by castle/road, which must always be placeable). A building
   // can list several non-contiguous eras — see EraDef in era_definitions.dart.
   final List<String> eraIds;
   final bool isMainBuilding;
@@ -906,6 +906,56 @@ class BuildingDef {
     this.costPerEra = const {},
     this.effects = const [],
   });
+
+  /// The same building with the numbers the RENDERER measured — footprint and
+  /// where the picture's base sits in it — and nothing else changed.
+  ///
+  /// Named, narrow and deliberate, exactly like [withEffects] and for the same
+  /// reason: a general copyWith is a second way to rewrite a def, and a second
+  /// way is a second chance for two of them to disagree. This one exists for
+  /// Dev Mode's "Vom Modell übernehmen", which has to touch five fields on a
+  /// LIVE row and must not touch the forty it did not measure.
+  ///
+  /// image_url goes to null on purpose: a bundled picture already beats it
+  /// (see data/building_art.dart), so a URL left behind is a value that looks
+  /// live and is never drawn.
+  BuildingDef withModelArt({
+    required int gridW,
+    required int gridH,
+    required double artBaseWidth,
+    required double artAnchorX,
+    required double artLift,
+  }) => BuildingDef(
+    id: id,
+    name: name,
+    imageUrl: null,
+    artBaseWidth: artBaseWidth,
+    artAnchorX: artAnchorX,
+    artLift: artLift,
+    color: color,
+    gridW: gridW,
+    gridH: gridH,
+    resourceCost: resourceCost,
+    constructionHours: constructionHours,
+    eraIds: eraIds,
+    isMainBuilding: isMainBuilding,
+    isUnique: isUnique,
+    isRoad: isRoad,
+    isBuildPlot: isBuildPlot,
+    requiredTechId: requiredTechId,
+    population: population,
+    workshops: workshops,
+    buildSpeedBonus: buildSpeedBonus,
+    populationBonus: populationBonus,
+    queueSlotsBonus: queueSlotsBonus,
+    maxCount: maxCount,
+    category: category,
+    maxLevelPerEra: maxLevelPerEra,
+    costFactor: costFactor,
+    timeFactor: timeFactor,
+    costPerEra: costPerEra,
+    effects: effects,
+  );
 
   /// The same building with its EFFECTS replaced — everything else identical.
   ///
@@ -1189,7 +1239,7 @@ class BuildingDef {
       population: (row['population'] as num?)?.toInt() ?? 0,
       // The main hall NEVER has worker slots (user 2026-07-22: fully passive,
       // no crafting). Enforced at PARSE time because DB-authored defs override
-      // the bundled fallback — the user's live main_hall row (created by a
+      // the bundled fallback — the user's live castle row (created by a
       // dev-mode PNG upload) still carried the old construction/crafting
       // workshops, which is exactly how they came back after the fallback
       // was cleaned. A rule, not content: no row can reintroduce them.
@@ -1308,7 +1358,7 @@ class BuildingDef {
 // building/tech below reproduces those sheets' numbers exactly (cross-
 // checked against the sheet's own "Metric" validation block). Everything is
 // assigned to Era I (`eraIds: ['era_1']`) except the two always-available
-// structures (Main Hall/Tribal Center, Road, `eraIds: []`) — see
+// structures (Main Hall/Castle, Road, `eraIds: []`) — see
 // EraDef/kEraDefs in era_definitions.dart for the progression track itself.
 //
 // Construction/research times are calibrated the same way as before: at
@@ -1360,10 +1410,18 @@ class BuildingDef {
 // special buildings (Grand Works = raws+element, Treasury = GOLD+luxuries) that
 // each take ONE legendary to double their output. Civic buildings (Builder Camp,
 // Healing/Breeding Hut, Workshop, Scout, Training, Warehouse, Smokehouse) plus
-// the always-available main_hall/road/building_plot. All numbers tune in Dev Mode.
+// the always-available castle/road/building_plot. All numbers tune in Dev Mode.
 // ═══════════════════════════════════════════════════════════════════════════
+// ── Era I carries none (user 2026-08-12) ──
+// Every other entry names the MATERIAL the era builds in, which is a fact
+// about the building. "Primitive" named the people instead, and it sat on the
+// first thing anyone ever places. Era I is where the church is just the
+// church; the prefix returns with clay.
+//
+// Empty rather than absent, so `_pre(era)` can stay a lookup and nothing has
+// to branch on the era number.
 const Map<int, String> _eraPrefix = {
-  1: 'Primitive',
+  1: '',
   2: 'Clay',
   3: 'Terracotta',
   4: 'Plaster',
@@ -1372,33 +1430,47 @@ const Map<int, String> _eraPrefix = {
   7: 'Glass',
   8: 'Crystal',
 };
+/// The ID for a generated building — bare in era I, suffixed after it.
+///
+/// ── Era I names things plainly (user 2026-08-12) ──
+/// The live database says `small_wood_camp`, `church`, `marketplace`; the
+/// generator said `small_wood_camp`, `church`,
+/// `marketplace`. The user's ids are the same rule their NAMES follow
+/// — describe the building, and let era I go without a qualifier — and the id
+/// is what the map keys art and placement on, so the code follows the data
+/// rather than the other way round.
+///
+/// Era II onward keeps the suffix it always had: `refinery_e2` is unchanged in
+/// their database too, so nothing above era I was ever renamed and nothing
+/// above era I is touched here.
+String _idFor(int era, String bare, String suffixed) =>
+    era == 1 ? bare : suffixed;
+
+/// "$prefix Name" with the space dropped when there is no prefix.
+String _named(int era, String what) {
+  final p = _eraPrefix[era]!;
+  return p.isEmpty ? what : '$p $what';
+}
+
 const Map<int, int> _eraHousingCap = {
   1: 12, 2: 25, 3: 35, 4: 50, 5: 70, 6: 95, 7: 125, 8: 165,
 };
 
-// ── HABITATS, not houses (user 2026-08-03) ──
-// Monsters do not live in buildings. They were housed in a "Hut" and a
-// "Longhouse", and every later tier got the material prefix every other
-// building gets — a "Clay Den", an "Iron Roost". That prefix is right for a
-// thing you BUILD and wrong for a place something LIVES: a habitat is ground
-// you have taken and made liveable, so it is named for what the ground is.
+// ── Named by SIZE again (user 2026-08-12) ──
+// They were "Hut" and "Longhouse", became Thicket and Grove on the argument
+// that monsters are not lodged but given somewhere to live (2026-08-03), and
+// are now Small House and Large House: "Ich habe es zu Small House und Large
+// House umbenannt jetzt. Die Effekte bleiben, da es die gleichen Gebäude
+// sind."
 //
-// Deliberately NOT per element (user chose the neutral form): capacity stays
-// shared, so this is a rename and a reskin, not a new cost. A fire monster
-// needing its own building is a different, more expensive design.
+// So it stays a rename and nothing else — same ids, same capacity, same costs.
+// One pair for all eight tiers rather than eight invented place-names, and the
+// era prefix is what keeps them apart from era II onwards; era I gets the bare
+// pair, which is what the user wrote.
 //
-// Two per tier, the second larger. Ids stay `hut`/`house`/`pen_*` — they are
-// referenced by DB rows and by kBuildingUnlockBattle, and an id is not a name.
-const Map<int, (String, String)> _habitatNames = {
-  1: ('Thicket', 'Grove'),
-  2: ('Outcrop', 'Crag'),
-  3: ('Ashfield', 'Caldera'),
-  4: ('Meadow', 'Downs'),
-  5: ('Gorge', 'Cavern'),
-  6: ('Marsh', 'Fen'),
-  7: ('Terrace', 'Basin'),
-  8: ('Summit', 'Sanctum'),
-};
+// Ids stay `hut`/`house`/`pen_*` — they are referenced by DB rows and by
+// kBuildingUnlockBattle, and an id is not a name.
+const (String, String) _habitatNames = ('Small House', 'Large House');
 
 double _eraMult(int era) => math.pow(1.6, era - 1).toDouble();
 double _eraBuildHours(double seconds, int era) =>
@@ -1468,8 +1540,11 @@ List<BuildingDef> _buildRoster() {
   final defs = <BuildingDef>[];
 
   defs.add(const BuildingDef(
-    id: 'main_hall',
-    name: 'Tribal Center',
+    id: 'castle',
+    // Castle, not Castle (user 2026-08-12). It has been a castle in the
+    // art since 2026-08-04 — stone, battlements, a gatehouse and a donjon —
+    // and the name was the last thing still calling it a camp.
+    name: 'Castle',
     color: Color(0xFF7C5CBF),
     gridW: 5,
     gridH: 5,
@@ -1499,7 +1574,6 @@ List<BuildingDef> _buildRoster() {
   ));
 
   for (var era = 1; era <= 8; era++) {
-    final prefix = _eraPrefix[era]!;
     final matCap = _rosterCapMaterial(era);
     final civCap = _rosterCapCivic(era);
     final element = elementForEra(era);
@@ -1512,10 +1586,28 @@ List<BuildingDef> _buildRoster() {
       for (final large in const [false, true]) {
         final k = large ? 1.6 : 1.0;
         defs.add(BuildingDef(
-          id: '${res}_${large ? 'works' : 'camp'}_e$era',
-          name: '$prefix $baseName ${large ? 'Works' : 'Camp'}',
+          id: _idFor(
+            era,
+            '${large ? 'large' : 'small'}_${res}_camp',
+            '${res}_${large ? 'works' : 'camp'}_e$era',
+          ),
+          // ── SIZE, not era (user 2026-08-12: "primitive wood camp ist
+          // das small wood camp usw.") ──
+          // The pair is the only place in the roster where two buildings
+          // differ by nothing except how big they are, and "Primitive" said
+          // nothing about that — it said which era, which the MATERIAL already
+          // says: era 3 gathers Terracotta, era 5 gathers Iron. Era 1 is the
+          // only one with two raws, and Wood and Stone are era 1's materials
+          // anyway. So the adjective goes to the difference that is real.
+          // BOTH are Camps (user 2026-08-12: "Large Wood Camp"). Small and
+          // Large is the whole difference between them, and calling the big
+          // one a Works said there was a second one as well.
+          name: '${large ? 'Large' : 'Small'} $baseName Camp',
           color: _rosterColor(res),
-          gridW: large ? 4 : 3,
+          // A camp SHIPS what it gathers, so it needs room for a cart
+          // beside the pile (2026-08-09). The works halls were already
+          // 4 x 4 and stay there.
+          gridW: 4,
           gridH: large ? 4 : 3,
           resourceCost: _rosterCost(era, k),
           constructionHours: _eraBuildHours(large ? 600 : 360, era),
@@ -1532,7 +1624,7 @@ List<BuildingDef> _buildRoster() {
     if (element != null) {
       defs.add(BuildingDef(
         id: 'refinery_e$era',
-        name: '$prefix Refinery',
+        name: _named(era, 'Refinery'),
         color: const Color(0xFF5C6BC0),
         gridW: 4,
         gridH: 4,
@@ -1548,15 +1640,18 @@ List<BuildingDef> _buildRoster() {
     }
 
     final cap = _eraHousingCap[era]!;
-    final habitat = _habitatNames[era]!;
+    final habitat = _habitatNames;
     final houseSpecs = era == 1
         ? [
-            ('hut', habitat.$1, 2, 2, 0.7, cap),
-            ('house', habitat.$2, 2, 5, 1.1, cap + 5),
+            // The small house carries a fungus, a den, a nest and a bowl;
+            // two cells square left it a dark lump with no yard (2026-08-09).
+            ('small_house', _named(era, habitat.$1), 3, 3, 0.7, cap),
+            ('large_house', _named(era, habitat.$2), 2, 5, 1.1, cap + 5),
           ]
         : [
-            ('pen_a_e$era', habitat.$1, 3, 4, 0.9, cap),
-            ('pen_b_e$era', habitat.$2, 3, 5, 1.3, (cap * 1.4).round()),
+            ('pen_a_e$era', _named(era, habitat.$1), 3, 4, 0.9, cap),
+            ('pen_b_e$era', _named(era, habitat.$2), 3, 5, 1.3,
+                (cap * 1.4).round()),
           ];
     for (final h in houseSpecs) {
       defs.add(BuildingDef(
@@ -1586,8 +1681,11 @@ List<BuildingDef> _buildRoster() {
         id: 'lux_${lux.id}',
         name: '${lux.emoji} ${lux.name} ${_luxWord(lux.id)}',
         color: const Color(0xFF8D6E4A),
+        // A luxury has to SHOW what it trades, and the showing is what needs
+        // the ground: a dock with a boat in it, a tanning vat and a drying
+        // frame. Three deep rather than two (2026-08-09).
         gridW: 3,
-        gridH: 2,
+        gridH: 3,
         resourceCost: _rosterCost(era, 0.9),
         constructionHours: _eraBuildHours(360, era),
         eraIds: ['era_$era'],
@@ -1608,10 +1706,13 @@ List<BuildingDef> _buildRoster() {
         BuildingEffect(type: 'production', key: element.id, value: _rate1(1.5 * _eraMult(era)), era: era),
     ];
     defs.add(BuildingDef(
-      id: 'special_materials_e$era',
-      name: '$prefix Grand Works',
+      id: _idFor(era, 'church', 'special_materials_e$era'),
+      name: _named(era, 'Church'),
       color: const Color(0xFF6D4C41),
-      gridW: 5,
+      // 3 x 5 (user 2026-08-12): a NAVE and a west tower, not a hall. Long and
+      // narrow is what makes a church read as a church from above — five cells
+      // of ridge with a tower at one end, where 5 x 5 was a square block.
+      gridW: 3,
       gridH: 5,
       resourceCost: _rosterCost(era, 3.0),
       constructionHours: _eraBuildHours(900, era),
@@ -1630,8 +1731,8 @@ List<BuildingDef> _buildRoster() {
         BuildingEffect(type: 'production', key: lux.id, value: _rate1(1.5 * _eraMult(era)), era: era),
     ];
     defs.add(BuildingDef(
-      id: 'special_treasury_e$era',
-      name: '$prefix Treasury',
+      id: _idFor(era, 'marketplace', 'special_treasury_e$era'),
+      name: _named(era, 'Marketplace'),
       color: const Color(0xFFC9971A),
       gridW: 4,
       gridH: 4,
@@ -1652,8 +1753,8 @@ List<BuildingDef> _buildRoster() {
         id: 'builder_camp',
         name: 'Builder Camp',
         color: const Color(0xFF546E7A),
-        gridW: 3,
-        gridH: 4,
+        gridW: 6,
+        gridH: 6,
         resourceCost: _rosterCost(1, 1.2),
         constructionHours: _eraBuildHours(480, 1),
         eraIds: const ['era_1'],
@@ -1667,7 +1768,8 @@ List<BuildingDef> _buildRoster() {
         id: 'healing_hut',
         name: 'Healing Hut',
         color: const Color(0xFF4FAE6B),
-        gridW: 2,
+        // A drying rack the width of the building, a cauldron and a bench of phials do not fit in two cells of frontage.
+        gridW: 3,
         gridH: 3,
         resourceCost: _rosterCost(1, 0.6),
         constructionHours: _eraBuildHours(120, 1),
@@ -1686,7 +1788,8 @@ List<BuildingDef> _buildRoster() {
         id: 'trading_post',
         name: 'Trade Center',
         color: const Color(0xFFC9A227),
-        gridW: 3,
+        // A market needs stalls down BOTH sides of the hall, which 3 x 3 could not hold without the awnings overhanging the grass.
+        gridW: 4,
         gridH: 3,
         resourceCost: _rosterCost(1, 1.0),
         constructionHours: _eraBuildHours(300, 1),
@@ -1725,7 +1828,8 @@ List<BuildingDef> _buildRoster() {
         id: 'hatchery',
         name: 'Hatchery',
         color: const Color(0xFFF06292),
-        gridW: 3,
+        // The clutches are the label, and they have to lie in front of the chamber rather than under its eaves.
+        gridW: 4,
         gridH: 3,
         resourceCost: _rosterCost(1, 0.9),
         constructionHours: _eraBuildHours(300, 1),
@@ -1772,8 +1876,9 @@ List<BuildingDef> _buildRoster() {
         id: 'caravanserai',
         name: 'Caravanserai',
         color: const Color(0xFFB07D3A),
-        gridW: 3,
-        gridH: 2,
+        // Wider AND deeper (2026-08-09): the yard is the building. Camels and a wagon need floor, and at 3 x 2 twenty props ended up off the tile.
+        gridW: 4,
+        gridH: 3,
         resourceCost: _rosterCost(1, 0.8),
         constructionHours: _eraBuildHours(300, 1),
         eraIds: const ['era_1'],
@@ -1799,7 +1904,8 @@ List<BuildingDef> _buildRoster() {
         id: 'storehouse',
         name: 'Storehouse',
         color: const Color(0xFF9A7B4F),
-        gridW: 3,
+        // Raised on staddle stones, so the ground floor is all shadow — the sacks, casks and the cart at the door need their own strip of yard.
+        gridW: 4,
         gridH: 3,
         resourceCost: _rosterCost(1, 0.9),
         constructionHours: _eraBuildHours(300, 1),
@@ -1816,8 +1922,11 @@ List<BuildingDef> _buildRoster() {
         id: 'gold_vault',
         name: 'Gold Vault',
         color: const Color(0xFFC9A227),
-        gridW: 2,
-        gridH: 2,
+        // 3 x 3 (user 2026-08-12). The tower stays dense — that is its whole
+        // character — but a vault with a chain round it and a hoard at its
+        // foot needs a yard to be guarded in.
+        gridW: 3,
+        gridH: 3,
         resourceCost: _rosterCost(1, 0.7),
         constructionHours: _eraBuildHours(300, 1),
         eraIds: const ['era_1'],
@@ -1945,27 +2054,49 @@ final Map<String, BuildingDef> kBuildingDefs = Map.of(kFallbackBuildingDefs);
 ///
 /// Measured off the render, not guessed: open `docs/renders/<id>.png` and read
 /// the chimney's mouth as a fraction of the image.
+/// Where a building's smoke comes out, as a fraction of its ART BOX.
+///
+/// ── Computed, not eyeballed (user 2026-08-09) ──
+/// Every entry is the chimney POT's own position, projected through the same
+/// camera tool/blender/render_building.py frames the picture with, so smoke
+/// lands on the stack rather than near it. The two that were here were guessed
+/// from the picture, and both were about a tenth of a box off — which at map
+/// size is smoke coming out of a roof slope.
+///
+/// The renders deliberately have NO smoke baked into them: the app draws it
+/// animated and phase-shifted per building (see ChimneySmoke in
+/// building_life.dart), and a second, still one underneath would show as a grey
+/// smudge that never moves. Re-render a building whose chimney moved and this
+/// map has to be recomputed with it.
 const Map<String, (double, double)> kChimneyAnchor = {
-  'breeding_hut': (0.395, 0.185),
-  'main_hall': (0.552, 0.232),
+  'breeding_hut': (0.454, 0.220),
+  'castle': (0.562, 0.292),
+  'healing_hut': (0.447, 0.317),
+  'lux_fish': (0.517, 0.377),
+  'lux_fur': (0.863, 0.536),
+  'large_stone_camp': (0.454, 0.342),
+  'builder_camp': (0.456, 0.374),
+  // 'large_wood_camp' had an entry here, but that building's chimney is
+  // gone — the 2026-08-16 redesign replaced it with an open thatched shed
+  // with no fireplace. A stale anchor would have put smoke over open air.
 };
 
 const Map<String, int> kBuildingUnlockBattle = {
   'healing_hut': 1, // "Nach dem 1. Kampf" — heal up right after the first win.
-  'house': 3, // the Longhouse (more housing than the starting Hut)
+  'large_house': 3, // more housing than the starting Small House
   'lux_fish': 4,
   'lux_fur': 6,
   'building_plot': 7, // expansion ground (still capped by expansionsUnlocked)
-  'wood_works_e1': 9, // the bigger production buildings come mid-era
-  'stone_works_e1': 10,
+  'large_wood_camp': 9, // the bigger production buildings come mid-era
+  'large_stone_camp': 10,
   // The market + item shop, once there IS a surplus worth trading (user
   // 2026-07-25). Gold has no other sink than skipping timers before this.
   'trading_post': 11,
   'breeding_hut': 12,
   'hatchery': 12, // unlocks together with the Breeding Hut (user 2026-07-24)
   'builder_camp': 14,
-  'special_treasury_e1': 16,
-  'special_materials_e1': 18, // the grand works, just before the era boss (19)
+  'marketplace': 16,
+  'church': 18, // the grand works, just before the era boss (19)
   // THE REFINERY IS THE SECOND-TO-LAST NODE OF AN ERA (user 2026-07-31: "die
   // rafinery wird jeweils beim zweitletzten Knotenpunkt freigeschalten"), i.e.
   // 18 with the boss at 19.

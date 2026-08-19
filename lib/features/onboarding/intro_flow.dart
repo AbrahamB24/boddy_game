@@ -18,7 +18,7 @@
 //                         while the tutorial runs
 //   5. firstCapture     — hunt: the wild cannot be K.O.'d and a missed QTE
 //                         tap just restarts the ring — the catch always lands
-//   6. assignWorker     — station a monster at the Tribal Center (construction)
+//   6. assignWorker     — station a monster at the Castle (construction)
 //   7. buildWoodcutter  — build the Woodland Camp
 //   8. buildQuarry      — build the Quarry
 //   9. buildHouse       — build a Hut (housing)
@@ -156,7 +156,7 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     ctaLabel: '🗺 Open the map',
     destination: IntroDestination.map,
   ),
-  // ⚠️ The Tribal Center lost its worker slots (user 2026-07-22: it builds and
+  // ⚠️ The Castle lost its worker slots (user 2026-07-22: it builds and
   // produces on its own now). This step's milestone (setAssignment) still
   // fires from ANY building, but at step 6 the only workshops standing are the
   // Healing Hut's none — IF the intro is ever re-enabled (kIntroEnabled),
@@ -225,9 +225,9 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
 // were replaced by the per-era producers).
 const Map<String, IntroStep> kIntroBuildSteps = {
   'healing_hut': IntroStep.buildHealingHut,
-  'wood_camp_e1': IntroStep.buildWoodcutter,
-  'stone_camp_e1': IntroStep.buildQuarry,
-  'hut': IntroStep.buildHouse,
+  'small_wood_camp': IntroStep.buildWoodcutter,
+  'small_stone_camp': IntroStep.buildQuarry,
+  'small_house': IntroStep.buildHouse,
   'lux_fish': IntroStep.buildFishingHut,
 };
 

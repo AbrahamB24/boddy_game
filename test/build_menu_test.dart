@@ -13,8 +13,8 @@ import 'package:boddygame/features/settlement/build_menu_screen.dart';
 
 void main() {
   test('a choice carries the building to place', () {
-    const choice = BuildPlace('hut');
-    expect(choice.typeId, 'hut');
+    const choice = BuildPlace('small_house');
+    expect(choice.typeId, 'small_house');
   });
 
   test('every choice is exhaustively switchable', () {

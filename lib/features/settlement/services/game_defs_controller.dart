@@ -22,7 +22,7 @@ import 'game_defs_service.dart';
 // ── THE DB *OVERRIDES* THE BUNDLED CONTENT, IT DOES NOT REPLACE IT ──
 // This used to clear the map and refill it from the DB whenever the table was
 // non-empty. That destroyed the game the first time anyone edited a single
-// def: uploading a PNG for `main_hall` wrote ONE row, so the roster became
+// def: uploading a PNG for `castle` wrote ONE row, so the roster became
 // exactly that one building, and every placed woodland camp / quarry / hut
 // silently stopped existing (`kBuildingDefs[b.buildingTypeId]` → null →
 // skipped everywhere). The rows in `placed_buildings` were never touched — the
@@ -108,6 +108,19 @@ class GameDefsController extends ChangeNotifier {
       _saveThenReload(() => _svc.upsertEraDef(def));
   Future<void> savePathNode(PathNode node) =>
       _saveThenReload(() => _svc.upsertPathNode(node));
+
+  /// Writes SEVERAL buildings and reloads ONCE.
+  ///
+  /// Dev Mode's "Renders & Grössen übernehmen" pushes the measured footprint
+  /// and art placement into up to twenty rows at a go; [saveBuildingDef]
+  /// re-reads every def table after each one, which is right for a single edit
+  /// and twenty round trips for one answer.
+  Future<void> saveBuildingDefs(Iterable<BuildingDef> defs) =>
+      _saveThenReload(() async {
+        for (final d in defs) {
+          await _svc.upsertBuildingDef(d);
+        }
+      });
 
   /// Writes SEVERAL path nodes and reloads ONCE (user 2026-07-30, with the
   /// per-era re-roll).

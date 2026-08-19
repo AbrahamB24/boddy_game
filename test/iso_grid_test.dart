@@ -1,3 +1,8 @@
+import 'dart:math' as math;
+import 'dart:ui' show Size;
+
+import 'package:flutter/widgets.dart' show Matrix4, MatrixUtils;
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:boddygame/features/settlement/data/building_definitions.dart'
@@ -293,6 +298,279 @@ void main() {
         expect(path.width, closeTo(local.width, 0.001));
         expect(path.height, closeTo(local.height, 0.001));
       }
+    });
+  });
+
+  // ── Wohin ein Pfeil zeigt (user 2026-08-09) ────────────────
+  // "mache an jeder Kante ein Pfeil, welcher die Richtung angibt"
+  //
+  // The placement arrows are the one bit of UI that has to SPEAK the
+  // projection: on a 2:1 diamond +x runs down-right and +y down-left, so the
+  // four buttons sit at four oblique angles and beside four slanted edges. Get
+  // either wrong and the arrow labelled "this way" moves the building somewhere
+  // else — the exact class of bug that put the old placement outline a tile off.
+  group('direction arrows', () {
+    test('an arrow points the way its direction actually travels', () {
+      for (final (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
+        // Where one step in that direction really lands, on screen.
+        final travelled = gridToScreen(10.0 + dx, 10.0 + dy) -
+            gridToScreen(10, 10);
+        final angle = isoScreenAngle(dx, dy);
+        final pointed = Offset(math.cos(angle), math.sin(angle));
+        // Same heading: the unit vectors agree to within a rounding error.
+        final unit = travelled / travelled.distance;
+        expect(pointed.dx, closeTo(unit.dx, 0.001), reason: '($dx,$dy) x');
+        expect(pointed.dy, closeTo(unit.dy, 0.001), reason: '($dx,$dy) y');
+      }
+    });
+
+    test('no two directions share an angle — a square grid would fail this', () {
+      final angles = [
+        for (final (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)])
+          isoScreenAngle(dx, dy),
+      ];
+      // Nothing horizontal or vertical: on this grid every direction is oblique.
+      for (final a in angles) {
+        expect(math.sin(a).abs(), greaterThan(0.1), reason: 'not horizontal');
+        expect(math.cos(a).abs(), greaterThan(0.1), reason: 'not vertical');
+      }
+      expect(angles.map((a) => a.toStringAsFixed(3)).toSet(), hasLength(4));
+    });
+
+    test('each arrow sits on the edge that faces its direction', () {
+      // A 3x2 footprint, where "the right-hand side" is a slanted edge rather
+      // than a corner — the shape that makes a rectangle's midpoints wrong.
+      final (x, y, w, h) = (4, 6, 3, 2);
+      final box = isoBounds(x, y, w, h);
+      for (final (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
+        final mid = isoEdgeMidpoint(x, y, w, h, dx, dy);
+        // On the outline, and on the outward half of it.
+        expect(box.inflate(0.001).contains(mid), isTrue, reason: '($dx,$dy)');
+        final outward = mid - box.center;
+        final angle = isoScreenAngle(dx, dy);
+        expect(
+          outward.dx * math.cos(angle) + outward.dy * math.sin(angle),
+          greaterThan(0),
+          reason: '($dx,$dy) faces the wrong way',
+        );
+      }
+    });
+
+    test('opposite edges are opposite — the footprint stays centred', () {
+      final (x, y, w, h) = (4, 6, 3, 2);
+      final centre = isoBounds(x, y, w, h).center;
+      for (final (dx, dy) in [(1, 0), (0, 1)]) {
+        final a = isoEdgeMidpoint(x, y, w, h, dx, dy) - centre;
+        final b = isoEdgeMidpoint(x, y, w, h, -dx, -dy) - centre;
+        expect(a.dx, closeTo(-b.dx, 0.001));
+        expect(a.dy, closeTo(-b.dy, 0.001));
+      }
+    });
+  });
+
+  // ── Was ein Gebäude wirklich verdeckt (user 2026-08-09) ────
+  // "Wenn ich das Gebäude hinter ein anderes schiebe, dann wird dieses
+  //  transparent, damit ich die Platzierung besser sehe"
+  //
+  // Deciding WHICH building to fade is an overlap test, and the footprint is
+  // the wrong shape for it: what hides a building being placed is the roof
+  // leaning over the tiles in front of it, which its own ground never touches.
+  group('the box the picture occupies', () {
+    test('it reaches ABOVE the tile, because the art does', () {
+      final tile = isoBounds(3, 3, 2, 2);
+      final art = isoArtBounds(3, 3, 2, 2);
+      expect(art.top, lessThan(tile.top));
+      expect(art.bottom, closeTo(tile.bottom, 0.001), reason: 'feet on the ground');
+    });
+
+    test('it never gives up ground the footprint owns', () {
+      // Art drawn narrow (a tower on a wide plot) must not shrink the box below
+      // the tiles the building is standing on.
+      final tile = isoBounds(3, 3, 4, 4);
+      final art = isoArtBounds(3, 3, 4, 4, baseWidth: 2.0);
+      expect(art.left, lessThanOrEqualTo(tile.left + 0.001));
+      expect(art.right, greaterThanOrEqualTo(tile.right - 0.001));
+      expect(art.bottom, greaterThanOrEqualTo(tile.bottom - 0.001));
+    });
+
+    test('a lifted building carries its box down with it', () {
+      final flat = isoArtBounds(3, 3, 2, 2);
+      final lifted = isoArtBounds(3, 3, 2, 2, lift: 0.1);
+      expect(lifted.bottom, greaterThan(flat.bottom));
+    });
+
+    test('a tall building covers the one behind it, ground apart or not', () {
+      // The whole reason the fade test cannot use footprints: these two tiles
+      // do not touch anywhere on screen, and the front one's picture still
+      // reaches back over the rear one.
+      final frontTile = isoBounds(3, 3, 2, 2);
+      final backTile = isoBounds(0, 0, 2, 2);
+      expect(frontTile.overlaps(backTile), isFalse, reason: 'the GROUND is clear');
+      expect(
+        isoArtBounds(3, 3, 2, 2).overlaps(isoArtBounds(0, 0, 2, 2)),
+        isTrue,
+        reason: 'the PICTURES are not',
+      );
+    });
+  });
+
+  // ── Das Spielfeld ist die Grenze (user 2026-08-09) ─────────
+  // "Ich will nicht ganz so nahe heranzoomen können wie aktuell. Es darf
+  //  niemals aus dem Spielfeld hinausgezoomt/gescrollt werden."
+  //
+  // Panning is bounded by the transform clamp, which needs no help once the
+  // SCALE is bounded — but if the minimum scale is a hair too small the map no
+  // longer covers the viewport and there is nothing left to clamp against. So
+  // the covering property is what is pinned, not the formula.
+  group('the map is the boundary', () {
+    test('at the minimum scale the map covers the viewport, every shape', () {
+      for (final v in const [
+        Size(430, 932),   // a phone, portrait
+        Size(932, 430),   // the same phone, turned
+        Size(1600, 900),  // a desktop window
+        Size(300, 300),   // square, and small
+        Size(2400, 400),  // absurdly wide — the case one ratio gets wrong
+      ]) {
+        final s = minMapScale(v);
+        expect(isoCanvasSize.width * s, greaterThanOrEqualTo(v.width - 0.001),
+            reason: '$v leaves a gap across');
+        expect(isoCanvasSize.height * s, greaterThanOrEqualTo(v.height - 0.001),
+            reason: '$v leaves a gap down');
+      }
+    });
+
+    test('and it is the SMALLEST scale that does — no wasted zoom', () {
+      for (final v in const [Size(430, 932), Size(1600, 900)]) {
+        final s = minMapScale(v) * 0.98;
+        final coversW = isoCanvasSize.width * s >= v.width;
+        final coversH = isoCanvasSize.height * s >= v.height;
+        expect(coversW && coversH, isFalse,
+            reason: '$v could zoom out further and still be covered');
+      }
+    });
+
+    test('zooming IN stops where the player asked it to', () {
+      // Measured off a screenshot the user labelled "das soll der maximal zoom
+      // in sein": a 1x1 road cell about 50 px wide on a 432 px phone.
+      expect(kIsoTileW * kMaxMapZoom, closeTo(51.2, 0.001));
+      // And it must still be a range worth having — a max below the min would
+      // mean a map that cannot be zoomed at all on some screen.
+      expect(kMaxMapZoom, greaterThan(minMapScale(const Size(430, 932))));
+    });
+  });
+
+  // ── Die Matrix muss ihren eigenen Zoom kennen (user 2026-08-09) ──
+  // "ich kann viel zu weit hinauszoomen" und "wenn ich ein gebäude anwähle zum
+  //  schieben, zoomt es hinein" were ONE bug, and it lived in a single 1.
+  group('the view transform reports its own zoom', () {
+    test('a matrix below 1:1 does not claim to be 1:1', () {
+      for (final s in [0.018, 0.18, 0.5, 1.0, 2.5, 4.0]) {
+        expect(mapTransform(s, -710, 0).getMaxScaleOnAxis(), closeTo(s, 1e-9),
+            reason: 'scale $s');
+      }
+    });
+
+    test('the OLD construction is exactly what got it wrong', () {
+      // Kept as the counter-example, because the mistake looks like tidiness:
+      // the map is flat, so z "cannot matter" — except getMaxScaleOnAxis takes
+      // the LARGEST axis, and every real map scale is below 1.
+      expect(Matrix4.diagonal3Values(0.18, 0.18, 1).getMaxScaleOnAxis(), 1.0);
+      expect(mapTransform(0.18, 0, 0).getMaxScaleOnAxis(), closeTo(0.18, 1e-9));
+    });
+
+    test('and every scale a phone reaches IS below 1', () {
+      // Which is why it was invisible to read and total in play: the map is
+      // 10240 px across, so filling a phone with it is a scale near 0.18.
+      expect(minMapScale(const Size(430, 932)), lessThan(0.3));
+      expect(minMapScale(const Size(2400, 1600)), lessThan(1.0));
+    });
+
+    test('it moves a point the way InteractiveViewer does', () {
+      final m = mapTransform(0.25, 100, -40);
+      final p = MatrixUtils.transformPoint(m, const Offset(200, 80));
+      expect(p.dx, closeTo(200 * 0.25 + 100, 1e-9));
+      expect(p.dy, closeTo(80 * 0.25 - 40, 1e-9));
+    });
+  });
+
+  // ── Der Rand darf NIE sichtbar sein (user 2026-08-09) ──────
+  // "diese leeren Stellen darf es nicht geben"
+  //
+  // Stated as a property over arbitrary input rather than as a list of cases:
+  // whatever transform arrives — a pinch past the limit, a camera move built
+  // from a stale scale, a matrix from nowhere — what comes back covers every
+  // pixel of the viewport. The page under the map is a dark parchment, so a gap
+  // reads as a black band, which is exactly what was reported.
+  group('the clamp leaves no gap, whatever it is given', () {
+    void coversEverything(Matrix4 m, Size v) {
+      final f = clampMapTransform(m, v);
+      final s = f.getMaxScaleOnAxis();
+      final t = f.getTranslation();
+      expect(t.x, lessThanOrEqualTo(1e-6), reason: 'gap on the left: $m in $v');
+      expect(t.y, lessThanOrEqualTo(1e-6), reason: 'gap on top: $m in $v');
+      expect(isoCanvasSize.width * s + t.x,
+          greaterThanOrEqualTo(v.width - 1e-6),
+          reason: 'gap on the right: $m in $v');
+      expect(isoCanvasSize.height * s + t.y,
+          greaterThanOrEqualTo(v.height - 1e-6),
+          reason: 'gap at the bottom: $m in $v');
+      expect(s, greaterThanOrEqualTo(minMapScale(v) - 1e-9));
+      expect(s, lessThanOrEqualTo(kMaxMapZoom + 1e-9));
+    }
+
+    test('zoomed far out, panned to nowhere', () {
+      const v = Size(430, 932);
+      for (final s in [0.0005, 0.018, 0.1, 0.18, 1.0, 3.0, 40.0]) {
+        for (final t in [
+          const Offset(0, 0),
+          const Offset(5000, 5000),
+          const Offset(-99999, -99999),
+          const Offset(300, -20),
+        ]) {
+          coversEverything(mapTransform(s, t.dx, t.dy), v);
+        }
+      }
+    });
+
+    test('and in any window shape', () {
+      for (final v in const [
+        Size(430, 932), Size(932, 430), Size(1600, 900),
+        Size(300, 300), Size(2400, 400),
+      ]) {
+        coversEverything(mapTransform(0.001, 4000, 4000), v);
+        coversEverything(mapTransform(99.0, -50000, -50000), v);
+      }
+    });
+
+    test('a transform already inside is left alone', () {
+      // Otherwise the listener that applies this would fight every gesture.
+      const v = Size(430, 932);
+      final good = clampMapTransform(mapTransform(0.5, -100, -80), v);
+      final again = clampMapTransform(good, v);
+      expect(again.getMaxScaleOnAxis(), closeTo(good.getMaxScaleOnAxis(), 1e-12));
+      expect(again.getTranslation().x, closeTo(good.getTranslation().x, 1e-9));
+      expect(again.getTranslation().y, closeTo(good.getTranslation().y, 1e-9));
+    });
+
+    test('a clamped ZOOM keeps the middle of the screen where it was', () {
+      // Scaling about the origin instead would throw the map sideways every
+      // time a pinch went one notch too far. Checked well away from the rims,
+      // where the edge clamp has nothing to say — pinned against the rim it is
+      // the EDGE that decides where you end up, and rightly so.
+      const v = Size(430, 932);
+      const s0 = 8.0; // past kMaxMapZoom, so the scale really is clamped
+      const tx = -40000.0, ty = -20000.0;
+      final f = clampMapTransform(mapTransform(s0, tx, ty), v);
+      final s = f.getMaxScaleOnAxis();
+      final t = f.getTranslation();
+      expect(s, kMaxMapZoom, reason: 'the zoom was not clamped at all');
+      // The scene point under the middle of the screen, before and after.
+      Offset under(double scale, double x, double y) =>
+          Offset((v.width / 2 - x) / scale, (v.height / 2 - y) / scale);
+      final before = under(s0, tx, ty);
+      final after = under(s, t.x, t.y);
+      expect(after.dx, closeTo(before.dx, 1e-6));
+      expect(after.dy, closeTo(before.dy, 1e-6));
     });
   });
 }

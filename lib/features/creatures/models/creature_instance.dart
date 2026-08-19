@@ -75,7 +75,7 @@ class CreatureInstance {
   /// Work assignment (settlement economy). A creature works in AT MOST ONE
   /// workshop at a time: [assignedBuildingId] is the PlacedBuilding it's
   /// stationed in and [assignedStat] is which of that building's work roles
-  /// it fills (a building can offer several — e.g. the Tribal Center offers
+  /// it fills (a building can offer several — e.g. the Castle offers
   /// both construction and research). Both null = idle. Being assigned does
   /// NOT block battle-team selection; a creature only stops producing while
   /// it's K.O., out of energy, or breeding (see CreaturesController).

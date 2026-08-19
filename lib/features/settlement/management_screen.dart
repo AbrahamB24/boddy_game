@@ -407,7 +407,7 @@ class _ManagementScreenState extends State<ManagementScreen>
         Text('Housing buildings', style: FoE.title(size: 13)),
         const SizedBox(height: 8),
         if (houses.isEmpty)
-          Text('Only the Tribal Center houses monsters so far.',
+          Text('Only the Castle houses monsters so far.',
               style: FoE.dim(size: 12)),
         for (final (_, def) in houses)
           Padding(

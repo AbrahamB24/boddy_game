@@ -8,6 +8,7 @@ import '../creatures/models/creature_enums.dart'
 import '../onboarding/intro_flow.dart' show introBuildTarget;
 import '../onboarding/intro_spotlight.dart';
 import 'data/building_definitions.dart';
+import 'data/road_tiles.dart';
 import 'data/workshop_role_effects.dart';
 import 'sheets/building_upgrade_sheet.dart';
 import 'settlement_controller.dart';
@@ -666,8 +667,22 @@ class _BuildCard extends StatelessWidget {
 
   /// The building, standing on its own cast shadow and overflowing the tile's
   /// top edge — the shared look, see ShadowedBuildingIcon.
-  Widget _art(bool enabled) =>
-      ShadowedBuildingIcon(imageUrl: def.imageUrl, width: _artW, dimmed: !enabled);
+  ///
+  /// A ROAD shows the crossroads, from the same bundled set the map draws. It
+  /// has no single picture of its own — the map ignores `image_url` for roads
+  /// entirely (see settlement_map.dart), and a card showing a picture the map
+  /// will never draw is a card that lies about what you are buying.
+  Widget _art(bool enabled) => def.isRoad
+      ? Opacity(
+          opacity: enabled ? 1 : 0.4,
+          child: Image.asset(roadAsset(15), width: _artW),
+        )
+      : ShadowedBuildingIcon(
+          imageUrl: def.imageUrl,
+          defId: def.id,
+          width: _artW,
+          dimmed: !enabled,
+        );
 
   /// Footprint · build time · limit, in their own inset box at the foot of the
   /// tile — the reference's "Bauzeit / Erbaut" panel.
@@ -742,7 +757,7 @@ class _BuildCard extends StatelessWidget {
 
   String _bonusText(BuildingDef def) {
     if (def.isRoad) {
-      return 'Connects buildings to the Tribal Center — paint as many as you '
+      return 'Connects buildings to the Castle — paint as many as you '
           'like';
     }
     if (def.isBuildPlot) {

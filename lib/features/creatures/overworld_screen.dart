@@ -313,7 +313,7 @@ class _OverworldScreenState extends State<OverworldScreen>
   /// After a region boss falls the FIRST time: unlock the next region (rides on
   /// dungeonMaxStage, same as before) and award the region legendary. PUSHING
   /// ON — moving the settlement's own tier up to match — is still a manual,
-  /// paid step at the Tribal Center (unchanged).
+  /// paid step at the Castle (unchanged).
   Future<void> _grantBossRewards(AreaDef area, int battleNumber) async {
     final era = eraForBattle(battleNumber); // == area.battleStage
     final firstClear = _settlement.dungeonMaxStage <= era;
@@ -333,8 +333,8 @@ class _OverworldScreenState extends State<OverworldScreen>
     if (!mounted) return;
     context.snack(caught != null
         ? '👑 ${caught.displayName} joins you! The next region is open — '
-            'push on at the Tribal Center.'
-        : 'The next region is open — push on at the Tribal Center.');
+            'push on at the Castle.'
+        : 'The next region is open — push on at the Castle.');
   }
 
 }

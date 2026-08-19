@@ -46,11 +46,11 @@ void main() {
     // The hall's automatic build points were the last one — construction now
     // comes from stationed builders or an authored production effect.
     expect(src.contains('kHallBuildPointsPerLevel'), isFalse,
-        reason: 'the Tribal Center must not grant build points in code');
+        reason: 'the Castle must not grant build points in code');
   });
 
-  test('the Tribal Center carries its bootstrap as ordinary effects', () {
-    final hall = kFallbackBuildingDefs['main_hall']!;
+  test('the Castle carries its bootstrap as ordinary effects', () {
+    final hall = kFallbackBuildingDefs['castle']!;
     // The AMOUNTS are the author's to tune (Dev Mode → Gebäude); what this
     // pins is that the bootstrap exists as ordinary effects at all, which
     // is the thing the hardcoded-bonus deletion could have broken.

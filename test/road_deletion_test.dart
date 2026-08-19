@@ -39,9 +39,9 @@ void main() {
   test('a hut only shelters anyone while a road reaches the hall', () {
     // The hall is 5x5 at (0,0), so it fills x 0..4. One road cell at (5,0)
     // touches its edge, and the hut at (6,0) touches that road.
-    final hall = _b('hall', 'main_hall', 0, 0);
+    final hall = _b('hall', 'castle', 0, 0);
     final road = _b('road1', 'road', 5, 0);
-    final hut = _b('hut1', 'hut', 6, 0);
+    final hut = _b('hut1', 'small_house', 6, 0);
 
     final connected = GameEngine.housingCapacity([hall, road, hut]);
     final severed = GameEngine.housingCapacity([hall, hut]);
@@ -59,9 +59,9 @@ void main() {
     // a road and the hut is momentarily cut off" — so roads must be exempt,
     // because a road destroys nothing, it only disconnects, and the player is
     // mid-edit and about to reconnect it.
-    final hall = _b('hall', 'main_hall', 0, 0);
+    final hall = _b('hall', 'castle', 0, 0);
     final road = _b('road1', 'road', 3, 0);
-    final hut = _b('hut1', 'hut', 4, 0);
+    final hut = _b('hut1', 'small_house', 4, 0);
 
     final withoutRoad = GameEngine.housingCapacity([hall, hut]);
     final withoutHut = GameEngine.housingCapacity([hall, road]);
@@ -71,6 +71,6 @@ void main() {
 
   test('the road def is flagged as a road — the exemption keys off this', () {
     expect(kBuildingDefs['road']!.isRoad, isTrue);
-    expect(kBuildingDefs['hut']!.isRoad, isFalse);
+    expect(kBuildingDefs['small_house']!.isRoad, isFalse);
   });
 }

@@ -150,17 +150,17 @@ void main() {
 
   group('main hall is fully passive (user 2026-07-22)', () {
     test('the bundled def has no worker slots', () {
-      expect(kFallbackBuildingDefs['main_hall']!.workshops, isEmpty);
+      expect(kFallbackBuildingDefs['castle']!.workshops, isEmpty);
     });
 
     test('a DB row cannot smuggle workshops back onto the main hall', () {
       // DB-authored defs OVERRIDE the fallback (GameDefsController._merge), and
-      // the user's live main_hall row still carried the old construction +
+      // the user's live castle row still carried the old construction +
       // crafting slots — which is exactly how they reappeared after the
       // fallback was cleaned. fromDefRow strips them as a RULE.
       final def = BuildingDef.fromDefRow({
-        'id': 'main_hall',
-        'name': 'Tribal Center',
+        'id': 'castle',
+        'name': 'Castle',
         'grid_w': 5,
         'grid_h': 5,
         'is_main_building': true,
@@ -263,7 +263,7 @@ void main() {
       // this test is about ERA gating only.
       final inEra2 =
           availableBuildings('era_2', 999).map((d) => d.id).toSet();
-      expect(inEra2, contains('wood_camp_e1'),
+      expect(inEra2, contains('small_wood_camp'),
           reason: 'era-1 buildings remain buildable (user answer 8)');
       expect(inEra2, contains('clay_camp_e2'));
       // ...and era-2 buildings are NOT offered while still in era 1.
@@ -284,12 +284,12 @@ void main() {
       // are there, but the campaign rewards are not.
       final start =
           availableBuildings('era_1', 0).map((d) => d.id).toSet();
-      expect(start, contains('wood_camp_e1'));
-      expect(start, contains('stone_camp_e1'));
-      expect(start, contains('hut'));
+      expect(start, contains('small_wood_camp'));
+      expect(start, contains('small_stone_camp'));
+      expect(start, contains('small_house'));
       expect(start, isNot(contains('healing_hut')));
       expect(start, isNot(contains('breeding_hut')));
-      expect(start, isNot(contains('special_treasury_e1')));
+      expect(start, isNot(contains('marketplace')));
 
       // Winning the first battle unlocks the Healing Hut, and nothing earlier.
       final afterFirst =

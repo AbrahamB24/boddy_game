@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
+import '../data/building_art.dart';
 import '../data/building_definitions.dart';
 import '../data/iso_grid.dart';
 import '../data/era_definitions.dart';
@@ -261,6 +262,43 @@ class _BuildingDefFormState extends State<BuildingDefForm>
   void dispose() {
     _tabs.dispose();
     super.dispose();
+  }
+
+  /// True when this building has a render bundled with the app.
+  bool get _hasModel => kBundledBuildingArt.contains(_id.trim());
+
+  /// Pull the footprint and the art placement out of the MODEL.
+  ///
+  /// ── Why this exists (user 2026-08-12) ──
+  /// The renderer measures both of them and writes them into
+  /// building_art_box.dart, and until now the only way into a live database
+  /// was building_roster.sql — which deletes all 89 rows and rewrites them,
+  /// taking every hand-tuned value with it. This changes one building.
+  ///
+  /// image_url is cleared on purpose: a bundled picture already beats it (see
+  /// building_art.dart), so a URL left behind is a value that looks live,
+  /// previews in this form, and is never drawn on the map again.
+  void _applyFromModel() {
+    final id = _id.trim();
+    final def = kFallbackBuildingDefs[id];
+    final box = kBundledArtBox[id];
+    if (def == null || box == null) return;
+    setState(() {
+      _gridW = def.gridW;
+      _gridH = def.gridH;
+      _artBaseWidth = box.$1;
+      _artAnchorX = box.$2;
+      _artLift = box.$3;
+      _imageUrl = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$id: ${def.gridW} x ${def.gridH}, Basis ${box.$1}/'
+          '${box.$2}/${box.$3} — noch nicht gespeichert',
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -1347,7 +1385,13 @@ class _BuildingDefFormState extends State<BuildingDefForm>
             height: 56,
             alignment: Alignment.center,
             decoration: FoE.panel(radius: 8),
-            child: BuildingIcon(imageUrl: _imageUrl, size: 40),
+            // defId, so the BUNDLED render previews here exactly as the map
+            // draws it — the upload is the fallback now, not the source.
+            child: BuildingIcon(
+              imageUrl: _imageUrl,
+              defId: _id.trim(),
+              size: 40,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1355,10 +1399,34 @@ class _BuildingDefFormState extends State<BuildingDefForm>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Image (PNG)',
+                  _hasModel ? 'Bild — Modell mitgeliefert' : 'Image (PNG)',
                   style: FoE.label(size: 12).copyWith(color: FoE.gold),
                 ),
                 const SizedBox(height: 6),
+                if (_hasModel) ...[
+                  Text(
+                    'Dieses Gebäude bringt seinen Render mit. Der Knopf setzt '
+                    'Grundfläche und Bildlage auf die Werte, die der Renderer '
+                    'gemessen hat — und löscht die hochgeladene URL, weil das '
+                    'mitgelieferte Bild sie ohnehin überstimmt.',
+                    style: FoE.dim(size: 11),
+                  ),
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: _applyFromModel,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: FoE.btn(),
+                      alignment: Alignment.center,
+                      child: Text('Vom Modell übernehmen',
+                          style: FoE.label(size: 13)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 GestureDetector(
                   onTap: _uploadingImage ? null : _uploadImage,
                   child: Container(
@@ -1385,7 +1453,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
           ),
         ],
           ),
-          if (_imageUrl != null) ...[
+          if (_imageUrl != null || _hasModel) ...[
             const SizedBox(height: 10),
             Text(
               'Where the base sits in the picture. 1 / 0.5 / 0 means it fills '
@@ -1403,7 +1471,8 @@ class _BuildingDefFormState extends State<BuildingDefForm>
             // tiles the map draws, at the same 2:1, with the art placed by the
             // current values — dial it here and the answer is under your thumb.
             _BasePreview(
-              imageUrl: _imageUrl!,
+              imageUrl: _imageUrl,
+              defId: _id.trim(),
               gridW: _gridW,
               gridH: _gridH,
               baseWidth: _artBaseWidth,
@@ -1636,7 +1705,12 @@ class _SearchPickerDialogState extends State<_SearchPickerDialog> {
 /// a preview that computes the placement its own way would agree with the map
 /// only until one of the two changed.
 class _BasePreview extends StatelessWidget {
-  final String imageUrl;
+  final String? imageUrl;
+
+  /// So a BUNDLED render previews here too — it is the one the map will
+  /// actually draw, and previewing the upload instead was showing the wrong
+  /// picture for every modelled building.
+  final String? defId;
   final int gridW;
   final int gridH;
   final double baseWidth;
@@ -1645,6 +1719,7 @@ class _BasePreview extends StatelessWidget {
 
   const _BasePreview({
     required this.imageUrl,
+    required this.defId,
     required this.gridW,
     required this.gridH,
     required this.baseWidth,
@@ -1693,6 +1768,7 @@ class _BasePreview extends StatelessWidget {
               width: art.width,
               child: BuildingIcon(
                 imageUrl: imageUrl,
+                defId: defId,
                 width: art.width,
                 anchorBottomOverflowTop: true,
               ),

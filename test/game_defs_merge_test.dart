@@ -54,10 +54,10 @@ void main() {
   });
 
   group('one authored def must not wipe the roster', () {
-    test('editing main_hall leaves every other building alive', () {
-      final edited = kFallbackBuildingDefs['main_hall']!;
+    test('editing castle leaves every other building alive', () {
+      final edited = kFallbackBuildingDefs['castle']!;
       // Exactly the shape of the bug: the DB holds ONE row.
-      mergeInto(kBuildingDefs, kFallbackBuildingDefs, {'main_hall': edited});
+      mergeInto(kBuildingDefs, kFallbackBuildingDefs, {'castle': edited});
 
       expect(kBuildingDefs.length, kFallbackBuildingDefs.length);
       for (final id in kFallbackBuildingDefs.keys) {
@@ -65,21 +65,21 @@ void main() {
       }
       // And the buildings a player has placed still resolve — which is what
       // "my buildings were deleted" actually meant.
-      for (final id in ['wood_camp_e1', 'stone_camp_e1', 'hut', 'healing_hut']) {
+      for (final id in ['small_wood_camp', 'small_stone_camp', 'small_house', 'healing_hut']) {
         expect(kBuildingDefs[id], isNotNull, reason: id);
       }
     });
 
     test('the authored version wins for its own id', () {
       const custom = BuildingDef(
-        id: 'main_hall',
+        id: 'castle',
         name: 'Edited Hall',
         color: Color(0xFF000000),
         gridW: 3,
         gridH: 3,
       );
-      mergeInto(kBuildingDefs, kFallbackBuildingDefs, {'main_hall': custom});
-      expect(kBuildingDefs['main_hall']!.name, 'Edited Hall');
+      mergeInto(kBuildingDefs, kFallbackBuildingDefs, {'castle': custom});
+      expect(kBuildingDefs['castle']!.name, 'Edited Hall');
     });
 
     test('a brand-new def is added without displacing anything', () {
@@ -120,15 +120,15 @@ void main() {
   // could bring the old wipe-the-roster bug back if it ever over-reached.
   group('a retired def', () {
     test('is gone even though the app bundles it', () {
-      expect(kFallbackBuildingDefs.containsKey('wood_camp_e1'), isTrue,
+      expect(kFallbackBuildingDefs.containsKey('small_wood_camp'), isTrue,
           reason: 'the seed this test is about');
       mergeInto(
         kBuildingDefs,
         kFallbackBuildingDefs,
         const {},
-        retired: {'wood_camp_e1'},
+        retired: {'small_wood_camp'},
       );
-      expect(kBuildingDefs.containsKey('wood_camp_e1'), isFalse);
+      expect(kBuildingDefs.containsKey('small_wood_camp'), isFalse);
     });
 
     test('takes NOTHING else with it', () {
@@ -138,11 +138,11 @@ void main() {
         kBuildingDefs,
         kFallbackBuildingDefs,
         const {},
-        retired: {'wood_camp_e1'},
+        retired: {'small_wood_camp'},
       );
       expect(kBuildingDefs.length, kFallbackBuildingDefs.length - 1);
       for (final id in kFallbackBuildingDefs.keys) {
-        if (id == 'wood_camp_e1') continue;
+        if (id == 'small_wood_camp') continue;
         expect(kBuildingDefs[id], isNotNull, reason: '$id went missing');
       }
     });
@@ -153,10 +153,10 @@ void main() {
         kBuildingDefs,
         kFallbackBuildingDefs,
         const {},
-        retired: {'wood_camp_e1', 'hut'},
+        retired: {'small_wood_camp', 'small_house'},
         collectRetired: retired,
       );
-      expect(retired, {'wood_camp_e1', 'hut'});
+      expect(retired, {'small_wood_camp', 'small_house'});
     });
 
     test('comes back when the tombstone goes', () {
@@ -164,10 +164,10 @@ void main() {
       // through the merge again, which is what it always did.
       final retired = <String>{};
       mergeInto(kBuildingDefs, kFallbackBuildingDefs, const {},
-          retired: {'wood_camp_e1'}, collectRetired: retired);
+          retired: {'small_wood_camp'}, collectRetired: retired);
       mergeInto(kBuildingDefs, kFallbackBuildingDefs, const {},
           collectRetired: retired);
-      expect(kBuildingDefs['wood_camp_e1'], isNotNull);
+      expect(kBuildingDefs['small_wood_camp'], isNotNull);
       expect(retired, isEmpty, reason: 'the strip must empty out too');
     });
   });

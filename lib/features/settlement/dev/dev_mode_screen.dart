@@ -13,6 +13,7 @@ import '../../creatures/models/species_def.dart';
 import '../../creatures/services/creature_defs_controller.dart';
 import '../../creatures/services/creature_defs_service.dart';
 import '../../creatures/services/stat_budget.dart';
+import '../data/building_art.dart';
 import '../data/building_definitions.dart';
 import '../data/era_definitions.dart';
 import '../services/game_defs_controller.dart';
@@ -897,7 +898,14 @@ class _BuildingsTabState extends State<_BuildingsTab> {
             ),
           )
           .toList(),
-      header: _filterBar(visible.length, eras),
+      header: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _filterBar(visible.length, eras),
+          const SizedBox(height: 8),
+          _ApplyModelsButton(),
+        ],
+      ),
       onNew: widget.onNew,
       onTap: (id) => widget.onOpen(kBuildingDefs[id]),
     );
@@ -1033,6 +1041,98 @@ class _DefRow {
   });
 }
 
+/// "Alle N übernehmen": push every bundled render's own numbers into the DB.
+///
+/// ── Why this is not building_roster.sql (user 2026-08-12) ──
+/// That script deletes all 89 rows and rewrites them from code, so using it to
+/// fix a footprint also throws away every value tuned in this editor. This
+/// touches exactly the fields the RENDERER measured — grid_w, grid_h and the
+/// three placement numbers — on exactly the buildings that have a model, and
+/// leaves costs, effects, era gates and everything else alone.
+///
+/// One reload at the end rather than one per building: saveBuildingDef()
+/// re-reads every def table after each write, and twenty of those is twenty
+/// round trips for one answer.
+class _ApplyModelsButton extends StatefulWidget {
+  @override
+  State<_ApplyModelsButton> createState() => _ApplyModelsButtonState();
+}
+
+class _ApplyModelsButtonState extends State<_ApplyModelsButton> {
+  bool _busy = false;
+
+  /// The buildings whose live def disagrees with what the renderer measured.
+  List<BuildingDef> _stale() {
+    final out = <BuildingDef>[];
+    for (final id in kBundledBuildingArt) {
+      final live = kBuildingDefs[id];
+      final model = kFallbackBuildingDefs[id];
+      final box = kBundledArtBox[id];
+      if (live == null || model == null || box == null) continue;
+      final same = live.gridW == model.gridW &&
+          live.gridH == model.gridH &&
+          (live.artBaseWidth - box.$1).abs() < 0.0005 &&
+          (live.artAnchorX - box.$2).abs() < 0.0005 &&
+          (live.artLift - box.$3).abs() < 0.0005 &&
+          (live.imageUrl == null || live.imageUrl!.isEmpty);
+      if (!same) out.add(live);
+    }
+    return out;
+  }
+
+  Future<void> _apply() async {
+    final stale = _stale();
+    if (stale.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      await GameDefsController().saveBuildingDefs([
+        for (final live in stale)
+          live.withModelArt(
+            gridW: kFallbackBuildingDefs[live.id]!.gridW,
+            gridH: kFallbackBuildingDefs[live.id]!.gridH,
+            artBaseWidth: kBundledArtBox[live.id]!.$1,
+            artAnchorX: kBundledArtBox[live.id]!.$2,
+            artLift: kBundledArtBox[live.id]!.$3,
+          ),
+      ]);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${stale.length} Gebäude auf die '
+            'Modellwerte gesetzt'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final n = _stale().length;
+    return GestureDetector(
+      onTap: _busy || n == 0 ? null : _apply,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: FoE.btn(),
+        alignment: Alignment.center,
+        child: _busy
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(
+                n == 0
+                    ? 'Renders & Grössen: alle aktuell'
+                    : 'Renders & Grössen übernehmen ($n)',
+                style: FoE.label(size: 13),
+              ),
+      ),
+    );
+  }
+}
+
 class _DefList extends StatelessWidget {
   final List<_DefRow> items;
   final VoidCallback onNew;
@@ -1101,7 +1201,11 @@ class _DefList extends StatelessWidget {
                   child: Row(
                     children: [
                       BuildingIcon(
+                        // The same list shows buildings, eras and elements;
+                        // buildingAsset() returns null for everything that is
+                        // not a modelled building, so this is free.
                         imageUrl: item.imageUrl,
+                        defId: item.id,
                         emoji: item.emoji,
                         size: 22,
                       ),

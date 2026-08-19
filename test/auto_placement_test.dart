@@ -36,10 +36,10 @@ void main() {
   tearDown(() => ctrl.buildings = []);
 
   test('an empty settlement has room, and the spot is a LEGAL one', () {
-    final spot = ctrl.firstFreeSpotFor('hut');
+    final spot = ctrl.firstFreeSpotFor('small_house');
     expect(spot, isNotNull);
     // The one rule that matters: the game would have accepted this from a tap.
-    expect(ctrl.isPlacementValid('hut', spot!.$1, spot.$2), isTrue);
+    expect(ctrl.isPlacementValid('small_house', spot!.$1, spot.$2), isTrue);
   });
 
   test('the spot lands NEAR THE HALL, not in whichever corner scans first', () {
@@ -47,8 +47,8 @@ void main() {
     // in the far corner of the plot reads as "nothing happened".
     final hallDef = kFallbackBuildingDefs.values.firstWhere((d) => d.isMainBuilding);
     ctrl.buildings = [placed('h', hallDef.id, kInitialPlotX + 8, kInitialPlotY + 8)];
-    final spot = ctrl.firstFreeSpotFor('hut')!;
-    final hutDef = kFallbackBuildingDefs['hut']!;
+    final spot = ctrl.firstFreeSpotFor('small_house')!;
+    final hutDef = kFallbackBuildingDefs['small_house']!;
     final dx = (spot.$1 + hutDef.gridW / 2) - (kInitialPlotX + 8 + hallDef.gridW / 2);
     final dy = (spot.$2 + hutDef.gridH / 2) - (kInitialPlotY + 8 + hallDef.gridH / 2);
     // Adjacent-ish: within a couple of cells of the hall's footprint, not the
@@ -58,11 +58,11 @@ void main() {
   });
 
   test('it does not overlap what is already standing', () {
-    final spot = ctrl.firstFreeSpotFor('hut')!;
-    ctrl.buildings = [placed('a', 'hut', spot.$1, spot.$2)];
-    final next = ctrl.firstFreeSpotFor('hut')!;
+    final spot = ctrl.firstFreeSpotFor('small_house')!;
+    ctrl.buildings = [placed('a', 'small_house', spot.$1, spot.$2)];
+    final next = ctrl.firstFreeSpotFor('small_house')!;
     expect(next, isNot(spot));
-    expect(ctrl.isPlacementValid('hut', next.$1, next.$2), isTrue);
+    expect(ctrl.isPlacementValid('small_house', next.$1, next.$2), isTrue);
   });
 
   test('a FULL settlement answers null — which is a real answer', () {
@@ -73,7 +73,7 @@ void main() {
         for (var y = kInitialPlotY; y < kInitialPlotY + kInitialPlotSize; y++)
           placed('r_${x}_$y', 'road', x, y),
     ];
-    expect(ctrl.firstFreeSpotFor('hut'), isNull);
+    expect(ctrl.firstFreeSpotFor('small_house'), isNull);
   });
 
   test('a BUILD PLOT is not auto-placed — it has no spot inside the region', () {

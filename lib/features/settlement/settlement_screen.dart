@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'data/resource_icons.dart';
-import '../../core/ui/feel.dart';
 import '../../core/ui/feel_button.dart';
 import '../../core/orientation_lock.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/number_format.dart';
-import '../../core/ui/snack.dart';
 import '../../core/ui/duration_format.dart';
 import 'data/building_definitions.dart';
 import 'data/era_definitions.dart';
@@ -20,7 +18,6 @@ import 'build_menu_screen.dart';
 import 'sheets/energy_sheet.dart';
 import 'bag_screen.dart';
 import 'sheets/resource_breakdown_sheet.dart';
-import 'widgets/building_icon.dart';
 import 'widgets/meander_strip.dart';
 import 'widgets/quick_pad.dart';
 import 'widgets/scroll_paper.dart';
@@ -59,9 +56,6 @@ class _SettlementScreenState extends State<SettlementScreen>
   String? _pendingTypeId;
   bool _editMode = false;
 
-  /// The building just built — handed to the map so it arrives SELECTED and can
-  /// be dragged immediately (user 2026-07-30). See [_buildAndPlace].
-  String? _justBuiltId;
   bool _roadMode = false;
 
   // PORTRAIT. This screen used to force landscape, which is flatly at odds
@@ -162,60 +156,26 @@ class _SettlementScreenState extends State<SettlementScreen>
     }
   }
 
-  /// Buys the building and PUTS IT ON THE MAP, then hands you move mode with it
-  /// selected (user 2026-07-30: "wenn ich beim app ein gebäude baue, soll dies
-  /// einfach auf die map kommen, damit ich es dann verschieben kann. Aktuell muss
-  /// ich einen punkt auswählen, um es direkt zu bauen, ich will es aber schieben
-  /// können").
+  /// Hands the building to the MAP to be aimed (user 2026-08-09: "Wenn ich ein
+  /// Gebäude ausgewählt habe, dann erscheint es mittig im Screen … Über dem
+  /// Gebäude gibt es ein gutzeichen und ein X").
   ///
-  /// Choosing the spot BEFORE the building existed was the wrong order: it asked
-  /// for a decision while the thing you were deciding about was an outline under
-  /// your thumb. Now it stands somewhere sensible and the drag — which the map
-  /// could always do — is how you place it.
+  /// It is not bought here and it is not placed here. The map opens it in the
+  /// middle of the view as a ghost, and its ✓ is the single point where the
+  /// resources are spent — so backing out of a placement costs nothing.
   ///
-  /// A BUILDING PLOT still asks for the spot. It cannot be moved afterwards
-  /// (SettlementController.moveBuilding refuses) and its whole purpose is WHICH
-  /// new ground it claims, so auto-placing one would decide the only thing it is
-  /// for and then refuse to let you change it.
+  /// The two previous designs each got half of this right: aiming first asked
+  /// for the spot while the thing being placed was an outline under your thumb,
+  /// and auto-placing bought the building the moment you tapped its card. The
+  /// ghost is the outline AND the decision, which is why one flow can now cover
+  /// ordinary buildings, plots and roads alike.
   Future<void> _buildAndPlace(String typeId) async {
-    final def = kBuildingDefs[typeId];
-    if (def == null) return;
-    if (def.isBuildPlot) {
-      setState(() {
-        _pendingTypeId = typeId;
-        _editMode = false;
-        _roadMode = false;
-      });
-      return;
-    }
-    final spot = _ctrl.firstFreeSpotFor(typeId);
-    if (spot == null) {
-      if (mounted) {
-        Feel.deny();
-        context.snack(
-          'No free space for ${def.name} — a Building Plot makes room.',
-          error: true,
-        );
-      }
-      return;
-    }
-    final err = await _ctrl.placeBuilding(typeId, spot.$1, spot.$2);
-    if (!mounted) return;
-    if (err != null) {
-      Feel.deny();
-      context.snack(err, error: true);
-      return;
-    }
-    // Straight into move mode with it selected: the placement gesture is now the
-    // drag, and the banner's Done is what ends it.
+    if (kBuildingDefs[typeId] == null) return;
     setState(() {
-      _pendingTypeId = null;
+      _pendingTypeId = typeId;
+      _editMode = false;
       _roadMode = false;
-      _editMode = true;
-      _justBuiltId = _ctrl.lastPlacedId;
     });
-    Feel.place();
-    context.snack('${def.name} placed — drag it where you want it.');
   }
 
   /// Long-pressing a building on the map drops straight into move mode (user
@@ -552,15 +512,9 @@ class _SettlementScreenState extends State<SettlementScreen>
           roadMode: _roadMode,
           onPlacementDone: () => setState(() => _pendingTypeId = null),
           onEnterEditMode: _enterEditMode,
-          onExitEditMode: () => setState(() {
-            _editMode = false;
-            // The fresh building is placed the moment move mode ends — holding
-            // the id would re-select it the next time edit mode opens.
-            _justBuiltId = null;
-          }),
+          onExitEditMode: () => setState(() => _editMode = false),
           onExitRoadMode: () => setState(() => _roadMode = false),
           onOpenBuildMenu: _showBuildMenu,
-          selectBuildingId: _justBuiltId,
         ),
       ),
       // Stacked rather than each Positioned at a guessed offset: the top bar's
@@ -611,11 +565,16 @@ class _SettlementScreenState extends State<SettlementScreen>
     ],
   );
 
-  /// True while the map owns the bottom of the screen: road painting and
-  /// move/edit mode each show their own banner down there (with the button
+  /// True while the map owns the bottom of the screen: aiming, road building
+  /// and move/edit mode each show their own banner down there (with the button
   /// that LEAVES the mode), so the quick menu has to get out of the way or
   /// they stack on top of each other.
-  bool get _mapModeActive => _roadMode || _editMode;
+  ///
+  /// Placement counts too now (2026-08-09): the map's own banner explains the
+  /// ✓/✗ that are sitting over the building, and a second banner underneath it
+  /// saying roughly the same thing is one too many.
+  bool get _mapModeActive =>
+      _roadMode || _editMode || _pendingTypeId != null;
 
   Widget _bottomStack() {
     // The Build menu no longer needs a mention here (2026-07-31): it is a page
@@ -630,22 +589,18 @@ class _SettlementScreenState extends State<SettlementScreen>
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_pendingTypeId != null || _ctrl.introStep.isActive)
+          if (_ctrl.introStep.isActive)
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              // Yields to the placement banner: someone mid-placement is
-              // already being guided by that one.
-              child: _pendingTypeId != null
-                  ? _placementBanner()
-                  : KeyedSubtree(
-                      // The spotlight's hole — the card (CTA + skip) is the
-                      // only living UI while the tutorial overlay is up.
-                      key: IntroSpotlightAnchors.of('intro-panel'),
-                      child: IntroCardPanel(
-                        ctrl: _ctrl,
-                        onNavigate: _goToIntroTarget,
-                      ),
-                    ),
+              child: KeyedSubtree(
+                // The spotlight's hole — the card (CTA + skip) is the only
+                // living UI while the tutorial overlay is up.
+                key: IntroSpotlightAnchors.of('intro-panel'),
+                child: IntroCardPanel(
+                  ctrl: _ctrl,
+                  onNavigate: _goToIntroTarget,
+                ),
+              ),
             ),
           _quickPad(),
         ],
@@ -662,7 +617,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     IntroDestination.healingHut =>
       _mapKey.currentState?.openBuildingByType(kHealingHutBuildingId),
     IntroDestination.mainHall =>
-      _mapKey.currentState?.openBuildingByType('main_hall'),
+      _mapKey.currentState?.openBuildingByType('castle'),
   };
 
   /// The tutorial's scripted first battle: the starter against a rival far
@@ -1193,7 +1148,7 @@ class _SettlementScreenState extends State<SettlementScreen>
   );
 
   /// HOUSING, PROMOTED INTO THE STRIP (user 2026-07-29). It used to live only
-  /// in the Tribal Center's dialog, which meant the one number that decides
+  /// in the Castle's dialog, which meant the one number that decides
   /// whether a catch, a hatch or an adoption is even possible was three taps
   /// and a map pan away — and you found out it was full at the moment it cost
   /// you the monster.
@@ -1340,40 +1295,6 @@ class _SettlementScreenState extends State<SettlementScreen>
         sub: isEmpty ? 'empty' : fmtDuration(hoursLeft * 3600),
         valueColor: isEmpty ? FoE.danger : null,
         subColor: isEmpty ? FoE.danger : null,
-      ),
-    );
-  }
-
-  Widget _placementBanner() {
-    final def = kBuildingDefs[_pendingTypeId!]!;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: FoE.panel(
-        radius: 8,
-        overrideBorder: Colors.greenAccent.shade400,
-      ),
-      child: Row(
-        children: [
-          BuildingIcon(imageUrl: def.imageUrl, size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              // Only a BUILDING PLOT still gets here (user 2026-07-30: everything
-              // else is placed for you and dragged into position), so the banner
-              // says why this one is different — otherwise being asked to aim
-              // reads as an inconsistency.
-              def.isBuildPlot
-                  ? 'Tap NEW ground to place the ${def.name} — it cannot be '
-                        'moved later'
-                  : 'Tap the map to place ${def.name}',
-              style: FoE.label().copyWith(color: Colors.greenAccent),
-            ),
-          ),
-          GestureDetector(
-            onTap: () => setState(() => _pendingTypeId = null),
-            child: const Icon(Icons.close, color: FoE.textDim, size: 16),
-          ),
-        ],
       ),
     );
   }

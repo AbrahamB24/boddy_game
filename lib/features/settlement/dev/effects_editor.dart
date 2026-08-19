@@ -300,7 +300,7 @@ class _EffectRow extends StatelessWidget {
   /// What a worker-free `production` effect can trickle: the settlement raws,
   /// every good — and `construction`, the build-point pool.
   ///
-  /// Construction is here because the Tribal Center's automatic build points
+  /// Construction is here because the Castle's automatic build points
   /// were deleted with the other hardcoded bonuses (user 2026-07-25). Without
   /// this key there would be no way to give a building worker-free build power
   /// at all, and a settlement with no staffed Builder Camp could never build.

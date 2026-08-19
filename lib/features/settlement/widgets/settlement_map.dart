@@ -36,9 +36,11 @@ import '../../creatures/models/creature_instance.dart';
 import '../../creatures/models/species_def.dart';
 import '../../creatures/services/creatures_controller.dart';
 import 'assign_workers_sheet.dart';
+import '../data/building_art.dart';
 import '../data/building_definitions.dart';
 import '../data/iso_grid.dart';
 import '../data/resource_icons.dart';
+import '../data/road_tiles.dart';
 import '../data/era_definitions.dart' show EraDef;
 import '../data/goods_definitions.dart';
 import '../data/workshop_role_effects.dart';
@@ -162,7 +164,7 @@ class SettlementMapState extends State<SettlementMap>
 
   /// Opens the detail dialog of the first placed building of [typeId], as if
   /// the player had tapped it. The guided intro's cards use this so "tap the
-  /// Tribal Center" is a lit button, not a search across the map.
+  /// Castle" is a lit button, not a search across the map.
   void openBuildingByType(String typeId) {
     for (final b in widget.ctrl.buildings) {
       if (b.buildingTypeId == typeId) {
@@ -172,22 +174,52 @@ class SettlementMapState extends State<SettlementMap>
     }
   }
 
-  // Normal long-press move (outside edit mode)
-  int? _ghostX, _ghostY;
-  String? _movingId;
-  String? _movingType;
+  // ── AIMING (user 2026-08-09) ────────────────────────────────
+  // "Wenn ich ein Gebäude ausgewählt habe, dann erscheint es mittig im Screen.
+  //  Wenn ich es berühre, kann ich es verschieben … Wenn ich daneben mit dem
+  //  Finger bin, dann kann ich scrollen. […] Über dem Gebäude gibt es ein
+  //  gutzeichen und ein X […]. Genau gleich funktioniert der
+  //  Bearbeitungs/movemodus."
+  //
+  // ONE session covers both jobs the map used to do differently. Placing
+  // something new and moving something that already stands are the same
+  // gesture: a ghost you push around and then accept. Nothing is written until
+  // the ✓ — so a cancelled placement costs nothing, and a cancelled move never
+  // touched the building in the first place.
+  //
+  // The old flow bought the building, dropped it somewhere near the hall and
+  // left you to drag it: every mis-tap was a purchase, and the drag fought the
+  // map's own pan because a full-screen overlay had to swallow every gesture to
+  // get at it. Here the only thing that swallows gestures is the ghost's own
+  // box, which is exactly what "beside it I can scroll" means.
+  String? _aimType; // the ghost's building type — null when no session
+  String? _aimMoveId; // set when the ghost IS a building already on the map
+  int? _aimX, _aimY; // the cell the ghost's north-west corner sits on
 
-  // Edit mode
-  String? _selectedId;
-  String? _selectedType;
-  bool _isDragging = false;
+  bool get _aiming => _aimType != null;
 
-  // Road paint mode — tracks the last cell touched during a drag stroke so
-  // each cell is only toggled once per continuous gesture.
-  int? _lastRoadKey;
+  // ── ROAD CHAINS ─────────────────────────────────────────────
+  // "Wenn ich eine Strasse Platziere und auf bestätigen drücke, dann werden die
+  //  Pfeile aktiv (grösser) und ich kann diese antippen um an dieser Stelle eine
+  //  neue Strasse zu bauen."
+  //
+  // A road is never one tile, so confirming one does not end the job — it turns
+  // the four arrows into a brush and leaves the ✓/✗ hovering over whichever
+  // tile you laid last. Deleting works the same way with red arrows, which is
+  // what replaced dragging a finger over the map and hoping.
+  bool _chaining = false;
+  bool _chainErase = false;
+  int _chainX = 0, _chainY = 0;
+  final List<String> _chainBuilt = [];
+  final List<(int, int)> _chainRemoved = [];
 
-  bool get _inMoveMode => _movingId != null;
-  bool get _inPlaceMode => widget.pendingTypeId != null;
+  // ── Dragging the ghost ──────────────────────────────────────
+  bool _dragging = false;
+  // Where inside its own footprint the finger grabbed it, so the building does
+  // not jump its own half-width the moment you touch it.
+  int _grabDx = 0, _grabDy = 0;
+  Offset? _dragAt; // last pointer position, in the map widget's coordinates
+  Timer? _edgeTimer;
 
   final _txCtrl = TransformationController();
   bool _txInitialized = false;
@@ -211,17 +243,20 @@ class SettlementMapState extends State<SettlementMap>
   /// deliberate: a camera that also re-scaled would take away the view the player
   /// had chosen.
   void focusBuilding(PlacedBuilding b) {
-    final view = _viewport;
     final def = kBuildingDefs[b.buildingTypeId];
-    if (view == null || def == null) return;
+    if (def == null) return;
+    _focusCell(b.gridX, b.gridY, def.gridW, def.gridH);
+  }
+
+  /// [focusBuilding] for a footprint that is not (yet) a building — the ghost.
+  void _focusCell(int gx, int gy, int w, int h) {
+    final view = _viewport;
+    if (view == null) return;
     final scale = _txCtrl.value.getMaxScaleOnAxis();
     final mapW = isoCanvasSize.width * scale;
     final mapH = isoCanvasSize.height * scale;
-    // The building's own point on the diamond, not the middle of a rectangle.
-    final centre = gridToScreen(
-      b.gridX + def.gridW / 2,
-      b.gridY + def.gridH / 2,
-    );
+    // The footprint's own point on the diamond, not the middle of a rectangle.
+    final centre = gridToScreen(gx + w / 2, gy + h / 2);
     final cx = centre.dx * scale;
     final cy = centre.dy * scale;
     final tx = (view.width / 2 - cx)
@@ -230,8 +265,7 @@ class SettlementMapState extends State<SettlementMap>
     final ty = (view.height / 2 - cy)
         .clamp(math.min(0.0, view.height - mapH), 0.0)
         .toDouble();
-    final target = Matrix4.diagonal3Values(scale, scale, 1)
-      ..setTranslationRaw(tx, ty, 0);
+    final target = mapTransform(scale, tx, ty);
     _panAnim = Matrix4Tween(begin: _txCtrl.value, end: target).animate(
       CurvedAnimation(parent: _panCtrl, curve: Curves.easeOutCubic),
     );
@@ -243,35 +277,37 @@ class SettlementMapState extends State<SettlementMap>
   @override
   void didUpdateWidget(SettlementMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Clear edit selection when leaving edit mode
-    if (!widget.editMode && oldWidget.editMode) {
-      _selectedId = null;
-      _selectedType = null;
-      _isDragging = false;
-      _movingId = null;
-      _movingType = null;
-      _ghostX = null;
-      _ghostY = null;
+    // Leaving a mode drops whatever was being aimed in it. Nothing was written,
+    // so there is nothing to undo.
+    if (!widget.editMode && oldWidget.editMode && _aimMoveId != null) {
+      _clearAim();
     }
-    if (!widget.roadMode && oldWidget.roadMode) {
-      _lastRoadKey = null;
+    // A type arriving from the build menu OPENS a session (and a type going
+    // away — the screen's own ✗ — closes it).
+    final pending = widget.pendingTypeId;
+    if (pending != null && pending != oldWidget.pendingTypeId) {
+      _startAim(pending);
+    } else if (pending == null &&
+        oldWidget.pendingTypeId != null &&
+        _aimMoveId == null) {
+      _clearAim();
     }
-    // A JUST-BUILT building arrives selected (user 2026-07-30), so the very next
-    // gesture can drag it where you want it. Only on CHANGE: re-selecting on
-    // every rebuild would fight the player's own taps.
+    // Roads come in through the same door: the Build menu's "Roads" is just a
+    // session whose type is `road`, and the ✓ hands it on to the chain.
+    if (widget.roadMode && !oldWidget.roadMode) {
+      _startAim('road');
+    } else if (!widget.roadMode && oldWidget.roadMode) {
+      _clearAim();
+      if (_chaining) setState(_dropChainState);
+    }
+    // A building the SCREEN wants aimed (the tutorial, and anything that builds
+    // on the player's behalf). Only on CHANGE: re-opening on every rebuild
+    // would fight the player's own taps.
     final fresh = widget.selectBuildingId;
     if (fresh != null && fresh != oldWidget.selectBuildingId) {
       for (final b in widget.ctrl.buildings) {
         if (b.id != fresh) continue;
-        _selectedId = b.id;
-        _selectedType = b.buildingTypeId;
-        // …and BRING IT INTO VIEW. The map is pannable and zoomable, so a
-        // building placed for you can be well off-screen; "drag it where you
-        // want it" then points at nothing. After the frame, because the focus
-        // maths needs the viewport this build is about to report.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) focusBuilding(b);
-        });
+        _startAim(b.buildingTypeId, moveId: b.id);
         break;
       }
     }
@@ -279,6 +315,7 @@ class SettlementMapState extends State<SettlementMap>
 
   @override
   void dispose() {
+    _edgeTimer?.cancel();
     _panCtrl.dispose();
     _txCtrl.dispose();
     super.dispose();
@@ -293,53 +330,413 @@ class SettlementMapState extends State<SettlementMap>
       final anim = _panAnim;
       if (anim != null) _txCtrl.value = anim.value;
     });
+    // Every write to the transform is checked, whoever made it.
+    _txCtrl.addListener(_enforceBounds);
   }
 
-  // ── Tap inside InteractiveViewer (normal + edit-idle) ─────
+  // ── Opening and closing a session ─────────────────────────
+  /// Puts [typeId] under the player's thumb. [moveId] names a building that is
+  /// already standing — then the session MOVES it instead of placing a new one.
+  void _startAim(String typeId, {String? moveId}) {
+    final def = kBuildingDefs[typeId];
+    if (def == null) return;
+    // Build plots are permanent (settlement_controller refuses to move one), so
+    // there is nothing for a move session to do with one.
+    if (moveId != null && def.isBuildPlot) return;
+    final b = moveId == null
+        ? null
+        : widget.ctrl.buildings.where((x) => x.id == moveId).firstOrNull;
+    if (moveId != null && b == null) return;
+    _stopDrag();
+    setState(() {
+      _dropChainState();
+      _aimType = typeId;
+      _aimMoveId = moveId;
+      _aimX = b?.gridX;
+      _aimY = b?.gridY;
+    });
+    // "…dann erscheint es mittig im Screen." For something already on the map
+    // that means bringing the CAMERA to it; for something new it means dropping
+    // it on whatever the camera is already looking at. After the frame, because
+    // both need the viewport this build is about to report.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _aimType != typeId || _aimMoveId != moveId) return;
+      if (b != null) {
+        focusBuilding(b);
+      } else {
+        _dropGhostAtCentre(def);
+      }
+    });
+  }
+
+  /// Opens a new building on the cell in the middle of the view.
+  void _dropGhostAtCentre(BuildingDef def) {
+    final view = _viewport;
+    if (view == null) return;
+    final (col, row) = _cellAt(Offset(view.width / 2, view.height / 2));
+    var gx = (col - def.gridW ~/ 2).clamp(0, kGridCols - def.gridW);
+    var gy = (row - def.gridH ~/ 2).clamp(0, kGridRows - def.gridH);
+    (gx, gy) = widget.ctrl.snapPlacement(def.id, gx, gy);
+    if (!widget.ctrl.isPlacementValid(def.id, gx, gy)) {
+      // The middle of the view can be locked ground or somebody's wall. Opening
+      // on a red outline reads as a refusal rather than an invitation, so fall
+      // back to a spot the game WOULD accept and take the camera there —
+      // "mittig im Screen" is about what you are looking at, not about which
+      // cell happens to be under the crosshair.
+      final spot = widget.ctrl.firstFreeSpotFor(def.id);
+      if (spot != null) {
+        gx = spot.$1;
+        gy = spot.$2;
+        _focusCell(gx, gy, def.gridW, def.gridH);
+      }
+    }
+    setState(() {
+      _aimX = gx;
+      _aimY = gy;
+    });
+  }
+
+  /// Drops the ghost without writing anything. Nothing was ever committed, so
+  /// there is nothing to roll back.
+  void _clearAim() {
+    _stopDrag();
+    if (!_aiming) return;
+    setState(() {
+      _aimType = null;
+      _aimMoveId = null;
+      _aimX = null;
+      _aimY = null;
+    });
+  }
+
+  /// The ✗. Also tells the SCREEN, whose `pendingTypeId` / `roadMode` opened
+  /// the session in the first place and would otherwise re-open it.
+  void _cancelAim() {
+    Feel.tap();
+    _clearAim();
+    _closeSessionMode();
+  }
+
+  /// The ✓ — the one place a building is bought or moved.
+  Future<void> _confirmAim() async {
+    final type = _aimType, x = _aimX, y = _aimY;
+    if (type == null || x == null || y == null) return;
+    final moveId = _aimMoveId;
+    final err = moveId == null
+        ? await widget.ctrl.placeBuilding(type, x, y)
+        : await widget.ctrl.moveBuilding(moveId, x, y);
+    if (!mounted) return;
+    if (err != null) {
+      // STAYS OPEN. The spot is the only thing wrong, and dropping the session
+      // would make the player start the whole placement again to fix it.
+      Feel.deny();
+      context.snack(err, error: true);
+      return;
+    }
+    Feel.place();
+    final isNewRoad = moveId == null && (kBuildingDefs[type]?.isRoad ?? false);
+    final chainHead = widget.ctrl.lastPlacedId;
+    _clearAim();
+    if (isNewRoad && chainHead != null) {
+      // Hand straight over to the chain — the session does NOT close, it
+      // changes shape (user 2026-08-09).
+      setState(() {
+        _chaining = true;
+        _chainErase = false;
+        _chainX = x;
+        _chainY = y;
+        _chainBuilt
+          ..clear()
+          ..add(chainHead);
+        _chainRemoved.clear();
+      });
+      return;
+    }
+    _closeSessionMode();
+    // Edit mode deliberately STAYS on after a move (user 2026-07-20), so
+    // several buildings can be rearranged in one visit.
+  }
+
+  // ── Road chains ───────────────────────────────────────────
+  void _dropChainState() {
+    _chaining = false;
+    _chainErase = false;
+    _chainBuilt.clear();
+    _chainRemoved.clear();
+  }
+
+  /// One arrow tap during a chain: lays the next road, or takes the next one
+  /// away, and moves the chain's head onto it.
+  Future<void> _chainStep(int dx, int dy) async {
+    final nx = _chainX + dx, ny = _chainY + dy;
+    if (nx < 0 || ny < 0 || nx >= kGridCols || ny >= kGridRows) {
+      Feel.deny();
+      return;
+    }
+    if (_chainErase) {
+      final hit = _hitTest(nx, ny);
+      if (hit == null || !(kBuildingDefs[hit.buildingTypeId]?.isRoad ?? false)) {
+        Feel.deny();
+        return;
+      }
+      final err = await widget.ctrl.deleteBuilding(hit.id);
+      if (!mounted) return;
+      if (err != null) {
+        Feel.deny();
+        context.snack(err, error: true);
+        return;
+      }
+      Feel.tap();
+      setState(() {
+        _chainX = nx;
+        _chainY = ny;
+        _chainRemoved.add((nx, ny));
+      });
+      return;
+    }
+    final err = await widget.ctrl.placeBuilding('road', nx, ny);
+    if (!mounted) return;
+    if (err != null) {
+      Feel.deny();
+      context.snack(err, error: true);
+      return;
+    }
+    final id = widget.ctrl.lastPlacedId;
+    Feel.place();
+    setState(() {
+      _chainX = nx;
+      _chainY = ny;
+      if (id != null) _chainBuilt.add(id);
+    });
+  }
+
+  /// Whichever mode the SCREEN opened this session in has to be told the job is
+  /// over, or it hands the map the same type straight back.
+  void _closeSessionMode() {
+    if (widget.pendingTypeId != null) widget.onPlacementDone?.call();
+    if (widget.roadMode) widget.onExitRoadMode?.call();
+  }
+
+  /// The chain's ✓ — keep everything laid (or everything torn out) and stop.
+  void _endChain() {
+    Feel.tap();
+    setState(_dropChainState);
+    _closeSessionMode();
+  }
+
+  /// The chain's ✗ — the whole stroke goes back the way it was. A chain is
+  /// built one tap at a time, so undoing only the last tap would leave the
+  /// player pressing ✗ twenty times to get out of a mistake.
+  Future<void> _undoChain() async {
+    final built = [..._chainBuilt];
+    final removed = [..._chainRemoved];
+    final erasing = _chainErase;
+    Feel.tap();
+    setState(_dropChainState);
+    _closeSessionMode();
+    if (erasing) {
+      for (final (x, y) in removed) {
+        await widget.ctrl.placeBuilding('road', x, y);
+      }
+    } else {
+      for (final id in built) {
+        await widget.ctrl.deleteBuilding(id);
+      }
+    }
+  }
+
+  // ── Moving the ghost ──────────────────────────────────────
+  /// A pointer's position in the MAP WIDGET's own coordinates — the space the
+  /// screen-side controls and [TransformationController.toScene] both live in.
+  /// Gesture-local coordinates would be relative to whichever little button was
+  /// touched, which is not a place on the map.
+  Offset _mapLocal(Offset global) {
+    final box = context.findRenderObject() as RenderBox?;
+    return box == null ? global : box.globalToLocal(global);
+  }
+
+  /// The cell under a map-local point.
+  (int, int) _cellAt(Offset local) => screenToGrid(_txCtrl.toScene(local));
+
+  void _moveGhostTo(Offset local) {
+    final type = _aimType;
+    final def = type == null ? null : kBuildingDefs[type];
+    if (def == null) return;
+    final (col, row) = _cellAt(local);
+    var gx = (col - _grabDx).clamp(0, kGridCols - def.gridW);
+    var gy = (row - _grabDy).clamp(0, kGridRows - def.gridH);
+    (gx, gy) = widget.ctrl.snapPlacement(type!, gx, gy);
+    if (gx == _aimX && gy == _aimY) return;
+    setState(() {
+      _aimX = gx;
+      _aimY = gy;
+    });
+  }
+
+  void _ghostDragStart(DragStartDetails d) {
+    final type = _aimType;
+    final def = type == null ? null : kBuildingDefs[type];
+    if (def == null || _aimX == null || _aimY == null) return;
+    final local = _mapLocal(d.globalPosition);
+    final (col, row) = _cellAt(local);
+    setState(() {
+      _dragging = true;
+      // Clamped INTO the footprint: the touch box reaches up over the art, and
+      // a grab taken up there would otherwise offset the building by however
+      // tall its picture happens to be.
+      _grabDx = (col - _aimX!).clamp(0, def.gridW - 1);
+      _grabDy = (row - _aimY!).clamp(0, def.gridH - 1);
+    });
+    _dragAt = local;
+    _edgeTimer ??= Timer.periodic(
+      const Duration(milliseconds: 16),
+      (_) => _tickEdgeScroll(),
+    );
+  }
+
+  void _ghostDragUpdate(DragUpdateDetails d) {
+    if (!_dragging) return;
+    final local = _mapLocal(d.globalPosition);
+    _dragAt = local;
+    _moveGhostTo(local);
+  }
+
+  void _stopDrag() {
+    _edgeTimer?.cancel();
+    _edgeTimer = null;
+    _dragAt = null;
+    if (_dragging && mounted) setState(() => _dragging = false);
+  }
+
+  // ── Scrolling the map under the ghost ─────────────────────
+  // "Das geht auch, wenn ich das Gebäude an den Rand des Screens bewege."
+  //
+  // Without this the map is only as big as one screenful for placement
+  // purposes: you can drag a building to the edge and then have nowhere to put
+  // it, because the hand holding the building is the hand that would have
+  // panned. The band is generous (a thumb is wide) and the speed ramps with how
+  // far in you are, so grazing the edge nudges and pinning to it runs.
+  static const double _kEdgeBand = 76;
+  static const double _kEdgeSpeed = 13;
+
+  void _tickEdgeScroll() {
+    final at = _dragAt;
+    final view = _viewport;
+    if (!_dragging || at == null || view == null) return;
+    double push(double d) =>
+        d >= _kEdgeBand ? 0 : (1 - math.max(d, 0) / _kEdgeBand) * _kEdgeSpeed;
+    // Near the LEFT edge the content slides right, which is what reveals what
+    // lies further left.
+    final dx = push(at.dx) - push(view.width - at.dx);
+    final dy = push(at.dy) - push(view.height - at.dy);
+    if (dx == 0 && dy == 0) return;
+    _panScreen(Offset(dx, dy));
+    // The finger has not moved, but the ground under it has.
+    _moveGhostTo(at);
+  }
+
+  /// Slides the view by [delta] screen pixels. The bounds listener is what
+  /// keeps it inside the map, so this does not clamp a second time.
+  void _panScreen(Offset delta) {
+    final m = _txCtrl.value.clone();
+    final t = m.getTranslation();
+    m.setTranslationRaw(t.x + delta.dx, t.y + delta.dy, 0);
+    _txCtrl.value = m;
+  }
+
+  // ── The boundary, enforced on every write ─────────────────
+  // "Es darf niemals aus dem Spielfeld hinausgezoomt/gescrollt werden … Es
+  //  dürfte niemals der Rand sichtbar sein" (user 2026-08-09).
+  //
+  // NIEMALS is a strong word, and the way to honour it is not to ask each
+  // writer of the transform to remember: it is to check the invariant on the
+  // controller itself. InteractiveViewer's gestures, the camera moves, the
+  // edge-scroll and anything added later all go through this one listener.
+  //
+  // The z-scale bug (see mapTransform) is fixed at the source, so this is no
+  // longer load-bearing for that case — but it is what makes the rule true
+  // rather than merely intended.
+  bool _fixingBounds = false;
+
+  void _enforceBounds() {
+    if (_fixingBounds || !_txInitialized) return;
+    final view = _viewport;
+    if (view == null) return;
+    final m = _txCtrl.value;
+    final fixed = clampMapTransform(m, view);
+    if (_sameTransform(fixed, m)) return;
+    _fixingBounds = true;
+    _txCtrl.value = fixed;
+    _fixingBounds = false;
+  }
+
+  static bool _sameTransform(Matrix4 a, Matrix4 b) {
+    if ((a.getMaxScaleOnAxis() - b.getMaxScaleOnAxis()).abs() > 1e-9) {
+      return false;
+    }
+    final ta = a.getTranslation(), tb = b.getTranslation();
+    return (ta.x - tb.x).abs() < 1e-6 && (ta.y - tb.y).abs() < 1e-6;
+  }
+
+  /// One arrow tap outside a chain: a single cell in that direction. Plots move
+  /// by their own 5-cell snap, so their arrow does something visible.
+  void _nudge(int dx, int dy) {
+    final type = _aimType;
+    final def = type == null ? null : kBuildingDefs[type];
+    if (def == null || _aimX == null || _aimY == null) return;
+    final step = def.isBuildPlot ? 5 : 1;
+    final gx = (_aimX! + dx * step).clamp(0, kGridCols - def.gridW);
+    final gy = (_aimY! + dy * step).clamp(0, kGridRows - def.gridH);
+    if (gx == _aimX && gy == _aimY) {
+      Feel.deny();
+      return;
+    }
+    Feel.tap();
+    setState(() {
+      _aimX = gx;
+      _aimY = gy;
+    });
+  }
+
+  // ── Tap inside InteractiveViewer ──────────────────────────
   void _handleTap(Offset local) {
     // ISOMETRIC (2026-08-01): the inverse projection, not a division — see
     // iso_grid.dart. It clamps to the map the way the old floor+clamp did.
     final (col, row) = screenToGrid(local);
 
-    if (_inMoveMode) {
-      final def = kBuildingDefs[_movingType!]!;
-      final x = (col - def.gridW ~/ 2).clamp(0, kGridCols - def.gridW);
-      final y = (row - def.gridH ~/ 2).clamp(0, kGridRows - def.gridH);
-      _confirmMove(x, y);
-      return;
-    }
+    // A chain is driven by its arrows alone; a stray tap on the map must not
+    // move the head somewhere the road cannot reach.
+    if (_chaining) return;
 
-    if (_inPlaceMode) {
-      final def = kBuildingDefs[widget.pendingTypeId!]!;
-      var x = (col - def.gridW ~/ 2).clamp(0, kGridCols - def.gridW);
-      var y = (row - def.gridH ~/ 2).clamp(0, kGridRows - def.gridH);
-      (x, y) = widget.ctrl.snapPlacement(widget.pendingTypeId!, x, y);
-      _confirmPlacement(x, y, def);
-      return;
-    }
-
-    if (widget.editMode) {
-      // Overlay is inactive (no selection yet) — tap selects
-      final hit = _hitTest(col, row);
+    if (_aiming) {
+      // A tap on open ground is a long drag in one go — the arrows are for
+      // nudging, the drag for aiming, and this for crossing the map.
+      final def = kBuildingDefs[_aimType!];
+      if (def == null) return;
+      var gx = (col - def.gridW ~/ 2).clamp(0, kGridCols - def.gridW);
+      var gy = (row - def.gridH ~/ 2).clamp(0, kGridRows - def.gridH);
+      (gx, gy) = widget.ctrl.snapPlacement(_aimType!, gx, gy);
       setState(() {
-        _selectedId = hit?.id;
-        _selectedType = hit?.buildingTypeId;
+        _aimX = gx;
+        _aimY = gy;
       });
       return;
     }
 
     final hit = _hitTest(col, row);
+    if (widget.editMode) {
+      // Tapping a building in edit mode IS picking it up (user 2026-08-09):
+      // selection and move are the same act now, so there is no idle
+      // "selected but doing nothing" state to explain.
+      if (hit != null) _startAim(hit.buildingTypeId, moveId: hit.id);
+      return;
+    }
     if (hit != null) _showDetail(hit);
   }
 
   // ── Long-press inside InteractiveViewer (normal mode only) ─
   void _handleLongPress(Offset local) {
-    if (widget.editMode) return;
-    if (_inMoveMode) {
-      _cancelMove();
-      return;
-    }
-    if (_inPlaceMode) return;
+    if (widget.editMode || _aiming || _chaining) return;
 
     // ISOMETRIC (2026-08-01): the inverse projection, not a division — see
     // iso_grid.dart. It clamps to the map the way the old floor+clamp did.
@@ -348,192 +745,56 @@ class SettlementMapState extends State<SettlementMap>
     if (hit == null) return;
     // Build plots are permanent — no move (see settlement_controller).
     if (kBuildingDefs[hit.buildingTypeId]?.isBuildPlot ?? false) return;
-    // Open the PERSISTENT move mode with this building already selected (user
-    // 2026-07-20). It used to start a one-shot move that ended the moment the
-    // building was dropped; now the mode belongs to the screen and stays up
-    // until Done, so you can rearrange several in a row.
-    setState(() {
-      _selectedId = hit.id;
-      _selectedType = hit.buildingTypeId;
-    });
+    // Open the PERSISTENT move mode with this building already in hand (user
+    // 2026-07-20) — it stays up until Done, so you can rearrange several in a
+    // row.
     widget.onEnterEditMode?.call();
+    _startAim(hit.buildingTypeId, moveId: hit.id);
   }
 
-  void _handleHover(Offset local) {
-    if (!_inMoveMode && !_inPlaceMode) return;
-    final typeId = _inMoveMode ? _movingType! : widget.pendingTypeId!;
-    final def = kBuildingDefs[typeId]!;
-    final (col, row) = screenToGrid(local);
-    var gx = (col - def.gridW ~/ 2).clamp(0, kGridCols - def.gridW);
-    var gy = (row - def.gridH ~/ 2).clamp(0, kGridRows - def.gridH);
-    // Build plots snap the ghost to the 5×5 grid so the preview sits exactly
-    // where placement will land.
-    (gx, gy) = widget.ctrl.snapPlacement(typeId, gx, gy);
-    setState(() {
-      _ghostX = gx;
-      _ghostY = gy;
-    });
-  }
-
-  // ── Road paint mode (screen-space coordinates) ─────────────
-  // Tapping/dragging over an empty cell paints a road; over an existing
-  // road it erases it; over any other building it's a no-op. Free, instant.
-  void _paintRoadAt(Offset screenLocal) {
-    final scene = _txCtrl.toScene(screenLocal);
-    // ISOMETRIC (2026-08-01): the inverse projection, not a division — see
-    // iso_grid.dart. It clamps to the map the way the old floor+clamp did.
-    final (col, row) = screenToGrid(scene);
-    final key = row * kGridCols + col;
-    if (key == _lastRoadKey) return;
-    _lastRoadKey = key;
-
-    final hit = _hitTest(col, row);
-    if (hit != null && hit.buildingTypeId == 'road') {
-      // Errors were dropped on the floor here, which is why "roads can't be
-      // deleted" looked like nothing happening at all rather than a refusal.
-      _report(widget.ctrl.deleteBuilding(hit.id));
-    } else if (hit == null) {
-      _report(widget.ctrl.placeBuilding('road', col, row));
-    }
-  }
-
-  /// Surfaces a controller error, if any. Painting fires on every dragged
-  /// cell, so this stays quiet on success — only a refusal speaks.
-  Future<void> _report(Future<String?> action) async {
-    final err = await action;
-    if (err == null || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(err, style: FoE.label(size: 12)),
-        backgroundColor: FoE.danger,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  // ── Edit-mode overlay handlers (screen-space coordinates) ──
-  void _handleOverlayTap(Offset screenLocal) {
-    final scene = _txCtrl.toScene(screenLocal);
-    // ISOMETRIC (2026-08-01): the inverse projection, not a division — see
-    // iso_grid.dart. It clamps to the map the way the old floor+clamp did.
-    final (col, row) = screenToGrid(scene);
-    final hit = _hitTest(col, row);
-    setState(() {
-      _selectedId = hit?.id;
-      _selectedType = hit?.buildingTypeId;
-    });
-  }
-
-  void _handleDragStart(Offset screenLocal) {
-    if (_selectedId == null) return;
-    final scene = _txCtrl.toScene(screenLocal);
-    // ISOMETRIC (2026-08-01): the inverse projection, not a division — see
-    // iso_grid.dart. It clamps to the map the way the old floor+clamp did.
-    final (col, row) = screenToGrid(scene);
-    final hit = _hitTest(col, row);
-    if (hit?.id != _selectedId) {
-      return; // drag didn't start on selected building
-    }
-    // Build plots are permanent — no drag-to-move.
-    if (kBuildingDefs[hit!.buildingTypeId]?.isBuildPlot ?? false) return;
-    setState(() {
-      _isDragging = true;
-      _movingId = _selectedId;
-      _movingType = _selectedType;
-      _ghostX = hit.gridX;
-      _ghostY = hit.gridY;
-    });
-  }
-
-  void _handleDragUpdate(Offset screenLocal) {
-    if (!_isDragging || _movingType == null) return;
-    final scene = _txCtrl.toScene(screenLocal);
-    final def = kBuildingDefs[_movingType!]!;
-    final (col, row) = screenToGrid(scene);
-    setState(() {
-      _ghostX = (col - def.gridW ~/ 2).clamp(0, kGridCols - def.gridW);
-      _ghostY = (row - def.gridH ~/ 2).clamp(0, kGridRows - def.gridH);
-    });
-  }
-
-  void _handleDragEnd() {
-    if (!_isDragging ||
-        _movingId == null ||
-        _ghostX == null ||
-        _ghostY == null) {
+  // ── Delete ────────────────────────────────────────────────
+  /// The 🗑 beside the building being aimed.
+  ///
+  /// A ROAD skips the dialog and opens an ERASE CHAIN instead (user
+  /// 2026-08-09: "aber die Pfeile sind rot, um das Löschen zu signalisieren").
+  /// Roads cost nothing and are laid by the dozen, so a modal per tile would be
+  /// the whole job; the chain's own ✗ is the undo that dialog was standing in
+  /// for.
+  Future<void> _deleteAimed() async {
+    final id = _aimMoveId;
+    final type = _aimType;
+    if (id == null || type == null) return;
+    final def = kBuildingDefs[type];
+    if (def == null) return;
+    if (def.isRoad) {
+      final b = widget.ctrl.buildings.where((x) => x.id == id).firstOrNull;
+      if (b == null) return;
+      final (x, y) = (b.gridX, b.gridY);
+      final err = await widget.ctrl.deleteBuilding(id);
+      if (!mounted) return;
+      if (err != null) {
+        Feel.deny();
+        context.snack(err, error: true);
+        return;
+      }
+      Feel.tap();
+      _clearAim();
       setState(() {
-        _isDragging = false;
+        _chaining = true;
+        _chainErase = true;
+        _chainX = x;
+        _chainY = y;
+        _chainBuilt.clear();
+        _chainRemoved
+          ..clear()
+          ..add((x, y));
       });
       return;
     }
-    final id = _movingId!;
-    final x = _ghostX!;
-    final y = _ghostY!;
-    setState(() {
-      _isDragging = false;
-      _movingId = null;
-      _movingType = null;
-      _ghostX = null;
-      _ghostY = null;
-      // _selectedId stays so the building remains selected after drop
-    });
-    Feel.place();
-    widget.ctrl.moveBuilding(id, x, y).then((err) {
-      if (err != null && mounted) {
-        Feel.deny();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(err), backgroundColor: FoE.danger),
-        );
-      }
-    });
+    _showDeleteConfirmation(id, def);
   }
 
-  // ── Normal move helpers ───────────────────────────────────
-  Future<void> _confirmPlacement(int x, int y, BuildingDef def) async {
-    final err = await widget.ctrl.placeBuilding(widget.pendingTypeId!, x, y);
-    if (!mounted) return;
-    if (err != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(err), backgroundColor: FoE.danger));
-    } else {
-      widget.onPlacementDone?.call();
-    }
-    setState(() {
-      _ghostX = null;
-      _ghostY = null;
-    });
-  }
-
-  Future<void> _confirmMove(int x, int y) async {
-    final err = await widget.ctrl.moveBuilding(_movingId!, x, y);
-    if (!mounted) return;
-    if (err != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(err), backgroundColor: FoE.danger));
-    }
-    setState(() {
-      _movingId = null;
-      _movingType = null;
-      _ghostX = null;
-      _ghostY = null;
-    });
-  }
-
-  void _cancelMove() => setState(() {
-    _movingId = null;
-    _movingType = null;
-    _ghostX = null;
-    _ghostY = null;
-  });
-
-  // ── Delete ────────────────────────────────────────────────
-  void _showDeleteConfirmation() {
-    final id = _selectedId;
-    final type = _selectedType;
-    if (id == null || type == null) return;
-    final def = kBuildingDefs[type]!;
+  void _showDeleteConfirmation(String id, BuildingDef def) {
     showDialog<bool>(
       context: context,
       builder: (_) => Dialog(
@@ -548,7 +809,11 @@ class SettlementMapState extends State<SettlementMap>
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  BuildingIcon(imageUrl: def.imageUrl, size: 18),
+                  BuildingIcon(
+                    imageUrl: def.imageUrl,
+                    defId: def.id,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
@@ -581,16 +846,12 @@ class SettlementMapState extends State<SettlementMap>
       ),
     ).then((confirmed) async {
       if (confirmed != true) return;
-      setState(() {
-        _selectedId = null;
-        _selectedType = null;
-        _isDragging = false;
-        _movingId = null;
-        _movingType = null;
-        _ghostX = null;
-        _ghostY = null;
-      });
-      await widget.ctrl.deleteBuilding(id);
+      _clearAim();
+      final err = await widget.ctrl.deleteBuilding(id);
+      if (err != null && mounted) {
+        Feel.deny();
+        context.snack(err, error: true);
+      }
     });
   }
 
@@ -779,7 +1040,7 @@ class SettlementMapState extends State<SettlementMap>
                                     const SizedBox(height: 10),
                                   ],
                                   // Housing lives HERE, not in the top bar (user decision
-                                  // 2026-07-17): the Tribal Center is the settlement's
+                                  // 2026-07-17): the Castle is the settlement's
                                   // administrative heart, so its dialog owns the population
                                   // overview. isMainBuilding, not connectivity — the hall IS
                                   // the road network's root and never needs a connection.
@@ -1055,7 +1316,7 @@ class SettlementMapState extends State<SettlementMap>
 
   /// Everything this building lets you DO, in one place at the foot of the
   /// card (user 2026-07-22, modern pass). The features are compact PILLS in a
-  /// wrap — a stack of full-width buttons made a Tribal Center dialog scroll
+  /// wrap — a stack of full-width buttons made a Castle dialog scroll
   /// for no reason. The two that carry live numbers (healing's price, the
   /// build-skip toll) stay full width, because that number is the decision.
   /// A building can be paused when it RUNS something: a work post, or a
@@ -1154,9 +1415,9 @@ class SettlementMapState extends State<SettlementMap>
   /// Returns null for a building with no such feature (a plain producer), and
   /// for one that is not [functional] yet — an unfinished or unconnected
   /// building cannot open anything.
-  /// A LIST since 2026-07-30 (user: "Worker Verwaltung über Tribal Center und
+  /// A LIST since 2026-07-30 (user: "Worker Verwaltung über Castle und
   /// Population über jedes Haus aufrufbar machen"): a building can lead to more
-  /// than one thing — the Tribal Center shelters monsters AND runs the workforce
+  /// than one thing — the Castle shelters monsters AND runs the workforce
   /// — and the old single-return shape could only ever offer the first of them.
   List<Widget> _primaryActions(
     BuildContext context,
@@ -1256,7 +1517,7 @@ class SettlementMapState extends State<SettlementMap>
     // AND EVERY HOUSE OPENS THE POPULATION BUDGET. Keyed on what a building DOES
     // — shelters monsters — not on a list of ids, so a new dwelling in a later
     // era gets the door by being a dwelling (the same rule housingCapacity
-    // counts by). The Tribal Center shelters too, so it offers both.
+    // counts by). The Castle shelters too, so it offers both.
     if (def.sheltersMonsters(widget.ctrl.settlement?.eraIndex ?? 1)) {
       actions.add(('Population', () => open(2)));
     }
@@ -1321,7 +1582,11 @@ class SettlementMapState extends State<SettlementMap>
           // Standing on its cast shadow — the same look as the build-menu
           // card (user 2026-07-23), one definition in ShadowedBuildingIcon.
           child: Center(
-            child: ShadowedBuildingIcon(imageUrl: def.imageUrl, width: 140),
+            child: ShadowedBuildingIcon(
+              imageUrl: def.imageUrl,
+              defId: def.id,
+              width: 140,
+            ),
           ),
         ),
       ],
@@ -2533,22 +2798,131 @@ class SettlementMapState extends State<SettlementMap>
     return out;
   }
 
+  /// One painting layer, with the ghost dropped into it at ITS OWN DEPTH.
+  ///
+  /// The ghost used to be painted last, on top of the whole map — which reads
+  /// as a cut-out floating over the town and, worse, hides the very thing the
+  /// player is judging: whether the new building fits BETWEEN the ones already
+  /// there. In its proper place it can be covered by something in front of it,
+  /// which is exactly why [_fadedBehindGhost] exists.
+  List<Widget> _layer({
+    required bool roads,
+    BuildingDef? ghostDef,
+    int? gx,
+    int? gy,
+    required Set<String> faded,
+  }) {
+    final withGhost =
+        ghostDef != null && gx != null && gy != null && ghostDef.isRoad == roads;
+    final out = <Widget>[];
+    var pending = withGhost;
+    for (final b in _sortedForPainting(roads: roads)) {
+      final d = kBuildingDefs[b.buildingTypeId];
+      if (pending &&
+          isoDrawOrder(
+                gx!,
+                gy!,
+                ghostDef!.gridW,
+                ghostDef.gridH,
+                b.gridX,
+                b.gridY,
+                d?.gridW ?? 1,
+                d?.gridH ?? 1,
+              ) <
+              0) {
+        out.add(_ghost(ghostDef.id, gx, gy));
+        pending = false;
+      }
+      out.add(_buildingTile(b, faded: faded.contains(b.id)));
+    }
+    if (pending) out.add(_ghost(ghostDef!.id, gx!, gy!));
+    return out;
+  }
+
+  /// Buildings that STAND IN FRONT of the ghost and overlap it on screen.
+  ///
+  /// "Wenn ich das Gebäude hinter ein anderes schiebe, dann wird dieses
+  /// transparent, damit ich die Platzierung besser sehe" (user 2026-08-09).
+  /// Only while aiming — a permanently see-through town would be a much worse
+  /// map than an occasionally occluded one.
+  ///
+  /// The test is against the SPRITE's box, not the footprint's: what hides the
+  /// ghost is a tall roof leaning over the tiles in front of it, and those tiles
+  /// are not part of the building's own ground.
+  Set<String> _fadedBehindGhost(BuildingDef ghostDef, int gx, int gy) {
+    final ghostBox = _artRect(ghostDef, gx, gy);
+    final out = <String>{};
+    for (final b in widget.ctrl.buildings) {
+      final d = kBuildingDefs[b.buildingTypeId];
+      if (d == null || d.isRoad || d.isBuildPlot) continue;
+      if (b.id == _aimMoveId) continue;
+      // In front of the ghost, not behind it — anything behind is already
+      // hidden BY the ghost, and fading it would reveal nothing.
+      if (isoDrawOrder(
+            gx,
+            gy,
+            ghostDef.gridW,
+            ghostDef.gridH,
+            b.gridX,
+            b.gridY,
+            d.gridW,
+            d.gridH,
+          ) >=
+          0) {
+        continue;
+      }
+      if (_artRect(d, b.gridX, b.gridY).overlaps(ghostBox)) out.add(b.id);
+    }
+    return out;
+  }
+
+  /// The box a building's PICTURE occupies in map space. A road and a build
+  /// plot ARE their ground and have no art above it, so for those the tile is
+  /// the whole story.
+  Rect _artRect(BuildingDef def, int gx, int gy) =>
+      def.isRoad || def.isBuildPlot
+      ? isoBounds(gx, gy, def.gridW, def.gridH)
+      : isoArtBounds(
+          gx,
+          gy,
+          def.gridW,
+          def.gridH,
+          baseWidth: artBoxOf(def).baseWidth,
+          anchorX: artBoxOf(def).anchorX,
+          lift: artBoxOf(def).lift,
+        );
+
   // ── Build ─────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     // The diamond's bounding box — wider and flatter than the grid it holds.
     final mapW = isoCanvasSize.width;
     final mapH = isoCanvasSize.height;
-    final ghostTypeId = _inMoveMode ? _movingType! : widget.pendingTypeId;
+    final ghostDef = _aimType == null ? null : kBuildingDefs[_aimType!];
+    final gx = _aimX, gy = _aimY;
+    final showGhost = ghostDef != null && gx != null && gy != null;
+    final faded = showGhost
+        ? _fadedBehindGhost(ghostDef, gx, gy)
+        : const <String>{};
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final minScale = max(
-          constraints.maxWidth / mapW,
-          constraints.maxHeight / mapH,
+        // ── THE MAP IS THE BOUNDARY (user 2026-08-09) ──
+        // "Es darf niemals aus dem Spielfeld hinausgezoomt/gescrollt werden."
+        //
+        // Zooming out is bounded by making the smallest allowed scale the one
+        // at which the map already covers the viewport — the LARGER of the two
+        // ratios, so it covers both axes and not just the tighter one. Panning
+        // is bounded by _clampedToMap, which every write to the matrix goes
+        // through, including the ones that bypass InteractiveViewer (the camera
+        // moves and the edge-scroll).
+        final minScale = minMapScale(
+          Size(constraints.maxWidth, constraints.maxHeight),
         );
-        final maxScale = max(minScale, 6.0);
-        _viewport = Size(constraints.maxWidth, constraints.maxHeight);
+        final maxScale = max(minScale, kMaxMapZoom);
+        final view = Size(constraints.maxWidth, constraints.maxHeight);
+        final resized = _viewport != null && _viewport != view;
+        _viewport = view;
 
         if (!_txInitialized) {
           _txInitialized = true;
@@ -2556,18 +2930,31 @@ class SettlementMapState extends State<SettlementMap>
           final ty = (constraints.maxHeight - mapH * minScale) / 2;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
-            _txCtrl.value = Matrix4.diagonal3Values(minScale, minScale, 1)
-              ..setTranslationRaw(tx, ty, 0);
+            _txCtrl.value = mapTransform(minScale, tx, ty);
+          });
+        } else if (resized) {
+          // The viewport can change under a transform that was legal when it
+          // was set — a rotation, a keyboard, a resized desktop window — and
+          // minScale changes with it. InteractiveViewer only re-clamps on the
+          // next gesture, so until the player touches the map they would be
+          // looking at the void beside it.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final scale = _txCtrl.value.getMaxScaleOnAxis();
+            if (scale >= minScale) {
+              _txCtrl.value = clampMapTransform(_txCtrl.value, view);
+              return;
+            }
+            _txCtrl.value = clampMapTransform(
+              mapTransform(
+                minScale,
+                (view.width - mapW * minScale) / 2,
+                (view.height - mapH * minScale) / 2,
+              ),
+              view,
+            );
           });
         }
-
-        // Overlay is active in edit mode whenever a building is selected (or being
-        // dragged), and for the whole duration of road paint mode. It sits above
-        // the InteractiveViewer and intercepts pan/tap for drag-and-drop / painting.
-        // Without it, InteractiveViewer consumes pan events for scrolling.
-        final showOverlay =
-            (widget.editMode && (_selectedId != null || _isDragging)) ||
-            widget.roadMode;
 
         return Stack(
           children: [
@@ -2575,102 +2962,98 @@ class SettlementMapState extends State<SettlementMap>
               constrained: false,
               minScale: minScale,
               maxScale: maxScale,
+              // Explicit, though it is the default: zero margin is what stops a
+              // pan from bringing the map's edge inside the viewport, and it is
+              // half of the boundary rule above. A reader should not have to
+              // know the default to know the rule is being kept.
+              boundaryMargin: EdgeInsets.zero,
               transformationController: _txCtrl,
-              child: MouseRegion(
-                onHover: (e) => _handleHover(e.localPosition),
-                child: GestureDetector(
-                  onTapUp: (d) => _handleTap(d.localPosition),
-                  onLongPressStart: (d) => _handleLongPress(d.localPosition),
-                  child: SizedBox(
-                    width: mapW,
-                    height: mapH,
-                    child: Stack(
-                      children: [
+              child: GestureDetector(
+                onTapUp: (d) => _handleTap(d.localPosition),
+                onLongPressStart: (d) => _handleLongPress(d.localPosition),
+                child: SizedBox(
+                  width: mapW,
+                  height: mapH,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: RepaintBoundary(
+                          child: Image.asset(
+                            'assets/images/map_background.png',
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.medium,
+                            // 4096 x 2048 decodes to 32 MB of RGBA for a
+                            // backdrop that is never read closely. Half that
+                            // in each direction is a quarter of the memory and
+                            // indistinguishable under a town.
+                            cacheWidth: 2048,
+                          ),
+                        ),
+                      ),
+                      if (showGhost ||
+                          _chaining ||
+                          widget.editMode ||
+                          widget.roadMode)
                         Positioned.fill(
-                          child: RepaintBoundary(
-                            child: Image.asset(
-                              'assets/images/map_background.png',
-                              fit: BoxFit.cover,
-                              filterQuality: FilterQuality.medium,
+                          child: CustomPaint(
+                            painter: _GridPainter(
+                              buildableRegion: widget.ctrl.buildableRegion,
                             ),
                           ),
                         ),
-                        if (_inMoveMode ||
-                            _inPlaceMode ||
-                            widget.editMode ||
-                            widget.roadMode)
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _GridPainter(
-                                buildableRegion: widget.ctrl.buildableRegion,
-                              ),
-                            ),
-                          ),
-                        // ── GROUND FIRST, THEN WHAT STANDS ON IT ──
-                        // (user 2026-08-01: "die Strasse ist jetzt über dem
-                        // Gebäude").
-                        //
-                        // Depth alone cannot fix that. A road one tile in FRONT
-                        // of a building is genuinely nearer the viewer, so it
-                        // sorts later — and then its flat tile paints over the
-                        // wall that leans into that space, because a tall sprite
-                        // occupies tiles its footprint does not.
-                        //
-                        // So roads are a LAYER, not a competitor: they are
-                        // ground, and nothing that lies on the ground may cover
-                        // something standing on it.
-                        ..._sortedForPainting(roads: true)
-                            .map((b) => _buildingTile(b)),
-                        // BACK TO FRONT among themselves.
-                        ..._sortedForPainting(roads: false)
-                            .map((b) => _buildingTile(b)),
-                        if (ghostTypeId != null &&
-                            _ghostX != null &&
-                            _ghostY != null)
-                          _ghost(ghostTypeId, _ghostX!, _ghostY!),
-                      ],
-                    ),
+                      // ── GROUND FIRST, THEN WHAT STANDS ON IT ──
+                      // (user 2026-08-01: "die Strasse ist jetzt über dem
+                      // Gebäude").
+                      //
+                      // Depth alone cannot fix that. A road one tile in FRONT
+                      // of a building is genuinely nearer the viewer, so it
+                      // sorts later — and then its flat tile paints over the
+                      // wall that leans into that space, because a tall sprite
+                      // occupies tiles its footprint does not.
+                      //
+                      // So roads are a LAYER, not a competitor: they are
+                      // ground, and nothing that lies on the ground may cover
+                      // something standing on it.
+                      ..._layer(
+                        roads: true,
+                        ghostDef: ghostDef,
+                        gx: gx,
+                        gy: gy,
+                        faded: faded,
+                      ),
+                      // BACK TO FRONT among themselves.
+                      ..._layer(
+                        roads: false,
+                        ghostDef: ghostDef,
+                        gx: gx,
+                        gy: gy,
+                        faded: faded,
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
 
-            // Drag-and-drop / road-paint overlay — blocks InteractiveViewer pan
-            if (showOverlay)
+            // ── The controls, in SCREEN space ─────────────────
+            // They ride above the InteractiveViewer but cover only the ghost
+            // and its handles — everything else falls through to the viewer,
+            // which is what makes "beside it I can scroll" true without a mode
+            // switch. The AnimatedBuilder is what keeps them pinned while the
+            // map moves under them.
+            if (showGhost || _chaining)
+              // Positioned.fill, because a bare Stack whose children are ALL
+              // positioned collapses to nothing and takes every control with it.
               Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapUp: (d) {
-                    if (widget.roadMode) {
-                      _lastRoadKey = null;
-                      _paintRoadAt(d.localPosition);
-                    } else {
-                      _handleOverlayTap(d.localPosition);
-                    }
-                  },
-                  onPanStart: (d) {
-                    if (widget.roadMode) {
-                      _lastRoadKey = null;
-                      _paintRoadAt(d.localPosition);
-                    } else {
-                      _handleDragStart(d.localPosition);
-                    }
-                  },
-                  onPanUpdate: (d) {
-                    if (widget.roadMode) {
-                      _paintRoadAt(d.localPosition);
-                    } else {
-                      _handleDragUpdate(d.localPosition);
-                    }
-                  },
-                  onPanEnd: (_) {
-                    if (widget.roadMode) {
-                      _lastRoadKey = null;
-                    } else {
-                      _handleDragEnd();
-                    }
-                  },
-                  child: const SizedBox.expand(),
+                child: AnimatedBuilder(
+                  animation: _txCtrl,
+                  builder: (context, _) => Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (showGhost) ..._aimControls(ghostDef, gx, gy),
+                      if (_chaining) ..._chainControls(),
+                    ],
+                  ),
                 ),
               ),
 
@@ -2684,15 +3067,12 @@ class SettlementMapState extends State<SettlementMap>
             // Bottom is also simply the right place: it's in thumb reach, and
             // the settlement screen hides its quick menu while a mode is
             // active, so nothing else is competing for the space.
-            if (widget.roadMode)
-              _bottomBanner(_roadBanner())
-            else if (widget.editMode && !_inMoveMode)
-              _bottomBanner(_editIdleBanner())
-            else if (_inMoveMode)
-              _bottomBanner(_moveBanner()),
-
-            // Delete X — pinned to selected building in screen space
-            ?_buildDeleteButton(),
+            if (_chaining)
+              _bottomBanner(_chainBanner())
+            else if (showGhost)
+              _bottomBanner(_aimBanner(ghostDef))
+            else if (widget.editMode)
+              _bottomBanner(_editIdleBanner()),
           ],
         );
       },
@@ -2700,11 +3080,15 @@ class SettlementMapState extends State<SettlementMap>
   }
 
   // ── Building tile ─────────────────────────────────────────
-  Widget _buildingTile(PlacedBuilding b) {
+  /// [faded] is set for a building STANDING IN FRONT of the ghost — see
+  /// [_fadedBehindGhost]. It is not a state the building is in; it is a state
+  /// the CAMERA is in, and it lasts exactly as long as the placement.
+  Widget _buildingTile(PlacedBuilding b, {bool faded = false}) {
     final def = kBuildingDefs[b.buildingTypeId];
     if (def == null) return const SizedBox.shrink();
-    final isSelected = widget.editMode && b.id == _selectedId && !_isDragging;
-    final isGhostSrc = b.id == _movingId;
+    // The building being moved keeps standing where it was, ghosted: the ✗ is
+    // still on the table, so "where it came from" is live information.
+    final isGhostSrc = b.id == _aimMoveId;
     final isDisconnected =
         b.isComplete &&
         !def.isRoad &&
@@ -2727,7 +3111,11 @@ class SettlementMapState extends State<SettlementMap>
       width: iso.width,
       height: iso.height,
       child: Opacity(
-        opacity: isGhostSrc ? 0.3 : 1.0,
+        opacity: isGhostSrc
+            ? 0.3
+            : faded
+            ? 0.3
+            : 1.0,
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -2750,7 +3138,16 @@ class SettlementMapState extends State<SettlementMap>
             // tick, but a tile's art only changes when the building does, so a
             // RepaintBoundary keeps the tick from repainting all ~200 tiles.
             RepaintBoundary(
-              child: _BuildingTile(def: def, building: b),
+              child: _BuildingTile(
+                def: def,
+                building: b,
+                // Which junction this road is. Computed here rather than in the
+                // tile because only the map can see the neighbours, and it has
+                // the controller's cached cell set to see them cheaply.
+                roadMask: def.isRoad
+                    ? roadMask(widget.ctrl.roadCells, b.gridX, b.gridY)
+                    : 0,
+              ),
             ),
             // ── SIGNS OF LIFE (user 2026-08-04) ──
             // Smoke and lamplight, over the sprite and inside its own box.
@@ -2761,25 +3158,6 @@ class SettlementMapState extends State<SettlementMap>
             if (b.isComplete && !b.isPaused && !def.isRoad && !def.isBuildPlot)
               Positioned.fill(
                 child: _LifeOverlay(def: def, seed: b.id.hashCode),
-              ),
-            // SELECTED = ITS CELLS, LIT (user 2026-08-01: "jetzt noch den
-            // grünen Rahmen entfernen. Wenn das gebäude markiert ist, will ich
-            // nur die gehighlighteten Kachel sehen").
-            //
-            // It was a rectangle around the sprite's bounding box — a shape the
-            // map no longer has, drawn around ground the building does not
-            // stand on. What is lit now is the footprint itself, cell by cell,
-            // so selecting a 2×2 shows you four tiles rather than a frame.
-            if (isSelected)
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _FootprintPainter(
-                    w: def.gridW,
-                    h: def.gridH,
-                    color: FoE.accentBlue,
-                    outline: false,
-                  ),
-                ),
               ),
             if (isDisconnected)
               Positioned.fill(
@@ -2828,7 +3206,7 @@ class SettlementMapState extends State<SettlementMap>
       typeId,
       gx,
       gy,
-      excludeId: _movingId,
+      excludeId: _aimMoveId,
     );
     final iso = isoBounds(gx, gy, def.gridW, def.gridH);
     return Positioned(
@@ -2850,16 +3228,38 @@ class SettlementMapState extends State<SettlementMap>
               ),
             ),
           ),
+          // A ROAD GHOST SHOWS THE JUNCTION IT WOULD MAKE. Counting the cell
+          // being aimed as already laid is the point: dragging a road up to a
+          // straight run turns the preview into a tee before you commit, which
+          // is the whole question you are asking while you aim it.
+          if (def.isRoad)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.75,
+                child: Image.asset(
+                  roadAsset(roadMask(
+                    {...widget.ctrl.roadCells, roadCellKey(gx, gy)},
+                    gx,
+                    gy,
+                  )),
+                  fit: BoxFit.fill,
+                  filterQuality: FilterQuality.medium,
+                  cacheWidth: 256,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+            )
           // A Build Plot is a free area — no art, just the validity box.
-          if (!def.isBuildPlot)
+          else if (!def.isBuildPlot)
             Builder(
               builder: (_) {
                 final local = isoLocalBounds(def.gridW, def.gridH);
+                final box = artBoxOf(def);
                 final art = artPlacement(
                   local,
-                  baseWidth: def.artBaseWidth,
-                  anchorX: def.artAnchorX,
-                  lift: def.artLift,
+                  baseWidth: box.baseWidth,
+                  anchorX: box.anchorX,
+                  lift: box.lift,
                 );
                 return Positioned(
                   left: art.left,
@@ -2867,6 +3267,7 @@ class SettlementMapState extends State<SettlementMap>
                   bottom: local.height - art.bottom,
                   child: BuildingIcon(
                     imageUrl: def.imageUrl,
+                    defId: def.id,
                     width: art.width,
                     anchorBottomOverflowTop: true,
                   ),
@@ -2878,51 +3279,211 @@ class SettlementMapState extends State<SettlementMap>
     );
   }
 
-  // ── Delete button — screen-space, next to selected building ─
-  Widget? _buildDeleteButton() {
-    if (_selectedId == null || _selectedType == null) return null;
-    final def = kBuildingDefs[_selectedType!]!;
-    // Main building and build plots are permanent — no delete X.
-    if (def.isMainBuilding || def.isBuildPlot) return null;
+  // ── Screen-space controls ─────────────────────────────────
+  // Everything below is drawn in the VIEWPORT's coordinates rather than the
+  // map's, so a button stays thumb-sized however far the map is zoomed out. The
+  // map's own matrix is applied by hand ([MatrixUtils]) to work out where each
+  // one belongs.
 
-    // The diamond's EAST corner: the right-hand point of the footprint, which
-    // is where a button beside the building belongs on an isometric map.
-    Offset east(int gx, int gy) =>
-        gridToScreen((gx + def.gridW).toDouble(), gy.toDouble());
-    final Offset anchor;
-    if (_isDragging && _ghostX != null && _ghostY != null) {
-      anchor = east(_ghostX!, _ghostY!);
-    } else {
-      final building = widget.ctrl.buildings
-          .where((b) => b.id == _selectedId)
-          .firstOrNull;
-      if (building == null) return null;
-      anchor = east(building.gridX, building.gridY);
-    }
-    final mapX = anchor.dx;
-    final mapY = anchor.dy;
+  /// The midpoint of the footprint edge that faces (dx, dy), after the map's
+  /// own transform — where that direction's arrow belongs on screen.
+  Offset _edgeAnchor(int gx, int gy, int w, int h, int dx, int dy) =>
+      MatrixUtils.transformPoint(
+        _txCtrl.value,
+        isoEdgeMidpoint(gx, gy, w, h, dx, dy),
+      );
 
-    final screen = MatrixUtils.transformPoint(
-      _txCtrl.value,
-      Offset(mapX, mapY),
-    );
+  /// One direction arrow, sitting just outside the edge it belongs to and
+  /// pointing the way it would move things.
+  Widget _arrowButton({
+    required Offset at,
+    required int dx,
+    required int dy,
+    required double size,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    final angle = isoScreenAngle(dx, dy);
+    final centre =
+        at + Offset(math.cos(angle), math.sin(angle)) * (size * 0.55);
     return Positioned(
-      left: screen.dx + 4,
-      top: screen.dy - 13,
+      left: centre.dx - size / 2,
+      top: centre.dy - size / 2,
       child: GestureDetector(
-        onTap: _showDeleteConfirmation,
+        onTap: onTap,
         child: Container(
-          width: 26,
-          height: 26,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
-            color: Colors.red.shade700,
+            color: color,
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white, width: 1.5),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x66000000),
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
-          child: const Icon(Icons.close, color: Colors.white, size: 14),
+          child: Transform.rotate(
+            angle: angle,
+            child: Icon(
+              Icons.arrow_forward_rounded,
+              size: size * 0.58,
+              color: Colors.white,
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  Widget _roundButton({
+    required IconData icon,
+    required Color color,
+    required double size,
+    required VoidCallback onTap,
+  }) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 5,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Icon(icon, color: Colors.white, size: size * 0.55),
+    ),
+  );
+
+  /// The ✓/✗ pair, ABOVE whatever is being aimed and always on screen — a
+  /// confirm button that has slid off the top edge is a session you cannot
+  /// leave (which is how the road banner got buried once already).
+  Widget _confirmBar({
+    required Rect anchor,
+    required VoidCallback onOk,
+    required VoidCallback onCancel,
+  }) {
+    final view = _viewport ?? const Size(400, 800);
+    const barW = 108.0;
+    // math.max on the upper bound: clamp() throws when the two ends cross, and
+    // on a viewport narrower than the bar itself they would.
+    final left = (anchor.center.dx - barW / 2)
+        .clamp(8.0, math.max(8.0, view.width - barW - 8))
+        .toDouble();
+    // 80, not "just above": the up-and-right arrow reaches ~30px over the
+    // footprint's north corner, and on a ROAD — whose box IS one tile — a
+    // tighter gap puts the ✓ under the arrow the player is tapping.
+    final top = (anchor.top - 80)
+        .clamp(8.0, math.max(8.0, view.height - 100))
+        .toDouble();
+    return Positioned(
+      left: left,
+      top: top,
+      width: barW,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          _roundButton(
+            icon: Icons.close_rounded,
+            color: kParchmentDeep,
+            size: 40,
+            onTap: onCancel,
+          ),
+          _roundButton(
+            icon: Icons.check_rounded,
+            color: kActionGreen,
+            size: 40,
+            onTap: onOk,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Everything that hangs off the ghost: the box you grab it by, the four
+  /// arrows, the ✓/✗ and — when the ghost is a building that already stands —
+  /// the 🗑.
+  List<Widget> _aimControls(BuildingDef def, int gx, int gy) {
+    final rect = MatrixUtils.transformRect(
+      _txCtrl.value,
+      _artRect(def, gx, gy),
+    );
+    final canDelete =
+        _aimMoveId != null && !def.isMainBuilding && !def.isBuildPlot;
+    return [
+      // THE GRAB BOX, and nothing wider. It covers the building alone, so a
+      // finger set down beside it reaches the InteractiveViewer underneath and
+      // pans the map — "wenn ich daneben mit dem Finger bin, dann kann ich
+      // scrollen", with no mode to switch between the two.
+      Positioned(
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: _ghostDragStart,
+          onPanUpdate: _ghostDragUpdate,
+          onPanEnd: (_) => _stopDrag(),
+          onPanCancel: _stopDrag,
+        ),
+      ),
+      for (final (dx, dy) in const [(1, 0), (-1, 0), (0, 1), (0, -1)])
+        _arrowButton(
+          at: _edgeAnchor(gx, gy, def.gridW, def.gridH, dx, dy),
+          dx: dx,
+          dy: dy,
+          size: 28,
+          color: FoE.accentBlue,
+          onTap: () => _nudge(dx, dy),
+        ),
+      if (canDelete)
+        Positioned(
+          left: rect.right + 2,
+          top: rect.bottom - 34,
+          child: _roundButton(
+            icon: Icons.delete_outline_rounded,
+            color: Colors.red.shade700,
+            size: 32,
+            onTap: _deleteAimed,
+          ),
+        ),
+      _confirmBar(anchor: rect, onOk: _confirmAim, onCancel: _cancelAim),
+    ];
+  }
+
+  /// The chain's arrows: bigger than the aiming ones ("dann werden die Pfeile
+  /// aktiv (grösser)"), green while laying road and RED while tearing it up.
+  List<Widget> _chainControls() {
+    final colour = _chainErase ? Colors.red.shade700 : kActionGreen;
+    final rect = MatrixUtils.transformRect(
+      _txCtrl.value,
+      isoBounds(_chainX, _chainY, 1, 1),
+    );
+    return [
+      for (final (dx, dy) in const [(1, 0), (-1, 0), (0, 1), (0, -1)])
+        _arrowButton(
+          at: _edgeAnchor(_chainX, _chainY, 1, 1, dx, dy),
+          dx: dx,
+          dy: dy,
+          size: 40,
+          color: colour,
+          onTap: () => _chainStep(dx, dy),
+        ),
+      // The ✓/✗ follow the head of the chain, so the way out is always beside
+      // the tile you just touched rather than back where you started.
+      _confirmBar(anchor: rect, onOk: _endChain, onCancel: _undoChain),
+    ];
   }
 
   // ── Banners ───────────────────────────────────────────────
@@ -2935,98 +3496,73 @@ class SettlementMapState extends State<SettlementMap>
     child: child,
   );
 
-  Widget _roadBanner() => Container(
+  Widget _bannerShell({
+    required Widget leading,
+    required String text,
+    required Color colour,
+    Widget? trailing,
+  }) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    decoration: FoE.panel(
-      radius: 8,
-      overrideBorder: Colors.greenAccent.shade400,
-    ),
+    decoration: FoE.panel(radius: 8, overrideBorder: colour),
     child: Row(
       children: [
-        const Text('🛤️', style: TextStyle(fontSize: 16)),
+        leading,
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            'Drag to paint roads  ·  tap a road to remove it',
-            style: FoE.label().copyWith(color: Colors.greenAccent),
-          ),
+          child: Text(text, style: FoE.label().copyWith(color: colour)),
         ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: widget.onExitRoadMode,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 5, side: BorderSide(color: Colors.greenAccent.shade400))),
-            child: Text(
-              'Done',
-              style: FoE.label(size: 11).copyWith(color: Colors.greenAccent),
-            ),
-          ),
-        ),
+        if (trailing != null) ...[const SizedBox(width: 8), trailing],
       ],
     ),
   );
 
-  Widget _editIdleBanner() => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    decoration: FoE.panel(radius: 8, overrideBorder: FoE.accentBlue),
-    child: Row(
-      children: [
-        const Icon(Icons.open_with, color: FoE.accentBlue, size: 16),
-        const SizedBox(width: 8),
-        Expanded(
+  Widget _doneButton(String label, Color colour, VoidCallback onTap) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: ShapeDecoration(
+            color: FoE.panelDark,
+            shape: FoE.facet(radius: 5, side: BorderSide(color: colour)),
+          ),
           child: Text(
-            _selectedId != null
-                ? 'Drag to move  ·  tap another or empty to change'
-                : 'Tap a building to select it',
-            style: FoE.label().copyWith(color: FoE.accentBlue),
+            label,
+            style: FoE.label(size: 11).copyWith(color: colour),
           ),
         ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _selectedId = null;
-              _selectedType = null;
-            });
-            widget.onExitEditMode?.call();
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 5, side: BorderSide(color: FoE.accentBlue))),
-            child: Text(
-              'Done',
-              style: FoE.label(size: 11).copyWith(color: FoE.accentBlue),
-            ),
-          ),
-        ),
-      ],
-    ),
+      );
+
+  Widget _aimBanner(BuildingDef def) => _bannerShell(
+    leading: BuildingIcon(imageUrl: def.imageUrl, defId: def.id, size: 16),
+    colour: FoE.accentBlue,
+    text: def.isRoad
+        ? 'Drag the road into place, then ✓ to keep going'
+        : _aimMoveId != null
+        ? 'Drag ${def.name} where you want it  ·  ✓ to keep, ✗ to leave it'
+        : 'Drag ${def.name} where you want it  ·  ✓ to build it here',
   );
 
-  Widget _moveBanner() {
-    final def = kBuildingDefs[_movingType!]!;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: FoE.panel(radius: 8, overrideBorder: FoE.accentBlue),
-      child: Row(
-        children: [
-          BuildingIcon(imageUrl: def.imageUrl, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Tap to place ${def.name}  ·  Hold to cancel',
-              style: FoE.label().copyWith(color: FoE.accentBlue),
-            ),
-          ),
-          GestureDetector(
-            onTap: _cancelMove,
-            child: const Icon(Icons.close, color: FoE.textDim, size: 16),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _chainBanner() => _bannerShell(
+    leading: Text(
+      _chainErase ? '⛏️' : '🛤️',
+      style: const TextStyle(fontSize: 16),
+    ),
+    colour: _chainErase ? FoE.danger : Colors.greenAccent,
+    text: _chainErase
+        ? 'Tap a red arrow to pull up the next road  ·  ✗ puts them all back'
+        : 'Tap an arrow to lay the next road  ·  ✗ takes the whole run back',
+  );
+
+  Widget _editIdleBanner() => _bannerShell(
+    leading: const Icon(Icons.open_with, color: FoE.accentBlue, size: 16),
+    colour: FoE.accentBlue,
+    text: 'Tap a building to pick it up',
+    trailing: _doneButton(
+      'Done',
+      FoE.accentBlue,
+      () => widget.onExitEditMode?.call(),
+    ),
+  );
 }
 
 // ── Live build countdown ───────────────────────────────────
@@ -3173,32 +3709,57 @@ class _BuildCountdownState extends State<_BuildCountdown> {
 class _BuildingTile extends StatelessWidget {
   final BuildingDef def;
   final PlacedBuilding building;
-  const _BuildingTile({required this.def, required this.building});
+
+  /// For a road: which of its four neighbours are roads (see road_tiles.dart).
+  /// Ignored for anything else.
+  final int roadMask;
+
+  const _BuildingTile({
+    required this.def,
+    required this.building,
+    this.roadMask = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (def.isRoad) {
-      // Dev-uploaded road art fills its cell edge-to-edge (BoxFit.cover, no
-      // margin/border): roads tile into continuous paths, and a margin would
-      // draw a visible grid across every one.
+      // ── A ROAD PICKS ITS OWN PIECE (user 2026-08-09) ──
+      // Sixteen bundled tiles, one per neighbour combination, so a crossroads
+      // is a crossroads and a corner is a curve without anyone choosing. The
+      // art is rendered to exactly the cell's diamond, so it needs no clip and
+      // no fit: filling the box IS lining up with the grid, and a tile scaled
+      // by anything else would leave a seam at every junction.
       //
-      // The cell is a DIAMOND now (2026-08-01), so the art is clipped to it and
-      // the plain-colour fallback is painted as one — a square road on an
-      // isometric grid is a tile that refuses to join its neighbours.
-      if (def.imageUrl != null && def.imageUrl!.isNotEmpty) {
-        return ClipPath(
-          clipper: _CellDiamondClipper(),
-          child: BuildingIcon(
-            imageUrl: def.imageUrl,
-            width: kIsoTileW,
-            height: kIsoTileH,
-            fit: BoxFit.cover,
-          ),
-        );
-      }
-      return CustomPaint(
-        size: const Size(kIsoTileW, kIsoTileH),
-        painter: _RoadDiamondPainter(color: def.color),
+      // ── image_url IS IGNORED HERE, and that is the point ──
+      // It was honoured first, as an escape hatch, and it turned the feature
+      // off for the only person who had ever used it: the live road def carried
+      // an uploaded picture, so the map went on drawing one flat tile at every
+      // junction and the whole thing looked like it had not shipped (user
+      // 2026-08-09: "es sind noch die alten Strassen").
+      //
+      // There is no version of that escape hatch worth having. One picture per
+      // def is exactly the thing a road cannot use — a road's whole job is to
+      // be a different shape depending on what is next to it, and no single URL
+      // can be sixteen shapes. Honouring the column meant honouring a value
+      // that contradicts the requirement.
+      return Image.asset(
+        roadAsset(roadMask),
+        width: kIsoTileW,
+        height: kIsoTileH,
+        fit: BoxFit.fill,
+        filterQuality: FilterQuality.medium,
+        // A road cell is 64 x 32 on screen. Decoding the tile at its source
+        // size and then drawing it at a tenth of that is the same texture
+        // waste the buildings had — and there are far more road cells than
+        // buildings. 256 keeps it sharp at the map's maximum zoom.
+        cacheWidth: 256,
+        // The flat diamond is still the floor under this: an asset that failed
+        // to load must not leave a hole where a road is, because the road is
+        // what the player just paid for and placed.
+        errorBuilder: (_, _, _) => CustomPaint(
+          size: const Size(kIsoTileW, kIsoTileH),
+          painter: _RoadDiamondPainter(color: def.color),
+        ),
       );
     }
 
@@ -3222,9 +3783,14 @@ class _BuildingTile extends StatelessWidget {
 
     final done = building.isComplete;
     final queued = building.isQueued;
-    final hasImage = def.imageUrl != null && def.imageUrl!.isNotEmpty;
+    // Bundled art counts as having a picture — otherwise the twenty buildings
+    // that ship with one would still draw the decorative placeholder box on a
+    // database that has never had an upload, which is every fresh install.
+    final hasImage =
+        buildingAsset(def.id) != null ||
+        (def.imageUrl != null && def.imageUrl!.isNotEmpty);
 
-    // An uploaded PNG is shown completely bare — no border, no background,
+    // The PNG is shown completely bare — no border, no background,
     // no inset — scaled so it touches the tile's left/right edges exactly
     // and sits flush against the bottom edge; if the art is taller than the
     // footprint it's allowed to overflow upward past the top (that's just
@@ -3243,11 +3809,12 @@ class _BuildingTile extends StatelessWidget {
       // LOCAL: this is drawn inside the tile, so the map's origin must not be
       // in it. isoBounds would carry it and push the art a map-width sideways.
       final bounds = isoLocalBounds(def.gridW, def.gridH);
+      final box = artBoxOf(def);
       final art = artPlacement(
         bounds,
-        baseWidth: def.artBaseWidth,
-        anchorX: def.artAnchorX,
-        lift: def.artLift,
+        baseWidth: box.baseWidth,
+        anchorX: box.anchorX,
+        lift: box.lift,
       );
       return Stack(
         clipBehavior: Clip.none,
@@ -3260,6 +3827,7 @@ class _BuildingTile extends StatelessWidget {
             bottom: bounds.height - art.bottom,
             child: BuildingIcon(
               imageUrl: def.imageUrl,
+              defId: def.id,
               width: art.width,
               anchorBottomOverflowTop: true,
               dimmed: !done,
@@ -3377,11 +3945,12 @@ class _LifeOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final chimney = kChimneyAnchor[def.id];
     final local = isoLocalBounds(def.gridW, def.gridH);
+    final box = artBoxOf(def);
     final art = artPlacement(
       local,
-      baseWidth: def.artBaseWidth,
-      anchorX: def.artAnchorX,
-      lift: def.artLift,
+      baseWidth: box.baseWidth,
+      anchorX: box.anchorX,
+      lift: box.lift,
     );
     // The sprite is scaled to art.width and keeps its aspect; the map does not
     // know the image's true height, so the overlay box uses the same square-ish
@@ -3494,20 +4063,6 @@ class _FootprintPainter extends CustomPainter {
   @override
   bool shouldRepaint(_FootprintPainter old) =>
       old.w != w || old.h != h || old.color != color || old.outline != outline;
-}
-
-/// One cell's diamond, for clipping road art to its tile.
-class _CellDiamondClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) => Path()
-    ..moveTo(size.width / 2, 0)
-    ..lineTo(size.width, size.height / 2)
-    ..lineTo(size.width / 2, size.height)
-    ..lineTo(0, size.height / 2)
-    ..close();
-
-  @override
-  bool shouldReclip(CustomClipper<Path> old) => false;
 }
 
 /// A road without art: its cell, filled flat, with the lit near edge every

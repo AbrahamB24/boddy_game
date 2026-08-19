@@ -1,4 +1,10 @@
+import 'dart:math' as math;
 import 'dart:ui';
+
+// Matrix4 only — this file stays projection maths, and the one transform it
+// hands out (mapTransform) is part of that: how a grid coordinate reaches the
+// screen is exactly what iso_grid is for.
+import 'package:flutter/widgets.dart' show Matrix4;
 
 import 'building_definitions.dart' show kGridCols, kGridRows;
 
@@ -38,6 +44,93 @@ const double kIsoTileW = 64;
 /// One cell's height — half the width, which is what makes the diamond read as
 /// ground rather than as a floor tile seen from above.
 const double kIsoTileH = kIsoTileW / 2;
+
+/// The closest the map may be zoomed (user 2026-08-09: "Ich will nicht ganz so
+/// nahe heranzoomen können wie aktuell", then a screenshot: "das soll der
+/// maximal zoom in sein").
+///
+/// 0.8, measured off that screenshot rather than argued from the art: a road
+/// cell came out about 50 px on a 432 px phone, and a cell is [kIsoTileW] = 64
+/// px at scale 1.
+///
+/// It was 4.0 first, on the reasoning that 4 is where the sprites are drawn at
+/// their own resolution (everything renders at SCALE = 4 in tool/blender). That
+/// is a true fact about the ART and the wrong answer for the GAME: what decides
+/// how close you may get is how much settlement has to stay on screen at once,
+/// and five times too close is still five times too close even when every pixel
+/// of it is real. Down here the art is simply downsampled, which is the safe
+/// direction.
+const double kMaxMapZoom = 0.8;
+
+/// The map's view transform: [scale] about the origin, then a screen-space
+/// shift of ([tx], [ty]).
+///
+/// ── The z axis is NOT decoration (user 2026-08-09) ──
+/// This used to be `Matrix4.diagonal3Values(scale, scale, 1)`, leaving z at 1
+/// because the map is flat and z cannot matter. It matters: [Matrix4
+/// .getMaxScaleOnAxis] returns the LARGEST of the three axes, and this map's
+/// scale is always well under 1 — 0.18 fills a phone. So every reader of that
+/// matrix was told the zoom was 1.0 when it was 0.18, and two things broke at
+/// once:
+///
+///   * InteractiveViewer clamped a pinch against a scale five times too big, so
+///     you could zoom out until the map was a stamp in the corner ("ich kann
+///     viel zu weit hinauszoomen. Es dürfte niemals der Rand sichtbar sein");
+///   * and focusing a building rebuilt the transform at that phantom 1.0, which
+///     is why picking one up zoomed in ("wenn ich ein gebäude anwähle zum
+///     schieben, zoomt es hinein").
+///
+/// A uniform scale reports itself, whatever it is.
+Matrix4 mapTransform(double scale, double tx, double ty) =>
+    Matrix4.identity()
+      ..translateByDouble(tx, ty, 0, 1)
+      ..scaleByDouble(scale, scale, scale, 1);
+
+/// The furthest the map may be zoomed OUT in a [viewport]: the scale at which
+/// the map already covers it (user 2026-08-09: "Es darf niemals aus dem
+/// Spielfeld hinausgezoomt/gescrollt werden. Das Spielfeld ist die Grenze").
+///
+/// The LARGER of the two ratios, and that is the whole rule. The smaller one
+/// covers the tighter axis and leaves the other short, which is a viewport with
+/// the void down one side — and it is the easy mistake, because either ratio
+/// "fits the map to the screen" in the loose sense.
+double minMapScale(Size viewport) => math.max(
+  viewport.width / isoCanvasSize.width,
+  viewport.height / isoCanvasSize.height,
+);
+
+/// The nearest transform to [m] that keeps the map over the whole [viewport].
+///
+/// The rule in one function, so it is a thing that can be TESTED rather than a
+/// promise spread across a gesture handler, two camera moves and an edge
+/// scroll. Whatever comes in — a pinch past the limit, a camera move computed
+/// from a stale scale, a matrix from nowhere — what comes out shows map on
+/// every pixel: "Es dürfte niemals der Rand sichtbar sein" (user 2026-08-09).
+///
+/// A clamped ZOOM is re-centred on the viewport's middle. Scaling about the
+/// origin instead would drag the map sideways every time a pinch went one notch
+/// too far, which reads as the map fighting you.
+Matrix4 clampMapTransform(Matrix4 m, Size viewport) {
+  final lo = minMapScale(viewport);
+  final scale = m.getMaxScaleOnAxis();
+  final want = scale.clamp(lo, math.max(lo, kMaxMapZoom)).toDouble();
+  final t = m.getTranslation();
+  var tx = t.x, ty = t.y;
+  if (want != scale && scale > 0) {
+    final k = want / scale;
+    tx = viewport.width / 2 - (viewport.width / 2 - tx) * k;
+    ty = viewport.height / 2 - (viewport.height / 2 - ty) * k;
+  }
+  // Never a gap: the map's near edge may not come inside the viewport, and its
+  // far edge may not come short of it.
+  tx = tx
+      .clamp(math.min(0.0, viewport.width - isoCanvasSize.width * want), 0.0)
+      .toDouble();
+  ty = ty
+      .clamp(math.min(0.0, viewport.height - isoCanvasSize.height * want), 0.0)
+      .toDouble();
+  return mapTransform(want, tx, ty);
+}
 
 /// How far right the whole map has to be pushed so nothing lands at a negative
 /// x: the westernmost point is the grid's south-west corner, at (0, rows).
@@ -195,6 +288,76 @@ Rect isoLocalBounds(int w, int h) =>
     left: bounds.center.dx - w * anchorX,
     width: w,
     bottom: bounds.bottom + w * lift,
+  );
+}
+
+/// The screen angle a grid direction runs at, in radians, for [Transform.rotate]
+/// (0 points right, angles grow clockwise because screen y grows downward).
+///
+/// The placement arrows need this and could not guess it: +x runs down-RIGHT
+/// and +y down-LEFT on a 2:1 diamond, so the four directions sit at ±26.6° and
+/// its supplements — nowhere near the up/down/left/right a square grid would
+/// have drawn.
+double isoScreenAngle(int dx, int dy) {
+  final a = math.atan2(kIsoTileH, kIsoTileW); // ≈ 26.57°
+  return switch ((dx, dy)) {
+    (1, 0) => a,
+    (-1, 0) => math.pi + a,
+    (0, 1) => math.pi - a,
+    _ => -a,
+  };
+}
+
+/// The middle of the footprint edge that FACES (dx, dy) — where an arrow for
+/// that direction belongs.
+///
+/// Not a corner and not the centre: on a diamond the "right-hand side" of a
+/// footprint is an edge running north-east to south-east, and its midpoint is
+/// the only point on it that stays put as the footprint changes shape.
+Offset isoEdgeMidpoint(int x, int y, int w, int h, int dx, int dy) =>
+    switch ((dx, dy)) {
+      (1, 0) => gridToScreen((x + w).toDouble(), y + h / 2),
+      (-1, 0) => gridToScreen(x.toDouble(), y + h / 2),
+      (0, 1) => gridToScreen(x + w / 2, (y + h).toDouble()),
+      _ => gridToScreen(x + w / 2, y.toDouble()),
+    };
+
+/// The box a building's PICTURE occupies in map space: its tile plus the height
+/// the art rises above it.
+///
+/// [isoBounds] is only the GROUND. What hides a building being placed is a roof
+/// leaning over the tiles in front of it, and what a finger reaches for is the
+/// wall rather than the grass — both are questions about the picture, and both
+/// got the wrong answer from the footprint alone.
+///
+/// The height is taken as the art's own WIDTH: generated art comes back square,
+/// and the map never learns the real height because the picture is drawn
+/// width-first and allowed to overflow upward (see [artPlacement]).
+Rect isoArtBounds(
+  int x,
+  int y,
+  int w,
+  int h, {
+  double baseWidth = 1.0,
+  double anchorX = 0.5,
+  double lift = 0.0,
+}) {
+  final iso = isoBounds(x, y, w, h);
+  final art = artPlacement(
+    isoLocalBounds(w, h),
+    baseWidth: baseWidth,
+    anchorX: anchorX,
+    lift: lift,
+  );
+  final left = iso.left + art.left;
+  final foot = iso.top + art.bottom;
+  // Union with the tile: art narrower than its footprint must not shrink the
+  // ground the building is standing on out of the box.
+  return Rect.fromLTRB(
+    math.min(iso.left, left),
+    math.min(iso.top, foot - art.width),
+    math.max(iso.right, left + art.width),
+    math.max(iso.bottom, foot),
   );
 }
 

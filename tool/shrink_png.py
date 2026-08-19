@@ -1,6 +1,6 @@
 """Quantise a render to a palette PNG — same picture, a fraction of the bytes.
 
-    python tool/shrink_png.py docs/renders/main_hall.png
+    python tool/shrink_png.py docs/renders/castle.png
     python tool/shrink_png.py docs/renders/*.png --colors 128
 
 ── Why this works so well HERE and would not elsewhere ──

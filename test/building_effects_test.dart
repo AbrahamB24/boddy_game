@@ -68,7 +68,7 @@ void main() {
   });
 
   test('the housing buildings actually house someone', () {
-    for (final id in ['main_hall', 'hut', 'house']) {
+    for (final id in ['castle', 'small_house', 'large_house']) {
       expect(def(id).effectKeys('housing'), isNotEmpty, reason: id);
     }
   });

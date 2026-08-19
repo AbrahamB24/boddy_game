@@ -35,7 +35,13 @@ SPACING = 7.0
 def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     ap = argparse.ArgumentParser()
-    ap.add_argument('--blend', default='docs/renders/all_buildings.blend')
+    # ── Run it WITHOUT --background and it opens in front of you ──
+    # Rendering to look at a change costs minutes and gives one fixed angle.
+    # Building the scene straight into the GUI costs the same seconds the
+    # geometry always cost, and then the model is there to be turned, zoomed
+    # and picked apart. Saving the .blend is the optional part, not the point.
+    ap.add_argument('--blend', default=None,
+                    help='also save the scene to this .blend')
     ap.add_argument('--out', help='also render an overview PNG')
     ap.add_argument('--scale', type=int, default=2)
     args = ap.parse_args(argv)
@@ -72,7 +78,10 @@ def main():
         print(f'  {name}: {len(made)} objects at {d:+.1f}')
 
     rb.vary_tones()
-    rb.bevel_everything()
+    # Bevel OFF in the viewport unless this run is actually rendering. Looking
+    # at the set is the common case and it must stay interactive; the modifier
+    # is still on for the render.
+    rb.bevel_everything(viewport=bool(args.out))
     rb.light()
     # The row as one big footprint. It spreads the same distance along +x as
     # along −y, so the box that holds it is square and as wide as the whole
@@ -94,8 +103,13 @@ def main():
         bpy.ops.render.render(write_still=True)
         print(f'wrote {args.out}')
 
-    bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(args.blend))
-    print(f'saved {args.blend} — {n} buildings')
+    if args.blend:
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(args.blend))
+        print(f'saved {args.blend}')
+    print(f'{n} buildings')
+    # Open on the camera when there is a window to open in. Deferred through a
+    # timer because a --python script at startup runs before the UI exists.
+    rb.show_in_viewport()
 
 
 main()

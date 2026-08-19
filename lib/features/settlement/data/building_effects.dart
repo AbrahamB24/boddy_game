@@ -249,7 +249,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'main_hall': BuildingEffects(
+  'castle': BuildingEffects(
     effects: [
       BuildingEffect(
         type: 'production',
@@ -276,7 +276,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'wood_camp_e1': BuildingEffects(
+  'small_wood_camp': BuildingEffects(
     workshops: [
       WorkshopRole(
         stat: CreatureStat.production,
@@ -288,7 +288,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'wood_works_e1': BuildingEffects(
+  'large_wood_camp': BuildingEffects(
     workshops: [
       WorkshopRole(
         stat: CreatureStat.production,
@@ -300,7 +300,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'stone_camp_e1': BuildingEffects(
+  'small_stone_camp': BuildingEffects(
     workshops: [
       WorkshopRole(
         stat: CreatureStat.production,
@@ -312,7 +312,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'stone_works_e1': BuildingEffects(
+  'large_stone_camp': BuildingEffects(
     workshops: [
       WorkshopRole(
         stat: CreatureStat.production,
@@ -324,7 +324,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'hut': BuildingEffects(
+  'small_house': BuildingEffects(
     effects: [
       BuildingEffect(type: 'housing', value: 2, levelSteps: {5: 1, 10: 1}),
       BuildingEffect(
@@ -335,7 +335,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'house': BuildingEffects(
+  'large_house': BuildingEffects(
     effects: [
       BuildingEffect(
         type: 'housing',
@@ -374,7 +374,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'special_materials_e1': BuildingEffects(
+  'church': BuildingEffects(
     effects: [
       BuildingEffect(
         type: 'production',
@@ -396,7 +396,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'special_treasury_e1': BuildingEffects(
+  'marketplace': BuildingEffects(
     effects: [
       BuildingEffect(
         type: 'production',

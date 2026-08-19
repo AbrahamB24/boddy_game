@@ -174,7 +174,7 @@ void main() {
       expect(buildingYieldFactor(1), 1.0);
       expect(buildingCostFactor(1), 1.0);
       expect(buildingTimeFactor(1), 1.0);
-      final def = kFallbackBuildingDefs['wood_camp_e1']!;
+      final def = kFallbackBuildingDefs['small_wood_camp']!;
       expect(def.resourceCostAt(1), def.resourceCost);
       expect(def.constructionSecondsAt(1), def.constructionSeconds);
     });
@@ -194,7 +194,7 @@ void main() {
     test('a level scales the concrete cost of a real building', () {
       // The 2026-07-24 roster prices per era band × the def's OWN costFactor
       // (level 3 is still in the era-1 band, whose first level is 1).
-      final def = kFallbackBuildingDefs['wood_camp_e1']!;
+      final def = kFallbackBuildingDefs['small_wood_camp']!;
       final base = def.resourceCost['wood']!;
       expect(
         def.resourceCostAt(3)['wood'],

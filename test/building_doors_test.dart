@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:boddygame/features/settlement/data/building_definitions.dart';
 
 // ── Where a settlement-wide screen is reached FROM (user 2026-07-30) ──
-// "Worker Verwaltung über Tribal Center und Population über jedes Haus aufrufbar
+// "Worker Verwaltung über Castle und Population über jedes Haus aufrufbar
 // machen."
 //
 // Both were only reachable through the Manage screen's tabs — settlement-wide
@@ -17,7 +17,7 @@ void main() {
     // Names the ones that must qualify, so a rule that accidentally stopped
     // matching (e.g. a pen re-authored as an effect instead of the column) fails
     // here rather than by quietly losing its door.
-    final dwellings = ['hut', 'house', 'pen_a_e2', 'pen_b_e8'];
+    final dwellings = ['small_house', 'large_house', 'pen_a_e2', 'pen_b_e8'];
     for (final id in dwellings) {
       final def = kFallbackBuildingDefs[id]!;
       expect(
@@ -31,17 +31,17 @@ void main() {
   test('a workplace is not a dwelling', () {
     // The door has to be discriminating or it is not a door: a lumber camp and a
     // store shelter nobody, whatever else they do.
-    for (final id in ['wood_camp_e1', 'storehouse', 'gold_vault']) {
+    for (final id in ['small_wood_camp', 'storehouse', 'gold_vault']) {
       final def = kFallbackBuildingDefs[id]!;
       expect(def.sheltersMonsters(1), isFalse, reason: id);
     }
   });
 
-  test('the Tribal Center runs the workforce AND shelters', () {
+  test('the Castle runs the workforce AND shelters', () {
     final hall = kFallbackBuildingDefs.values.firstWhere(
       (d) => d.isMainBuilding,
     );
-    expect(hall.name, 'Tribal Center');
+    expect(hall.name, 'Castle');
     // Exactly one building is the hall, so exactly one carries the Workers door.
     expect(
       kFallbackBuildingDefs.values.where((d) => d.isMainBuilding).length,

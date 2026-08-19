@@ -19,7 +19,7 @@ void main() {
   PlacedBuilding building({bool paused = false}) => PlacedBuilding(
     id: 'b1',
     settlementId: 's',
-    buildingTypeId: 'wood_camp_e1',
+    buildingTypeId: 'small_wood_camp',
     gridX: 3,
     gridY: 4,
     level: 2,

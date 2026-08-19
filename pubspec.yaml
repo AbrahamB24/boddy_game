@@ -40,4 +40,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    # Its own line, because a directory entry is NOT recursive — the sixteen
+    # road tiles would simply not ship.
+    - assets/images/roads/
+    - assets/images/buildings/
     - assets/sfx/

@@ -23,45 +23,63 @@ void main() {
   // village of identical sheds.
   group('footprint proportions', () {
     test('a dwelling is smaller than a worksite', () {
-      expect(_cells('hut'), lessThan(_cells('wood_camp_e1')));
-      expect(_cells('hut'), lessThan(_cells('stone_camp_e1')));
-      expect(_cells('house'), lessThan(_cells('stone_works_e1')));
-      expect(_cells('house'), lessThan(_cells('main_hall')));
+      expect(_cells('small_house'), lessThan(_cells('small_wood_camp')));
+      expect(_cells('small_house'), lessThan(_cells('small_stone_camp')));
+      expect(_cells('large_house'), lessThan(_cells('large_stone_camp')));
+      expect(_cells('large_house'), lessThan(_cells('castle')));
     });
 
     test('the upgrade of a worksite is bigger than the worksite', () {
-      expect(_cells('wood_works_e1'), greaterThan(_cells('wood_camp_e1')));
-      expect(_cells('stone_works_e1'), greaterThan(_cells('stone_camp_e1')));
+      expect(_cells('large_wood_camp'), greaterThan(_cells('small_wood_camp')));
+      expect(_cells('large_stone_camp'), greaterThan(_cells('small_stone_camp')));
     });
 
-    test('a hut is the smallest real building; only the road is smaller', () {
-      final smallest = kFallbackBuildingDefs.values
-          .where((d) => !d.isRoad)
-          .map((d) => d.gridW * d.gridH)
-          .reduce((a, b) => a < b ? a : b);
-      expect(_cells('hut'), smallest);
-      expect(_cells('road'), lessThan(_cells('hut')));
+    test('only buildings that need no YARD take less ground than a dwelling',
+        () {
+      // ── This rule was "the hut is the smallest building" (2026-08-09) ──
+      // It stopped being true when footprints stopped being fixed and the
+      // The Small House grew to 3 × 3 to hold a den, a fungus and a nest. What
+      // was really guarding is still guarded: an earlier pass flattened nearly
+      // everything to 2 × 2 to fit a cramped plot, and the map read as a
+      // village of identical sheds.
+      //
+      // So the invariant is now about WHY something is small. A watchtower is
+      // four legs and the air between them; a store is a box. Neither has
+      // anything to stand outside it, and a dwelling does. Anything else this
+      // small is the old flattening coming back.
+      //
+      // The Gold Vault LEFT this set on 2026-08-12: at 2 x 3 it was a
+      // strongbox you cannot walk round, and the user gave it 3 x 3 so the
+      // chain, the padlock and the hoard have a yard to be guarded in. That
+      // is a building with something outside it, so it belongs with the
+      // dwellings rather than with the boxes.
+      final smaller = kFallbackBuildingDefs.values
+          .where((d) => d.gridW * d.gridH < _cells('small_house'))
+          .map((d) => d.id)
+          .toSet();
+      expect(smaller, {'road', 'scout_post', 'warehouse', 'smokehouse'});
+      expect(_cells('road'), lessThan(_cells('small_house')));
     });
 
-    test('the Tribal Center is the landmark — nothing outgrows it', () {
+    test('the Castle is the landmark — nothing outgrows it', () {
       // The 2026-07-24 roster caps every footprint at the hall's 5×5 (the Grand
       // Works ties it, nothing exceeds it).
       final bigger = kFallbackBuildingDefs.values
-          .where((d) => d.gridW * d.gridH > _cells('main_hall'))
+          .where((d) => d.gridW * d.gridH > _cells('castle'))
           .map((d) => d.id)
           .toList();
       expect(bigger, isEmpty);
     });
 
     test('the longhouse is long, not just large', () {
-      final d = kFallbackBuildingDefs['house']!;
+      final d = kFallbackBuildingDefs['large_house']!;
       expect(d.gridH, greaterThanOrEqualTo(d.gridW * 2));
     });
   });
 
   group('starting plot', () {
-    test('the Tribal Center is centred in it and fully inside', () {
-      final hall = kFallbackBuildingDefs['main_hall']!;
+    test('the Castle is centred in it and fully inside', () {
+      final hall = kFallbackBuildingDefs['castle']!;
       final leftGap = kMainHallStartX - kInitialPlotX;
       final rightGap =
           (kInitialPlotX + kInitialPlotSize) - (kMainHallStartX + hall.gridW);
@@ -93,10 +111,10 @@ void main() {
       // Buildings are only functional while road-connected (GameEngine
       // .functional), so a plot that fits the footprints exactly fits nothing.
       const plot = kInitialPlotSize * kInitialPlotSize;
-      final core = _cells('main_hall') +
-          _cells('hut') +
-          _cells('wood_camp_e1') +
-          _cells('stone_camp_e1') +
+      final core = _cells('castle') +
+          _cells('small_house') +
+          _cells('small_wood_camp') +
+          _cells('small_stone_camp') +
           _cells('healing_hut');
       expect(core, lessThan(plot));
       expect(

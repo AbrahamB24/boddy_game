@@ -17,6 +17,7 @@ import 'data/building_definitions.dart';
 import 'data/era_definitions.dart';
 import 'data/goods_definitions.dart';
 import 'data/item_definitions.dart';
+import 'data/road_tiles.dart';
 import '../creatures/models/path_node.dart';
 import 'models/energy_model.dart';
 import 'models/placed_building.dart';
@@ -1157,7 +1158,7 @@ class SettlementController extends ChangeNotifier {
     // NOTE: the hall's automatic build points are gone with the rest of the
     // hardcoded bonuses (user 2026-07-25). Construction now comes from stationed
     // builders and from any authored `production` effect with the key
-    // `construction` — the Tribal Center included, if its effects say so.
+    // `construction` — the Castle included, if its effects say so.
     //
     // The tutorial's free build power is gone too (user 2026-07-26): it only
     // ever existed because zero builders meant zero progress. Points are a cut
@@ -1194,12 +1195,29 @@ class SettlementController extends ChangeNotifier {
   List<PlacedBuilding>? _derivedFor;
   Set<String>? _connectedCache;
   Set<int>? _regionCache;
+  Set<int>? _roadCache;
 
   void _refreshDerived() {
     if (identical(_derivedFor, buildings)) return;
     _derivedFor = buildings;
     _connectedCache = null;
     _regionCache = null;
+    _roadCache = null;
+  }
+
+  /// Every cell a road stands on, keyed by [roadCellKey].
+  ///
+  /// Cached for the same reason the region is: the map asks each road tile
+  /// which of its neighbours are roads, and answering that by scanning the
+  /// buildings list would be O(roads²) per frame — with one row per cell, a
+  /// couple of hundred roads is normal.
+  Set<int> get roadCells {
+    _refreshDerived();
+    return _roadCache ??= {
+      for (final b in buildings)
+        if (kBuildingDefs[b.buildingTypeId]?.isRoad ?? false)
+          roadCellKey(b.gridX, b.gridY),
+    };
   }
 
   Set<String> get connectedBuildingIds {
@@ -2057,7 +2075,7 @@ class SettlementController extends ChangeNotifier {
   /// One-time grants of the reached era still apply.
   // ── Era ascension (user redesign 2026-07-22) ──────────────
   // Beating the region boss UNLOCKS the ascension; performing it — and paying
-  // for it — happens at the Tribal Center. Ascending raises the creature level
+  // for it — happens at the Castle. Ascending raises the creature level
   // cap (+10), the XP multiplier, and auto-levels the hall.
 
   /// The era the settlement could ascend into right now, or null when the
@@ -2104,7 +2122,7 @@ class SettlementController extends ChangeNotifier {
     return cost;
   }
 
-  /// Performs the ascension at the Tribal Center. Returns null on success,
+  /// Performs the ascension at the Castle. Returns null on success,
   /// else a user-facing reason.
   Future<String?> ascendEra() async {
     if (settlement == null || resources == null) return 'Not loaded';
@@ -2169,11 +2187,11 @@ class SettlementController extends ChangeNotifier {
     if (kBuildingDefs[buildings[idx].buildingTypeId]?.isBuildPlot ?? false) {
       return 'Building Plots are permanent and cannot be removed.';
     }
-    // The Tribal Center is the settlement (user 2026-07-22). The map already
+    // The Castle is the settlement (user 2026-07-22). The map already
     // hides its delete button, but that was the ONLY thing preventing it —
     // this is the authoritative backstop, same pattern as the plots above.
     if (kBuildingDefs[buildings[idx].buildingTypeId]?.isMainBuilding ?? false) {
-      return 'The Tribal Center is the heart of the settlement — it cannot '
+      return 'The Castle is the heart of the settlement — it cannot '
           'be demolished.';
     }
 
@@ -2682,7 +2700,7 @@ class SettlementController extends ChangeNotifier {
       GameEventLog().add(
         GameEventKind.building,
         '🎓 Tutorial complete! From now on buildings need a ROAD to the '
-        'Tribal Center to work — paint roads via Build ▸ Roads.',
+        'Castle to work — paint roads via Build ▸ Roads.',
       );
     }
   }

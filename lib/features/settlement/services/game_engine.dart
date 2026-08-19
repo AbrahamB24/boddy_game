@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../data/building_definitions.dart';
 import '../data/goods_definitions.dart';
+import '../data/water_cells.dart';
 
 import '../models/energy_model.dart';
 import '../models/placed_building.dart';
@@ -207,11 +208,30 @@ class GameEngine {
   }
 
   // ── Buildable territory ────────────────────────────────────
+  /// The cells the settlement may build on: the starting plot plus every
+  /// finished Building Plot — MINUS the water.
+  ///
+  /// ── Why the water is subtracted at the end (user 2026-08-09: "Der Fluss ist
+  ///    nicht bebaubar") ──
+  /// Doing it here rather than in each caller means there is one place that can
+  /// forget. It also gives a Building Plot laid across the river the right
+  /// behaviour for free: the plot still claims its square, the river still runs
+  /// through it, and the two banks are what you get — which is what claiming
+  /// land next to a river ought to buy you, and is nothing anyone had to write.
+  ///
+  /// The mask is generated: tool/blender/terrain.py draws the map and writes
+  /// water_cells.dart from the same classify(), so this is the same coastline
+  /// the player can see.
   static Set<int> buildableRegionCells(List<PlacedBuilding> buildings) {
     final cells = <int>{};
+    void claim(int x, int y) {
+      if (isWaterCell(x, y)) return;
+      cells.add(_cellKey(x, y));
+    }
+
     for (int x = kInitialPlotX; x < kInitialPlotX + kInitialPlotSize; x++) {
       for (int y = kInitialPlotY; y < kInitialPlotY + kInitialPlotSize; y++) {
-        cells.add(_cellKey(x, y));
+        claim(x, y);
       }
     }
     for (final b in buildings) {
@@ -220,7 +240,7 @@ class GameEngine {
       if (def == null || !def.isBuildPlot) continue;
       for (int dx = 0; dx < def.gridW; dx++) {
         for (int dy = 0; dy < def.gridH; dy++) {
-          cells.add(_cellKey(b.gridX + dx, b.gridY + dy));
+          claim(b.gridX + dx, b.gridY + dy);
         }
       }
     }

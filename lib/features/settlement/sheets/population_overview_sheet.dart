@@ -143,7 +143,7 @@ class _PopulationOverviewSheetState extends State<PopulationOverviewSheet> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          BuildingIcon(imageUrl: def.imageUrl, size: 18),
+          BuildingIcon(imageUrl: def.imageUrl, defId: def.id, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
