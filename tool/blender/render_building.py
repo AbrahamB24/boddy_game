@@ -4258,9 +4258,9 @@ def breeding_hut(w, h):
     # ── The house ──
     hx, hy = -0.66, 0.82
     hw, hd = 2.06, 1.86
-    base_h, floor_h, upper_h = 0.3, 0.98, 0.82
-    ashlar_courses('hbase', hx, hy, 0, hw + 0.12, hd + 0.12, base_h,
-                   course=0.0763, block=0.149)
+    # No stone base (user 2026-08-20: "keine Bodenplatten") — the house
+    # stands straight on the tile, same as builder_camp.
+    base_h, floor_h, upper_h = 0.0, 0.98, 0.82
     half_timber('hlow', hx, hy, base_h, hw, hd, floor_h, bays=5)
     jetty('hjet', hx, hy, base_h + floor_h, hw, hd, out=0.17)
     up_w, up_d = hw + 0.34, hd + 0.34
@@ -4289,37 +4289,44 @@ def breeding_hut(w, h):
     doorway('hdoor', door_x, low_face, base_h, 0.62, 0.8)
     plank_door('hleaf', door_x, low_face - 0.06, base_h + 0.02, 0.56, 0.5,
                planks=7)
-    steps('hsteps', door_x, low_face - 0.12, 0, 0.9, count=3, rise=0.09)
+    # No approach steps — they used to climb the stone base that is gone
+    # now; the door sits right at grade.
     for sign in (-1, 1):
         sconce(f'hlamp{sign}', door_x + sign * 0.52, low_face, base_h + 0.86)
-    leaded_window('hw0', hx + 0.56, low_face, base_h + 0.4, 0.3, 0.38)
+    leaded_window('hw0', hx + 0.56, low_face, base_h + 0.4, 0.3, 0.38,
+                  open=True)
     leaded_window('hw1', hx + hw / 2, hy + 0.3, base_h + 0.4, 0.3, 0.38,
-                  facing='x')
+                  facing='x', open=True)
     # Upper floor windows sit on the jetty, where the overhang shades them.
     uz = base_h + floor_h + 0.34
     for i, ox in enumerate((-0.5, 0.42)):
-        leaded_window(f'hu{i}', hx + ox, face_y, uz, 0.28, 0.34)
-    leaded_window('hu2', hx + up_w / 2, hy + 0.24, uz, 0.28, 0.34, facing='x')
+        leaded_window(f'hu{i}', hx + ox, face_y, uz, 0.28, 0.34, open=True)
+    leaded_window('hu2', hx + up_w / 2, hy + 0.24, uz, 0.28, 0.34, facing='x',
+                  open=True)
 
     # ── The wing, its gable turned across the house's ──
     wx, wy = 1.06, 0.96
     ww, wd = 1.42, 1.5
-    ashlar_courses('wbase', wx, wy, 0, ww + 0.1, wd + 0.1, 0.26,
-                   course=0.0713, block=0.139)
-    half_timber('wlow', wx, wy, 0.26, ww, wd, 1.02, bays=4)
-    w_roof_z = 1.28
+    # No stone base here either (user 2026-08-20) — w_base replaces the old
+    # 0.26 ashlar_courses height everywhere below, so the wing keeps its
+    # own proportions, just sitting 0.26 lower, at grade.
+    w_base = 0.0
+    half_timber('wlow', wx, wy, w_base, ww, wd, 1.02, bays=4)
+    w_roof_z = w_base + 1.02
     shingle_gable('wroof', wx, wy, w_roof_z, ww, wd, 0.86, overhang=0.24,
                   rows=18, ridge_along='x')
     moss('wmoss', wx, wy, w_roof_z, ww * 0.8, wd * 0.8, 0.5, overhang=0.0,
          patches=8)
     w_face = wy - wd / 2
-    doorway('wdoor', wx + 0.1, w_face, 0.26, 0.5, 0.62, rim=0.13)
-    plank_door('wleaf', wx + 0.1, w_face - 0.05, 0.28, 0.44, 0.36, planks=5)
-    leaded_window('ww0', wx + ww / 2, wy + 0.3, 0.72, 0.28, 0.34, facing='x')
-    lantern('wlamp', wx - 0.44, w_face - 0.12, 1.02, drop=0.16)
-    box('wlamparm', wx - 0.36, w_face - 0.06, 1.0, 0.24, 0.06, 0.05,
-        mat('iron'))
-    vine('wvine', wx + ww / 2 - 0.02, wy - 0.42, 0.26, 0.78, facing='x')
+    doorway('wdoor', wx + 0.1, w_face, w_base, 0.5, 0.62, rim=0.13)
+    plank_door('wleaf', wx + 0.1, w_face - 0.05, w_base + 0.02, 0.44, 0.36,
+              planks=5)
+    leaded_window('ww0', wx + ww / 2, wy + 0.3, w_base + 0.46, 0.28, 0.34,
+                  facing='x', open=True)
+    lantern('wlamp', wx - 0.44, w_face - 0.12, w_roof_z - 0.26, drop=0.16)
+    box('wlamparm', wx - 0.36, w_face - 0.06, w_roof_z - 0.28, 0.24, 0.06,
+        0.05, mat('iron'))
+    vine('wvine', wx + ww / 2 - 0.02, wy - 0.42, w_base, 0.78, facing='x')
 
     # ── The yard, filling the near corner ──
     yx0, yx1 = -half + 0.16, half - 0.16
@@ -4372,9 +4379,12 @@ def breeding_hut(w, h):
     # reused, mirrored, or looked at in Blender, the empty half is all you see.
     # It also costs almost nothing — the parts already exist.
     back_y = hy + up_d / 2
-    leaded_window('hb0', hx - 0.5, back_y, uz, 0.28, 0.34, facing='y')
-    leaded_window('hb1', hx + 0.5, back_y, uz, 0.28, 0.34, facing='y')
-    leaded_window('hb2', hx + 0.3, hy + hd / 2, base_h + 0.4, 0.3, 0.38)
+    leaded_window('hb0', hx - 0.5, back_y, uz, 0.28, 0.34, facing='y',
+                  open=True)
+    leaded_window('hb1', hx + 0.5, back_y, uz, 0.28, 0.34, facing='y',
+                  open=True)
+    leaded_window('hb2', hx + 0.3, hy + hd / 2, base_h + 0.4, 0.3, 0.38,
+                  open=True)
     # A back door onto the yard behind, with its own step and lamp.
     back_door_x = hx - 0.62
     doorway('hbdoor', back_door_x, hy + hd / 2, base_h, 0.5, 0.66, rim=0.13)
@@ -4766,7 +4776,6 @@ def _main_hall_plan(w, h):
 #
 # The recipe all of them share:
 #
-#   * a stone plinth or base course — nothing stands straight on soil;
 #   * ORNAMENT ON THE SKYLINE FIRST. At map size a building is read by its
 #     outline, so a spire, a crest and a vane are worth more than any amount of
 #     carving on a wall, and they cost three boxes each;
@@ -4774,6 +4783,17 @@ def _main_hall_plan(w, h):
 #     and nowhere else, because nothing else is ever rendered;
 #   * and one object that says WHAT IT IS at a glance — the woodpile, the
 #     anvil, the coin chest, the hanging sign.
+#
+# ── No plinth on the timber-framed half of the roster any more (user
+#    2026-08-20: "keine Bodenplatten") ──
+# The stone plinth/base-course line above stops applying to every building
+# that stands on a half_timber() frame — breeding_hut, small_house,
+# large_house, storehouse, healing_hut, fish_hut, fur_lodge, workshop, and
+# builder_camp, which started this: "so a second stone slab under it was
+# redundant" once the app's own floor already reads as ground. Stone-built
+# ones (castle, church, the quarries) keep their base course — a keep or a
+# nave standing straight off the turf would be the wrong signal, not this
+# one.
 
 
 def small_house(w, h):
@@ -4787,16 +4807,14 @@ def small_house(w, h):
     chimney and a fenced garden — and the creatures live in the garden, which
     is where a cottager's animals actually lived.
     """
-    plinth('shbase', 0, 0, w - 0.3, h - 0.3, 0.14)
+    # No plinth and no stone sill (user 2026-08-20: "keine Bodenplatten") —
+    # the cottage and its garden both sit straight on the tile, same as
+    # builder_camp. Every z below is the old plinth/sill-relative height
+    # with that base subtracted back out.
     bw, bd = w - 1.15, h - 1.5
     hx, hy = -0.18, h / 2 - bd / 2 - 0.42
-    # A rubble sill under the frame: timber rots where it meets the ground, and
-    # every cottage in Europe sits on a course of whatever stone was nearest.
-    ashlar_courses('shsill', hx, hy, 0.14, bw + 0.14, bd + 0.14, 0.3,
-                   course=0.0691, block=0.134, key='ashlar',
-                   dark='ashlar_dark')
-    half_timber('shwall', hx, hy, 0.44, bw, bd, 1.05, bays=5)
-    roof_z = 1.49
+    half_timber('shwall', hx, hy, 0.0, bw, bd, 1.05, bays=5)
+    roof_z = 1.05
     # THATCH, deep and eyebrowed over the door. A cottage roof is half the
     # building and it is the thing you recognise before anything else.
     shingle_gable('shroof', hx, hy, roof_z, bw, bd, 1.16, overhang=0.36,
@@ -4812,37 +4830,38 @@ def small_house(w, h):
     dagged('shdag', hx, face - 0.36, roof_z, bw + 0.6, key='oak')
     chimney('shchim', hx + bw / 2 - 0.3, hy + 0.34, 0, 0.3, roof_z + 1.05)
     smoke('shsmoke', hx + bw / 2 - 0.3, hy + 0.34, roof_z + 1.12, h=0.85)
-    gothic_door('shdoor', hx - 0.3, face, 0.44, 0.5, 0.76)
-    plank_door('shleaf', hx - 0.3, face - 0.06, 0.46, 0.44, 0.6, planks=5)
-    window('shwin', hx + 0.42, face, 0.86, 0.36, 0.32, 0.1)
-    leaded_window('shwinx', hx + bw / 2, hy + 0.1, 0.8, 0.28, 0.3, facing='x')
-    lantern('shlamp', hx - 0.72, face - 0.08, 1.24, drop=0.14)
+    gothic_door('shdoor', hx - 0.3, face, 0.0, 0.5, 0.76)
+    plank_door('shleaf', hx - 0.3, face - 0.06, 0.02, 0.44, 0.6, planks=5)
+    window('shwin', hx + 0.42, face, 0.42, 0.36, 0.32, 0.1)
+    leaded_window('shwinx', hx + bw / 2, hy + 0.1, 0.36, 0.28, 0.3,
+                  facing='x', open=True)
+    lantern('shlamp', hx - 0.72, face - 0.08, 0.8, drop=0.14)
     # ── The garden: a cottage IS its garden ──
-    withy_fence('shfen0', 0, -h / 2 + 0.34, 0.14, w - 0.7, h=0.42, axis='x')
-    withy_fence('shfen1', -w / 2 + 0.34, -0.45, 0.14, h - 1.5, h=0.42,
+    withy_fence('shfen0', 0, -h / 2 + 0.34, 0, w - 0.7, h=0.42, axis='x')
+    withy_fence('shfen1', -w / 2 + 0.34, -0.45, 0, h - 1.5, h=0.42,
                 axis='y')
     for i in range(3):
         flower_bed(f'shbed{i}', -w / 2 + 0.85 + i * 0.62, -h / 2 + 0.85,
-                   0.14, 0.5, 0.36,
+                   0, 0.5, 0.36,
                    bloom=('bloom_red', 'bloom_white', 'bloom_blue')[i], n=5)
     for i in range(4):
-        plant(f'shherb{i}', w / 2 - 0.55, -h / 2 + 0.7 + i * 0.42, 0.14,
+        plant(f'shherb{i}', w / 2 - 0.55, -h / 2 + 0.7 + i * 0.42, 0,
               r=0.11, key='herb' if i % 2 else 'leaf')
-    firewood('shwood', -w / 2 + 0.62, h / 2 - 0.85, 0.14, w=0.6, rows=4)
-    barrel('shbar', w / 2 - 0.5, h / 2 - 0.6, 0.14, r=0.17, h=0.36)
-    box('shbench', hx - 0.1, face - 0.5, 0.14, 0.8, 0.24, 0.3, mat('oak'))
-    basket('shbask', hx + 0.6, face - 0.46, 0.14, fill='leaf')
-    beehive('shbee', w / 2 - 0.52, -0.15, 0.14)
-    washing('shwash', -0.1, -h / 2 + 1.35, 0.14, 1.3, axis='x', h=0.85,
+    firewood('shwood', -w / 2 + 0.62, h / 2 - 0.85, 0, w=0.6, rows=4)
+    barrel('shbar', w / 2 - 0.5, h / 2 - 0.6, 0, r=0.17, h=0.36)
+    box('shbench', hx - 0.1, face - 0.5, 0, 0.8, 0.24, 0.3, mat('oak'))
+    basket('shbask', hx + 0.6, face - 0.46, 0, fill='leaf')
+    beehive('shbee', w / 2 - 0.52, -0.15, 0)
+    washing('shwash', -0.1, -h / 2 + 1.35, 0, 1.3, axis='x', h=0.85,
             items=4)
     # ── And who lives here ──
-    nest('shnest', -w / 2 + 0.8, -h / 2 + 1.5, 0.14, 0.2)
-    egg('shegg', -w / 2 + 0.8, -h / 2 + 1.5, 0.16, 0.12, mat('egg_common'))
-    critter('shcrit0', -0.55, -h / 2 + 0.7, 0.14, angle=0.6, kind=0)
-    critter('shcrit1', 0.35, -h / 2 + 1.1, 0.14, angle=2.4, kind=2, scale=0.7)
-    fowl('shfowl', 0.75, -h / 2 + 0.6, 0.14, angle=1.4)
+    nest('shnest', -w / 2 + 0.8, -h / 2 + 1.5, 0, 0.2)
+    egg('shegg', -w / 2 + 0.8, -h / 2 + 1.5, 0.02, 0.12, mat('egg_common'))
+    critter('shcrit0', -0.55, -h / 2 + 0.7, 0, angle=0.6, kind=0)
+    critter('shcrit1', 0.35, -h / 2 + 1.1, 0, angle=2.4, kind=2, scale=0.7)
+    fowl('shfowl', 0.75, -h / 2 + 0.6, 0, angle=1.4)
     perch_bird('shbird', hx + 0.3, face - 0.3, roof_z + 1.24)
-    window_box('shwb', hx + 0.42, face - 0.09, 0.7, 0.4, bloom='bloom_red')
+    window_box('shwb', hx + 0.42, face - 0.09, 0.26, 0.4, bloom='bloom_red')
     tufts('shtuft', 0, 0, w - 0.5, h - 0.5)
 
 
@@ -4855,13 +4874,12 @@ def large_house(w, h):
     side, people at the near end and animals at the far one — and the smoke
     coming out of the people's half is what tells you which is which.
     """
-    plinth('lhbase', 0, 0, w - 0.24, h - 0.24, 0.14)
+    # No plinth and no stone sill (user 2026-08-20: "keine Bodenplatten") —
+    # every z below is the old plinth/sill-relative height with that base
+    # (0.46 under the house, 0.14 under the yard) subtracted back out.
     bw, bd = w - 0.7, h - 0.9
-    ashlar_courses('lhsill', 0, 0, 0.14, bw + 0.14, bd + 0.14, 0.32,
-                   course=0.0691, block=0.134, key='ashlar',
-                   dark='ashlar_dark')
-    half_timber('lhwall', 0, 0, 0.46, bw, bd, 1.12, bays=12)
-    roof_z = 1.58
+    half_timber('lhwall', 0, 0, 0.0, bw, bd, 1.12, bays=12)
+    roof_z = 1.12
     shingle_gable('lhroof', 0, 0, roof_z, bw, bd, 1.05, overhang=0.3,
                   rows=30, key='thatch', dark='thatch_dark', ridge_along='y')
     box('lhridge', 0, 0, roof_z + 1.01, 0.22, bd + 0.4, 0.14, mat('root'))
@@ -4870,50 +4888,49 @@ def large_house(w, h):
             0.34, 0.07, 0.07, mat('root_dark'))
     moss('lhmoss', 0, 0, roof_z, bw * 0.6, bd * 0.6, 0.5, overhang=0.0,
          patches=9)
-    face = -bw / 2
     # The cross-passage: a door each side, halfway along. It is what makes a
     # longhouse a longhouse rather than a very long shed.
     for s_ in (-1, 1):
-        gothic_door(f'lhdoor{s_}', s_ * bw / 2, -0.2, 0.46, 0.5, 0.78,
+        gothic_door(f'lhdoor{s_}', s_ * bw / 2, -0.2, 0.0, 0.5, 0.78,
                     facing='x')
-    plank_door('lhleaf', -bw / 2 - 0.06, -0.2, 0.48, 0.44, 0.62, facing='x',
+    plank_door('lhleaf', -bw / 2 - 0.06, -0.2, 0.02, 0.44, 0.62, facing='x',
                planks=5)
     for i, ty in enumerate((-bd / 2 + 0.7, -bd / 2 + 1.5)):
-        window(f'lhwin{i}', -bw / 2, ty, 0.9, 0.32, 0.3, 0.1, facing='x')
-    leaded_window('lhwing', -bw / 2, bd / 2 - 0.9, 0.9, 0.3, 0.34,
-                  facing='x')
+        window(f'lhwin{i}', -bw / 2, ty, 0.44, 0.32, 0.3, 0.1, facing='x')
+    leaded_window('lhwing', -bw / 2, bd / 2 - 0.9, 0.44, 0.3, 0.34,
+                  facing='x', open=True)
     # The byre end: bigger opening, no glass, and a hurdle across it.
-    box('lhbyre', -bw / 2 + 0.05, bd / 2 - 0.55, 0.46, 0.1, 0.72, 0.86,
+    box('lhbyre', -bw / 2 + 0.05, bd / 2 - 0.55, 0.0, 0.1, 0.72, 0.86,
         mat('dark'))
-    withy_fence('lhhurdle', -bw / 2 - 0.12, bd / 2 - 0.55, 0.14, 0.7, h=0.44,
+    withy_fence('lhhurdle', -bw / 2 - 0.12, bd / 2 - 0.55, 0.0, 0.7, h=0.44,
                 axis='y')
     chimney('lhchim', 0, -bd / 2 + 0.6, 0, 0.32, roof_z + 1.0)
     smoke('lhsmoke', 0, -bd / 2 + 0.6, roof_z + 1.06, h=0.9)
     dagged('lhdag', 0, -bd / 2 - 0.3, roof_z, bw + 0.5, key='oak')
     for s_ in (-1, 1):
-        corbel_head(f'lhhead{s_}', s_ * (bw / 2 - 0.08), -bd / 2 + 0.1, 1.4)
-    lantern('lhlamp', -bw / 2 - 0.1, -0.62, 1.3, drop=0.14)
-    hanging_sign('lhsign', -bw / 2 + 0.04, 0.35, 1.3, w=0.2, facing='x')
+        corbel_head(f'lhhead{s_}', s_ * (bw / 2 - 0.08), -bd / 2 + 0.1, 0.94)
+    lantern('lhlamp', -bw / 2 - 0.1, -0.62, 0.84, drop=0.14)
+    hanging_sign('lhsign', -bw / 2 + 0.04, 0.35, 0.84, w=0.2, facing='x')
     # ── The strip of yard the plot leaves ──
-    withy_fence('lhpen', w / 2 - 0.22, 0.9, 0.14, h - 2.4, h=0.44, axis='y')
-    firewood('lhwood', w / 2 - 0.4, -h / 2 + 0.85, 0.14, w=0.5, rows=5)
+    withy_fence('lhpen', w / 2 - 0.22, 0.9, 0.0, h - 2.4, h=0.44, axis='y')
+    firewood('lhwood', w / 2 - 0.4, -h / 2 + 0.85, 0.0, w=0.5, rows=5)
     for i in range(2):
-        barrel(f'lhbar{i}', -w / 2 + 0.3, -h / 2 + 0.7 + i * 0.5, 0.14,
+        barrel(f'lhbar{i}', -w / 2 + 0.3, -h / 2 + 0.7 + i * 0.5, 0.0,
                r=0.15, h=0.34)
-    straw_bale('lhbale', w / 2 - 0.36, 1.5, 0.14, 0.4, 0.28, 0.26)
-    trough('lhtr', w / 2 - 0.32, 0.55, 0.14, 0.24, 0.6, key='oak')
-    nest('lhnest', -w / 2 + 0.34, 1.7, 0.14, 0.2)
+    straw_bale('lhbale', w / 2 - 0.36, 1.5, 0.0, 0.4, 0.28, 0.26)
+    trough('lhtr', w / 2 - 0.32, 0.55, 0.0, 0.24, 0.6, key='oak')
+    nest('lhnest', -w / 2 + 0.34, 1.7, 0.0, 0.2)
     for i, r in enumerate((0.12, 0.1)):
-        egg(f'lhegg{i}', -w / 2 + 0.3 + i * 0.2, 1.7, 0.16, r,
+        egg(f'lhegg{i}', -w / 2 + 0.3 + i * 0.2, 1.7, 0.02, r,
             mat('egg_common' if i % 2 else 'egg_uncommon'))
-    critter('lhcrit0', w / 2 - 0.34, 1.05, 0.14, angle=1.3, kind=1, scale=0.9)
-    critter('lhcrit1', -w / 2 + 0.36, -1.3, 0.14, angle=2.6, kind=0,
+    critter('lhcrit0', w / 2 - 0.34, 1.05, 0.0, angle=1.3, kind=1, scale=0.9)
+    critter('lhcrit1', -w / 2 + 0.36, -1.3, 0.0, angle=2.6, kind=0,
             scale=0.75)
-    fowl('lhfowl', -w / 2 + 0.34, 0.3, 0.14, angle=0.8)
-    washing('lhwash', -w / 2 + 0.32, -0.55, 0.14, 1.1, axis='y', h=0.9)
-    flower_bed('lhbed', -w / 2 + 0.34, -h / 2 + 1.6, 0.14, 0.42, 0.32,
+    fowl('lhfowl', -w / 2 + 0.34, 0.3, 0.0, angle=0.8)
+    washing('lhwash', -w / 2 + 0.32, -0.55, 0.0, 1.1, axis='y', h=0.9)
+    flower_bed('lhbed', -w / 2 + 0.34, -h / 2 + 1.6, 0.0, 0.42, 0.32,
                bloom='bloom_white', n=5)
-    window_box('lhwb', -bw / 2 - 0.08, -bd / 2 + 0.7, 0.74, 0.36, facing='x',
+    window_box('lhwb', -bw / 2 - 0.08, -bd / 2 + 0.7, 0.28, 0.36, facing='x',
                bloom='bloom_red')
     perch_bird('lhbird', 0, -bd / 2 - 0.16, roof_z + 1.06)
     tufts('lhtuft', 0, 0, w - 0.4, h - 0.4)
@@ -5105,7 +5122,8 @@ def stone_camp(w, h):
 
     # ── THE CRANE, on the RIGHT (+x AND +y), against the sky ──
     cx_, cy_ = right(1.2)
-    jib_crane('sccrane', cx_ + 0.15, cy_ - 0.35, 0.12, hh=1.85, reach=0.92)
+    jib_crane('sccrane', cx_ + 0.15, cy_ - 0.35, 0.12, hh=1.85, reach=0.92,
+              head_bolts=0)
 
     # ── THE LARGE CAMP: the same hole, worked twice ──
     # "Large Stone Camp soll wirklich auch ein grösserer Steinbruch sein"
@@ -5128,7 +5146,7 @@ def stone_camp(w, h):
         mine_cart('sc2cart', m2x, m2y - 1.2, 0.19, axis='y',
                   load='rock_warm')
         jib_crane('sc2crane', -hw + 1.15, hh_ - 1.9, 0.12, hh=1.5,
-                  reach=0.62)
+                  reach=0.62, head_bolts=0)
         for i in range(3):
             for k in range(2):
                 box(f'sc2blk{i}{k}', -0.35 + i * 0.6, -hh_ + 0.62,
@@ -5252,7 +5270,8 @@ def wood_works(w, h):
     # thatch roof read as one tangle on screen however far apart their
     # footprints actually are in x and y alone ──
     crx, cry = w / 2 - 1.1, h / 2 - 1.05
-    jib_crane('wwcrane', crx, cry, z0, hh=1.25, reach=0.42, load='log')
+    jib_crane('wwcrane', crx, cry, z0, hh=1.25, reach=0.42, load='log',
+              head_bolts=0)
 
     # ── Eigenleben: a cart at the gate, and something alive in the yard ──
     cart('wwcart', hx + 0.5, face - 0.55, z0, angle=0.5, load='log')
@@ -5349,16 +5368,19 @@ def storehouse(w, h):
     building a band of shadow nothing else on the map has. The dovecote is the
     ornament that also does a job — every medieval granary had one.
     """
-    plinth('sthbase', 0, 0, w - 0.4, h - 0.4, 0.12)
+    # No flat plinth under the staddle stones (user 2026-08-20: "keine
+    # Bodenplatten") — they plant straight in the ground now, which is one
+    # redundant slab gone, not the raised-granary design itself: THAT is
+    # the staddle stones staying exactly as tall as they always were.
     bw, bd = w - 1.1, h - 1.1
     for sx_ in (-1, 1):
         for sy_ in (-1, 1):
             px, py = sx_ * (bw / 2 - 0.16), sy_ * (bd / 2 - 0.16)
-            box(f'stst{sx_}{sy_}', px, py, 0.12, 0.24, 0.24, 0.34,
+            box(f'stst{sx_}{sy_}', px, py, 0.0, 0.24, 0.24, 0.34,
                 mat('ashlar'))
-            box(f'stcap{sx_}{sy_}', px, py, 0.46, 0.42, 0.42, 0.12,
+            box(f'stcap{sx_}{sy_}', px, py, 0.34, 0.42, 0.42, 0.12,
                 mat('limestone'))
-    floor_z = 0.58
+    floor_z = 0.46
     box('stfloor', 0, 0, floor_z, bw + 0.2, bd + 0.2, 0.12, mat('oak'))
     half_timber('stwall', 0, 0, floor_z + 0.12, bw, bd, 1.05, bays=4)
     roof_z = floor_z + 1.17
@@ -5379,8 +5401,8 @@ def storehouse(w, h):
     # The floor is 0.46 above the ground and four risers of 0.17 climb
     # 0.68, so the flight stood a quarter of a metre proud of the door it
     # leads to. The rise is the gap divided by the count, always.
-    steps('ststeps', 0, face - 0.2, 0.12, 0.8, count=4,
-          rise=(floor_z - 0.12) / 4, tread=0.115)
+    steps('ststeps', 0, face - 0.2, 0.0, 0.8, count=4,
+          rise=floor_z / 4, tread=0.115)
     for s in (-1, 1):
         corbel_head(f'sthead{s}', s * (bw / 2 - 0.1), face, floor_z + 1.0)
         sconce(f'stlamp{s}', s * 0.46, face, floor_z + 0.78)
@@ -5389,29 +5411,29 @@ def storehouse(w, h):
     grille('stvent', bw / 2, 0.25, floor_z + 0.62, 0.3, 0.3, facing='x')
     for i, (ox, oy, r) in enumerate(((w / 2 - 0.62, -h / 2 + 0.6, 0.2),
                                      (w / 2 - 0.66, -h / 2 + 1.1, 0.17))):
-        pot(f'stbar{i}', ox, oy, 0.12, r=r, h=0.44, key='oak')
+        pot(f'stbar{i}', ox, oy, 0.0, r=r, h=0.44, key='oak')
     for i in range(3):
         s = 0.34 + 0.08 * (i % 2)
-        box(f'stsack{i}', -w / 2 + 0.6 + i * 0.3, -h / 2 + 0.62, 0.12,
+        box(f'stsack{i}', -w / 2 + 0.6 + i * 0.3, -h / 2 + 0.62, 0.0,
             s, s * 0.8, 0.3, mat('straw' if i % 2 else 'sand'))
     tufts('sttuft', 0, 0, w - 0.6, h - 0.6)
 
     # ── What a store is FULL of, standing outside it ──
-    cart('stcart', -w / 2 + 0.95, -h / 2 + 0.9, 0.12, angle=0.4, load='sack')
-    sack_pile('stheap', w / 2 - 0.7, h / 2 - 0.7, 0.12, n=4)
+    cart('stcart', -w / 2 + 0.95, -h / 2 + 0.9, 0.0, angle=0.4, load='sack')
+    sack_pile('stheap', w / 2 - 0.7, h / 2 - 0.7, 0.0, n=4)
     for i in range(2):
-        barrel(f'stbar{i}', -w / 2 + 0.5, h / 2 - 0.6 - i * 0.44, 0.12,
+        barrel(f'stbar{i}', -w / 2 + 0.5, h / 2 - 0.6 - i * 0.44, 0.0,
                r=0.18, h=0.4)
-    crate('stcrate', w / 2 - 0.6, -h / 2 + 1.35, 0.12, s=0.38)
-    box('stscale', 0.5, -h / 2 + 0.5, 0.12, 0.08, 0.08, 0.5, mat('iron'))
-    box('stpan', 0.5, -h / 2 + 0.5, 0.62, 0.34, 0.24, 0.05, mat('iron'))
+    crate('stcrate', w / 2 - 0.6, -h / 2 + 1.35, 0.0, s=0.38)
+    box('stscale', 0.5, -h / 2 + 0.5, 0.0, 0.08, 0.08, 0.5, mat('iron'))
+    box('stpan', 0.5, -h / 2 + 0.5, 0.5, 0.34, 0.24, 0.05, mat('iron'))
     # ── Eigenleben: a store is a place people come to ──
-    critter('stcrit', -w / 2 + 1.5, -h / 2 + 0.5, 0.12, angle=0.3, kind=2)
+    critter('stcrit', -w / 2 + 1.5, -h / 2 + 0.5, 0.0, angle=0.3, kind=2)
     for i in range(2):
-        fowl(f'stfowl{i}', w / 2 - 1.15 + i * 0.42, -h / 2 + 0.42, 0.12,
+        fowl(f'stfowl{i}', w / 2 - 1.15 + i * 0.42, -h / 2 + 0.42, 0.0,
              angle=1.2 + i * 1.6, kind=i)
-    basket('stbask', 0.15, -h / 2 + 1.0, 0.12, fill='gold')
-    signpost('stsign2', -w / 2 + 0.42, -h / 2 + 1.5, 0.12)
+    basket('stbask', 0.15, -h / 2 + 1.0, 0.0, fill='gold')
+    signpost('stsign2', -w / 2 + 0.42, -h / 2 + 1.5, 0.0)
     perch_bird('stbird', 0, bd / 2 + 0.2, roof_z + 0.96)
     # Accent: RED under the thatch — the two loudest things on the building,
     # and between them nothing else on the map looks like it.
@@ -5956,13 +5978,13 @@ def healing_hut(w, h):
     where a symbol would say nothing at thirty pixels. The spore lamps are the
     fantasy note — this world's herbalist grows things that glow.
     """
-    plinth('hhbase', 0, 0, w - 0.2, h - 0.2, 0.16)
+    # No plinth and no stone sill (user 2026-08-20: "keine Bodenplatten") —
+    # every z below is the old plinth (0.16) or sill-top (0.42) height with
+    # that base subtracted back out.
     bw, bd = w - 0.62, h - 0.9
     hx, hy = 0, 0.25
-    ashlar_courses('hhsill', hx, hy, 0.16, bw + 0.12, bd + 0.12, 0.26,
-                   course=0.0662, block=0.1289)
-    half_timber('hhwall', hx, hy, 0.42, bw, bd, 1.0, bays=4)
-    roof_z = 1.42
+    half_timber('hhwall', hx, hy, 0.0, bw, bd, 1.0, bays=4)
+    roof_z = 1.0
     # TURF, with flowers in it — the apothecary's roof is part of the
     # apothecary's stock, and it is the only green roof on the map.
     turf_roof('hhroof', hx, hy, roof_z, bw, bd, 1.05, ridge_along='x',
@@ -5975,63 +5997,63 @@ def healing_hut(w, h):
     dagged('hhdag', hx, face - 0.34, roof_z, bw + 0.62)
     gable_boards('hhgab', hx, face - 0.3, roof_z, bw + 0.55, 0.95, axis='x')
     weathervane('hhvane', hx + bw / 2 + 0.06, hy, roof_z + 1.05, 0.42)
-    gothic_door('hhdoor', hx + 0.2, face, 0.42, 0.48, 0.72)
-    plank_door('hhleaf', hx + 0.2, face - 0.06, 0.44, 0.42, 0.5, planks=5)
-    oriel('hhor', hx - 0.42, face, 0.78, 0.44, 0.42)
-    leaded_window('hhwinx', hx + bw / 2, hy + 0.2, 0.75, 0.28, 0.34,
-                  facing='x')
-    hanging_sign('hhsign', hx + 0.72, face, 1.24, w=0.36)
+    gothic_door('hhdoor', hx + 0.2, face, 0.0, 0.48, 0.72)
+    plank_door('hhleaf', hx + 0.2, face - 0.06, 0.02, 0.42, 0.5, planks=5)
+    oriel('hhor', hx - 0.42, face, 0.36, 0.44, 0.42)
+    leaded_window('hhwinx', hx + bw / 2, hy + 0.2, 0.33, 0.28, 0.34,
+                  facing='x', open=True)
+    hanging_sign('hhsign', hx + 0.72, face, 0.82, w=0.36)
     # ── THE FLAG (user 2026-08-12) ──
     # "Healing Hut braucht eine Fahne mit einem roten Kreuz auf weissem
     # Grund." It is the strongest identifier the building has: a drying rack
     # says herbs, a still says laboratory, and only the cross says INFIRMARY.
-    cross_flag('hhflag', hx - bw / 2 - 0.16, face + 0.1, 1.05, w=0.36,
+    cross_flag('hhflag', hx - bw / 2 - 0.16, face + 0.1, 0.63, w=0.36,
                h=0.52)
-    lantern('hhlamp', hx - 0.66, face - 0.1, 1.2, drop=0.16)
+    lantern('hhlamp', hx - 0.66, face - 0.1, 0.78, drop=0.16)
     for s in (-1, 1):
-        corbel_head(f'hhhead{s}', hx + s * (bw / 2 - 0.1), face, 1.3)
+        corbel_head(f'hhhead{s}', hx + s * (bw / 2 - 0.1), face, 0.88)
     # THE RACK, under the eave.
     rx, ry = hx, face - 0.46
     for s in (-1, 1):
-        carved_post(f'hhrp{s}', rx + s * (bw / 2 - 0.08), ry, 0.16, 1.02)
-    box('hhrail', rx, ry, 1.08, bw - 0.06, 0.08, 0.08, mat('oak_light'))
+        carved_post(f'hhrp{s}', rx + s * (bw / 2 - 0.08), ry, 0.0, 1.02)
+    box('hhrail', rx, ry, 0.92, bw - 0.06, 0.08, 0.08, mat('oak_light'))
     for k in range(5):
         t = -bw / 2 + 0.3 + k * (bw - 0.6) / 4
-        box(f'hhbunch{k}', rx + t, ry, 0.74, 0.16, 0.13, 0.34,
+        box(f'hhbunch{k}', rx + t, ry, 0.58, 0.16, 0.13, 0.34,
             mat('leaf' if k % 2 else 'moss'))
-    spore_lamp('hhspore0', -w / 2 + 0.36, -h / 2 + 0.5, 0.16, h=0.5)
-    spore_lamp('hhspore1', w / 2 - 0.34, -h / 2 + 0.9, 0.16, h=0.42)
+    spore_lamp('hhspore0', -w / 2 + 0.36, -h / 2 + 0.5, 0.0, h=0.5)
+    spore_lamp('hhspore1', w / 2 - 0.34, -h / 2 + 0.9, 0.0, h=0.42)
     for i in range(3):
-        plant(f'hhherb{i}', -w / 2 + 0.36, -h / 2 + 0.95 + i * 0.42, 0.16)
-    brazier('hhbraz', w / 2 - 0.4, -h / 2 + 0.5, 0.16)
+        plant(f'hhherb{i}', -w / 2 + 0.36, -h / 2 + 0.95 + i * 0.42, 0.0)
+    brazier('hhbraz', w / 2 - 0.4, -h / 2 + 0.5, 0.0)
     tufts('hhtuft', 0, -h / 2 + 0.9, w - 0.8, 0.6)
 
     # ── The apothecary's own things ──
-    cauldron('hhcaul', w / 2 - 0.5, -h / 2 + 1.35, 0.16, r=0.24)
+    cauldron('hhcaul', w / 2 - 0.5, -h / 2 + 1.35, 0.0, r=0.24)
     for i in range(4):
-        box(f'hhvial{i}', -w / 2 + 0.3 + i * 0.16, -h / 2 + 1.5, 0.16,
+        box(f'hhvial{i}', -w / 2 + 0.3 + i * 0.16, -h / 2 + 1.5, 0.0,
             0.11, 0.11, 0.2 + 0.08 * (i % 2),
             mat('glow' if i % 2 else 'gold'))
-    box('hhmort', 0.55, -h / 2 + 0.42, 0.16, 0.2, 0.2, 0.16,
+    box('hhmort', 0.55, -h / 2 + 0.42, 0.0, 0.2, 0.2, 0.16,
         mat('limestone'))
-    box('hhpest', 0.6, -h / 2 + 0.42, 0.3, 0.05, 0.05, 0.18, mat('oak_light'))
-    sack_pile('hhherbs', -w / 2 + 0.34, h / 2 - 0.5, 0.16, n=2, key='leaf')
-    barrel('hhbar', w / 2 - 0.4, h / 2 - 0.55, 0.16, r=0.16, h=0.34)
+    box('hhpest', 0.6, -h / 2 + 0.42, 0.14, 0.05, 0.05, 0.18, mat('oak_light'))
+    sack_pile('hhherbs', -w / 2 + 0.34, h / 2 - 0.5, 0.0, n=2, key='leaf')
+    barrel('hhbar', w / 2 - 0.4, h / 2 - 0.55, 0.0, r=0.16, h=0.34)
     # ── Eigenleben: the fire is under the pot ──
-    critter('hhcrit', -w / 2 + 0.75, -h / 2 + 0.55, 0.16, angle=0.5, kind=2,
+    critter('hhcrit', -w / 2 + 0.75, -h / 2 + 0.55, 0.0, angle=0.5, kind=2,
             scale=0.85)
-    beehive('hhbee', w / 2 - 0.48, h / 2 - 0.5, 0.16)
-    washing('hhwash', -0.1, h / 2 - 0.4, 0.16, 1.5, axis='x', h=0.9, items=4)
-    basket('hhbask', 0.9, -h / 2 + 0.42, 0.16, fill='leaf')
+    beehive('hhbee', w / 2 - 0.48, h / 2 - 0.5, 0.0)
+    washing('hhwash', -0.1, h / 2 - 0.4, 0.0, 1.5, axis='x', h=0.9, items=4)
+    basket('hhbask', 0.9, -h / 2 + 0.42, 0.0, fill='leaf')
     # Accent: the roof is already the accent. Beds of the same herbs below it,
     # so the green reads as GROWN rather than as a paint choice.
-    flower_bed('hhbed0', -w / 2 + 0.55, -h / 2 + 0.75, 0.16, 0.62, 0.4,
+    flower_bed('hhbed0', -w / 2 + 0.55, -h / 2 + 0.75, 0.0, 0.62, 0.4,
                bloom='bloom_white', n=8)
-    flower_bed('hhbed1', w / 2 - 0.52, -h / 2 + 0.55, 0.16, 0.5, 0.36,
+    flower_bed('hhbed1', w / 2 - 0.52, -h / 2 + 0.55, 0.0, 0.5, 0.36,
                bloom='bloom_blue', n=6)
-    window_box('hhwb', hx - 0.42, face - 0.1, 0.72, 0.42, bloom='bloom_pink')
+    window_box('hhwb', hx - 0.42, face - 0.1, 0.30, 0.42, bloom='bloom_pink')
     # ── SIGNATURE: the still ──
-    still('hhstill', w / 2 - 0.62, -h / 2 + 1.28, 0.16)
+    still('hhstill', w / 2 - 0.62, -h / 2 + 1.28, 0.0)
 
 def scout_post(w, h):
     """Scout Post — a watchtower, and the only building whose job is HEIGHT.
@@ -6438,11 +6460,12 @@ def fish_hut(w, h):
     that in one shape. The hut is small and pushed back; the racks and the boat
     take the front, because those are the readable parts.
     """
-    plinth('fhbase', 0, 0, w - 0.24, h - 0.24, 0.14)
+    # No plinth (user 2026-08-20: "keine Bodenplatten") — every z below is
+    # the old plinth-relative height (0.14) with that base subtracted out.
     bw, bd = 1.15, 0.95
     hx, hy = -w / 2 + 0.85, h / 2 - 0.62
-    half_timber('fhwall', hx, hy, 0.14, bw, bd, 0.85, bays=4)
-    roof_z = 0.99
+    half_timber('fhwall', hx, hy, 0.0, bw, bd, 0.85, bays=4)
+    roof_z = 0.85
     # SLATE: the only cold roof in the settlement, which is what a building
     # standing in water should have.
     shingle_gable('fhroof', hx, hy, roof_z, bw, bd, 0.78, overhang=0.26,
@@ -6450,83 +6473,85 @@ def fish_hut(w, h):
     ridge_crest('fhcrest', hx, hy, roof_z + 0.74, bw + 0.4, axis='x')
     dagged('fhdag', hx, hy - bd / 2 - 0.28, roof_z, bw + 0.5)
     weathervane('fhvane', hx + bw / 2 + 0.06, hy, roof_z + 0.78, 0.4)
-    gothic_door('fhdoor', hx, hy - bd / 2, 0.14, 0.42, 0.6)
-    leaded_window('fhwin', hx + bw / 2, hy, 0.5, 0.24, 0.3, facing='x')
-    hanging_sign('fhsign', hx + 0.72, hy - bd / 2 + 0.1, 0.86, w=0.36)
-    lantern('fhlamp', hx - 0.66, hy - bd / 2 + 0.05, 0.86, drop=0.14)
+    gothic_door('fhdoor', hx, hy - bd / 2, 0.0, 0.42, 0.6)
+    leaded_window('fhwin', hx + bw / 2, hy, 0.36, 0.24, 0.3, facing='x',
+                  open=True)
+    hanging_sign('fhsign', hx + 0.72, hy - bd / 2 + 0.1, 0.72, w=0.36)
+    lantern('fhlamp', hx - 0.66, hy - bd / 2 + 0.05, 0.72, drop=0.14)
     for i in range(2):
         ry = -h / 2 + 0.5 + i * 0.55
         for s in (-1, 1):
-            carved_post(f'fhp{i}{s}', 0.5 + s * 0.75, ry, 0.14, 0.82)
-        box(f'fhrail{i}', 0.5, ry, 0.9, 1.6, 0.07, 0.07, mat('oak_light'))
+            carved_post(f'fhp{i}{s}', 0.5 + s * 0.75, ry, 0.0, 0.82)
+        box(f'fhrail{i}', 0.5, ry, 0.76, 1.6, 0.07, 0.07, mat('oak_light'))
         for k in range(5):
             # Split fish on a rail: a body, a tail and a head, all round.
             # Boxes on a line read as pegged laundry (user 2026-08-12).
             fx_ = 0.5 - 0.6 + k * 0.3
-            orb(f'fhfish{i}{k}', fx_, ry, 0.5, 0.19, 0.1, 0.3,
+            orb(f'fhfish{i}{k}', fx_, ry, 0.36, 0.19, 0.1, 0.3,
                 key='slate' if k % 2 else 'stucco_shade', subdiv=1,
                 wobble=0.12, seed=k + i * 3)
-            orb(f'fhhead{i}{k}', fx_, ry, 0.74, 0.13, 0.09, 0.12,
+            orb(f'fhhead{i}{k}', fx_, ry, 0.6, 0.13, 0.09, 0.12,
                 key='slate' if k % 2 else 'stucco_shade', subdiv=0)
-            tl = box(f'fhtail{i}{k}', fx_, ry, 0.46, 0.16, 0.04, 0.14,
+            tl = box(f'fhtail{i}{k}', fx_, ry, 0.32, 0.16, 0.04, 0.14,
                      mat('linen'))
             tl.rotation_euler = (0, 0.4, 0)
     bx, by = 0.45, -h / 2 + 0.58
-    hull = box('fhboat', bx, by, 0.06, 1.15, 0.44, 0.2, mat('oak'))
+    hull = box('fhboat', bx, by, -0.08, 1.15, 0.44, 0.2, mat('oak'))
     hull.rotation_euler = (0, 0, 0.16)
-    box('fhkeel', bx, by, 0.26, 1.1, 0.12, 0.07, mat('oak_light'))
+    box('fhkeel', bx, by, 0.12, 1.1, 0.12, 0.07, mat('oak_light'))
     for k in range(2):
-        box(f'fhthwart{k}', bx - 0.24 + k * 0.48, by, 0.24, 0.16, 0.4, 0.05,
+        box(f'fhthwart{k}', bx - 0.24 + k * 0.48, by, 0.1, 0.16, 0.4, 0.05,
             mat('oak_light'))
-    oar = box('fhoar', bx - 0.3, by - 0.28, 0.3, 0.9, 0.07, 0.05,
+    oar = box('fhoar', bx - 0.3, by - 0.28, 0.16, 0.9, 0.07, 0.05,
               mat('oak_light'))
     oar.rotation_euler = (0, 0, 0.5)
-    box('fhmast', bx + 0.34, by, 0.26, 0.07, 0.07, 0.8, mat('oak'))
-    box('fhsail', bx + 0.34, by, 0.5, 0.05, 0.36, 0.5, mat('cloth'))
+    box('fhmast', bx + 0.34, by, 0.12, 0.07, 0.07, 0.8, mat('oak'))
+    box('fhsail', bx + 0.34, by, 0.36, 0.05, 0.36, 0.5, mat('cloth'))
     for i in range(2):
-        box(f'fhcrate{i}', -w / 2 + 0.45, -h / 2 + 0.5 + i * 0.36, 0.14,
+        box(f'fhcrate{i}', -w / 2 + 0.45, -h / 2 + 0.5 + i * 0.36, 0.0,
             0.3, 0.28, 0.22, mat('oak_light'))
-    box('fhnet', -0.6, h / 2 - 0.42, 0.14, 0.5, 0.5, 0.16, mat('straw'))
+    box('fhnet', -0.6, h / 2 - 0.42, 0.0, 0.5, 0.5, 0.16, mat('straw'))
 
     # ── WATER AND A BOAT (user 2026-08-09) ──
     # The boat was already here and it was standing on grass, which is the one
     # place a boat says nothing. Cut the dock into the plinth, float the hull
     # in it, and put a pier over the edge — now every part of the yard is about
-    # the same thing.
-    water_patch('fhdock', 0.35, -h / 2 + 0.62, 2.1, 1.0, z=0.14)
-    pier('fhpier', 0.35, -h / 2 + 1.2, 0.16, 1.7, axis='x')
+    # the same thing. No plinth any more (user 2026-08-20), so the dock is a
+    # flush pond at grade instead of a recess — same idea, one less platform.
+    water_patch('fhdock', 0.35, -h / 2 + 0.62, 2.1, 1.0, z=0.0)
+    pier('fhpier', 0.35, -h / 2 + 1.2, 0.02, 1.7, axis='x')
     for i in range(2):
-        box(f'fhbol{i}', w / 2 - 1.5 + i * 1.1, -h / 2 + 1.25, 0.16,
+        box(f'fhbol{i}', w / 2 - 1.5 + i * 1.1, -h / 2 + 1.25, 0.02,
             0.12, 0.12, 0.26, mat('oak'))
-    net_frame('fhnet0', -w / 2 + 0.5, -h / 2 + 0.7, 0.14, w=0.62, h=0.66)
-    net_frame('fhnet1', -w / 2 + 0.5, h / 2 - 0.6, 0.14, w=0.62, h=0.6)
+    net_frame('fhnet0', -w / 2 + 0.5, -h / 2 + 0.7, 0.0, w=0.62, h=0.66)
+    net_frame('fhnet1', -w / 2 + 0.5, h / 2 - 0.6, 0.0, w=0.62, h=0.6)
     for i in range(3):
-        crate(f'fhcr{i}', -0.35 + i * 0.42, -h / 2 + 0.5, 0.14, s=0.32)
-        box(f'fhcatch{i}', -0.35 + i * 0.42, -h / 2 + 0.5, 0.4, 0.22, 0.16,
+        crate(f'fhcr{i}', -0.35 + i * 0.42, -h / 2 + 0.5, 0.0, s=0.32)
+        box(f'fhcatch{i}', -0.35 + i * 0.42, -h / 2 + 0.5, 0.26, 0.22, 0.16,
             0.07, mat('stucco_shade'))
-    barrel('fhbar', 0.15, h / 2 - 0.5, 0.14, r=0.18, h=0.38)
+    barrel('fhbar', 0.15, h / 2 - 0.5, 0.0, r=0.18, h=0.38)
     for i in range(3):
-        box(f'fhfloat{i}', w / 2 - 1.45 + i * 0.4, -h / 2 + 1.55, 0.14,
+        box(f'fhfloat{i}', w / 2 - 1.45 + i * 0.4, -h / 2 + 1.55, 0.0,
             0.16, 0.16, 0.14, mat('cloth_stripe' if i % 2 else 'straw'))
     # ── Eigenleben: the catch is in and the gulls know ──
-    chimney('fhchim', hx - bw / 2 + 0.15, hy + 0.3, 0.14, 0.24,
+    chimney('fhchim', hx - bw / 2 + 0.15, hy + 0.3, 0.0, 0.24,
             roof_z + 0.7)
     for i in range(3):
-        perch_bird(f'fhgull{i}', w / 2 - 1.4 + i * 0.55, -h / 2 + 1.22, 0.3,
+        perch_bird(f'fhgull{i}', w / 2 - 1.4 + i * 0.55, -h / 2 + 1.22, 0.16,
                    kind=i % 2)
-    critter('fhcrit', -w / 2 + 0.55, h / 2 - 1.1, 0.14, angle=0.8, kind=2,
+    critter('fhcrit', -w / 2 + 0.55, h / 2 - 1.1, 0.0, angle=0.8, kind=2,
             scale=0.8)
-    basket('fhbask', -0.5, -h / 2 + 1.6, 0.14, fill='stucco_shade')
-    washing('fhwash', -w / 2 + 1.2, h / 2 - 0.45, 0.14, 1.3, axis='x', h=0.85,
+    basket('fhbask', -0.5, -h / 2 + 1.6, 0.0, fill='stucco_shade')
+    washing('fhwash', -w / 2 + 1.2, h / 2 - 0.45, 0.0, 1.3, axis='x', h=0.85,
             items=3)
     # Accent: BLUE, and sailcloth over the dock — the roof is already cold.
-    window_box('fhwb', hx, hy - bd / 2 - 0.09, 0.62, 0.42, bloom='bloom_blue')
+    window_box('fhwb', hx, hy - bd / 2 - 0.09, 0.48, 0.42, bloom='bloom_blue')
     awning('fhsail', 0.35, -h / 2 + 1.62, 0.95, 1.5, 0.8, key='linen',
            stripe='cloth_blue')
-    flower_bed('fhbed', -w / 2 + 0.55, h / 2 - 1.4, 0.14, 0.5, 0.34,
+    flower_bed('fhbed', -w / 2 + 0.55, h / 2 - 1.4, 0.0, 0.5, 0.34,
                bloom='bloom_white', n=5)
     # ── SIGNATURE: the net, slung and full ──
-    hung_net('fhhang', w / 2 - 0.42, -0.35, 0.14, span=1.5, mast=1.3,
+    hung_net('fhhang', w / 2 - 0.42, -0.35, 0.0, span=1.5, mast=1.3,
              axis='y')
 
 def fur_lodge(w, h):
@@ -6536,13 +6561,13 @@ def fur_lodge(w, h):
     horizontal rails, the frames here are upright, and the material is fur
     rather than fish. Two luxuries that read alike are one luxury drawn twice.
     """
-    plinth('flbase', 0, 0, w - 0.24, h - 0.24, 0.14)
+    # No plinth and no stone sill (user 2026-08-20: "keine Bodenplatten") —
+    # every z below is the old plinth (0.14) or sill-top (0.38) height with
+    # that base subtracted back out.
     bw, bd = 1.2, 1.0
     hx, hy = w / 2 - 0.85, h / 2 - 0.65
-    ashlar_courses('flsill', hx, hy, 0.14, bw + 0.1, bd + 0.1, 0.24,
-                   course=0.0648, block=0.125)
-    half_timber('flwall', hx, hy, 0.38, bw, bd, 0.84, bays=4)
-    roof_z = 1.22
+    half_timber('flwall', hx, hy, 0.0, bw, bd, 0.84, bays=4)
+    roof_z = 0.84
     # HIDES pegged over the shingles — the lodge is roofed in its own trade.
     shingle_gable('flroof', hx, hy, roof_z, bw, bd, 0.85, overhang=0.26,
                   rows=22, key='hide_dark', dark='root_dark',
@@ -6551,75 +6576,75 @@ def fur_lodge(w, h):
     dagged('fldag', hx, hy - bd / 2 - 0.28, roof_z, bw + 0.5)
     chimney('flchim', hx + bw / 2 - 0.2, hy + 0.28, 0, 0.26, roof_z + 0.72)
     weathervane('flvane', hx - bw / 2 - 0.06, hy, roof_z + 0.85, 0.4)
-    gothic_door('fldoor', hx, hy - bd / 2, 0.38, 0.44, 0.6)
-    oriel('flor', hx - bw / 2, hy, 0.72, 0.4, 0.38, facing='x')
-    hanging_sign('flsign', hx - 0.74, hy - bd / 2 + 0.1, 1.1, w=0.36)
-    lantern('fllamp', hx + 0.68, hy - bd / 2 + 0.05, 1.06, drop=0.14)
-    corbel_head('flhead', hx, hy - bd / 2, 1.12)
+    gothic_door('fldoor', hx, hy - bd / 2, 0.0, 0.44, 0.6)
+    oriel('flor', hx - bw / 2, hy, 0.34, 0.4, 0.38, facing='x')
+    hanging_sign('flsign', hx - 0.74, hy - bd / 2 + 0.1, 0.72, w=0.36)
+    lantern('fllamp', hx + 0.68, hy - bd / 2 + 0.05, 0.68, drop=0.14)
+    corbel_head('flhead', hx, hy - bd / 2, 0.74)
     for i in range(3):
         if i == 1:
             continue        # the great hoop stands here now
         fx = -w / 2 + 0.62 + i * 0.62
         for s in (-1, 1):
-            box(f'flp{i}{s}', fx + s * 0.26, -h / 2 + 0.62, 0.14,
+            box(f'flp{i}{s}', fx + s * 0.26, -h / 2 + 0.62, 0.0,
                 0.07, 0.07, 0.98, mat('root'))
-        box(f'fltop{i}', fx, -h / 2 + 0.62, 1.06, 0.6, 0.07, 0.07,
+        box(f'fltop{i}', fx, -h / 2 + 0.62, 0.92, 0.6, 0.07, 0.07,
             mat('root_dark'))
-        box(f'flknob{i}', fx, -h / 2 + 0.62, 1.13, 0.12, 0.12, 0.1,
+        box(f'flknob{i}', fx, -h / 2 + 0.62, 0.99, 0.12, 0.12, 0.1,
             mat('oak_light'))
-        box(f'flpelt{i}', fx, -h / 2 + 0.63, 0.34, 0.44, 0.06, 0.62,
+        box(f'flpelt{i}', fx, -h / 2 + 0.63, 0.20, 0.44, 0.06, 0.62,
             mat('oak' if i % 2 else 'root'))
     # ── The yard was a jumble (user 2026-08-12: "Sieht unaufgeräumt aus") ──
     # Six separate heaps of brown stood in front of the door, all at prop
     # scale and all the same tone. A tannery is a place of ORDER — the whole
     # trade is racks and lines and bales in rows — so the rolls go onto one
     # rack against the back wall and the front of the house is left clear.
-    box('flrack', -w / 2 + 1.24, h / 2 - 0.42, 0.14, 1.3, 0.3, 0.4,
+    box('flrack', -w / 2 + 1.24, h / 2 - 0.42, 0.0, 1.3, 0.3, 0.4,
         mat('oak'))
-    box('flracktop', -w / 2 + 1.24, h / 2 - 0.42, 0.54, 1.42, 0.38, 0.07,
+    box('flracktop', -w / 2 + 1.24, h / 2 - 0.42, 0.40, 1.42, 0.38, 0.07,
         mat('oak_light'))
     for i in range(3):
-        cyl(f'flroll{i}', -w / 2 + 0.78 + i * 0.46, h / 2 - 0.42, 0.61,
+        cyl(f'flroll{i}', -w / 2 + 0.78 + i * 0.46, h / 2 - 0.42, 0.47,
             0.11, 0.34, sides=10, axis='y',
             key='hide' if i % 2 else 'hide_dark')
-    brazier('flbraz', -w / 2 + 0.5, -h / 2 + 1.15, 0.14)
+    brazier('flbraz', -w / 2 + 0.5, -h / 2 + 1.15, 0.0)
     if h >= 3:
         # A drying line across the new depth, and the trapper's pack under it.
         for s_ in (-1, 1):
-            box(f'flline{s_}', -w / 2 + 0.45 + (s_ + 1) * 0.9, 0.55, 0.14,
+            box(f'flline{s_}', -w / 2 + 0.45 + (s_ + 1) * 0.9, 0.55, 0.0,
                 0.08, 0.08, 1.0, mat('root'))
-        box('fllinet', -w / 2 + 1.35, 0.55, 1.12, 1.9, 0.06, 0.06,
+        box('fllinet', -w / 2 + 1.35, 0.55, 0.98, 1.9, 0.06, 0.06,
             mat('root_dark'))
         for i in range(3):
-            box(f'flhang{i}', -w / 2 + 0.75 + i * 0.6, 0.56, 0.55,
+            box(f'flhang{i}', -w / 2 + 0.75 + i * 0.6, 0.56, 0.41,
                 0.42, 0.05, 0.56,
                 mat('hide' if i % 2 else 'hide_dark'))
-        sack_pile('flpack', -w / 2 + 0.5, -h / 2 + 0.5, 0.14, n=2)
+        sack_pile('flpack', -w / 2 + 0.5, -h / 2 + 0.5, 0.0, n=2)
 
     # ── A tannery works: a vat, bales, and a cart to take them ──
-    cauldron('flvat', -w / 2 + 0.55, h / 2 - 0.55, 0.14, r=0.26)
-    cart('flcart', w / 2 - 0.95, -h / 2 + 1.6, 0.14, angle=-0.35,
+    cauldron('flvat', -w / 2 + 0.55, h / 2 - 0.55, 0.0, r=0.26)
+    cart('flcart', w / 2 - 0.95, -h / 2 + 1.6, 0.0, angle=-0.35,
          load='sack')
     for i in range(3):
-        straw_bale(f'flbale{i}', -w / 2 + 0.62, -h / 2 + 0.6 + i * 0.34, 0.14,
+        straw_bale(f'flbale{i}', -w / 2 + 0.62, -h / 2 + 0.6 + i * 0.34, 0.0,
                    0.36, 0.26, 0.24, key='hide' if i % 2 else 'hide_dark')
-    tool_rack('fltools', -w / 2 + 0.35, -0.2, 0.14, w=0.6, facing='x')
-    crate('flcr', w / 2 - 0.45, -h / 2 + 0.5, 0.14, s=0.34)
+    tool_rack('fltools', -w / 2 + 0.35, -0.2, 0.0, w=0.6, facing='x')
+    crate('flcr', w / 2 - 0.45, -h / 2 + 0.5, 0.0, s=0.34)
     # ── Eigenleben: the vat is on and the dog is out ──
-    critter('flcrit', -w / 2 + 1.05, -h / 2 + 0.55, 0.14, angle=0.4, kind=1)
-    fowl('flfowl', w / 2 - 1.5, h / 2 - 0.5, 0.14, angle=2.6)
-    basket('flbask', -w / 2 + 0.45, 0.55, 0.14, fill='hide')
+    critter('flcrit', -w / 2 + 1.05, -h / 2 + 0.55, 0.0, angle=0.4, kind=1)
+    fowl('flfowl', w / 2 - 1.5, h / 2 - 0.5, 0.0, angle=2.6)
+    basket('flbask', -w / 2 + 0.45, 0.55, 0.0, fill='hide')
     perch_bird('flbird', hx, hy - bd / 2 - 0.2, roof_z + 0.9, kind=1)
     # Accent: PLUM against the hide roof.
-    window_box('flwb', hx, hy - bd / 2 - 0.09, 0.7, 0.44, bloom='bloom_plum'
+    window_box('flwb', hx, hy - bd / 2 - 0.09, 0.32, 0.44, bloom='bloom_plum'
                if False else 'bloom_pink')
-    curtain('flcurt', hx, hy - bd / 2 - 0.12, 0.38, 0.44, 0.55,
+    curtain('flcurt', hx, hy - bd / 2 - 0.12, 0.0, 0.44, 0.55,
             key='cloth_plum')
-    flower_bed('flbed', w / 2 - 0.5, h / 2 - 0.5, 0.14, 0.5, 0.34,
+    flower_bed('flbed', w / 2 - 0.5, h / 2 - 0.5, 0.0, 0.5, 0.34,
                bloom='bloom_red', n=5)
     # ── SIGNATURE: the bear on its hoop, and the rack over the door ──
-    hoop_pelt('flhoop', -0.3, -h / 2 + 0.66, 0.14, r=0.5, post=0.7)
-    antlers('flrack', 0.72, -h / 2 + 0.55, 0.14, span=0.34, post=1.05)
+    hoop_pelt('flhoop', -0.3, -h / 2 + 0.66, 0.0, r=0.5, post=0.7)
+    antlers('flrack', 0.72, -h / 2 + 0.55, 0.0, span=0.34, post=1.05)
 
 def church(w, h):
     """Church — a nave five cells long with a tower at its west end.
@@ -7078,15 +7103,14 @@ def workshop(w, h):
     it. The ring of low stones outside is that name kept: somewhere to sit and
     work a problem, which is the other half of the trade.
     """
-    plinth('wsbase', 0, 0, w - 0.24, h - 0.24, 0.15)
+    # No plinth and no stone sill (user 2026-08-20: "keine Bodenplatten") —
+    # every z below is the old plinth (0.15) or sill-top (0.41) height with
+    # that base subtracted back out.
     hw, hh_ = w / 2, h / 2
     bw, bd = w - 1.2, h - 1.75
     hx, hy = -0.15, hh_ - bd / 2 - 0.4
-
-    ashlar_courses('wssill', hx, hy, 0.15, bw + 0.12, bd + 0.12, 0.26,
-                   course=0.0662, block=0.1289)
-    half_timber('wswall', hx, hy, 0.41, bw, bd, 1.05, bays=5)
-    roof_z = 1.46
+    half_timber('wswall', hx, hy, 0.0, bw, bd, 1.05, bays=5)
+    roof_z = 1.05
     shingle_gable('wsroof', hx, hy, roof_z, bw, bd, 1.0, overhang=0.3,
                   rows=24, ridge_along='x')
     ridge_crest('wscrest', hx, hy, roof_z + 0.96, bw + 0.5, axis='x')
@@ -7100,53 +7124,53 @@ def workshop(w, h):
     smoke('wssmoke', hx - bw / 2 + 0.22, hy + 0.34, roof_z + 0.96, h=0.7)
     # OPEN-FRONTED: you have to be able to see the bench, or the building is
     # a shed with a weathervane.
-    box('wsdark', hx, face + 0.14, 0.41, bw - 0.55, 0.1, 1.0, mat('dark'))
+    box('wsdark', hx, face + 0.14, 0.0, bw - 0.55, 0.1, 1.0, mat('dark'))
     for s_ in (-1, 1):
-        carved_post(f'wsp{s_}', hx + s_ * (bw / 2 - 0.16), face, 0.41, 1.05)
-    box('wslint', hx, face, 1.44, bw - 0.06, 0.2, 0.14, mat('oak_light'))
-    leaded_window('wswinx', hx + bw / 2, hy + 0.14, 0.78, 0.26, 0.32,
-                  facing='x')
-    hanging_sign('wssign', hx + bw / 2 + 0.1, hy - 0.28, 1.25, w=0.34,
+        carved_post(f'wsp{s_}', hx + s_ * (bw / 2 - 0.16), face, 0.0, 1.05)
+    box('wslint', hx, face, 1.03, bw - 0.06, 0.2, 0.14, mat('oak_light'))
+    leaded_window('wswinx', hx + bw / 2, hy + 0.14, 0.37, 0.26, 0.32,
+                  facing='x', open=True)
+    hanging_sign('wssign', hx + bw / 2 + 0.1, hy - 0.28, 0.84, w=0.34,
                  facing='x')
     for s_ in (-1, 1):
-        sconce(f'wslamp{s_}', hx + s_ * (bw / 2 - 0.3), face, 1.16)
+        sconce(f'wslamp{s_}', hx + s_ * (bw / 2 - 0.3), face, 0.75)
 
     # ── THE DRAWING BOARD: a plan, pinned, at an angle ──
     dx, dy = hx + 0.5, face - 0.02
     for s_ in (-1, 1):
-        cyl(f'wsdl{s_}', dx + s_ * 0.26, dy - 0.1, 0.15, 0.035, 0.62,
+        cyl(f'wsdl{s_}', dx + s_ * 0.26, dy - 0.1, 0.0, 0.035, 0.62,
             sides=8, key='oak')
-    board = box('wsboard', dx, dy - 0.14, 0.72, 0.66, 0.5, 0.05,
+    board = box('wsboard', dx, dy - 0.14, 0.57, 0.66, 0.5, 0.05,
                 mat('oak_light'))
     board.rotation_euler = (0.62, 0, 0)
-    plan = box('wsplan', dx, dy - 0.17, 0.78, 0.54, 0.4, 0.02, mat('linen'))
+    plan = box('wsplan', dx, dy - 0.17, 0.63, 0.54, 0.4, 0.02, mat('linen'))
     plan.rotation_euler = (0.62, 0, 0)
     for i in range(3):
-        ln = box(f'wsline{i}', dx - 0.16 + i * 0.16, dy - 0.19, 0.8, 0.02,
+        ln = box(f'wsline{i}', dx - 0.16 + i * 0.16, dy - 0.19, 0.65, 0.02,
                  0.3, 0.01, mat('steel_dark'))
         ln.rotation_euler = (0.62, 0, 0)
 
     # ── THE POLE LATHE: a springy pole, a cord, a treadle ──
     lx, ly = hx - 0.62, face - 0.06
     for s_ in (-1, 1):
-        cyl(f'wsll{s_}', lx + s_ * 0.32, ly, 0.15, 0.045, 0.52, sides=8,
+        cyl(f'wsll{s_}', lx + s_ * 0.32, ly, 0.0, 0.045, 0.52, sides=8,
             key='oak')
-    box('wsbed', lx, ly, 0.66, 0.85, 0.24, 0.09, mat('oak'))
-    cyl('wswork', lx, ly, 0.75, 0.07, 0.62, sides=10, axis='x',
+    box('wsbed', lx, ly, 0.51, 0.85, 0.24, 0.09, mat('oak'))
+    cyl('wswork', lx, ly, 0.60, 0.07, 0.62, sides=10, axis='x',
         key='oak_light')
-    pole = box('wspole', lx, ly + 0.1, 1.5, 0.05, 0.05, 1.15, mat('root'))
+    pole = box('wspole', lx, ly + 0.1, 1.35, 0.05, 0.05, 1.15, mat('root'))
     pole.rotation_euler = (0.34, 0, 0)
-    catenary('wscord', (lx, ly - 0.16, 1.52), (lx, ly - 0.06, 0.5), sag=0.04,
+    catenary('wscord', (lx, ly - 0.16, 1.37), (lx, ly - 0.06, 0.35), sag=0.04,
              r=0.014, key='straw')
-    box('wstreadle', lx, ly - 0.18, 0.15, 0.5, 0.14, 0.05, mat('oak_light'))
-    straw_scatter('wsshav', lx, ly - 0.34, 0.15, 0.34, n=10, key='oak_light')
+    box('wstreadle', lx, ly - 0.18, 0.0, 0.5, 0.14, 0.05, mat('oak_light'))
+    straw_scatter('wsshav', lx, ly - 0.34, 0.0, 0.34, n=10, key='oak_light')
 
     # ── THE MECHANISM: gears, and plainly not finished ──
     gx, gy = hw - 0.62, -hh_ + 1.15
-    box('wstable', gx, gy, 0.15, 0.62, 0.5, 0.4, mat('oak'))
-    box('wstabletop', gx, gy, 0.55, 0.74, 0.6, 0.06, mat('oak_light'))
+    box('wstable', gx, gy, 0.0, 0.62, 0.5, 0.4, mat('oak'))
+    box('wstabletop', gx, gy, 0.40, 0.74, 0.6, 0.06, mat('oak_light'))
     for i, (ox, oy, r_) in enumerate(((-0.12, 0.0, 0.15), (0.14, 0.06, 0.1))):
-        wheel = lathe(f'wsgear{i}', gx + ox, gy + oy, 0.61,
+        wheel = lathe(f'wsgear{i}', gx + ox, gy + oy, 0.46,
                       [(r_ * 0.24, 0.0), (r_, 0.02), (r_, 0.05),
                        (r_ * 0.24, 0.07)], sides=12, key='steel')
         for k in range(9):
@@ -7154,43 +7178,43 @@ def workshop(w, h):
             _at(box(f'wstooth{i}{k}', 0, 0, 0, 0.045, 0.035, 0.05,
                     mat('steel_dark')),
                 gx + ox + r_ * 1.06 * math.cos(a),
-                gy + oy + r_ * 1.06 * math.sin(a), 0.645, 0, 0, a)
+                gy + oy + r_ * 1.06 * math.sin(a), 0.495, 0, 0, a)
         _ = wheel
-    cyl('wsaxle', gx - 0.12, gy, 0.61, 0.022, 0.2, sides=6, key='steel_dark')
-    box('wscal', gx + 0.26, gy - 0.16, 0.61, 0.2, 0.06, 0.03, mat('gold'))
+    cyl('wsaxle', gx - 0.12, gy, 0.46, 0.022, 0.2, sides=6, key='steel_dark')
+    box('wscal', gx + 0.26, gy - 0.16, 0.46, 0.2, 0.06, 0.03, mat('gold'))
 
     # ── THE THINKER CIRCLE: what the id remembers ──
     cx_, cy_ = -hw + 0.85, -hh_ + 0.95
     for i in range(6):
         a = 2 * math.pi * i / 6 + 0.4
         crag(f'wsring{i}', cx_ + 0.62 * math.cos(a), cy_ + 0.62 * math.sin(a),
-             0.15, 0.26, 0.24, 0.3 + 0.1 * _hash01(f'ws{i}'), key='rock',
+             0.0, 0.26, 0.24, 0.3 + 0.1 * _hash01(f'ws{i}'), key='rock',
              seed=40 + i)
-    paving('wscpav', cx_, cy_, 0.15, 1.0, 1.0, key_a='ashlar',
+    paving('wscpav', cx_, cy_, 0.0, 1.0, 1.0, key_a='ashlar',
            key_b='ashlar_dark', tile=0.16)
-    lathe('wsdial', cx_, cy_, 0.16, [(0.2, 0.0), (0.18, 0.1)], sides=10,
+    lathe('wsdial', cx_, cy_, 0.01, [(0.2, 0.0), (0.18, 0.1)], sides=10,
           key='limestone')
-    gn = box('wsgnomon', cx_, cy_, 0.26, 0.05, 0.16, 0.22, mat('steel'))
+    gn = box('wsgnomon', cx_, cy_, 0.11, 0.05, 0.16, 0.22, mat('steel'))
     gn.rotation_euler = (0.5, 0, 0)
 
     # ── Somebody works here ──
     for i in range(2):
-        box(f'wsshelf{i}', hx - bw / 2 + 0.28, hy + 0.2, 0.6 + i * 0.34,
+        box(f'wsshelf{i}', hx - bw / 2 + 0.28, hy + 0.2, 0.19 + i * 0.34,
             0.34, 0.6, 0.06, mat('oak_light'))
         for k in range(3):
             cyl(f'wsscroll{i}{k}', hx - bw / 2 + 0.28, hy + 0.02 + k * 0.18,
-                0.66 + i * 0.34, 0.04, 0.28, sides=7, axis='x', key='linen')
-    tool_rack('wstools', hx + bw / 2 + 0.04, hy + 0.5, 0.15, w=0.6,
+                0.25 + i * 0.34, 0.04, 0.28, sides=7, axis='x', key='linen')
+    tool_rack('wstools', hx + bw / 2 + 0.04, hy + 0.5, 0.0, w=0.6,
               facing='x')
-    barrel('wsbar', hw - 0.45, hh_ - 0.6, 0.15, r=0.16, h=0.34)
-    crate('wscr', -hw + 0.45, hh_ - 0.55, 0.15, s=0.32)
-    basket('wsbask', gx - 0.5, gy - 0.42, 0.15, fill='oak_light')
-    lantern('wslamp', hx, face - 0.16, 1.32, drop=0.14)
-    critter('wscrit', -0.15, -hh_ + 0.45, 0.15, angle=1.9, kind=2, scale=0.8)
+    barrel('wsbar', hw - 0.45, hh_ - 0.6, 0.0, r=0.16, h=0.34)
+    crate('wscr', -hw + 0.45, hh_ - 0.55, 0.0, s=0.32)
+    basket('wsbask', gx - 0.5, gy - 0.42, 0.0, fill='oak_light')
+    lantern('wslamp', hx, face - 0.16, 0.91, drop=0.14)
+    critter('wscrit', -0.15, -hh_ + 0.45, 0.0, angle=1.9, kind=2, scale=0.8)
     perch_bird('wsbird', hx + 0.35, face - 0.24, roof_z + 1.0)
-    window_box('wswb', hx + bw / 2 + 0.02, hy + 0.14, 0.7, 0.4, facing='x',
+    window_box('wswb', hx + bw / 2 + 0.02, hy + 0.14, 0.29, 0.4, facing='x',
                bloom='bloom_blue')
-    flower_bed('wsbed', hw - 0.5, hh_ - 1.5, 0.15, 0.46, 0.32,
+    flower_bed('wsbed', hw - 0.5, hh_ - 1.5, 0.0, 0.46, 0.32,
                bloom='bloom_pink', n=5)
     tufts('wstuft', 0, 0, w - 0.4, h - 0.4)
 
