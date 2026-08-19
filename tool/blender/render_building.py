@@ -4078,7 +4078,12 @@ def jib_crane(name, x, y, z, hh=2.6, reach=1.5, load='rock', foot=True,
             a0, a1 = along(0.05, off), along(length, off)
             strut(f'{name}_ch{sy_}{off}',
                   (a0[0], yy, a0[2]), (a1[0], yy, a1[2]), w=w_)
-    # The web: diagonals, alternating, with a plate at every node.
+    # The web: diagonals, alternating. No gusset plate at the nodes any more
+    # (user 2026-08-19, a photo of the crane head: "Alle nach oben stehenden
+    # Metallplatten entfernen am Krankopf und Kranarm") — gusset() stands
+    # each plate up out of the truss plane rather than flush against it, and
+    # bunched along the jib's own length that read as a row of little fins
+    # rather than the flat node plates they were meant to be.
     nodes = 6
     for i in range(nodes):
         t0 = 0.1 + (length - 0.2) * i / nodes
@@ -4089,8 +4094,6 @@ def jib_crane(name, x, y, z, hh=2.6, reach=1.5, load='rock', foot=True,
             p0, p1 = along(t0, hi), along(t1, lo)
             strut(f'{name}_web{sy_}{i}', (p0[0], yy, p0[2]),
                   (p1[0], yy, p1[2]), w=0.055, key='oak')
-        px, _, pz = along(t0, hi)
-        gusset(f'{name}_gu{i}', px, y, pz, s=0.15)
         # Cross-ties between the two side frames, so it reads as a box truss.
         cx_, _, cz_ = along(t0, -0.11)
         box(f'{name}_tie{i}', cx_, y, cz_, 0.055, 0.24, 0.055,
@@ -4146,10 +4149,13 @@ def jib_crane(name, x, y, z, hh=2.6, reach=1.5, load='rock', foot=True,
     else:
         boulder(f'{name}_load', hx_ - 0.02, y, z + 0.2 + lift, 0.46, 0.44, 0.4,
                 seed=7)
-    for s_ in (-1, 1):
-        strut(f'{name}_sl{s_}', (hx_ - 0.02, y + s_ * 0.05, z + 0.56 + lift),
-              (hx_ - 0.02 + s_ * 0.2, y + s_ * 0.22, z + 0.24 + lift), w=0.04,
-              key='root')
+    # No sling struts down into the load any more (user 2026-08-19, a photo
+    # of the hanging boulder: "Das Holz/Seil im Fels löschen") — their lower
+    # ends landed just above the boulder's own base point, which for an
+    # irregular crag() mass reads as the rope poking out through the rock
+    # rather than gathered round it. The hook block and rope fall above
+    # already say "this is slung", without needing a strut buried in the
+    # stone to say it twice.
 
     if foot:
         # ── The winch, at the foot, where a person can reach it ──
@@ -5754,7 +5760,10 @@ def builder_camp(w, h):
     for s in (-1, 1):
         box(f'bcbleg{s}', wx + s * 0.32, wy - 0.05, z0 + 0.17, 0.06, 0.34,
             0.34, mat('oak'))
-    tool_rack('bctools', wx + 0.46, wy + 0.34, z0, w=0.5, facing='x')
+    # tool_rack deleted outright (user 2026-08-19, a photo of exactly this
+    # spot: "Dunkle Platte und die zwei Hölzer entfernen, welche in die Wand
+    # geclipped sind") — its rail and both end posts sat right where the
+    # shed's own corner post is, buried in the timber rather than beside it.
     # Sawhorse pulled back toward the shed (x offset 0.55→0.15) — it used
     # to stand right where the steps come down, close enough that the
     # table top, the barrel and the bottom stair tier all read as one
@@ -5815,7 +5824,7 @@ def builder_camp(w, h):
     # it is (user 2026-08-19, a photo of exactly this: "Die Plattform soll
     # doch aus dem Dach kommen und nicht aus der Wand/Fenster").
     gan_x, gan_y = face_b, -1.1
-    deck_z = 2.55
+    deck_z = 2.85
     deck_out = 0.4
     deck_cx = gan_x - deck_out
     hw = 0.32
@@ -5823,6 +5832,19 @@ def builder_camp(w, h):
     # the timber frame rather than floating off it.
     box('bcganplate', gan_x - 0.03, gan_y, deck_z - 0.14, 0.06, hw * 2 + 0.1,
         0.16, mat('oak'))
+
+    def gan_bracket(nm, bx_, by_, bz_, sign):
+        """A corner bracket that actually wraps the beam's edge: a flat cap
+        on top plus a taller lip on the OUTWARD face, not a flush strap()
+        band (user 2026-08-19, a photo of the old flat plates: "Die
+        Metallecken beim Kran so drehen, dass sie das Holz umfassen und die
+        höhere Seite nach aussen zeigt")."""
+        box(f'{nm}_h', bx_, by_, bz_, 0.15, 0.15, 0.035, mat('steel'))
+        box(f'{nm}_v', bx_, by_ + sign * 0.06, bz_, 0.15, 0.03, 0.17,
+            mat('steel'))
+        for i in range(2):
+            bolt(f'{nm}_bo{i}', bx_ + (-0.045 + 0.09 * i), by_, bz_ + 0.02)
+
     for s in (-1, 1):
         by_ = gan_y + s * hw
         # The cantilever beam itself, wall to the deck's outer edge.
@@ -5833,8 +5855,11 @@ def builder_camp(w, h):
         # as BUILT, not just glued on.
         strut(f'bcganbrace{s}', (gan_x, by_, deck_z - 0.55),
               (deck_cx - 0.45, by_, deck_z - 0.05), w=0.05, key='oak_light')
-        strap(f'bcganbd{s}', deck_cx - 0.45, by_, deck_z - 0.05, 0.16, 0.16,
-              bolts=2)
+        # All four corners of the frame get the same bracket now (user
+        # 2026-08-19: "Bitte auf allen vier Seiten diesen Abschluss
+        # machen"), not just the outer two.
+        gan_bracket(f'bcganbdW{s}', gan_x - 0.02, by_, deck_z - 0.02, s)
+        gan_bracket(f'bcganbdO{s}', deck_cx - 0.45, by_, deck_z - 0.02, s)
     # The deck itself: planks across the two beams.
     for i in range(5):
         py = gan_y - hw + hw * 2 * (i + 0.5) / 5
@@ -5903,8 +5928,8 @@ def builder_camp(w, h):
     basket('bcbask', wx - 0.55, wy + 0.15, z0, fill='oak_light')
     bunting('bcbunt', ax, face_a - 0.05, roof_a - 0.1, aw + 0.15, axis='x',
             n=9, a='cloth_red', b='cloth_gold')
-    flower_bed('bcbed', ax - aw / 2 + 0.35, face_a - 0.15, z0, 0.5, 0.3,
-               bloom='bloom_red', n=6)
+    # flower_bed deleted (user 2026-08-19, a photo of it by the steps:
+    # "Das Dekoelement mit der Pflanze entfernen").
 
     # ── Turned 90° (user 2026-08-16: "die Rotation soll in die andere
     # Richtung sein") ──

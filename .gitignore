@@ -55,3 +55,4 @@ docs/renders/*.glb
 
 # The all-buildings scene: output, and it is rebuilt in one command
 docs/renders/*.blend
+docs/renders/*.blend1
