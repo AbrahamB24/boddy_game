@@ -25,16 +25,11 @@ import 'widgets/settlement_map.dart';
 import '../common/events/game_events.dart';
 import '../common/widgets/parchment_page.dart';
 import '../common/events/notification_button.dart';
-import '../creatures/battle_screen.dart';
 import '../creatures/collection_screen.dart';
 import 'management_screen.dart';
 import '../creatures/expeditions_screen.dart';
-import '../creatures/models/combatant.dart';
 import '../creatures/models/creature_enums.dart' show kHealingHutBuildingId;
-import '../creatures/models/species_def.dart';
 import '../creatures/overworld_screen.dart';
-import '../creatures/services/combat_engine.dart';
-import '../creatures/services/creatures_controller.dart';
 import '../onboarding/intro_card_panel.dart';
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
@@ -613,44 +608,9 @@ class _SettlementScreenState extends State<SettlementScreen>
     IntroDestination.map => _showOverworld(),
     IntroDestination.trips => _showExpeditions(),
     IntroDestination.build => _showBuildMenu(),
-    IntroDestination.practiceFight => _startPracticeFight(),
     IntroDestination.healingHut =>
       _mapKey.currentState?.openBuildingByType(kHealingHutBuildingId),
-    IntroDestination.mainHall =>
-      _mapKey.currentState?.openBuildingByType('castle'),
   };
-
-  /// The tutorial's scripted first battle: the starter against a rival far
-  /// out of its league. The loss is the LESSON — it produces the K.O. that
-  /// the Healing Hut step then fixes. Advances only once the starter is
-  /// actually down, so fleeing (or a miracle win) just re-offers the fight.
-  Future<void> _startPracticeFight() async {
-    final creatures = CreaturesController();
-    if (creatures.creatures.isEmpty) return;
-    final starter = creatures.creatures.first;
-    final species = kSpeciesDefs[starter.speciesId];
-    if (species == null) return;
-    final rival = Combatant.fromSpecies(
-      species,
-      level: starter.level + kIntroPracticeLevelBonus,
-      id: 'practice_rival',
-      statScale: kIntroPracticeStatScale,
-    );
-    final outcome = await Navigator.push<Object>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => BattleScreen(
-          team: [starter],
-          enemies: [rival],
-          title: 'Practice Fight',
-        ),
-      ),
-    );
-    if (!mounted) return;
-    if (outcome == CombatOutcome.defeat || starter.isKo) {
-      await _ctrl.advanceIntro(IntroStep.practiceFight);
-    }
-  }
 
   // ── Top bar ───────────────────────────────────────────────
   /// THE FIGURES, AND NOTHING ELSE (user 2026-07-29: "Alles auf der Zeile von

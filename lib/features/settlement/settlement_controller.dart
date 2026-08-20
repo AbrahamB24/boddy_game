@@ -1832,6 +1832,11 @@ class SettlementController extends ChangeNotifier {
 
     _applyTick(DateTime.now().toUtc());
     await creatures.setAssignment(creature, buildingId, stat);
+    // Tutorial milestone: specifically the Healing Hut, not any workshop —
+    // it is the only one standing this early anyway (see intro_flow.dart).
+    if (def.id == kHealingHutBuildingId) {
+      await advanceIntro(IntroStep.assignHealer);
+    }
     notifyListeners();
     return null;
   }

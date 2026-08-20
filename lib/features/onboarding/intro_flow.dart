@@ -1,4 +1,4 @@
-// The guided tutorial for brand-new players (rebuilt 2026-07-17, user design).
+// The guided tutorial for brand-new players (rebuilt 2026-08-20, user design).
 //
 // WHY THIS EXISTS: a fresh account starts with zero creatures, and creatures
 // ARE the workforce — workshopPower() sums the stats of creatures assigned to
@@ -6,25 +6,26 @@
 // Every screen reads as broken and nothing tells the player why.
 //
 // ── The script ────────────────────────────────────────────────
-// Unlike the old five-card hint chain, this is a fully guided script: at every
-// step exactly ONE control is lit (see intro_spotlight.dart), everything else
-// is dimmed and dead, and the game bends its rules so no step can dead-end:
+// This is a fully guided script: at every step exactly ONE control is lit
+// (see intro_spotlight.dart), everything else is dimmed and dead, and the
+// game bends its rules so no step can dead-end:
 //
 //   1. pickStarter      — choose the starter monster
-//   2. practiceFight    — a scripted LOSS against an overwhelming rival;
-//                         teaches what K.O. means
+//   2. firstNode        — win the first overworld node; cannot be lost
+//                         (enemies fight at kJumpstartEnemyStatMult)
 //   3. buildHealingHut  — build the Healing Hut
-//   4. healStarter      — heal the starter: costs goods, but is INSTANT
+//   4. assignHealer     — station a monster at the Healing Hut
+//   5. healStarter      — heal the starter: costs goods, but is INSTANT
 //                         while the tutorial runs
-//   5. firstCapture     — hunt: the wild cannot be K.O.'d and a missed QTE
+//   6. firstCapture     — hunt: the wild cannot be K.O.'d and a missed QTE
 //                         tap just restarts the ring — the catch always lands
-//   6. assignWorker     — station a monster at the Castle (construction)
-//   7. buildWoodcutter  — build the Woodland Camp
-//   8. buildQuarry      — build the Quarry
-//   9. buildHouse       — build a Hut (housing)
-//  10. fishTech         — win the Fishing trial on the map (cannot be lost:
-//                         trial wilds fight at kJumpstartEnemyStatMult)
-//  11. buildFishingHut  — build the Fishing Hut. Done.
+//   7. secondNode       — win the second overworld node; cannot be lost,
+//                         same mechanism as firstNode. Done.
+//
+// Ends here on purpose (user 2026-08-20): later concepts (resource buildings,
+// research, etc.) get their own steps once designed, rather than dragging
+// forward the old script's stale ones (they referenced systems — a tech-trial
+// map, a Castle worker slot — that no longer exist).
 //
 // ── The jumpstart and why it can't touch the base values ──────
 // docs/balancing.md anchors Era I at 5–7 days and 5–8 catches/day. Those are
@@ -48,16 +49,12 @@ const bool kIntroEnabled = false;
 /// or newer client can never trap a player in a step it doesn't know.
 enum IntroStep {
   pickStarter,
-  practiceFight,
+  firstNode,
   buildHealingHut,
+  assignHealer,
   healStarter,
   firstCapture,
-  assignWorker,
-  buildWoodcutter,
-  buildQuarry,
-  buildHouse,
-  fishTech,
-  buildFishingHut,
+  secondNode,
   done;
 
   static IntroStep fromIndex(int index) =>
@@ -83,9 +80,7 @@ enum IntroDestination {
   map,
   trips,
   build,
-  practiceFight,
   healingHut,
-  mainHall,
 }
 
 /// One step's player-facing content.
@@ -118,23 +113,31 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     ctaLabel: 'Choose starter',
     destination: IntroDestination.collection,
   ),
-  IntroStep.practiceFight => const IntroCard(
-    title: 'A practice fight',
+  IntroStep.firstNode => const IntroCard(
+    title: 'Your first battle',
     body:
-        'A wild rival is prowling right outside the gate — go meet it and '
-        'see how fighting works. Fair warning: this one is far out of your '
-        'league. Losing is part of the lesson.',
-    ctaLabel: '⚔️ Face the rival',
-    destination: IntroDestination.practiceFight,
+        'A path of numbered battles leads out from your settlement — win one '
+        'and the next unlocks. This first one is yours to learn on: the foe '
+        'is deliberately weak, so go meet it and see how fighting works.',
+    ctaLabel: '🗺 Open the map',
+    destination: IntroDestination.map,
   ),
   IntroStep.buildHealingHut => const IntroCard(
-    title: 'Your monster is K.O.',
+    title: 'Patch it up',
     body:
-        'At 0 HP a monster is knocked out: it cannot fight, hunt or work — '
-        'and HP never comes back on its own. Healing is what the Healing Hut '
-        'is for. Build one now.',
+        'That fight cost your monster some HP — and HP never comes back on '
+        'its own. Healing is what the Healing Hut is for. Build one now.',
     ctaLabel: '🏕 Build the Healing Hut',
     destination: IntroDestination.build,
+  ),
+  IntroStep.assignHealer => const IntroCard(
+    title: 'Station a monster there',
+    body:
+        'The hut works faster with someone tending it. Open the Healing Hut '
+        'and post a monster to its medicine role — a stationed worker keeps '
+        'the hut running even while you are away.',
+    ctaLabel: '🏥 Open the Healing Hut',
+    destination: IntroDestination.healingHut,
   ),
   IntroStep.healStarter => const IntroCard(
     title: 'Heal your monster',
@@ -156,64 +159,14 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     ctaLabel: '🗺 Open the map',
     destination: IntroDestination.map,
   ),
-  // ⚠️ The Castle lost its worker slots (user 2026-07-22: it builds and
-  // produces on its own now). This step's milestone (setAssignment) still
-  // fires from ANY building, but at step 6 the only workshops standing are the
-  // Healing Hut's none — IF the intro is ever re-enabled (kIntroEnabled),
-  // swap this step after buildWoodcutter so there is something to staff.
-  IntroStep.assignWorker => const IntroCard(
-    title: 'Put one of them to work',
+  IntroStep.secondNode => const IntroCard(
+    title: 'Push on',
     body:
-        'Now that you are two, one can hold the fort. Station a monster in a '
-        'production building\'s work role — a stationed worker boosts its '
-        'building far beyond the base trickle, earns XP on the job, and keeps '
-        'working around the clock, even while you are away.',
-    ctaLabel: '🏛 Open the map',
-    destination: IntroDestination.mainHall,
-  ),
-  IntroStep.buildWoodcutter => const IntroCard(
-    title: 'Build a Woodland Camp',
-    body:
-        'Wood is the settlement\'s bread and butter — nearly everything you '
-        'place is paid in it. The Woodland Camp gives your monsters a place '
-        'to cut it.',
-    ctaLabel: '🏕 Build the Woodland Camp',
-    destination: IntroDestination.build,
-  ),
-  IntroStep.buildQuarry => const IntroCard(
-    title: 'Build a Quarry',
-    body:
-        'Stone is the other half of every construction bill. An open pit '
-        'and monsters with strong backs — that is all a quarry needs.',
-    ctaLabel: '🏕 Build the Quarry',
-    destination: IntroDestination.build,
-  ),
-  IntroStep.buildHouse => const IntroCard(
-    title: 'Build a Hut',
-    body:
-        'Every monster you own needs a roof: housing capacity caps your '
-        'collection, and a full settlement cannot take in a single new '
-        'catch. A hut shelters ten.',
-    ctaLabel: '🏕 Build a Hut',
-    destination: IntroDestination.build,
-  ),
-  IntroStep.fishTech => const IntroCard(
-    title: 'Research Fishing',
-    body:
-        'Technologies are PLACES on the map: travel to one and win its '
-        'trial, and it is yours on the spot — the fight is the price. Head '
-        'to the Fishing site; during the tutorial its trial cannot be lost.',
+        'Two monsters now — one can rest while the other fights. Head back '
+        'to the map and take the next battle on the path. Still an easy one: '
+        'this is the last stretch of hand-holding.',
     ctaLabel: '🗺 Open the map',
     destination: IntroDestination.map,
-  ),
-  IntroStep.buildFishingHut => const IntroCard(
-    title: 'Build a Fishing Hut',
-    body:
-        'Fish are goods — the currency that pays for healing and dungeon '
-        'runs. With Fishing researched you can now build the hut that '
-        'produces them. This is the last step!',
-    ctaLabel: '🏕 Build the Fishing Hut',
-    destination: IntroDestination.build,
   ),
   IntroStep.done => null,
 };
@@ -221,14 +174,8 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
 /// The building each build-step waits for, keyed by step — used by the
 /// settlement tick's completion hook (advance on FINISHED, not on placed)
 /// and by the build menu to know which row to spotlight.
-// Rewired to the 2026-07-24 roster ids (the old woodland_camp/quarry/fishing_hut
-// were replaced by the per-era producers).
 const Map<String, IntroStep> kIntroBuildSteps = {
   'healing_hut': IntroStep.buildHealingHut,
-  'small_wood_camp': IntroStep.buildWoodcutter,
-  'small_stone_camp': IntroStep.buildQuarry,
-  'small_house': IntroStep.buildHouse,
-  'lux_fish': IntroStep.buildFishingHut,
 };
 
 /// The building type a build step wants, or null when [step] isn't one.
@@ -238,9 +185,6 @@ String? introBuildTarget(IntroStep step) {
   }
   return null;
 }
-
-/// The tech whose trial is the tutorial's research step.
-const String kIntroFishTechId = 'fishing';
 
 // ── Jumpstart ────────────────────────────────────────────────
 // Active for exactly as long as the tutorial is (IntroStep.isActive), so a
@@ -256,9 +200,9 @@ const String kIntroFishTechId = 'fishing';
 const double kJumpstartTimeScale = 0.02;
 
 /// Wild/gate enemies fight at this fraction of their stats during the
-/// tutorial. 0.2 makes the Fishing trial and the catch fight effectively
-/// unloseable — the script's promise is "this cannot fail", so the numbers
-/// have to actually deliver that, not merely "kinder".
+/// tutorial. 0.2 makes the first two overworld nodes and the catch fight
+/// effectively unloseable — the script's promise is "this cannot fail", so
+/// the numbers have to actually deliver that, not merely "kinder".
 const double kJumpstartEnemyStatMult = 0.2;
 
 // The tutorial's free construction power (kIntroBaseBuildPower) is GONE
@@ -273,13 +217,6 @@ const double kJumpstartEnemyStatMult = 0.2;
 /// kJumpstartTimeScale a hunt is ~40s of dead waiting; the tutorial's catch
 /// should be reachable immediately.
 const int kIntroMaxTripSeconds = 12;
-
-/// The practice rival's edge over the starter: levels above, and a stat
-/// multiplier on top. The fight is MEANT to be lost (it teaches K.O. and
-/// healing), so the rival has to beat a fresh level-5 starter reliably —
-/// 2.5× stats at +7 levels is far beyond any lucky roll.
-const int kIntroPracticeLevelBonus = 7;
-const double kIntroPracticeStatScale = 2.5;
 
 /// Fish/fur handed to a brand-new player. Buildings make these deliberately
 /// slowly (workshop mult 0.12) because they are the region-dungeon entry cost

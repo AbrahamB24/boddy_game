@@ -409,9 +409,6 @@ class CreaturesController extends ChangeNotifier {
     creature.assignedBuildingId = buildingId;
     creature.assignedStat = stat;
     notifyListeners();
-    if (buildingId != null) {
-      await SettlementController().advanceIntro(IntroStep.assignWorker);
-    }
     try {
       await _svc.update(creature);
     } catch (e) {

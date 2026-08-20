@@ -229,7 +229,7 @@ void main() {
         // The tutorial window is the documented "every building counts as
         // connected" state (connectedBuildingIds) — cheaper than laying a road
         // network for a capacity test, and it exercises the same code path.
-        ctrl.introStep = IntroStep.assignWorker;
+        ctrl.introStep = IntroStep.firstNode;
         CreaturesController().creatures.clear();
       });
 

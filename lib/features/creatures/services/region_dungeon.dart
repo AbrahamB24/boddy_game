@@ -28,7 +28,14 @@ import 'overworld_path.dart';
 /// outnumber, which the auto-battle handles far better than a symmetric pack
 /// (user 2026-07-24; see test/linear_combat_probe_test.dart). Challenge also
 /// scales by LEVEL.
-List<Combatant>? spawnPathBattle(AreaDef area, int battleNumber) {
+/// [statScale] is an extra multiplier on every spawned enemy's battle stats
+/// (1.0 = balanced default) — the tutorial passes kJumpstartEnemyStatMult so
+/// its first two nodes can't be lost. See Combatant.fromSpecies.
+List<Combatant>? spawnPathBattle(
+  AreaDef area,
+  int battleNumber, {
+  double statScale = 1.0,
+}) {
   final node = pathNodeAtOrder(battleNumber);
   // AUTHORED enemies win (user 2026-07-25): a node's explicit species+level
   // list defines the fight exactly. Unknown species ids are skipped; an empty
@@ -44,6 +51,7 @@ List<Combatant>? spawnPathBattle(AreaDef area, int battleNumber) {
         level: e.level,
         id: 'w${battleNumber}_$i',
         isBoss: node.isBoss,
+        statScale: statScale,
       ));
     }
     if (out.isNotEmpty) return out;
@@ -57,7 +65,15 @@ List<Combatant>? spawnPathBattle(AreaDef area, int battleNumber) {
     final boss = kSpeciesDefs[area.bossSpeciesId] ??
         (ranked.isEmpty ? null : ranked.first);
     if (boss == null) return null;
-    return [Combatant.fromSpecies(boss, level: level, id: 'boss', isBoss: true)];
+    return [
+      Combatant.fromSpecies(
+        boss,
+        level: level,
+        id: 'boss',
+        isBoss: true,
+        statScale: statScale,
+      )
+    ];
   }
   if (pool.isEmpty) return null;
   final count = enemyCountForBattle(battleNumber);
@@ -68,6 +84,7 @@ List<Combatant>? spawnPathBattle(AreaDef area, int battleNumber) {
         pool[rng.nextInt(pool.length)],
         level: level,
         id: 'w${battleNumber}_$i',
+        statScale: statScale,
       ),
   ];
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/snack.dart';
 import '../common/widgets/parchment_page.dart';
+import '../onboarding/intro_flow.dart';
 import '../settlement/settlement_controller.dart';
 import 'models/area.dart';
 import 'models/combatant.dart';
@@ -254,7 +255,20 @@ class _OverworldScreenState extends State<OverworldScreen>
       context.snack('No monsters live this far yet.');
       return;
     }
-    final enemies = spawnPathBattle(area, node.battleNumber);
+    // The tutorial's first two nodes can't be lost: while either is the
+    // current step, its enemies fight at kJumpstartEnemyStatMult.
+    final introNodeStep = switch (node.battleNumber) {
+      1 => IntroStep.firstNode,
+      2 => IntroStep.secondNode,
+      _ => null,
+    };
+    final guaranteedWin =
+        introNodeStep != null && _settlement.introStep == introNodeStep;
+    final enemies = spawnPathBattle(
+      area,
+      node.battleNumber,
+      statScale: guaranteedWin ? kJumpstartEnemyStatMult : 1.0,
+    );
     if (enemies == null) {
       context.snack('No monsters live here yet (Dev Mode → Species).');
       return;
@@ -306,6 +320,7 @@ class _OverworldScreenState extends State<OverworldScreen>
     if (outcome == CombatOutcome.victory && isFrontier) {
       await _settlement.advanceBattlesCleared(toBattle: node.battleNumber);
       if (node.isBoss) await _grantBossRewards(area, node.battleNumber);
+      if (introNodeStep != null) await _settlement.advanceIntro(introNodeStep);
     }
     if (mounted) setState(() {});
   }

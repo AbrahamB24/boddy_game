@@ -828,7 +828,7 @@ def paving(name, x, y, z, sx, sy, key_a='ashlar', key_b='ashlar_dark',
 
 
 def half_timber(name, x, y, z, sx, sy, h, bays=7, beam=0.0638,
-                panel='stucco', wood='oak'):
+                panel='stucco', wood='oak', proud=0.026):
     """A timber frame with plaster between it — THE medieval signal.
 
     Nothing else says the period so fast, and it costs almost nothing: a pale
@@ -841,16 +841,28 @@ def half_timber(name, x, y, z, sx, sy, h, bays=7, beam=0.0638,
     is the one line you cut only when a building has to stand up. One per face
     and not one per bay: a real frame braces where the racking is worst, and
     bracing everywhere turns the wall back into a pattern.
+
+    ── proud (user 2026-08-20: "die Balken teilweise nach vorne kommen, da
+    dies bei realen Gebäuden auch so ist") ──
+    Every timber used to sit exactly flush with the plaster panel — same
+    face, same plane, the whole frame and its infill coplanar. A real frame
+    is not built that way: the studs and the brace stand PROUD of the infill,
+    which is thin and set back between them, and that step is most of what
+    reads as carpentry rather than a printed pattern on a flat wall. Only the
+    studs and brace step forward — "teilweise", not the whole frame — the
+    sill and head plates stay flush, the way they actually sit at the
+    floor/ceiling line rather than floating in front of it.
     """
     box(f'{name}_panel', x, y, z, sx, sy, h, mat(panel))
     for axis, span, other in ((0, sx, sy), (1, sy, sx)):
         for sign in (-1, 1):
-            def put(nm, along, zz, ln, hh, ang=None):
+            def put(nm, along, zz, ln, hh, ang=None, out=False):
+                face = sign * (other / 2 + (proud if out else 0.0))
                 if axis == 0:
-                    bx, by = x + along, y + sign * other / 2
+                    bx, by = x + along, y + face
                     dims = (ln, beam, hh)
                 else:
-                    bx, by = x + sign * other / 2, y + along
+                    bx, by = x + face, y + along
                     dims = (beam, ln, hh)
                 ob = box(f'{name}_{nm}_{axis}{sign}', bx, by, zz, *dims,
                          mat(wood))
@@ -874,14 +886,13 @@ def half_timber(name, x, y, z, sx, sy, h, bays=7, beam=0.0638,
                 if axis == 1 and i in (0, bays):
                     continue
                 put(f'stud{i}', -span / 2 + span * i / bays, z + beam, beam,
-                    h - 2 * beam)
+                    h - 2 * beam, out=True)
             bw, bh = span / bays, h * 0.66
             b = put('brace', 0, z, beam, math.hypot(bw, bh),
-                    math.atan2(bw, bh) * (1 if sign > 0 else -1))
-            b.location = (x + (-span / 2 + bw / 2 if axis == 0
-                               else sign * other / 2),
-                          y + (sign * other / 2 if axis == 0
-                               else -span / 2 + bw / 2),
+                    math.atan2(bw, bh) * (1 if sign > 0 else -1), out=True)
+            face = sign * (other / 2 + proud)
+            b.location = (x + (-span / 2 + bw / 2 if axis == 0 else face),
+                          y + (face if axis == 0 else -span / 2 + bw / 2),
                           z + h / 2)
 
 
@@ -4540,7 +4551,7 @@ def _main_hall_plan(w, h):
         arrow_slit(f'ksb{i}', kx + ox, ky + kd / 2, 1.5, 0.58)
     # One real window, high and central: the hall behind it is where the
     # settlement is run from, and a keep with NO glass reads as a ruin.
-    leaded_window('kwin', kx, face_y, 2.05, 0.36, 0.44)
+    leaded_window('kwin', kx, face_y, 2.05, 0.36, 0.44, open=True)
     banner('kflag', kx, face_y - 0.02, 0.36 + wall_h - 0.18, 0.36, 0.62)
 
     # ── The two towers, and the gate between them ──
@@ -4832,7 +4843,11 @@ def small_house(w, h):
     smoke('shsmoke', hx + bw / 2 - 0.3, hy + 0.34, roof_z + 1.12, h=0.85)
     gothic_door('shdoor', hx - 0.3, face, 0.0, 0.5, 0.76)
     plank_door('shleaf', hx - 0.3, face - 0.06, 0.02, 0.44, 0.6, planks=5)
-    window('shwin', hx + 0.42, face, 0.42, 0.36, 0.32, 0.1)
+    # leaded_window(), not the stone-arch window() (user 2026-08-20: every
+    # building's windows/shutters/lattice/sill unified on builder_camp's
+    # plain leaded_window() defaults — the arched limestone surround reads
+    # as masonry, wrong on a timber-framed cottage).
+    leaded_window('shwin', hx + 0.42, face, 0.42, 0.36, 0.32, open=True)
     leaded_window('shwinx', hx + bw / 2, hy + 0.1, 0.36, 0.28, 0.3,
                   facing='x', open=True)
     lantern('shlamp', hx - 0.72, face - 0.08, 0.8, drop=0.14)
@@ -4896,7 +4911,10 @@ def large_house(w, h):
     plank_door('lhleaf', -bw / 2 - 0.06, -0.2, 0.02, 0.44, 0.62, facing='x',
                planks=5)
     for i, ty in enumerate((-bd / 2 + 0.7, -bd / 2 + 1.5)):
-        window(f'lhwin{i}', -bw / 2, ty, 0.44, 0.32, 0.3, 0.1, facing='x')
+        # leaded_window(), not window() (user 2026-08-20: unify every
+        # building's windows on builder_camp's plain leaded_window()).
+        leaded_window(f'lhwin{i}', -bw / 2, ty, 0.44, 0.32, 0.3, facing='x',
+                      open=True)
     leaded_window('lhwing', -bw / 2, bd / 2 - 0.9, 0.44, 0.3, 0.34,
                   facing='x', open=True)
     # The byre end: bigger opening, no glass, and a hurdle across it.
@@ -6298,7 +6316,7 @@ def caravanserai(w, h):
                   key='tile', dark='tile_dark', ridge_along='x')
     ridge_crest('csrc', rx, ry, 1.53, rw + 0.3, axis='x')
     dagged('csrd', rx, ry - rd / 2 - 0.24, 1.0, rw + 0.35)
-    leaded_window('cswin', rx, ry - rd / 2, 0.5, 0.28, 0.32)
+    leaded_window('cswin', rx, ry - rd / 2, 0.5, 0.28, 0.32, open=True)
     hanging_sign('cssign', rx + rw / 2 - 0.1, ry - rd / 2 + 0.05, 0.95, w=0.34)
     # ── AND NOW THE YARD ──
     pack_beast('cscam0', -0.35, -h / 2 + 0.72, 0.18, angle=0.12)
@@ -6403,7 +6421,7 @@ def hatchery(w, h):
     for s in (-1, 1):
         sconce(f'hylamp{s}', cx + s * (bw / 2 - 0.14), face, 0.9)
     leaded_window('hywinx', cx + bw / 2, cy + 0.2, 0.72, 0.26, 0.32,
-                  facing='x')
+                  facing='x', open=True)
     banner('hyflag', cx, face - 0.02, 1.14, 0.26, 0.4)
     # The clutch, on straw where the camera can see it. THE label.
     nx, ny = w / 2 - 1.35, -h / 2 + 0.9
@@ -6676,8 +6694,10 @@ def church(w, h):
                 0.1, mat('limestone'))
             box(f'chbutp{s_}{i}', s_ * (bw / 2 + 0.13), byy, 1.63, 0.14, 0.14,
                 0.24, mat('limestone_shade'))
+            # Shutters restored (user 2026-08-20: shutters/lattice/sill
+            # unified across every building on builder_camp's defaults).
             leaded_window(f'chwin{s_}{i}', s_ * bw / 2, byy + 0.42, 0.72, 0.26,
-                          0.66, facing='x', shutters=False)
+                          0.66, facing='x', open=True)
     roof_z = 1.88
     shingle_gable('chroof', 0, by, roof_z, bw + 0.16, bd + 0.16, 1.2,
                   overhang=0.3, rows=28, key='verdigris',

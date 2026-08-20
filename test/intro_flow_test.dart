@@ -145,22 +145,25 @@ void main() {
       int at(IntroStep s) => s.index;
       // Nothing works without a creature.
       expect(at(IntroStep.pickStarter), 0);
-      // The practice LOSS produces the K.O. the healing steps are about.
+      // The first node fight is what leaves the starter hurt.
       expect(
-        at(IntroStep.practiceFight),
+        at(IntroStep.firstNode),
         lessThan(at(IntroStep.buildHealingHut)),
       );
-      // The hut must stand before it can treat anyone.
+      // The hut must stand before a healer can be stationed there.
       expect(
         at(IntroStep.buildHealingHut),
+        lessThan(at(IntroStep.assignHealer)),
+      );
+      // ...and before it can treat anyone.
+      expect(
+        at(IntroStep.assignHealer),
         lessThan(at(IntroStep.healStarter)),
       );
-      // A K.O.'d starter can't hunt — heal first, catch second.
+      // A hurt starter can't hunt — heal first, catch second.
       expect(at(IntroStep.healStarter), lessThan(at(IntroStep.firstCapture)));
-      // Two monsters before one is asked to hold the fort.
-      expect(at(IntroStep.firstCapture), lessThan(at(IntroStep.assignWorker)));
-      // The Fishing Hut is tech-gated — its trial must come first.
-      expect(at(IntroStep.fishTech), lessThan(at(IntroStep.buildFishingHut)));
+      // Two monsters before the second node is asked of them.
+      expect(at(IntroStep.firstCapture), lessThan(at(IntroStep.secondNode)));
     });
 
     test('every build step points at a real bundled building', () {
@@ -175,18 +178,6 @@ void main() {
       // Steps that aren't build steps have no target.
       expect(introBuildTarget(IntroStep.pickStarter), isNull);
       expect(introBuildTarget(IntroStep.done), isNull);
-    });
-
-    test('the fishing-hut build step never dead-ends', () {
-      // The build step must target a REAL building (2026-07-24 roster: lux_fish).
-      // If that building is tech-gated at all, the gate must be the fish tech the
-      // script researches first — otherwise the tutorial dead-ends at its final
-      // step. Era-gated (no required tech) is fine: it's always buildable.
-      final id = introBuildTarget(IntroStep.buildFishingHut)!;
-      final def = kFallbackBuildingDefs[id]!;
-      if (def.requiredTechId != null) {
-        expect(def.requiredTechId, kIntroFishTechId);
-      }
     });
 
     test('only done is inactive — the jumpstart window is the chain', () {
