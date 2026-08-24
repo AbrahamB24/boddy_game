@@ -65,7 +65,7 @@ void main() {
       }
       // And the buildings a player has placed still resolve — which is what
       // "my buildings were deleted" actually meant.
-      for (final id in ['small_wood_camp', 'small_stone_camp', 'small_house', 'healing_hut']) {
+      for (final id in ['small_wood_camp', 'small_quarry', 'small_house', 'healing_hut']) {
         expect(kBuildingDefs[id], isNotNull, reason: id);
       }
     });

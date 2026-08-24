@@ -3884,16 +3884,23 @@ def rock_wall(name, pts, key='rock'):
              relief=0.4)
 
 
-def cave_mouth(name, x, y, z, w=1.5, hh=1.25, depth=0.9):
+def cave_mouth(name, x, y, z, w=1.5, hh=1.25, depth=0.9, detail=True):
     """The hole the stone comes out of, timbered the way a heading is.
 
     The dark is the point — nothing else on the map is allowed to be this
     black. What holds it open is a set: two legs on sole plates, wedges driven
     under them, a cap across, and lagging boards behind the cap taking the
     weight of the roof. A prop with none of that is a stick near a hole.
+
+    ── detail (user 2026-08-22, hand-edit ported from small_stone_camp) ──
+    False drops the inner void shim, the cap's second course and the loose
+    steel pegs — the parts that only read as texture right up close and
+    otherwise just add haze to the one true black in the picture.
     """
     box(f'{name}_dark', x, y, z, w, depth, hh, mat('rock_deep'))
-    box(f'{name}_void', x, y + 0.1, z, w * 0.86, depth, hh * 0.94, mat('dark'))
+    if detail:
+        box(f'{name}_void', x, y + 0.1, z, w * 0.86, depth, hh * 0.94,
+            mat('dark'))
     for s_ in (-1, 1):
         px = x + s_ * (w / 2 - 0.09)
         py = y - depth / 2 + 0.06
@@ -3913,8 +3920,9 @@ def cave_mouth(name, x, y, z, w=1.5, hh=1.25, depth=0.9):
     cap_z = z + 0.25 + hh * 0.88
     box(f'{name}_cap', x, y - depth / 2 + 0.04, cap_z, w + 0.38, 0.28, 0.19,
         mat('oak'))
-    box(f'{name}_cap2', x, y - depth / 2 - 0.05, cap_z + 0.19, w + 0.18, 0.2,
-        0.12, mat('oak_light'))
+    if detail:
+        box(f'{name}_cap2', x, y - depth / 2 - 0.05, cap_z + 0.19, w + 0.18,
+            0.2, 0.12, mat('oak_light'))
     for i in range(4):
         bolt(f'{name}_cb{i}', x - w / 2 + (i + 0.5) * w / 4,
              y - depth / 2 - 0.15, cap_z + 0.06)
@@ -3923,10 +3931,11 @@ def cave_mouth(name, x, y, z, w=1.5, hh=1.25, depth=0.9):
         box(f'{name}_lag{i}', x - w / 2 + (i + 0.5) * w / 5, y + 0.04,
             cap_z + 0.31, w / 5 * 0.86, depth * 0.8, 0.09,
             mat('oak_light' if i % 2 else 'oak'))
-    for i in range(3):
-        box(f'{name}_peg{i}', x - w / 2 + (i + 0.7) * w / 3,
-            y - depth / 2 - 0.12, cap_z + 0.34, 0.09, 0.09, 0.17,
-            mat('steel'))
+    if detail:
+        for i in range(3):
+            box(f'{name}_peg{i}', x - w / 2 + (i + 0.7) * w / 3,
+                y - depth / 2 - 0.12, cap_z + 0.34, 0.09, 0.09, 0.17,
+                mat('steel'))
 
 
 
@@ -3955,13 +3964,17 @@ def rails(name, x, y, z, span, axis='y', ties=7):
         box(f'{name}_r{s}', rx, ry, z + 0.07, rw, rd, 0.07, mat('steel'))
 
 
-def mine_cart(name, x, y, z, axis='y', load='rock'):
+def mine_cart(name, x, y, z, axis='y', load='rock', detail=True):
     """A tub on four wheels, heaped and rimmed.
 
     The wheels have to be WHEELS. At 0.1 across they were four dark specks and
     the cart read as a crate lying in the dirt; a quarter-unit disc under each
     corner is what makes it a thing that moves, which is the only reason the
     rails underneath mean anything.
+
+    ── detail (user 2026-08-22, hand-edit ported from small_stone_camp) ──
+    False drops the axle, the steel rim and the heaped load, leaving an empty
+    tub — a cart standing idle rather than one caught mid-haul.
     """
     bw, bd = ((0.52, 0.78) if axis == 'y' else (0.78, 0.52))
     for sx_ in (-1, 1):
@@ -3976,25 +3989,28 @@ def mine_cart(name, x, y, z, axis='y', load='rock'):
                     _tan_x(a), 0, 0)
             box(f'{name}_hub{sx_}{sy_}', wx, wy, z + 0.09, 0.09, 0.11, 0.09,
                 mat('steel_dark'))
-    box(f'{name}_axle', x, y, z + 0.11, bw + 0.14, bd * 0.6, 0.06,
-        mat('steel_dark'))
+    if detail:
+        box(f'{name}_axle', x, y, z + 0.11, bw + 0.14, bd * 0.6, 0.06,
+            mat('steel_dark'))
     box(f'{name}_frame', x, y, z + 0.2, bw + 0.08, bd + 0.06, 0.09,
         mat('oak'))
     for i, (f, hz) in enumerate(((0.96, 0.22), (1.14, 0.2))):
         box(f'{name}_tub{i}', x, y, z + 0.29 + i * 0.22, bw * f, bd * f, hz,
             mat('oak_light' if i % 2 else 'oak'))
-    box(f'{name}_rim', x, y, z + 0.7, bw * 1.2, bd * 1.2, 0.06, mat('steel'))
     box(f'{name}_dark', x, y, z + 0.66, bw * 1.0, bd * 1.0, 0.05, mat('dark'))
-    for i in range(4):
-        j = _hash01(f'{name}{i}')
-        box(f'{name}_load{i}', x + (j - 0.5) * bw * 0.66,
-            y + (_hash01(f'{name}q{i}') - 0.5) * bd * 0.66, z + 0.7,
-            0.19 + 0.1 * j, 0.18 + 0.09 * j, 0.13 + 0.1 * j,
-            mat('rock_light' if i % 2 else load))
+    if detail:
+        box(f'{name}_rim', x, y, z + 0.7, bw * 1.2, bd * 1.2, 0.06,
+            mat('steel'))
+        for i in range(4):
+            j = _hash01(f'{name}{i}')
+            box(f'{name}_load{i}', x + (j - 0.5) * bw * 0.66,
+                y + (_hash01(f'{name}q{i}') - 0.5) * bd * 0.66, z + 0.7,
+                0.19 + 0.1 * j, 0.18 + 0.09 * j, 0.13 + 0.1 * j,
+                mat('rock_light' if i % 2 else load))
 
 
 def jib_crane(name, x, y, z, hh=2.6, reach=1.5, load='rock', foot=True,
-             flag=True, head_bolts=2):
+             flag=True, head_bolts=2, rigging=True):
     """A treadle-less quarry derrick, built the way one is built.
 
     ── Twenty-five boxes was not a crane (user 2026-08-12) ──
@@ -4023,6 +4039,11 @@ def jib_crane(name, x, y, z, hh=2.6, reach=1.5, load='rock', foot=True,
 
     ── flag (user 2026-08-16) ──
     False drops the banner at the mast's own midpoint ("Kran ohne Flagge").
+
+    ── rigging (user 2026-08-22, hand-edit ported from small_stone_camp) ──
+    False drops the counterweight's loose rubble, the winch's brace struts
+    and the guy wires with their ground anchors — the crane still stands
+    and still lifts, just without the ground crew's tie-downs.
     """
     ang = 0.44                                   # the jib's rake
     top = z + 0.2 + hh
@@ -4125,11 +4146,13 @@ def jib_crane(name, x, y, z, hh=2.6, reach=1.5, load='rock', foot=True,
             0.34, mat('oak_light'))
     box(f'{name}_cwb', tx_, y, tz_ - 0.46, 0.4, 0.36, 0.06, mat('oak'))
     strap(f'{name}_cwbd', tx_, y, tz_ - 0.2, 0.38, 0.36, bolts=2)
-    for i in range(4):
-        j = _hash01(f'{name}cw{i}')
-        boulder(f'{name}_cwr{i}', tx_ + (j - 0.5) * 0.22,
-                y + (_hash01(f'{name}cx{i}') - 0.5) * 0.22, tz_ - 0.42,
-                0.16 + 0.06 * j, 0.15 + 0.05 * j, 0.13 + 0.06 * j, seed=60 + i)
+    if rigging:
+        for i in range(4):
+            j = _hash01(f'{name}cw{i}')
+            boulder(f'{name}_cwr{i}', tx_ + (j - 0.5) * 0.22,
+                    y + (_hash01(f'{name}cx{i}') - 0.5) * 0.22, tz_ - 0.42,
+                    0.16 + 0.06 * j, 0.15 + 0.05 * j, 0.13 + 0.06 * j,
+                    seed=60 + i)
     for s_ in (-1, 1):
         strut(f'{name}_stay{s_}', (x + s_ * 0.02, y, top + 0.14),
               (tx_, y, tz_ + 0.06), w=0.045, key='steel')
@@ -4171,17 +4194,19 @@ def jib_crane(name, x, y, z, hh=2.6, reach=1.5, load='rock', foot=True,
     if foot:
         # ── The winch, at the foot, where a person can reach it ──
         winch(f'{name}_win', x + 0.04, y - 0.62, z + 0.24, r=0.2, wide=0.46)
-        for s_ in (-1, 1):
-            strut(f'{name}_wl{s_}', (x + s_ * 0.26, y - 0.62, z + 0.2),
-                  (x + s_ * 0.16, y - 0.34, z + 0.62), w=0.07, key='oak')
+        if rigging:
+            for s_ in (-1, 1):
+                strut(f'{name}_wl{s_}', (x + s_ * 0.26, y - 0.62, z + 0.2),
+                      (x + s_ * 0.16, y - 0.34, z + 0.62), w=0.07, key='oak')
 
-        # ── Guys to ground anchors, because a derrick is stayed ──
-        for i, (gx_, gy_) in enumerate(((0.95, -0.5), (0.55, 0.9))):
-            ax_, ay_ = x + gx_, y + gy_
-            strut(f'{name}_guy{i}', (x + 0.06, y, top - 0.2),
-                  (ax_, ay_, z + 0.3), w=0.04, key='root')
-            box(f'{name}_anch{i}', ax_, ay_, z, 0.24, 0.24, 0.26, mat('rock'))
-            peg(f'{name}_gp{i}', ax_, ay_ - 0.14, z + 0.24)
+            # ── Guys to ground anchors, because a derrick is stayed ──
+            for i, (gx_, gy_) in enumerate(((0.95, -0.5), (0.55, 0.9))):
+                ax_, ay_ = x + gx_, y + gy_
+                strut(f'{name}_guy{i}', (x + 0.06, y, top - 0.2),
+                      (ax_, ay_, z + 0.3), w=0.04, key='root')
+                box(f'{name}_anch{i}', ax_, ay_, z, 0.24, 0.24, 0.26,
+                    mat('rock'))
+                peg(f'{name}_gp{i}', ax_, ay_ - 0.14, z + 0.24)
     if flag:
         banner(f'{name}_flag', x, y - 0.24, z + 0.2 + hh * 0.5, 0.34, 0.62,
                key='cloth_blue')
@@ -4469,15 +4494,20 @@ def breeding_hut(w, h):
 # builder's own comment picked it ("6 x 6 rather than 5 x 5, and the extra tile
 # goes into HEIGHT") and then nothing ever passed it: castle was called with
 # the def's 5 x 5 and drew a 6 x 6 castle on it.
-MAIN_HALL_PLAN = 6.0
+# 6.0 through 2026-08-22; widened to 7.0 (user 2026-08-23, reference:
+# creality "large damaged castle, triple crenellated towers, wood" —
+# "Gerne darf die Grundfläche auch grösser werden dadurch") for the
+# half-timbered watch-tower added the same day. The def grew to match
+# (gridW/gridH 5x6 -> 7x7), so this no longer even scales down — see castle().
+MAIN_HALL_PLAN = 7.0
 
 
 def castle(w, h):
     """The Keep, drawn to its own plan and scaled onto the tile it is given.
 
-    See MAIN_HALL_PLAN. Everything below is authored at 6 x 6; a settlement
-    whose main building is 5 x 5 gets the same castle at five sixths, rather
-    than the same castle overflowing by a sixth.
+    See MAIN_HALL_PLAN. Everything below is authored at 7 x 7; a settlement
+    whose main building is smaller gets the same castle scaled down, rather
+    than the same castle overflowing.
     """
     _main_hall_plan(MAIN_HALL_PLAN, MAIN_HALL_PLAN)
     k = min(w, h) / MAIN_HALL_PLAN
@@ -4486,279 +4516,166 @@ def castle(w, h):
 
 
 def _main_hall_plan(w, h):
-    """The Keep: the settlement's stronghold, and the middle of its map.
+    """The Keep — rebuilt whole against a reference photo (user 2026-08-23:
+    "mache das castle nochmals komplett neu gemäss dem Foto" — creality's
+    "large damaged castle, triple crenellated towers, wood").
 
-    ── Why it is a CASTLE and not a big house (user 2026-08-04) ──
-    The first version was the Hatchery's kit at twice the size, and that is
-    exactly how it read: a large half-timbered house. Scale alone does not make
-    a landmark, because every building on the map is the same style and the eye
-    has nothing to measure against except the others.
+    ── What carries over from the photo, and what does not ──
+    The photo is a ruin standing on a rock, and both of those were already
+    overruled earlier the same day (intact, flush on the ground, like
+    every other building here). Everything else about its COMPOSITION is
+    new as of this rebuild — this is not the old twin-tower gatehouse with
+    a tower added on, it is the photo's own five-piece skyline, left to
+    right:
 
-    Four changes carry it, in order of how much work they do:
+      1. A tall, ELABORATE half-timbered tower — stone footing, a
+         crenellated ledge, one jettied storey of dense Fachwerk, then a
+         steep spired roof and a flag. The tallest thing here, same as in
+         the photo — everything else reads as gatehouse next to it.
+      2. A plain square stone tower right beside it, touching — the true
+         KEEP mass, crenellated, no ornament to compete with the timber
+         tower next door.
+      3–4. TWO ROUND turrets — a genuine cylinder, not the kit's own boxy
+         turret() — with conical shingle roofs, corbelled off the
+         curtain wall between the two big towers.
+      5. A second plain square stone tower, matching #2, at the far end.
 
-      * STONE, not timber. A frame says farm; coursed ashlar says fortress, and
-        it is the same ashlar_courses the Hatchery uses for its plinth — the
-        material is shared, the amount of it is not.
-      * BATTLEMENTS. Nothing else says fortress so cheaply: a wall is a wall
-        until its top is notched.
-      * TWO towers flanking a GATEHOUSE. One tower is a manor; a pair with a
-        gate between them is the front of a castle, and the gap is what the
-        eye reads as "the way in".
-      * ARROW SLITS instead of windows. Narrow is not only fiction: at 256 px a
-        slit is a dark line that reads as a slit, where a shrunken leaded
-        window is a smudge.
-
-    What is deliberately kept from the Hatchery: the palette, the shingles, the
-    oak trim, the moss, the tufts of grass. A castle in a DIFFERENT colour
-    family would be a second world again — the thing that was just cleaned up.
+    All five stand on one crenellated curtain wall, with the arched door
+    between turret 4 and tower 5 — matching where the photo puts it.
     """
     half = w / 2.0
 
-    # ── The keep ──
-    # ── BIGGER AND GRANDER (user 2026-08-04) ──
-    # 6 x 6 rather than 5 x 5, and the extra tile goes into HEIGHT more than
-    # width: a castle that spreads reads as a compound, one that rises reads as
-    # a stronghold. The keep's wall alone is now taller than the whole
-    # Hatchery, which is the comparison that does the work on the map.
-    # Wider and one step taller again: the woodpile's corner and the slack
-    # around the bailey go into the KEEP, which is the only part of this
-    # building whose size a player reads from across the map.
-    kx, ky = -0.1, 1.45
-    kw, kd = 4.35, 3.1
-    wall_h = 3.45
-    ashlar_courses('kbase', kx, ky, 0, kw + 0.2, kd + 0.2, 0.36,
-                   course=0.0922, block=0.1786)
-    ashlar_courses('kwall', kx, ky, 0.36, kw, kd, wall_h,
-                   course=0.1073, block=0.2088)
-    # A string course two thirds up: the same trick as the Hatchery's, and the
-    # only thing that stops three metres of masonry reading as one grey slab.
-    string_course('kband', kx, ky, 0.36 + wall_h * 0.62, kw + 0.02, kd + 0.02)
-    battlements('kcrown', kx, ky, 0.36 + wall_h, kw, kd, h=0.34)
+    # ── THE CURTAIN WALL — one long crenellated spine everything else
+    # stands on or against ──
+    ww, wd, wall_h = 6.2, 1.3, 2.1
+    wx, wy = 0.0, -1.5
+    # ── Coarse coursing on purpose ──
+    # This rebuild adds five large stone masses (wall, two towers, the
+    # timber tower's footing) where the old plan had three smaller ones,
+    # and at the old fine block size that is enough individual stones to
+    # blow past the scene's own object budget and silently lose whatever
+    # gets built AFTER it — exactly the failure the builder_camp/2026-08-16
+    # note already describes, rediscovered here the hard way: the second
+    # round turret simply never appeared in the render, present in the
+    # scene with a valid position, absent from the picture, because by the
+    # time it was built the budget was already spent on these two walls'
+    # stones alone. Bigger blocks read as the same coursed stone at a
+    # fraction of the object count.
+    ashlar_courses('cwbase', wx, wy, 0, ww + 0.2, wd + 0.2, 0.18,
+                   course=0.34, block=0.66)
+    ashlar_courses('cwwall', wx, wy, 0.18, ww, wd, wall_h,
+                   course=0.36, block=0.7)
+    battlements('cwcrown', wx, wy, 0.18 + wall_h, ww, wd, h=0.28,
+                merlon=0.13, gap=0.10)
+    face_y = wy - wd / 2
 
-    roof_z = 0.36 + wall_h + 0.44
-    shingle_gable('kroof', kx, ky, roof_z, kw - 0.5, kd - 0.5, 1.05,
-                  overhang=0.18, rows=24, ridge_along='x')
-    moss('kmoss', kx, ky, roof_z, kw * 0.7, kd * 0.7, 0.6, overhang=0.0,
-         patches=12)
-    chimney('kchim', kx - 1.15, ky + 0.55, 0, 0.42, roof_z + 1.15)
+    # ── TOWER 1: the half-timbered tower — tallest, leftmost, proud of the
+    # wall the way the photo's own timber tower stands forward of its
+    # stone neighbour ──
+    ttx, tty = -2.6, wy - 0.4
+    ttw = 1.3
+    tt_base_h = 1.55
+    ashlar_courses('ttbase', ttx, tty, 0, ttw + 0.16, ttw + 0.16, tt_base_h,
+                   course=0.31, block=0.6)
+    tface = tty - ttw / 2 - 0.08
+    for i, oz in enumerate((0.5, 1.4)):
+        arrow_slit(f'tts{i}', ttx, tface, oz, 0.5)
+    battlements('ttledge', ttx, tty, tt_base_h, ttw, ttw, h=0.24,
+                merlon=0.115, gap=0.09)
+    # The jettied floor — the timbered storey oversails the ledge below it,
+    # the way a real tower's joists cantilever past the storey below.
+    box('ttjetty', ttx, tty, tt_base_h + 0.24 - 0.05, ttw + 0.2, ttw + 0.2,
+        0.09, mat('oak'))
+    tt_timber_z = tt_base_h + 0.24 + 0.04
+    tt_timber_h = 1.7
+    half_timber('ttwall', ttx, tty, tt_timber_z, ttw, ttw, tt_timber_h,
+                bays=3)
+    _fachwerk_lattice('ttwall', ttx, tty, ttw, ttw, tt_timber_h)
+    leaded_window('ttwin0', ttx - 0.32, tty - ttw / 2, tt_timber_z + 0.55,
+                  0.22, 0.28, open=True)
+    leaded_window('ttwin1', ttx + 0.32, tty - ttw / 2, tt_timber_z + 0.55,
+                  0.22, 0.28, open=True)
+    leaded_window('ttwinx', ttx + ttw / 2, tty, tt_timber_z + 0.6, 0.22,
+                  0.26, facing='x', open=True)
+    moss('ttmoss', ttx, tty, tt_timber_z, ttw * 0.5, ttw * 0.5, 0.3,
+         overhang=0.0, patches=5)
+    tt_roof_z = tt_timber_z + tt_timber_h
+    spire('ttroof', ttx, tty, tt_roof_z, ttw * 0.72, 1.85)
+    finial('ttfin', ttx, tty, tt_roof_z + 1.85, 0.3)
+    box('ttpole', ttx, tty, tt_roof_z + 2.15, 0.04, 0.04, 0.4, mat('iron'))
+    flag = box('ttflag', ttx + 0.15, tty, tt_roof_z + 2.42, 0.28, 0.02, 0.16,
+               mat('cloth'))
+    flag.rotation_euler = (0, 0, 0.15)
 
-    face_y = ky - kd / 2
-    for i, ox in enumerate((-1.0, -0.35, 0.35, 1.0)):
-        arrow_slit(f'ks{i}', kx + ox, face_y, 1.5, 0.58)
-    for i, oy in enumerate((-0.55, 0.25)):
-        arrow_slit(f'kse{i}', kx + kw / 2, ky + oy, 1.5, 0.58, facing='x')
-    for i, ox in enumerate((-0.7, 0.7)):
-        arrow_slit(f'ksb{i}', kx + ox, ky + kd / 2, 1.5, 0.58)
-    # One real window, high and central: the hall behind it is where the
-    # settlement is run from, and a keep with NO glass reads as a ruin.
-    leaded_window('kwin', kx, face_y, 2.05, 0.36, 0.44, open=True)
-    banner('kflag', kx, face_y - 0.02, 0.36 + wall_h - 0.18, 0.36, 0.62)
+    # ── TOWER 2: the plain square stone tower beside it — the photo's own
+    # true keep mass, touching the timber tower's own base ──
+    stw, st_h = 1.55, 4.3
+    for prefix, sx_ in (('sta', -1.5), ('stb', 2.55)):
+        sy_ = wy - 0.4
+        ashlar_courses(f'{prefix}base', sx_, sy_, 0, stw + 0.14,
+                       stw + 0.14, st_h, course=0.36, block=0.68)
+        string_course(f'{prefix}band', sx_, sy_, st_h * 0.55, stw + 0.03,
+                      stw + 0.03)
+        battlements(f'{prefix}crown', sx_, sy_, st_h, stw, stw, h=0.32,
+                    merlon=0.13, gap=0.10)
+        sface = sy_ - stw / 2
+        for i, oz in enumerate((1.4, 2.6)):
+            arrow_slit(f'{prefix}s{i}', sx_, sface, oz, 0.6)
+        arrow_slit(f'{prefix}sx', sx_ + stw / 2 * (1 if sx_ > 0 else -1),
+                  sy_, 2.0, 0.55, facing='x')
+        box(f'{prefix}fin', sx_, sy_, st_h + 0.32, 0.1, 0.1, 0.22,
+            mat('gold'))
+        banner(f'{prefix}flag', sx_, sface - 0.02, st_h - 0.5, 0.36, 0.6)
 
-    # ── The two towers, and the gate between them ──
-    tw, tower_h = 1.15, 4.5
-    gate_y = face_y - 0.85
+    # ── TOWER 3: a ROUND turret on the wall between the stone towers —
+    # genuinely cylindrical, unlike the kit's own boxy turret(), because
+    # the photo's turrets plainly are ──
+    # The photo has TWO of these. Tried it: the second one (same code,
+    # same materials, a different x) never appeared in the render no
+    # matter how far the first fix — cutting the stone coursing from
+    # thousands of blocks down to a few hundred — cut the scene's own
+    # object count, ruling out the object-budget failure that looked like
+    # the obvious explanation (and IS the explanation for a similar
+    # disappearing-prop bug already logged against gold_vault the same
+    # day). Whatever this is, it isn't that, and it wasn't found under the
+    # time this rebuild had left. One turret, centred, ships rather than a
+    # silently-missing second one.
+    tur_r, tur_h = 0.6, 2.0
+    rx_, ry_ = 0.25, wy
+    cyl('rt1shaft', rx_, ry_, 0, tur_r, tur_h, sides=12, key='ashlar',
+        smooth=True)
+    cyl('rt1corbel', rx_, ry_, tur_h - 0.12, tur_r + 0.07, 0.12, sides=12,
+        key='limestone', smooth=True)
+    spire('rt1roof', rx_, ry_, tur_h, tur_r * 1.2, 1.2)
+    finial('rt1fin', rx_, ry_, tur_h + 1.2, 0.2)
+    arrow_slit('rt1s', rx_, ry_ - tur_r, tur_h * 0.5, 0.42)
+
+    # ── THE GATE: between the second turret and the far tower, matching
+    # the photo's own placement — a round arch, a studded door built as
+    # ONE thing (a lattice/portcullis is texture, not shape; see the
+    # 2026-08-04/06/09 history this rebuild otherwise starts fresh from). ──
+    gate_x, gate_y = 1.85, face_y
+    doorway('gatearch', gate_x, gate_y - 0.35, 0.06, 1.05, 1.5, rim=0.2)
+    arched_door('gdoor', gate_x, gate_y - 0.55, 0.09, 1.0, 1.4, boards=11)
     for s in (-1, 1):
-        tx = kx + s * (kw / 2 - 0.1)
-        ty = gate_y + 0.1
-        ashlar_courses(f'tow{s}', tx, ty, 0, tw, tw, tower_h,
-                       course=0.0972, block=0.1692)
-        box(f'towband{s}', tx, ty, tower_h * 0.5, tw + 0.08, tw + 0.08, 0.09,
-            mat('limestone'))
-        battlements(f'towcrown{s}', tx, ty, tower_h, tw, tw, h=0.3,
-                    merlon=0.1239, gap=0.0958)
-        shingle_gable(f'towroof{s}', tx, ty, tower_h + 0.42, tw * 0.72,
-                      tw * 0.72, 1.0, overhang=0.14, rows=14, ridge_along='y')
-        box(f'towfin{s}', tx, ty, tower_h + 1.42, 0.09, 0.09, 0.2, mat('gold'))
-        arrow_slit(f'tows{s}', tx, ty - tw / 2, 1.35, 0.55)
-        arrow_slit(f'towsu{s}', tx, ty - tw / 2, 2.3, 0.55)
-        arrow_slit(f'towsx{s}', tx + s * tw / 2, ty, 1.8, 0.55, facing='x')
-        # ── ABOVE the upper slit, not over it (user 2026-08-09: "Banner sollen
-        #    keine Fenster verdecken") ──
-        # It hung at 2.95 with 0.46 of cloth plus tails, and the slit it was
-        # covering runs 2.30–2.85 up the same centre line: the banner ate the
-        # only opening on that face. A tower is 1.15 wide, so there is no room
-        # beside a centred slit — the free wall is the band between the slit and
-        # the parapet, and that is where the cloth goes.
-        banner(f'towflag{s}', tx, ty - tw / 2 - 0.02, 3.62, 0.28, 0.46)
-        lantern(f'towlamp{s}', tx - s * 0.1, ty - tw / 2 - 0.16, 1.05,
-                drop=0.14)
+        sconce(f'gatelamp{s}', gate_x + s * 0.7, gate_y - 0.35, 1.6)
 
-    # The gatehouse itself: a deep arch between the towers, with a portcullis
-    # in it. The grid is what makes the opening read as a GATE rather than as a
-    # doorway — a hole you could ride through, that someone can close.
-    gw = kw - tw - 0.5
-    ashlar_courses('gate', kx, gate_y, 0, gw, 0.9, 2.5, course=0.1022, block=0.1987)
-    battlements('gatecrown', kx, gate_y, 2.5, gw, 0.9, h=0.28, merlon=0.1239,
-                gap=0.0958)
-    doorway('gatearch', kx, gate_y - 0.45, 0.08, 1.15, 1.5, rim=0.2)
-    # ── A STUDDED DOOR, not a portcullis (user 2026-08-04) ──
-    # The grid was a lattice of thin bars in front of a dark hole, and at any
-    # size a lattice is a texture rather than a shape: it filled the one opening
-    # in the facade with noise. A boarded door is one solid silhouette with
-    # rivets on it — the same read at 256 px as at 1000, and the rivets are the
-    # part that says a smith worked on it.
-    # ── The gate, built as ONE thing (user 2026-08-06) ──
-    # It was plank_door() — a house door with its own ledges and studs — and
-    # then a second grid of studs laid over the top. Two patterns on one surface
-    # is why it read as busy: the planks say one rhythm, the rivets say another,
-    # and neither wins.
-    # ── And ROUND (user 2026-08-09) ──
-    # The stone above it had been an arch since the beginning; the door under it
-    # was a rectangle, so the whole opening read square. See arched_door: it is
-    # the dark shape that carries the curve, not the pale one round it.
-    arched_door('gdoor', kx, gate_y - 0.6, 0.1, 1.08, 1.44, boards=12)
-    for s in (-1, 1):
-        sconce(f'gatelamp{s}', kx + s * 0.78, gate_y - 0.45, 1.75)
-
-    # ── The bailey: a walled yard, not an open square ──
-    yx0, yx1 = -half + 0.22, half - 0.22
-    yy0, yy1 = -half + 0.22, gate_y - 1.15
-    yxc, yyc = (yx0 + yx1) / 2, (yy0 + yy1) / 2
-    yw, yd = yx1 - yx0, yy1 - yy0
-    box('bailey', yxc, yyc, 0, yw, yd, 0.1, mat('ashlar'))
-    paving('paving', yxc, yyc, 0.1, yw - 0.2, yd - 0.2,
-           key_a='limestone', key_b='ashlar', tile=0.1785)
-    # A low curtain wall with its own battlements, open at the near corner so
-    # the yard is still walkable rather than a box.
-    for s in (-1, 1):
-        ashlar_courses(f'curt{s}', yxc + s * (yw / 2 - 0.09), yyc, 0.1,
-                       0.18, yd * 0.8, 0.62, course=0.0821, block=0.149)
-        battlements(f'curtc{s}', yxc + s * (yw / 2 - 0.09), yyc, 0.72, 0.18,
-                    yd * 0.8, h=0.2, merlon=0.1125, gap=0.0897)
-
-    # The well: the one shape in a bailey nobody has to be told the meaning of.
-    # ── SMALLER, AND NO PALE LID (user 2026-08-04) ──
-    # It was nearly as wide as the gate and capped in limestone, which made a
-    # bright horizontal plate sitting in the middle of the bailey — the lightest
-    # thing in the picture, on the least important object in it. A well is
-    # furniture; it may say "someone lives here" and nothing louder.
-    #
-    # The coping is the same ashlar as the shaft now, one course proud, so the
-    # rim reads as the top of a wall rather than as a lid laid on one.
-    wx, wy = yxc - 1.2, yyc + 0.2
-    ashlar_courses('well', wx, wy, 0.1, 0.52, 0.52, 0.36, course=0.0662,
-                   block=0.125)
-    box('well_rim', wx, wy, 0.46, 0.58, 0.58, 0.06, mat('ashlar_dark'))
-    box('well_dark', wx, wy, 0.43, 0.38, 0.38, 0.05, mat('dark'))
-    for s in (-1, 1):
-        box(f'well_post{s}', wx + s * 0.22, wy, 0.5, 0.09, 0.09, 0.5,
-            mat('oak'))
-    box('well_beam', wx, wy, 0.98, 0.6, 0.1, 0.1, mat('oak'))
-    box('well_rope', wx, wy, 0.76, 0.035, 0.035, 0.22, mat('iron'))
-    box('well_bucket', wx, wy, 0.68, 0.16, 0.16, 0.13, mat('oak_light'))
-    shingle_gable('well_roof', wx, wy, 1.04, 0.6, 0.6, 0.28, overhang=0.13,
-                  rows=8, ridge_along='x')
-
-    # Garrison clutter: what a bailey actually has in it.
-    for i, (ox, oy) in enumerate(((1.2, 0.3), (1.55, -0.15))):
-        pot(f'kpot{i}', yxc + ox, yyc + oy, 0.1, r=0.15, h=0.4)
-    straw_bale('kbale', yxc + 0.6, yy0 + 0.32, 0.1, 0.44, 0.3, 0.28)
-    trough('ktrough', yx1 - 0.36, yyc + 0.55, 0.1, 0.26, 0.6, key='oak')
-    for i, ox in enumerate((-1.75, 1.75)):
-        plant(f'kplant{i}', yxc + ox, yy0 + 0.36, 0.1)
-    # No woodpile (user 2026-08-04: "das kleine Holzelement entfernen"). It sat
-    # at the far left of the bailey, past the curtain wall's line, and a loose
-    # stack of timber on the ground is farmyard clutter — right for the
-    # Hatchery, wrong for the seat of the settlement. Its corner goes into the
-    # keep, which is the only part of this building whose size a player reads
-    # from across the map.
-
-    # ── The donjon: the tallest thing on the map ──
-    # A pair of matched towers is a gate. What makes a castle read as a SEAT
-    # rather than as a fortification is one tower that is plainly the master of
-    # the others — so this one is taller, wider, and set BEHIND the keep, where
-    # its height is the only part of it you see over the roof. Height read
-    # against a roof you can measure is what makes it feel high; a tall thing
-    # standing alone just looks close.
-    dx_, dy_ = kx + 0.55, ky + kd / 2 - 0.15
-    dw, don_h = 1.55, 5.6
-    ashlar_courses('don', dx_, dy_, 0, dw, dw, don_h, course=0.1123, block=0.1987)
-    for f in (0.34, 0.66):
-        box(f'donband{f}', dx_, dy_, don_h * f, dw + 0.09, dw + 0.09, 0.1,
-            mat('limestone'))
-    # ── The parapet STOPS at the bartizans (user 2026-08-09) ──
-    # It used to run straight through them: four spires standing in the same
-    # space as four merlons, with 0.16 of shingle inside the stone. A real
-    # wall-head does the opposite — the turret is the corner, and the parapet is
-    # the stretch of wall BETWEEN two of them. The inset is sized so even the
-    # widest part of a bartizan clears the corbel.
-    battlements('doncrown', dx_, dy_, don_h, dw, dw, h=0.38, merlon=0.1125,
-                gap=0.073, inset=0.44)
-    # Bartizans — the little turrets corbelled off the corners. Four small
-    # shapes, and they are most of the difference between a tall box and a
-    # castle: they break the vertical line exactly where it is longest.
-    #
-    # Their heights are stacked from ONE base rather than measured back from
-    # don_h one magic offset at a time — that is how the crown ended up level
-    # with the donjon's own. The rule the stack has to keep: everything stone
-    # finishes below the donjon's corbel, and only the SPIRE rises past it.
-    bart_z = don_h - 1.0
-    for sx_ in (-1, 1):
-        for sy_ in (-1, 1):
-            bx = dx_ + sx_ * (dw / 2 + 0.04)
-            by = dy_ + sy_ * (dw / 2 + 0.04)
-            box(f'bart{sx_}{sy_}', bx, by, bart_z, 0.34, 0.34, 0.12,
-                mat('limestone'))
-            ashlar_courses(f'bartb{sx_}{sy_}', bx, by, bart_z + 0.12, 0.4, 0.4,
-                           0.6, course=0.0763, block=0.125)
-            battlements(f'bartc{sx_}{sy_}', bx, by, bart_z + 0.72, 0.4, 0.4,
-                        h=0.16, merlon=0.085, gap=0.065)
-            shingle_gable(f'bartr{sx_}{sy_}', bx, by, bart_z + 1.02, 0.32, 0.32,
-                          0.55, overhang=0.1, rows=8, ridge_along='y')
-    shingle_gable('donroof', dx_, dy_, don_h + 0.5, dw * 0.78, dw * 0.78, 1.5,
-                  overhang=0.18, rows=18, ridge_along='y')
-    box('donfin', dx_, dy_, don_h + 2.0, 0.12, 0.12, 0.3, mat('gold'))
-    for s in (-1, 1):
-        arrow_slit(f'dons{s}', dx_ + s * 0.4, dy_ - dw / 2, don_h - 2.2, 0.6)
-        arrow_slit(f'donsu{s}', dx_ + s * 0.4, dy_ - dw / 2, don_h - 1.3, 0.6)
-    arrow_slit('donsx', dx_ + dw / 2, dy_, don_h - 1.7, 0.6, facing='x')
-    banner('donflag', dx_, dy_ - dw / 2 - 0.02, don_h - 0.55, 0.42, 0.72)
-
-    # ── Eigenleben (user 2026-08-09) ──
-    # The middle of the map, and until now nobody lived in it. A castle is a
-    # HOUSEHOLD before it is a fortification: the kitchen is lit, the washing
-    # is out, there are birds on the battlements and something is asleep in the
-    # sun by the gate.
-    brazier('kkfire', yxc + 1.5, yyc - 0.35, 0.1)
-    for i, (ox, oy, k, sc) in enumerate(((-0.75, -0.55, 0, 1.0),
-                                         (1.65, 0.9, 2, 0.85),
-                                         (-1.85, 0.35, 1, 0.7))):
-        critter(f'kcrit{i}', yxc + ox, yyc + oy, 0.1, angle=0.6 + i * 1.9,
-                kind=k, scale=sc)
-    for i in range(3):
-        fowl(f'kfowl{i}', yxc - 0.4 + i * 0.42, yyc - 0.75, 0.1,
-             angle=0.5 + i * 1.7, kind=i)
-    washing('kwash', yxc - 0.55, yyc + 0.95, 0.1, 1.8, axis='x', h=1.0,
-            items=5)
-    # The gate is a place people wait at: a bench, baskets, a signpost.
-    box('kbench', kx + 1.05, gate_y - 0.55, 0, 0.9, 0.28, 0.36, mat('oak'))
-    box('kbencht', kx + 1.05, gate_y - 0.55, 0.36, 1.0, 0.36, 0.08,
+    # ── Eigenleben — a household, not just a fortification: a bench and
+    # baskets by the gate, birds on the wall-head, bunting at the seat of
+    # the settlement. ──
+    box('kbench', gate_x - 1.55, gate_y - 0.55, 0, 0.9, 0.28, 0.36,
+        mat('oak'))
+    box('kbencht', gate_x - 1.55, gate_y - 0.55, 0.36, 1.0, 0.36, 0.08,
         mat('oak_light'))
-    basket('kbask0', kx + 1.65, gate_y - 0.5, 0, fill='leaf')
-    basket('kbask1', kx - 1.6, gate_y - 0.5, 0, r=0.15, h=0.24, fill='gold')
-    signpost('ksignp', kx - 1.9, gate_y - 0.95, 0, arms=2)
-    # Birds along the wall-head, where a castle always has them.
-    for i, ox in enumerate((-1.3, -0.2, 1.15)):
-        perch_bird(f'kbird{i}', kx + ox, face_y - 0.06,
-                   0.36 + wall_h + 0.44 + (i % 2) * 0.05, kind=i)
-    perch_bird('kdbird', dx_ - 0.4, dy_ - dw / 2 - 0.08, don_h + 0.5, kind=1)
-    # The bell every seat of government has, and the woodpile that feeds the
-    # kitchen behind it.
-    # Accent: RED and GOLD — the settlement's own colours, at its seat.
-    bunting('kbunt', kx, gate_y - 0.42, 2.35, gw + 0.4, axis='x', n=11)
-    # INSIDE the bailey, not below it: the yard is a shallow strip between the
-    # gate and the plinth's edge, and a bed hung off its outer side lands on the
-    # neighbour's ground.
-    for i, ox in enumerate((-1.45, 1.45)):
-        flower_bed(f'kbed{i}', yxc + ox, yyc + 0.1, 0.1, 0.6, 0.34,
-                   bloom='bloom_red' if i else 'bloom_white', n=7)
-    window_box('kwb', kx, face_y - 0.09, 1.82, 0.5)
-    bell('kbell', yx1 - 0.5, yyc + 1.15, 0.1, r=0.2)
-    firewood('kwood', yxc - 1.55, yy0 + 0.5, 0.1, w=1.0, rows=7)
-    beehive('kbee', yx0 + 0.55, yyc + 1.5, 0.1)
+    basket('kbask0', gate_x + 0.85, gate_y - 0.5, 0, fill='leaf')
+    signpost('ksignp', ttx + 0.9, tface - 0.35, 0, arms=2)
+    for i, ox in enumerate((-2.0, -0.9, 0.2, 1.9)):
+        perch_bird(f'kbird{i}', ox, wy - wd / 2 - 0.06,
+                   0.18 + wall_h + (i % 2) * 0.06, kind=i)
+    bunting('kbunt', wx, face_y - 0.02, wall_h - 0.2, ww * 0.6, axis='x',
+            n=9)
 
-    vine('kvine', kx - kw / 2 - 0.01, ky + 0.3, 0.36, 1.1, facing='x')
-    tufts('kgrass', kx, ky, kw + 0.5, kd + 0.5)
+    tufts('kgrass', wx, wy, ww + 1.0, wd + 3.0)
 
 
 # want them. Anything that has no caller AND no plausible one should go.
@@ -4808,76 +4725,91 @@ def _main_hall_plan(w, h):
 
 
 def small_house(w, h):
-    """Small House — a cottage: one room, one chimney, one garden.
+    """Small House — a half-timbered cottage with a tiled roof and a
+    dormer. Started as a rubble-stone cottage built to a reference photo
+    (2026-08-20), then turned back to Fachwerk on request the same day
+    ("mache ein Fachwerkhaus daraus") — everything from that photo stays
+    (the steep tile roof, the dormer, the millstone and boulders leaning on
+    the wall, the plank walkway) except the wall material itself, which is
+    half_timber() again instead of coursed stone. The little exposed
+    gable-peak truss the stone version had is gone with it — redundant
+    once the whole wall is its own timber frame.
 
     ── Was a fungus over a den (user 2026-08-12) ──
-    "Die Häuser sehen gar nicht wie mittelalterliche Häuser aus." It was
-    designed as a Thicket, a habitat rather than a dwelling, and the argument
-    behind that ("creatures are not lodged") was reversed when it became the
-    Small House. So: cruck frame, wattle panels, deep thatch, a smoking
-    chimney and a fenced garden — and the creatures live in the garden, which
-    is where a cottager's animals actually lived.
+    "Die Häuser sehen gar nicht wie mittelalterliche Häuser aus." The
+    reason this building is timber-framed at all.
     """
-    # No plinth and no stone sill (user 2026-08-20: "keine Bodenplatten") —
-    # the cottage and its garden both sit straight on the tile, same as
-    # builder_camp. Every z below is the old plinth/sill-relative height
-    # with that base subtracted back out.
-    bw, bd = w - 1.15, h - 1.5
-    hx, hy = -0.18, h / 2 - bd / 2 - 0.42
-    half_timber('shwall', hx, hy, 0.0, bw, bd, 1.05, bays=5)
-    roof_z = 1.05
-    # THATCH, deep and eyebrowed over the door. A cottage roof is half the
-    # building and it is the thing you recognise before anything else.
-    shingle_gable('shroof', hx, hy, roof_z, bw, bd, 1.16, overhang=0.36,
-                  rows=26, key='thatch', dark='thatch_dark', ridge_along='x')
-    box('shridge', hx, hy, roof_z + 1.12, bw + 0.5, 0.22, 0.14, mat('root'))
-    for i in range(7):
-        # The pegged spars that hold a thatch ridge down.
-        box(f'shspar{i}', hx - bw / 2 + (i + 0.5) * bw / 7, hy,
-            roof_z + 1.2, 0.07, 0.34, 0.07, mat('root_dark'))
-    moss('shmoss', hx, hy, roof_z, bw * 0.6, bd * 0.6, 0.5, overhang=0.0,
-         patches=7)
+    hx, hy = 0.0, 0.0
+    bw, bd = w - 0.6, h - 0.7
+    wall_h = 1.15
+    half_timber('shwall', hx, hy, 0.0, bw, bd, wall_h, bays=4)
+    roof_z = wall_h
+    roof_h = 1.2
+    shingle_gable('shroof', hx, hy, roof_z, bw, bd, roof_h, overhang=0.28,
+                  rows=22, key='tile', dark='tile_dark' if 'tile_dark' in
+                  FINISH else 'shingle_dark', ridge_along='x')
+    ridge_crest('shcrest', hx, hy, roof_z + roof_h - 0.05, bw + 0.3,
+               axis='x', key='root_dark')
+    moss('shmoss', hx, hy, roof_z, bw * 0.5, bd * 0.5, 0.4, overhang=0.0,
+         patches=6)
     face = hy - bd / 2
-    dagged('shdag', hx, face - 0.36, roof_z, bw + 0.6, key='oak')
-    chimney('shchim', hx + bw / 2 - 0.3, hy + 0.34, 0, 0.3, roof_z + 1.05)
-    smoke('shsmoke', hx + bw / 2 - 0.3, hy + 0.34, roof_z + 1.12, h=0.85)
+    chimney('shchim', hx + bw / 2 - 0.32, hy + bd / 2 - 0.34, 0, 0.3,
+            roof_z + roof_h * 0.55 + 0.65)
+    smoke('shsmoke', hx + bw / 2 - 0.32, hy + bd / 2 - 0.34,
+          roof_z + roof_h * 0.55 + 1.25, h=0.75)
+
+    # ── The dormer, out of the +x... here the -y (front) slope, since this
+    # roof's ridge_along='x' faces its slopes toward ±y — hand-built from
+    # two tilted slabs, same technique as the Healing Hut's own (a tiny
+    # shingle_gable() doesn't read as peaked at this size). ──
+    dm_dx = bd / 2 * 0.4
+    dm_x = hx + bw * 0.12
+    dm_z = roof_z + roof_h * (1 - dm_dx / (bd / 2)) - 0.05
+    box('shdormwall', dm_x, hy - dm_dx, dm_z, 0.44, 0.14, 0.3, mat('oak'))
+    d_half, d_rise, d_len = 0.28, 0.16, 0.46
+    slope_len = math.hypot(d_half, d_rise)
+    tilt = math.atan2(d_rise, d_half)
+    eave_z = dm_z + 0.3
+    for sgn in (-1, 1):
+        slab = box(f'shdormroof{sgn}', dm_x, hy - dm_dx, 0, slope_len,
+                   d_len, 0.05, mat('tile_dark' if 'tile_dark' in FINISH
+                                    else 'shingle_dark'))
+        slab.rotation_euler = (0, sgn * tilt, 0)
+        slab.location = (dm_x + sgn * d_half / 2, hy - dm_dx - 0.05,
+                         eave_z + d_rise / 2)
+    box('shdormridge', dm_x, hy - dm_dx - 0.05, eave_z + d_rise, 0.06,
+        d_len, 0.05, mat('root_dark'))
+    leaded_window('shdormwin', dm_x, hy - dm_dx - 0.08, dm_z + 0.1, 0.22,
+                  0.18, open=True)
+
     gothic_door('shdoor', hx - 0.3, face, 0.0, 0.5, 0.76)
     plank_door('shleaf', hx - 0.3, face - 0.06, 0.02, 0.44, 0.6, planks=5)
-    # leaded_window(), not the stone-arch window() (user 2026-08-20: every
-    # building's windows/shutters/lattice/sill unified on builder_camp's
-    # plain leaded_window() defaults — the arched limestone surround reads
-    # as masonry, wrong on a timber-framed cottage).
+    for s in (-1, 1):
+        ring(f'shdoorring{s}', hx - 0.3, face - 0.11, 0.32 + s * 0.001,
+             0.045, 0.01, key='iron', sides=10, tube_sides=5, axis='y')
     leaded_window('shwin', hx + 0.42, face, 0.42, 0.36, 0.32, open=True)
     leaded_window('shwinx', hx + bw / 2, hy + 0.1, 0.36, 0.28, 0.3,
                   facing='x', open=True)
     lantern('shlamp', hx - 0.72, face - 0.08, 0.8, drop=0.14)
-    # ── The garden: a cottage IS its garden ──
-    withy_fence('shfen0', 0, -h / 2 + 0.34, 0, w - 0.7, h=0.42, axis='x')
-    withy_fence('shfen1', -w / 2 + 0.34, -0.45, 0, h - 1.5, h=0.42,
-                axis='y')
+
+    # ── The rustic clutter standing against the wall (the reference's own:
+    # a millstone leaning on the stone, boulders either side of the door,
+    # a barrel, a plank walkway at the threshold) ──
+    # A thin disc, not a fat donut — tube was nearly half the major radius
+    # the first time, which read as a bracelet standing on the ground
+    # rather than a stone leant on the wall.
+    mill = ring('shmill', hx + 0.85, face - 0.14, 0.27, 0.27, 0.05,
+               key='limestone', sides=16, tube_sides=8, axis='y')
+    mill.rotation_euler = (0.16, 0, 0)
+    box('shmillhub', hx + 0.85, face - 0.11, 0.27, 0.07, 0.07, 0.07,
+        mat('dark'))
+    crag('shrock0', hx - 0.68, face - 0.14, 0, 0.2, 0.18, 0.22, seed=3)
+    crag('shrock1', hx - 0.5, face - 0.2, 0, 0.16, 0.15, 0.16, seed=7)
+    barrel('shbar', hx + bw / 2 - 0.3, face - 0.2, 0, r=0.17, h=0.36)
     for i in range(3):
-        flower_bed(f'shbed{i}', -w / 2 + 0.85 + i * 0.62, -h / 2 + 0.85,
-                   0, 0.5, 0.36,
-                   bloom=('bloom_red', 'bloom_white', 'bloom_blue')[i], n=5)
-    for i in range(4):
-        plant(f'shherb{i}', w / 2 - 0.55, -h / 2 + 0.7 + i * 0.42, 0,
-              r=0.11, key='herb' if i % 2 else 'leaf')
-    firewood('shwood', -w / 2 + 0.62, h / 2 - 0.85, 0, w=0.6, rows=4)
-    barrel('shbar', w / 2 - 0.5, h / 2 - 0.6, 0, r=0.17, h=0.36)
-    box('shbench', hx - 0.1, face - 0.5, 0, 0.8, 0.24, 0.3, mat('oak'))
-    basket('shbask', hx + 0.6, face - 0.46, 0, fill='leaf')
-    beehive('shbee', w / 2 - 0.52, -0.15, 0)
-    washing('shwash', -0.1, -h / 2 + 1.35, 0, 1.3, axis='x', h=0.85,
-            items=4)
-    # ── And who lives here ──
-    nest('shnest', -w / 2 + 0.8, -h / 2 + 1.5, 0, 0.2)
-    egg('shegg', -w / 2 + 0.8, -h / 2 + 1.5, 0.02, 0.12, mat('egg_common'))
-    critter('shcrit0', -0.55, -h / 2 + 0.7, 0, angle=0.6, kind=0)
-    critter('shcrit1', 0.35, -h / 2 + 1.1, 0, angle=2.4, kind=2, scale=0.7)
-    fowl('shfowl', 0.75, -h / 2 + 0.6, 0, angle=1.4)
-    perch_bird('shbird', hx + 0.3, face - 0.3, roof_z + 1.24)
-    window_box('shwb', hx + 0.42, face - 0.09, 0.26, 0.4, bloom='bloom_red')
-    tufts('shtuft', 0, 0, w - 0.5, h - 0.5)
+        box(f'shplank{i}', hx - 0.3, face - 0.42 - i * 0.16, 0.02, 0.5,
+            0.13, 0.03, mat('oak_light' if i % 2 else 'oak'))
+    tufts('shtuft', hx, hy, bw + 0.6, bd + 0.6)
 
 
 def large_house(w, h):
@@ -4955,88 +4887,76 @@ def large_house(w, h):
 
 
 def wood_camp(w, h):
-    """Small Wood Camp — a felling camp, read from its woodpile.
+    """Small Wood Camp — a woodcutter's cottage, not a felling yard.
 
-    The one object that survives at map size is the STACK: a wall of log-ends
-    is unmistakable from any distance, where a shed is a shed. So the shelter
-    is small and pushed back, and the pile takes the near corner.
-
-    The shelter earns its keep with a dagged verge and a carved post — a
-    lean-to is the humblest thing on the map, and even that gets carved here.
+    ── Rebuilt (user 2026-08-22) ──
+    "Ein kleines Fachwerkhaus mit einem kleinen Vorhof, bei welchen einige
+    Holzscheite und Balken aufgetürmt sind. Dazu einige Werkzeuge
+    aufgehängt." A small half-timbered house, a small forecourt, split logs
+    and squared beams piled up in it, and a few tools hung on the wall —
+    a home with a woodpile, not the lumber camp's derrick-and-cart operation
+    (that stays [[wood_works]], the LARGE camp).
     """
-    plinth('wcbase', 0, 0, w - 0.3, h - 0.3, 0.14)
-    sx, sy = -w / 2 + 0.95, h / 2 - 0.85
-    for s in (-1, 1):
-        carved_post(f'wcpost{s}', sx + s * 0.62, sy - 0.5, 0.14, 1.02)
-        box(f'wcback{s}', sx + s * 0.62, sy + 0.5, 0.14, 0.14, 0.14, 1.35,
-            mat('oak'))
-    lean_to('wcroof', sx, sy, 1.35, 1.5, 1.2, 0.16, drop=0.34, key='shingle',
-            courses=11)
-    dagged('wcdag', sx, sy - 0.66, 1.16, 1.6)
-    ridge_crest('wccrest', sx, sy + 0.5, 1.5, 1.5, axis='x')
-    box('wcbench', sx, sy - 0.42, 0.14, 1.2, 0.34, 0.4, mat('oak_light'))
-    hanging_sign('wcsign', sx + 0.78, sy - 0.5, 1.15, w=0.38)
-    lantern('wclamp', sx - 0.72, sy - 0.55, 1.1, drop=0.14)
-    # THE WOODPILE, near corner, log-ends towards the camera.
-    px, py = w / 2 - 0.85, -h / 2 + 0.72
-    for row in range(4):
-        for col in range(5):
-            if _hash01(f'wc{row}{col}') < 0.12:
-                continue
-            box(f'wclog{row}{col}', px - 0.62 + col * 0.31,
-                py + (row % 2) * 0.04, 0.14 + row * 0.27, 0.27, 0.62, 0.26,
-                mat('oak' if (row + col) % 2 else 'oak_light'))
-    bx, by = -w / 2 + 0.8, -h / 2 + 0.6
-    box('wcblock', bx, by, 0.14, 0.38, 0.38, 0.42, mat('oak'))
-    box('wcaxeh', bx + 0.05, by - 0.02, 0.56, 0.06, 0.06, 0.44,
-        mat('oak_light'))
-    ah = box('wcaxe', bx + 0.05, by - 0.02, 0.94, 0.22, 0.08, 0.16, mat('iron'))
-    ah.rotation_euler = (0, 0.5, 0)
-    straw_scatter('wcchip', bx, by + 0.4, 0.14, 0.4, n=12, key='oak_light')
-    for i, (ox, oy) in enumerate(((0.1, 0.9), (-1.0, 0.2))):
-        plant(f'wcplant{i}', ox, oy, 0.14)
-    if w >= 4:
-        # A saw-horse with a log on it, a second short stack, and the felled
-        # trunk they came off. The pile alone said "wood"; this says "felling".
-        hx2, hy2 = -w / 2 + 0.85, -h / 2 + 0.62
-        for s_ in (-1, 1):
-            for t_ in (-1, 1):
-                leg = box(f'wchl{s_}{t_}', hx2 + s_ * 0.26, hy2 + t_ * 0.16,
-                          0.14, 0.09, 0.09, 0.5, mat('oak'))
-                leg.rotation_euler = (t_ * 0.2, -s_ * 0.2, 0)
-        box('wchtop', hx2, hy2, 0.62, 0.72, 0.16, 0.1, mat('oak_light'))
-        box('wchlog', hx2, hy2, 0.7, 0.9, 0.3, 0.28, mat('oak'))
-        for row in range(2):
-            for col in range(3):
-                box(f'wcst2{row}{col}', w / 2 - 1.55 + col * 0.3,
-                    h / 2 - 0.55, 0.14 + row * 0.27, 0.27, 0.6, 0.26,
-                    mat('oak_light' if (row + col) % 2 else 'oak'))
-        trunk = box('wctrunk', 0.35, h / 2 - 0.42, 0.14, 1.5, 0.36, 0.34,
-                    mat('oak'))
-        trunk.rotation_euler = (0, 0, 0.12)
+    plinth('swbase', 0, 0, w - 0.3, h - 0.3, 0.14)
+    z0 = 0.14
 
-    # ── A camp that SHIPS timber has a cart in it ──
-    cart('wccart', 0.15, -h / 2 + 1.55, 0.14, angle=0.35, load='log')
-    tool_rack('wctools', -w / 2 + 0.55, 0.55, 0.14, w=0.7, facing='x')
-    barrel('wcbar', w / 2 - 0.45, h / 2 - 0.5, 0.14, r=0.18, h=0.38)
-    sack_pile('wcsack', -w / 2 + 0.6, -h / 2 + 1.5, 0.14, n=2)
-    for i in range(3):
-        box(f'wcbranch{i}', -0.5 + i * 0.4, h / 2 - 0.4, 0.14, 0.7, 0.14,
-            0.12, mat('leaf' if i % 2 else 'moss'))
-    # ── Eigenleben: the fire is lit and the axe is down ──
-    brazier('wcfire', -w / 2 + 1.55, h / 2 - 1.25, 0.14)
-    critter('wccrit', 0.55, -h / 2 + 0.55, 0.14, angle=2.5, kind=0)
-    firewood('wcsplit', -w / 2 + 1.9, -h / 2 + 0.45, 0.14, w=0.85)
-    basket('wcbask', -w / 2 + 0.5, -0.15, 0.14, fill='oak_light')
-    perch_bird('wcbird', -w / 2 + 0.95, h / 2 - 1.55, 1.75)
-    # Accent: GOLD cloth over the bench, and a bed by the door.
-    curtain('wccurt', sx, sy - 0.72, 0.62, 1.0, 0.46, key='cloth_gold')
-    flower_bed('wcbed', w / 2 - 0.5, h / 2 - 0.5, 0.14, 0.6, 0.4,
-               bloom='bloom_red', n=6)
-    bunting('wcbunt', sx, sy - 0.66, 1.35, 1.5, axis='x', n=7,
-            a='cloth_gold', b='cloth_red')
-    # ── SIGNATURE: the spar tree ──
-    spar_tree('wcspar', -w / 2 + 0.52, h / 2 - 0.6, 0.14, hgt=2.75)
+    # ── THE COTTAGE, back-left, gable end (and its door) facing the yard ──
+    hx, hy = -w / 2 + 0.85, h / 2 - 0.75
+    hsx, hsy, wall_h = 1.2, 1.0, 0.95
+    half_timber('swwall', hx, hy, z0, hsx, hsy, wall_h, bays=3)
+    roof_h = 0.72
+    shingle_gable('swroof', hx, hy, z0 + wall_h, hsx, hsy, roof_h,
+                  overhang=0.16, rows=14, ridge_along='x')
+    ridge_crest('swcrest', hx, hy, z0 + wall_h + roof_h, hsx, axis='x')
+    plank_door('swdoor', hx, hy - hsy / 2, z0, 0.4, 0.62, facing='y',
+              planks=8)
+    leaded_window('swwin0', hx - 0.42, hy - hsy / 2, z0 + 0.45, 0.24, 0.28,
+                  facing='y')
+    leaded_window('swwin1', hx + hsx / 2, hy, z0 + 0.45, 0.22, 0.26,
+                  facing='x')
+    chim_z, chim_h = z0 + wall_h + 0.35, 0.5
+    chimney('swchim', hx + 0.35, hy, chim_z, 0.16, chim_h)
+    smoke('swsmoke', hx + 0.35, hy, chim_z + chim_h + 0.42, h=0.4, puffs=3)
+    tufts('swtuft', hx, hy, hsx + 0.7, hsy + 0.7)
+
+    # ── THE VORHOF: a small flagged forecourt, in front of the door ──
+    yx, yy = hx + 0.35, hy - hsy / 2 - 0.65
+    paving('swyard', yx, yy, z0, 1.6, 0.9)
+
+    # ── THE WOODPILE: split logs, end grain to the camera, stacked against
+    # the house's side wall — "Holzscheite aufgetürmt" ──
+    firewood('swlogs', hx + hsx / 2 + 0.75, hy + 0.15, z0, w=0.9, rows=9)
+
+    # ── THE BEAMS: squared timber, stacked separately from the round logs —
+    # "Balken aufgetürmt" ──
+    bx, by = w / 2 - 0.85, -h / 2 + 0.55
+    for row in range(3):
+        j = _hash01(f'swbm{row}')
+        beam = box(f'swbeam{row}', bx + (j - 0.5) * 0.08, by,
+                   z0 + row * 0.15, 1.2 - row * 0.06, 0.16, 0.14,
+                   mat('oak' if row % 2 else 'oak_light'))
+        beam.rotation_euler = (0, 0, (j - 0.5) * 0.06)
+
+    # ── TOOLS, hung on pegs by the door, not standing on a rack. The wall
+    # segment between the door's right edge and the corner is the only
+    # strip left free of door/window, so the tools cluster there — pushed
+    # right against the corner and given a wide berth from the door frame,
+    # since a rotated blade swings its footprint out past its own centre. ──
+    tx, ty = hx + 0.47, hy - hsy / 2
+    peg('swpeg0', tx - 0.11, ty, z0 + 0.72, facing='y')
+    axeb = box('swaxeb', tx - 0.11, ty - 0.05, z0 + 0.58, 0.16, 0.03, 0.18,
+              mat('iron'))
+    axeb.rotation_euler = (0, 0, 0.3)
+    box('swaxeh', tx - 0.11, ty - 0.03, z0 + 0.36, 0.04, 0.04, 0.4,
+        mat('oak_light'))
+    peg('swpeg1', tx + 0.11, ty, z0 + 0.78, facing='y')
+    box('swsawh', tx + 0.11, ty - 0.03, z0 + 0.7, 0.09, 0.05, 0.08,
+        mat('oak'))
+    box('swsaw', tx + 0.11, ty - 0.05, z0 + 0.42, 0.014, 0.045, 0.5,
+        mat('steel'))
+
+    # ── Eigenleben: a barrel by the door ──
+    barrel('swbar', hx - 0.5, hy - 0.55, z0, r=0.15, h=0.32)
 
 def stone_camp(w, h):
     """The quarry: a horseshoe of living rock round a cave mouth.
@@ -5062,13 +4982,11 @@ def stone_camp(w, h):
     dead centre with its props, the face closing round it, and the crane
     standing off to the right where it breaks the skyline against nothing.
     """
-    # A quarry floor is not a plinth: it is trodden rock dust with the bedrock
-    # showing through, so it is flat, pale and dirty rather than laid.
-    box('scfloor', 0, 0, 0, w - 0.3, h - 0.3, 0.12, mat('rock_shade'))
-    # Pale dust trodden over the bedrock: the timber, the rails and the
-    # cart are all dark, and they need something to be dark AGAINST.
-    box('scfloor2', 0, -0.1, 0.12, w - 0.9, h - 0.9, 0.025, mat('sand'))
-    straw_scatter('scgrit', 0, -0.2, 0.14, min(w, h) * 0.5, n=22, key='rock')
+    # No floor slab any more (user 2026-08-22, hand-edit ported from
+    # small_stone_camp: both scfloor and scfloor2 gone) — the tile's own
+    # ground reads through, and a coloured base plate under an already-busy
+    # rock face was one flat layer too many.
+    straw_scatter('scgrit', 0, -0.2, 0.14, min(w, h) * 0.5, n=6, key='rock')
 
     hw, hh_ = w / 2, h / 2
     # ── WHICH WAY IS WHICH ──
@@ -5121,7 +5039,8 @@ def stone_camp(w, h):
     # hole nobody finds.
     bx_, by_ = back(1.15)
     mx, my = bx_, by_
-    cave_mouth('scmouth', mx, my, 0.12, w=1.3, hh=1.05, depth=0.8)
+    cave_mouth('scmouth', mx, my, 0.12, w=1.3, hh=1.05, depth=0.8,
+               detail=False)
     boulder('scover', mx - 0.15, my + 0.3, 1.32, 1.4, 0.72, 0.42, seed=11)
 
     # ── THE TIMBER, bolted INTO the rock ──
@@ -5136,12 +5055,12 @@ def stone_camp(w, h):
     # the cart at its end hung a quarter cell off the far side.
     rails('scrail', mx + 0.1, my - 1.4, 0.145, min(h - 1.9, 2.3),
           axis='y', ties=8)
-    mine_cart('sccart', mx + 0.1, my - 1.85, 0.19, axis='y')
+    mine_cart('sccart', mx + 0.1, my - 1.85, 0.19, axis='y', detail=False)
 
     # ── THE CRANE, on the RIGHT (+x AND +y), against the sky ──
     cx_, cy_ = right(1.2)
     jib_crane('sccrane', cx_ + 0.15, cy_ - 0.35, 0.12, hh=1.85, reach=0.92,
-              head_bolts=0)
+              head_bolts=0, flag=False, rigging=False)
 
     # ── THE LARGE CAMP: the same hole, worked twice ──
     # "Large Stone Camp soll wirklich auch ein grösserer Steinbruch sein"
@@ -5157,14 +5076,15 @@ def stone_camp(w, h):
             (hw - 0.58, hh_ - 3.2, 0.64, 0.6, 0.72),
         ])
         m2x, m2y = -hw + 1.15, -hh_ + 1.85
-        cave_mouth('sc2mouth', m2x, m2y, 0.12, w=1.0, hh=0.85, depth=0.7)
+        cave_mouth('sc2mouth', m2x, m2y, 0.12, w=1.0, hh=0.85, depth=0.7,
+                   detail=False)
         ladder('sc2lad', m2x + 0.72, m2y - 0.85, 0.12, hh=1.15, axis='y',
                rungs=4)
         rails('sc2rail', m2x, m2y - 0.95, 0.145, 1.15, axis='y', ties=5)
         mine_cart('sc2cart', m2x, m2y - 1.2, 0.19, axis='y',
-                  load='rock_warm')
+                  load='rock_warm', detail=False)
         jib_crane('sc2crane', -hw + 1.15, hh_ - 1.9, 0.12, hh=1.5,
-                  reach=0.62, head_bolts=0)
+                  reach=0.62, head_bolts=0, flag=False, rigging=False)
         for i in range(3):
             for k in range(2):
                 box(f'sc2blk{i}{k}', -0.35 + i * 0.6, -hh_ + 0.62,
@@ -5175,12 +5095,12 @@ def stone_camp(w, h):
         shingle_gable('sc2hutr', hw - 1.0, -hh_ + 0.8, 0.67, 0.85, 0.7, 0.4,
                       overhang=0.16, rows=10, ridge_along='x')
         tool_rack('sc2tools', hw - 1.0, -hh_ + 0.35, 0.12, w=0.6)
-        critter('sc2crit', -0.9, -hh_ + 1.15, 0.12, angle=2.2, kind=0,
-                scale=0.85)
 
     # ── THE YIELD: cut blocks, squared, so the rock reads as raw ──
-    for i, (ox, oy, n) in enumerate(((-hw + 0.75, -hh_ + 0.68, 3),
-                                     (0.85, -hh_ + 0.6, 2))):
+    # One pile, not two (user 2026-08-22, hand-edit ported from
+    # small_stone_camp: the near-left stack is gone, only the one by the
+    # mouth remains).
+    for i, (ox, oy, n) in enumerate(((0.85, -hh_ + 0.6, 2),)):
         for k in range(n):
             box(f'scblk{i}{k}', ox + (k % 2) * 0.05, oy, 0.12 + k * 0.25,
                 0.54, 0.46, 0.24,
@@ -5194,24 +5114,24 @@ def stone_camp(w, h):
                 0.26 + 0.14 * j, 0.24 + 0.12 * j, 0.2 + 0.12 * j,
                 seed=20 + i)
 
-    # ── The tools, and that somebody is using them ──
-    box('scbank', -hw + 0.85, -0.35, 0.12, 0.8, 0.6, 0.44, mat('oak'))
+    # ── The tools — tidied up (user 2026-08-20: "alles etwas
+    # aufgeräumter"). Gone: the four tiny steel wedges, the basket, both
+    # plants and the flower bed, the critters ("keine Tiere"), and — per
+    # the 2026-08-22 hand-edit — the bench and the fire too. What is left
+    # is what actually SAYS quarry: the work boulder, the tool rack, the
+    # crane's own barrel. ──
     boulder('scwork', -hw + 0.85, -0.35, 0.56, 0.62, 0.46, 0.28, seed=31)
-    for k in range(4):
-        box(f'scwedge{k}', -hw + 0.63 + k * 0.14, -0.43, 0.84, 0.07,
-            0.11, 0.13, mat('steel'))
     tool_rack('sctools', hw - 0.5, -0.4, 0.12, w=0.7, facing='x')
     barrel('scbar', 0.35, -hh_ + 1.35, 0.12, r=0.18, h=0.38)
-    brazier('scfire', -0.55, -hh_ + 0.85, 0.12)
-    critter('sccrit', 0.15, -hh_ + 0.95, 0.12, angle=1.2, kind=2)
-    basket('scbask', -0.95, -hh_ + 0.75, 0.12, fill='rock_light')
-    for i, (ox, oy) in enumerate(((-hw + 0.5, -hh_ + 1.5),
-                                  (hw - 0.55, hh_ - 2.7))):
-        plant(f'scplant{i}', ox, oy, 0.12)
-    # The one saturated thing that is not the crane's flag: a bed of blooms in
-    # the dust, because a quarry with nothing growing in it reads as a ruin.
-    flower_bed('scbed', -hw + 0.55, -hh_ + 2.15, 0.12, 0.6, 0.36,
-               bloom='bloom_white', n=6)
+
+    # ── No ground-skirt shadow plate under any rock any more (user
+    # 2026-08-22, hand-edit ported from small_stone_camp: every boulder()
+    # and rock_wall() call in this scene lost its flat "_g" base plate).
+    # boulder() is shared by many other buildings, so this is stripped
+    # here, after the fact, rather than in boulder() itself. ──
+    for _ob in [o for o in bpy.data.objects
+                if o.name.startswith('sc') and o.name.endswith('_g')]:
+        bpy.data.objects.remove(_ob, do_unlink=True)
 
 
 def wood_works(w, h):
@@ -5463,69 +5383,143 @@ def storehouse(w, h):
     hoist('sthoist', 0, face - 0.04, roof_z + 0.86, out=0.32)
 
 def gold_vault(w, h):
-    """Gold Vault — a strongbox with a spire on it.
+    """Gold Vault — a fortified keep: a taller tower behind a lower rampart,
+    the two joined by one long straight stair run from the ground to the
+    tower's own parapet walk, and a short second flight up to a raised door.
 
-    2 × 2 and almost all wall, which is the point: a vault is a building that
-    is mostly its own thickness. What lifts it out of being a box is the
-    SPIRE — the smallest footprint on the map gets the sharpest skyline, and
-    the gold is spent once, at the very top, so it reads as treasure.
+    ── Rebuilt to a reference photo (user 2026-08-23) ──
+    No spire, no corner turrets, no chain, no portcullis — the photo has
+    none of that. What it has, and what carries the whole likeness, is the
+    two crenellated volumes and the stair climbing the length of one side of
+    them. The vault still says what it IS through the gold at its foot and
+    one small pennant at the top, not through ironwork piled onto the walls.
+
+    ── Tower to the front, wall to the back, stair to the other side
+    (user 2026-08-23: "Nimm den Turm beim Gold vault nach vorne und das
+    Hauptgebäude nach hinten. Die Treppe bitte auf der anderen Seite") ──
+    Repositioned, not mirrored: a straight swap of the tower's and the
+    wall's own y (and the long stair's own x) keeps every anchor's OWN
+    facing untouched — the arrow slit and the windows and the door still
+    open toward -y (the camera), same as always. A 180° spin was the first
+    attempt and was wrong: it turns the whole assembly including which way
+    each opening faces, so the wall's own windows ended up facing away from
+    a camera that never moves.
+
+    The one thing that ISN'T just a relabelled offset: the long stair used
+    to be SHORT at its ground end (the old front edge) and TALL at its
+    tower end (the old back edge, where the tower stood). The tower is now
+    at the front and the wall (the new "ground" end) is at the back, so
+    which end is tall and which is short trades places too — see the
+    reversed step_h below.
+
+    The tower's own x moves too, even though only its "forward" was asked
+    for — it has to, or it winds up nowhere near the long stair that is
+    supposed to climb to its parapet (first pass: tower stayed put, the
+    stair swapped sides on its own, and the two ended up on opposite
+    corners of the plot, with the short stair colliding into the tower on
+    the way). x is safe to move on its own where y is not: every "facing"
+    parameter here reads as a Y offset (arrow_slit's `into`, at() for
+    facing='y'), so sliding something sideways in x never touches which
+    way it opens — only reflecting Y (or rotating) does that.
     """
-    ashlar_courses('gvbase', 0, 0, 0, w - 0.24, h - 0.24, 0.28,
-                   course=0.0713, block=0.139)
-    bw, bd = w - 0.5, h - 0.5
-    ashlar_courses('gvwall', 0, 0, 0.28, bw, bd, 1.25, course=0.0972, block=0.1786)
-    string_course('gvband', 0, 0, 1.42, bw + 0.02, bd + 0.02)
-    battlements('gvcrown', 0, 0, 1.53, bw, bd, h=0.24, merlon=0.1125, gap=0.0897)
-    # BLACK IRON. Every other roof on the map is something you grow, quarry
-    # or fire; this one is plated, because a vault is a box with a lid.
-    spire('gvsp', 0, 0, 1.87, bw * 0.66, 1.15, sides=8, key='iron',
-          dark='dark')
-    finial('gvfin', 0, 0, 3.02, 0.34)
-    for sx_ in (-1, 1):
-        for sy_ in (-1, 1):
-            turret(f'gvt{sx_}{sy_}', sx_ * (bw / 2 + 0.02),
-                   sy_ * (bd / 2 + 0.02) + 0.0, 1.1, 0.16, 0.5,
-                   spire_h=0.42)
-    face = -bd / 2
-    gothic_door('gvdoor', 0, face, 0.28, 0.48, 0.72, rim=0.18)
-    box('gvleaf', 0, face - 0.07, 0.3, 0.42, 0.08, 0.58, mat('iron'))
-    for k in range(3):
-        box(f'gvriv{k}', 0, face - 0.12, 0.42 + k * 0.16, 0.28, 0.05, 0.06,
-            mat('gold'))
-    arrow_slit('gvslit', 0, face, 1.08, 0.3)
-    arrow_slit('gvslitx', bw / 2, 0.1, 1.08, 0.3, facing='x')
-    for s in (-1, 1):
-        corbel_head(f'gvhead{s}', s * (bw / 2 - 0.1), face, 1.36)
-        sconce(f'gvlamp{s}', s * 0.42, face, 1.05)
-    banner('gvflag', 0, face - 0.02, 1.34, 0.24, 0.36)
-    cx, cy = w / 2 - 0.5, -h / 2 + 0.42
-    box('gvchest', cx, cy, 0, 0.44, 0.34, 0.26, mat('oak'))
-    box('gvlid', cx, cy + 0.14, 0.26, 0.44, 0.1, 0.2, mat('oak_light'))
-    box('gvcoin', cx, cy - 0.02, 0.24, 0.32, 0.22, 0.08, mat('gold'))
-    box('gvlock', cx, cy - 0.18, 0.12, 0.12, 0.05, 0.12, mat('iron'))
+    hw, hh = w / 2, h / 2
 
-    # ── GOLD, and enough of it to see (user 2026-08-09) ──
-    gold_pile('gvgold', -w / 2 + 0.52, -h / 2 + 0.5, 0, r=0.24)
-    for k in range(4):
-        box(f'gvbar{k}', -w / 2 + 0.5 + (k % 2) * 0.22, -h / 2 + 1.0,
-            k // 2 * 0.09, 0.3, 0.15, 0.09, mat('gold'))
-    brazier('gvbraz', w / 2 - 0.42, -h / 2 + 1.05, 0)
-    box('gvspear', -w / 2 + 0.28, -h / 2 + 1.35, 0, 0.06, 0.06, 0.9,
-        mat('oak'))
-    box('gvhead', -w / 2 + 0.28, -h / 2 + 1.35, 0.9, 0.09, 0.09, 0.2,
-        mat('iron'))
-    # ── Eigenleben: it is GUARDED ──
-    critter('gvcrit', -w / 2 + 0.5, -h / 2 + 1.85, 0, angle=1.4, kind=1,
-            scale=0.85)
-    basket('gvbask', w / 2 - 0.5, -h / 2 + 1.72, 0, fill='gold')
-    perch_bird('gvbird', 0, -bd / 2 - 0.1, 1.6, kind=1)
-    # Accent: PLUM against all that gold — the one colour gold does not fight.
-    curtain('gvcurt', 0, face - 0.1, 0.32, 0.44, 0.62, key='cloth_plum')
-    flower_bed('gvbed', -w / 2 + 0.45, -h / 2 + 1.2, 0, 0.5, 0.36,
-               bloom='bloom_white', n=5)
-    # ── SIGNATURE: the chain, and the lock ──
-    chain_wrap('gvchain', 0, 0, 0.95, bw + 0.06, bd + 0.06, per=5)
-    portcullis('gvport', 0, face - 0.02, 0.3, 0.44, 0.66, bars=4)
+    # ── THE TOWER: taller, now the FRONT-EAST corner, its own parapet ──
+    tw, td = 1.5, 1.5
+    tx, ty = hw - tw / 2 - 0.5, -hh + td / 2 + 0.3
+    twh = 1.5
+    ashlar_courses('gvtbase', tx, ty, 0, tw + 0.14, td + 0.14, 0.16,
+                   course=0.0871, block=0.16)
+    ashlar_courses('gvtwall', tx, ty, 0.16, tw, td, twh, course=0.11,
+                   block=0.19)
+    string_course('gvtband', tx, ty, 0.16 + twh * 0.62, tw + 0.02, td + 0.02)
+    battlements('gvtcrown', tx, ty, 0.16 + twh, tw, td, h=0.26, merlon=0.13,
+               gap=0.1)
+    arrow_slit('gvtslit', tx, ty - td / 2, 0.16 + 0.8, 0.42)
+
+    # ── THE WALL: lower, now across the BACK, meeting the tower's north
+    # face — same distance from it as before, just the other way round ──
+    ww, wd = w - 0.5, 2.1
+    wx, wy = 0.0, hh - wd / 2 - 0.15
+    wwh = 0.95
+    ashlar_courses('gvwbase', wx, wy, 0, ww + 0.14, wd + 0.14, 0.16,
+                   course=0.0871, block=0.16)
+    ashlar_courses('gvwwall', wx, wy, 0.16, ww, wd, wwh, course=0.1,
+                   block=0.18)
+    battlements('gvwcrown', wx, wy, 0.16 + wwh, ww, wd, h=0.22, merlon=0.12,
+               gap=0.095)
+
+    # A row of small square windows, the way the photo's front face has one
+    # — still on the wall's OWN south (-y) face, unchanged, so they still
+    # face the camera even though the wall itself sits further back now.
+    face = wy - wd / 2
+    for i, fx in enumerate((-0.9, -0.35, 0.55)):
+        box(f'gvwin{i}f', fx, face, 0.16 + 0.42, 0.2, 0.06, 0.2,
+            mat('limestone'))
+        box(f'gvwin{i}d', fx, face - 0.01, 0.16 + 0.44, 0.13, 0.05, 0.13,
+            mat('dark'))
+
+    # ── THE LONG STAIR: now on the OTHER (east) side, ground (near the
+    # wall, at the back) to the tower's own parapet walk (at the front) ──
+    # A stack of solid wedges, not a set of floating treads: box i starts at
+    # the GROUND and grows one riser taller than the last, so the run fills
+    # solid underneath the way a real flight does, the same trick steps()
+    # uses — just run long enough here (twh worth of risers) to be the
+    # picture's own dominant line, the way the reference's stair is.
+    sx0 = hw - 0.06
+    sy0 = ty + td / 2 + 0.05    # the TALL end — the tower's own north face
+    sy1 = hh - 0.1              # the SHORT end — ground, near the back edge
+    n = 20
+    tread = (sy1 - sy0) / n
+    rise = twh / n
+    stair_w = 0.4
+    for i in range(n):
+        yy = sy0 + tread * (i + 0.5)
+        step_h = rise * (n - i)    # reversed — see the function's own note
+        box(f'gvstep{i}', sx0, yy, 0, stair_w, tread + 0.01, step_h,
+            mat('ashlar'))
+        if i % 2 == 0:
+            box(f'gvrail{i}', sx0 + stair_w / 2 + 0.06, yy, 0, 0.1,
+                tread * 2 + 0.02, step_h + 0.16, mat('ashlar_dark'))
+
+    # ── THE SHORT STAIR: left where it was ──
+    # "Die Treppe" — the definitive one, the one the function's own docstring
+    # singles out ("the stair climbing the length of one side of them") — is
+    # the LONG stair above, and that one moved. This is only ever called "a
+    # short second flight"; it stays on its own original spot rather than
+    # follow the tower east, which is what the gold at its foot needs too:
+    # tried mirrored west, and both it and two of the wall's own windows
+    # (also left at their original x) turned up missing from the render —
+    # not hidden behind anything, just gone, the same way for both, tied to
+    # x alone rather than to anything about THIS building's own new layout.
+    # Diagnosed as far as confirming it is real (a giant stand-in at the same
+    # spot rendered fine; the actual small props did not) without finding
+    # the root cause — flagged rather than chased further under time
+    # pressure. Left at the coordinates already proven to render.
+    dsx = hw - 0.45
+    dsy0 = -hh + 0.1
+    dn = 5
+    dtread = 0.15
+    drise = 0.07
+    for i in range(dn):
+        yy = dsy0 + dtread * (i + 0.5)
+        box(f'gvdstep{i}', dsx, yy, 0, 0.5, dtread + 0.01, drise * (i + 1),
+            mat('ashlar'))
+    porch_z = drise * dn
+    porch_y = dsy0 + dtread * dn
+    gothic_door('gvdoor', dsx, porch_y, porch_z, 0.36, 0.5, rim=0.14)
+    corbel_head('gvhead', dsx, porch_y, porch_z + 0.62)
+
+    # ── SIGNATURE: the gold at its foot, and one small pennant at the top —
+    # the vault still says what it is without the old ironwork ──
+    gold_pile('gvgold', sx0 - 0.55, dsy0 - 0.05, 0, r=0.22)
+    for k in range(3):
+        box(f'gvbar{k}', dsx - 0.5 + k * 0.08, dsy0 - 0.32, k * 0.09, 0.3,
+            0.15, 0.09, mat('gold'))
+    pole_z = 0.16 + twh + 0.36    # clear of the merlon tops
+    box('gvpole', tx, ty, pole_z, 0.05, 0.05, 0.5, mat('iron'))
+    box('gvpennant', tx + 0.13, ty, pole_z + 0.34, 0.22, 0.02, 0.16,
+        mat('cloth_gold'))
 
 def _timbered_wing(prefix, cx, cy, sx, sy, ridge_along, bays=5, jetty_out=0.16):
     """One jettied, two-storey, timber-framed volume — the repeating unit an
@@ -5989,89 +5983,340 @@ def builder_camp(w, h):
         ob.rotation_euler.z += math.pi / 2
 
 
-def healing_hut(w, h):
-    """Healing Hut — herbs, steam and a sign you can read.
+# Authored size of the plan below — 6 x 5, per the reference photo it was
+# built against. gridW/gridH went 4x4 -> 5x4 -> 6x5 as the dooryard wall
+# needed room (see the def's own comment), then back down to 4x4 (user
+# 2026-08-23: "das healing hut soll nur 4x4 sein") once the footprint budget
+# mattered more than the breathing room. Rather than re-fight the layout a
+# third time, the hand-placed plan stays at its own 6x5 and gets scaled onto
+# whatever tile it is given — same trick as castle/MAIN_HALL_PLAN.
+HEALING_HUT_PLAN_W, HEALING_HUT_PLAN_H = 6.0, 5.0
 
-    The drying rack names it: bunches hung under an open eave say apothecary
-    where a symbol would say nothing at thirty pixels. The spore lamps are the
-    fantasy note — this world's herbalist grows things that glow.
+
+def healing_hut(w, h):
+    """The apothecary's compound, drawn to its own plan and scaled onto the
+    tile it is given. See HEALING_HUT_PLAN_W/H."""
+    _healing_hut_plan(HEALING_HUT_PLAN_W, HEALING_HUT_PLAN_H)
+    k = min(w / HEALING_HUT_PLAN_W, h / HEALING_HUT_PLAN_H)
+    if abs(k - 1.0) > 1e-6:
+        scale_all(k)
+
+
+def _healing_hut_plan(w, h):
+    """Healing Hut — a timbered apothecary's compound round a walled
+    dooryard, built to match a reference photo exactly (user 2026-08-20,
+    "ich will dass es genau so aussieht wie auf dem Referenzbild").
+
+    Every feature in the photo, named so the code below can be checked
+    against it line for line: two gabled wings side by side, the taller one
+    on the right with TWO chimneys and a roof dormer; a faceted bay window
+    (oriel) filling the corner where the wings meet; dense Fachwerk
+    crosshatch over both wings, not one brace per face; a whitewashed
+    ground floor with ROUND-headed openings — the main door, two porthole
+    windows either side of it; and a walled dooryard in front holding a
+    ROOFED well shelter, a pointed (not round) window in the wall, two
+    framed picture niches, a round door/gate, a round oculus and a small
+    painted crest.
+
+    The apothecary's own props (drying rack, spore lamps, cauldron, mortar,
+    the still) are unchanged from every earlier version — those say WHAT
+    the building is; this rebuild is only about matching HOW the photo
+    builds it.
     """
-    # No plinth and no stone sill (user 2026-08-20: "keine Bodenplatten") —
-    # every z below is the old plinth (0.16) or sill-top (0.42) height with
-    # that base subtracted back out.
-    bw, bd = w - 0.62, h - 0.9
-    hx, hy = 0, 0.25
-    half_timber('hhwall', hx, hy, 0.0, bw, bd, 1.0, bays=4)
-    roof_z = 1.0
-    # TURF, with flowers in it — the apothecary's roof is part of the
-    # apothecary's stock, and it is the only green roof on the map.
-    turf_roof('hhroof', hx, hy, roof_z, bw, bd, 1.05, ridge_along='x',
-              overhang=0.32)
-    ridge_crest('hhcrest', hx, hy, roof_z + 1.01, bw + 0.5, axis='x')
-    moss('hhmoss', hx, hy, roof_z, bw * 0.7, bd * 0.7, 0.5, overhang=0.0,
-         patches=8)
-    chimney('hhchim', hx - bw / 2 + 0.2, hy + 0.42, 0, 0.3, roof_z + 0.95)
-    face = hy - bd / 2
-    dagged('hhdag', hx, face - 0.34, roof_z, bw + 0.62)
-    gable_boards('hhgab', hx, face - 0.3, roof_z, bw + 0.55, 0.95, axis='x')
-    weathervane('hhvane', hx + bw / 2 + 0.06, hy, roof_z + 1.05, 0.42)
-    gothic_door('hhdoor', hx + 0.2, face, 0.0, 0.48, 0.72)
-    plank_door('hhleaf', hx + 0.2, face - 0.06, 0.02, 0.42, 0.5, planks=5)
-    oriel('hhor', hx - 0.42, face, 0.36, 0.44, 0.42)
-    leaded_window('hhwinx', hx + bw / 2, hy + 0.2, 0.33, 0.28, 0.34,
+    half_w, half_h = w / 2.0, h / 2.0
+
+    # ── The right wing: taller, two chimneys, a dormer ──
+    hx, hy = 0.8, 0.35
+    hw, hd = 2.0, 1.6
+    hh_wall = 1.35
+    half_timber('hhwall', hx, hy, 0.0, hw, hd, hh_wall, bays=5)
+    _fachwerk_lattice('hhwall', hx, hy, hw, hd, hh_wall)
+    roof_z = hh_wall
+    roof_h = 1.15
+    shingle_gable('hhroof', hx, hy, roof_z, hw, hd, roof_h, overhang=0.15,
+                  rows=20, ridge_along='y')
+    ridge_crest('hhcrest', hx, hy, roof_z + roof_h - 0.06, hd + 0.4, axis='y',
+               key='root_dark')
+    moss('hhmoss', hx, hy, roof_z, hw * 0.5, hd * 0.5, 0.35, overhang=0.0,
+         patches=6)
+    face = hy - hd / 2
+    dagged('hhdag', hx, face - 0.3, roof_z, hw + 0.55)
+    for s, ox in ((-1, -0.32), (1, 0.32)):
+        chimney(f'hhchim{s}', hx + ox, hy + hd / 2 - 0.2, 0, 0.24,
+                roof_z + roof_h * 0.72 + 0.7)
+
+    # ── The dormer, out of the +x slope (the face this camera sees — see
+    # the kit's own "−y and +x" note) — user 2026-08-20: "baue mir zudem
+    # einen Erker aus dem Dach des grossen Gebäudes". ridge_along='y' on
+    # this roof means the RIDGE runs along y and the SLOPES face ±x, so a
+    # point dx out from the ridge sits at
+    # z = roof_z + roof_h*(1 - dx/(hw/2)) — the straight-line interpolation
+    # from the ridge's own peak down to the eave. Picked dx = 45% of the
+    # way out: far enough from the ridge to read as sitting IN the slope
+    # rather than straddling the peak, close enough that the roof there is
+    # still tall enough to hold a window.
+    # dm_y pulled to the FRONT of the roof (not hy, the centre) — the two
+    # chimneys sit at hy+hd/2-0.2, close to the back edge, and centred the
+    # dormer clipped straight into the near one.
+    dm_dx = hw / 2 * 0.45
+    dm_x = hx + dm_dx
+    dm_y = hy - hd * 0.32
+    dm_z = roof_z + roof_h * (1 - dm_dx / (hw / 2)) - 0.05
+    # A simple SHED dormer (one sloped box, not a full gable) rather than a
+    # tiny shingle_gable() — at this size the gable's two thin slopes and
+    # small overhang didn't read as a peaked roof at all, just a flat
+    # tilted plank (found by cropping in on the first attempt).
+    # Pushed further proud of the slope (user 2026-08-20: "soll weiter nach
+    # vorne kommen") — the wall box's own depth more than doubled, so it
+    # reads as a volume standing out of the tiles rather than a shallow
+    # bump, and the roof cap/window moved out with it.
+    box('hhdormwall', dm_x, dm_y, dm_z, 0.32, 0.5, 0.34, mat('stucco'))
+    # A proper Satteldach (user 2026-08-20: "soll auch ein Satteldach
+    # haben") — two hand-built slabs meeting at a ridge along x, not
+    # shingle_gable(): that function's many thin courses read as a flat
+    # plank at this size (see the note above), so this is two chunky
+    # slopes instead, built the same way _fachwerk_lattice's diagonals
+    # are — a flat box, tilted, then recentred on its own slope.
+    d_half, d_rise, d_len = 0.32, 0.2, 0.5
+    slope_len = math.hypot(d_half, d_rise)
+    tilt = math.atan2(d_rise, d_half)
+    eave_z = dm_z + 0.34
+    for sgn in (-1, 1):
+        slab = box(f'hhdormroof{sgn}', dm_x, dm_y, 0, d_len, slope_len,
+                   0.05, mat('shingle_dark'))
+        slab.rotation_euler = (sgn * tilt, 0, 0)
+        slab.location = (dm_x + 0.05, dm_y + sgn * d_half / 2,
+                         eave_z + d_rise / 2)
+    box('hhdormridge', dm_x + 0.05, dm_y, eave_z + d_rise, d_len, 0.06, 0.05,
+        mat('oak'))
+    leaded_window('hhdormwin', dm_x + 0.16, dm_y, dm_z + 0.13, 0.2, 0.18,
                   facing='x', open=True)
-    hanging_sign('hhsign', hx + 0.72, face, 0.82, w=0.36)
+
+    # ── The left wing: shorter, its own gable, meets the right wing at the
+    # oriel corner. wx pulled clear of the right wing's own hw/2=1.0 edge,
+    # AND clear of its roof overhang — the walls not overlapping was not
+    # enough the first two tries: shingle_gable() pads sx/sy by overhang*2
+    # internally, so even non-overlapping walls left the two ROOFS
+    # interpenetrating, which z-fights into bright white flicker exactly
+    # where they crossed. Both roofs' overhang dropped to 0.15 and the gap
+    # between the walls widened past overhang_main + overhang_wing so the
+    # roofs clear each other with room to spare. ──
+    wx, wy = -1.85, hy - 0.15
+    ww, wd = 1.5, 1.35
+    w_wall = 0.95
+    half_timber('hhwwall', wx, wy, 0.0, ww, wd, w_wall, bays=3)
+    _fachwerk_lattice('hhwwall', wx, wy, ww, wd, w_wall)
+    w_roof_z = w_wall
+    w_roof_h = 0.85
+    shingle_gable('hhwroof', wx, wy, w_roof_z, ww, wd, w_roof_h,
+                  overhang=0.15, rows=16, ridge_along='y')
+    ridge_crest('hhwcrest', wx, wy, w_roof_z + w_roof_h - 0.05, wd + 0.3,
+               axis='y')
+    moss('hhwmoss', wx, wy, w_roof_z, ww * 0.5, wd * 0.5, 0.25, overhang=0.0,
+         patches=4)
+    w_face = wy - wd / 2
+
+    # ── The oriel: the faceted bay window filling the corner the two wings
+    # leave between them (the reference's single most recognisable shape) ──
+    oriel('hhoriel', hx - hw / 2 - 0.02, face + 0.06, 0.4, 0.56, 0.62)
+
+    # ── Ground floor: whitewash pierced with ROUND arches (the reference:
+    # every ground-floor opening is round-headed) ──
+    doorway('hhdoor', hx + 0.15, face, 0.0, 0.48, 0.84)
+    arched_door('hhleaf', hx + 0.15, face - 0.05, 0.02, 0.42, 0.8, boards=9)
+    # Two round porthole windows flanking the door.
+    for s, ox in ((-1, -0.55), (1, 0.85)):
+        cyl(f'hhport{s}', hx + ox, face - 0.03, 0.5, 0.13, 0.06, sides=14,
+            key='dark', axis='y')
+        ring(f'hhportr{s}', hx + ox, face - 0.05, 0.5, 0.14, 0.02,
+             key='limestone', sides=14, tube_sides=6, axis='y')
+    leaded_window('hhwinx', hx + hw / 2, hy + 0.15, 0.85, 0.26, 0.32,
+                  facing='x', open=True)
+    leaded_window('hhwinx2', hx + hw / 2, hy - 0.15, 0.85, 0.26, 0.32,
+                  facing='x', open=True)
+    leaded_window('hhwing', wx - ww / 2, wy, 0.5, 0.26, 0.3, facing='x',
+                  open=True)
+    hanging_sign('hhsign', hx + hw / 2 + 0.1, hy - 0.3, 0.82, w=0.36,
+               facing='x')
     # ── THE FLAG (user 2026-08-12) ──
     # "Healing Hut braucht eine Fahne mit einem roten Kreuz auf weissem
     # Grund." It is the strongest identifier the building has: a drying rack
     # says herbs, a still says laboratory, and only the cross says INFIRMARY.
-    cross_flag('hhflag', hx - bw / 2 - 0.16, face + 0.1, 0.63, w=0.36,
-               h=0.52)
-    lantern('hhlamp', hx - 0.66, face - 0.1, 0.78, drop=0.16)
+    cross_flag('hhflag', hx - hw / 2 + 0.4, face - 0.02, 1.0, w=0.36, h=0.52)
     for s in (-1, 1):
-        corbel_head(f'hhhead{s}', hx + s * (bw / 2 - 0.1), face, 0.88)
-    # THE RACK, under the eave.
-    rx, ry = hx, face - 0.46
+        corbel_head(f'hhhead{s}', hx + s * (hw / 2 - 0.1), face, 0.88)
+    # THE RACK, under the eave of the left wing.
+    rx, ry = wx, w_face - 0.4
     for s in (-1, 1):
-        carved_post(f'hhrp{s}', rx + s * (bw / 2 - 0.08), ry, 0.0, 1.02)
-    box('hhrail', rx, ry, 0.92, bw - 0.06, 0.08, 0.08, mat('oak_light'))
-    for k in range(5):
-        t = -bw / 2 + 0.3 + k * (bw - 0.6) / 4
-        box(f'hhbunch{k}', rx + t, ry, 0.58, 0.16, 0.13, 0.34,
+        carved_post(f'hhrp{s}', rx + s * (ww / 2 - 0.1), ry, 0.0, 0.78)
+    box('hhrail', rx, ry, 0.68, ww - 0.2, 0.08, 0.08, mat('oak_light'))
+    for k in range(4):
+        t = -(ww - 0.4) / 2 + k * (ww - 0.4) / 3
+        box(f'hhbunch{k}', rx + t, ry, 0.4, 0.16, 0.13, 0.32,
             mat('leaf' if k % 2 else 'moss'))
-    spore_lamp('hhspore0', -w / 2 + 0.36, -h / 2 + 0.5, 0.0, h=0.5)
-    spore_lamp('hhspore1', w / 2 - 0.34, -h / 2 + 0.9, 0.0, h=0.42)
-    for i in range(3):
-        plant(f'hhherb{i}', -w / 2 + 0.36, -h / 2 + 0.95 + i * 0.42, 0.0)
-    brazier('hhbraz', w / 2 - 0.4, -h / 2 + 0.5, 0.0)
-    tufts('hhtuft', 0, -h / 2 + 0.9, w - 0.8, 0.6)
 
-    # ── The apothecary's own things ──
-    cauldron('hhcaul', w / 2 - 0.5, -h / 2 + 1.35, 0.0, r=0.24)
+    # ── THE DOORYARD WALL, its gate, its windows — and the roofed well in
+    # the far corner. RECONNECTED to the two wings themselves (user
+    # 2026-08-20: "diese wird wie gezeigt von der Mauer eingesäumt") — the
+    # first version's wall was a free-standing rectangle sitting a further
+    # 0.55 units out in front of both wings, not touching either one, which
+    # is not what the reference shows: there the wall runs from the LEFT
+    # wing's own front corner, out and along, to the RIGHT wing's own front
+    # corner, closing the yard between the two of them. So the side walls'
+    # own x now IS each wing's own edge, and their run reaches all the way
+    # back to that wing's own face — no gap left between wall and timber. ──
+    yx0 = wx - ww / 2
+    yx1 = hx + hw / 2
+    yy0 = -half_h + 0.16
+    wall_h = 0.5
+    yard_x = (yx0 + yx1) / 2
+    # z=0 — box() takes the BOTTOM, not the centre. These were passing
+    # wall_h/2 (the centre height) as the bottom, which floated the whole
+    # wall half its own height off the ground (user 2026-08-20: "die Mauer
+    # schwebt").
+    # ashlar_courses(), not a flat stucco box (user 2026-08-20: "gib der
+    # Mauer eine Struktur") — individual coursed stones instead of one
+    # painted slab, the same treatment every other building's own sill
+    # already gets.
+    ashlar_courses('hhwallF', yard_x, yy0, 0, yx1 - yx0, 0.14, wall_h)
+    box('hhwallFtop', yard_x, yy0, wall_h, yx1 - yx0 + 0.05, 0.18, 0.05,
+        mat('limestone'))
+    ashlar_courses('hhwallL', yx0, (yy0 + w_face) / 2, 0, 0.14,
+                   w_face - yy0, wall_h)
+    box('hhwallLtop', yx0, (yy0 + w_face) / 2, wall_h, 0.18,
+        w_face - yy0 + 0.05, 0.05, mat('limestone'))
+    ashlar_courses('hhwallR', yx1, (yy0 + face) / 2, 0, 0.14, face - yy0,
+                   wall_h)
+    box('hhwallRtop', yx1, (yy0 + face) / 2, wall_h, 0.18, face - yy0 + 0.05,
+        0.05, mat('limestone'))
+    yy1 = min(face, w_face) - 0.1
+    # A tall pointed window in the wall, off-centre — the one round-arch
+    # exception the reference itself makes, so it stays gothic here too.
+    gothic_arch('hhwallwin', yard_x - 0.3, yy0, wall_h * 0.06, 0.34,
+              wall_h * 1.15, 0.14)
+    # Two framed picture niches flanking it.
+    for s, ox in ((-1, -0.85), (1, 0.42)):
+        box(f'hhpic{s}', yard_x + ox, yy0 - 0.02, wall_h * 0.42, 0.24, 0.03,
+            0.32, mat('oak_light'))
+        box(f'hhpicin{s}', yard_x + ox, yy0 - 0.035, wall_h * 0.42, 0.18,
+            0.02, 0.26, mat('cloth'))
+    # The gate: a round arch and a dark door, off to the right.
+    gate_x = yx1 - 0.55
+    arch('hhgate', gate_x, yy0, wall_h * 0.06, 0.5, wall_h * 1.3, 0.2)
+    arched_door('hhgateleaf', gate_x, yy0 - 0.06, wall_h * 0.08, 0.44,
+               wall_h * 1.2, boards=8)
+    # A round oculus beside the gate, and a small painted crest over it.
+    cyl('hhoculus', gate_x + 0.55, yy0 - 0.03, wall_h * 0.85, 0.14, 0.06,
+        sides=14, key='dark', axis='y')
+    ring('hhoculusr', gate_x + 0.55, yy0 - 0.05, wall_h * 0.85, 0.15, 0.02,
+         key='limestone', sides=14, tube_sides=6, axis='y')
+    box('hhcrest', gate_x - 0.05, yy0 - 0.03, wall_h * 1.15, 0.22, 0.03,
+        0.18, mat('banner'))
+
+    # Front-left corner, clear of the drying rack (rx,ry = wx, w_face-0.4)
+    # which sat in almost the same spot and hid the wellhead behind its
+    # posts from this camera.
+    # Pulled clear of the drying rack (rx=wx=-1.85) — the yard is wide
+    # enough now that "front corner" doesn't have to mean "right under the
+    # rack's posts" any more (user 2026-08-20: "viel clippt ineinander").
+    well_x, well_y = wx + 0.9, yy0 + 0.5
+    well('hhwell', well_x, well_y, 0.0, r=0.24)
+    # The shelter over it: four posts and a small tiled roof.
+    for sx_, sy_ in ((-1, -1), (-1, 1), (1, -1), (1, 1)):
+        box(f'hhwshp{sx_}{sy_}', well_x + sx_ * 0.34, well_y + sy_ * 0.3, 0,
+            0.06, 0.06, 0.75, mat('oak'))
+    shingle_gable('hhwshroof', well_x, well_y, 0.75, 0.82, 0.72, 0.32,
+                  overhang=0.12, rows=8, ridge_along='y')
+    vine('hhvine', yx0 + 0.02, well_y - 0.5, 0, 0.7, facing='x')
+    paving('hhpav', yard_x, (yy0 + yy1) / 2, 0.0, yx1 - yx0 - 0.3,
+           yy1 - yy0 - 0.3, key_a='ashlar', key_b='ashlar_dark', tile=0.2)
+
+    spore_lamp('hhspore0', yx1 - 0.34, (yy0 + yy1) / 2, 0.0, h=0.5)
+    for i in range(3):
+        plant(f'hhherb{i}', well_x + 0.5, yy0 + 0.3 + i * 0.3, 0.0)
+    brazier('hhbraz', yx1 - 0.4, (yy0 + yy1) / 2 - 0.55, 0.0)
+
+    # ── The apothecary's own things — kept verbatim, spread across the
+    # walled yard. ──
+    caul_x, caul_y = yx1 - 0.5, yy0 + 0.55
+    cauldron('hhcaul', caul_x, caul_y, 0.0, r=0.24)
+    # Same fix as hhstill's steam above — cauldron() bakes in its own
+    # smoke() plume too, and this close to the main wing's wall it read
+    # the same way, so it gets the same shorter puff.
+    for _ob in [o for o in bpy.data.objects if o.name.startswith('hhcaul_st')]:
+        bpy.data.objects.remove(_ob, do_unlink=True)
     for i in range(4):
-        box(f'hhvial{i}', -w / 2 + 0.3 + i * 0.16, -h / 2 + 1.5, 0.0,
+        box(f'hhvial{i}', wx + 0.3 + i * 0.16, w_face - 0.1, 0.0,
             0.11, 0.11, 0.2 + 0.08 * (i % 2),
             mat('glow' if i % 2 else 'gold'))
-    box('hhmort', 0.55, -h / 2 + 0.42, 0.0, 0.2, 0.2, 0.16,
+    box('hhmort', wx - 0.4, w_face - 0.1, 0.0, 0.2, 0.2, 0.16,
         mat('limestone'))
-    box('hhpest', 0.6, -h / 2 + 0.42, 0.14, 0.05, 0.05, 0.18, mat('oak_light'))
-    sack_pile('hhherbs', -w / 2 + 0.34, h / 2 - 0.5, 0.0, n=2, key='leaf')
-    barrel('hhbar', w / 2 - 0.4, h / 2 - 0.55, 0.0, r=0.16, h=0.34)
+    box('hhpest', wx - 0.35, w_face - 0.1, 0.14, 0.05, 0.05, 0.18,
+        mat('oak_light'))
+    sack_pile('hhherbs', yx1 - 0.35, yy0 + 0.85, 0.0, n=2, key='leaf')
+    barrel('hhbar', gate_x, (yy0 + yy1) / 2 + 0.5, 0.0, r=0.16, h=0.34)
     # ── Eigenleben: the fire is under the pot ──
-    critter('hhcrit', -w / 2 + 0.75, -h / 2 + 0.55, 0.0, angle=0.5, kind=2,
+    critter('hhcrit', well_x + 0.2, yy1 - 0.3, 0.0, angle=0.5, kind=2,
             scale=0.85)
-    beehive('hhbee', w / 2 - 0.48, h / 2 - 0.5, 0.0)
-    washing('hhwash', -0.1, h / 2 - 0.4, 0.0, 1.5, axis='x', h=0.9, items=4)
-    basket('hhbask', 0.9, -h / 2 + 0.42, 0.0, fill='leaf')
-    # Accent: the roof is already the accent. Beds of the same herbs below it,
-    # so the green reads as GROWN rather than as a paint choice.
-    flower_bed('hhbed0', -w / 2 + 0.55, -h / 2 + 0.75, 0.0, 0.62, 0.4,
-               bloom='bloom_white', n=8)
-    flower_bed('hhbed1', w / 2 - 0.52, -h / 2 + 0.55, 0.0, 0.5, 0.36,
-               bloom='bloom_blue', n=6)
-    window_box('hhwb', hx - 0.42, face - 0.1, 0.30, 0.42, bloom='bloom_pink')
+    beehive('hhbee', yx1 - 0.35, yy1 - 0.35, 0.0)
+    basket('hhbask', wx, w_face - 0.35, 0.0, fill='leaf')
+    flower_bed('hhbed0', gate_x, yy0 + 0.55, 0.0, 0.4, 0.3,
+               bloom='bloom_white', n=5)
+    window_box('hhwb', wx - ww / 2, wy - 0.1, 0.35, 0.42, facing='x',
+               bloom='bloom_pink')
     # ── SIGNATURE: the still ──
-    still('hhstill', w / 2 - 0.62, -h / 2 + 1.28, 0.0)
+    # Pulled well out into the FRONT of the yard, clear not just of the wall
+    # but of the roof's own horizontal reach (wall + overhang) — its steam
+    # rises to z~2, well into roof height, so anywhere under the eaves it
+    # sits ON the tiles as a stray white blob regardless of how far it is
+    # from the wall itself (found by bisecting the whole building
+    # object-group by object-group down to hhstill_steam_*, the one thing
+    # left reaching z > 2).
+    # Its own clear spot too, away from both the well and the drying rack.
+    still_x, still_y = wx + 2.2, yy0 + 0.4
+    still('hhstill', still_x, still_y, 0.0)
+    # still()'s own steam rises to z~1.9 — well into roof height (roof_z
+    # starts at 1.35) — so from this camera it visually sat ON the tiles no
+    # matter where in the yard the still stood, and no matter how short a
+    # replacement puff got: an orthographic camera has no "too far away to
+    # overlap", screen position is a fixed function of x/y/z, and this
+    # roof's own footprint (plus overhang) covers most of the yard's
+    # possible positions from this angle. Cut rather than chased further —
+    # same for hhcaul_st above.
+    for _ob in [o for o in bpy.data.objects if o.name.startswith('hhstill_steam')]:
+        bpy.data.objects.remove(_ob, do_unlink=True)
+
+
+def _fachwerk_lattice(prefix, x, y, sx, sy, h):
+    """Extra crossed diagonals over a [half_timber] wall — the DENSE
+    crosshatch a real German Fachwerk townhouse wears (user's reference
+    photo), where half_timber() on its own draws one brace per face and
+    reads as a plainer, English-cottage frame.
+
+    Mirrors half_timber's OWN diagonal — a box the length of the bay's
+    hypotenuse, rotated to match — just one more of them per face, angled
+    the other way, so the two together read as an X rather than a single
+    slash. Kept local to this building rather than folded into
+    half_timber() itself: every other timbered building's wall is tuned
+    against the plainer look already, and this is one building's photo
+    reference, not a kit-wide style change.
+    """
+    beam = 0.0638
+    for axis, span, other in ((0, sx, sy), (1, sy, sx)):
+        for sign in (-1, 1):
+            bw, bh = span / 2, h * 0.66
+            # The MIRROR of half_timber's own brace angle — its diagonal runs
+            # bottom-near-centre to top-near-edge; this one runs the other
+            # way, so together they cross into an X.
+            ang = math.atan2(bw, bh) * (-1 if sign > 0 else 1)
+            face = sign * (other / 2 + 0.026)
+            ob = box(f'{prefix}_x2_{axis}{sign}', x, y, 0, beam, beam,
+                     math.hypot(bw, bh), mat('oak'))
+            ob.rotation_euler = (0, ang, 0) if axis == 0 else (-ang, 0, 0)
+            if axis == 0:
+                ob.location = (x + span / 2 - bw / 2, y + face, h / 2)
+            else:
+                ob.location = (x + face, y + span / 2 - bw / 2, h / 2)
 
 def scout_post(w, h):
     """Scout Post — a watchtower, and the only building whose job is HEIGHT.
@@ -6610,8 +6855,28 @@ def fur_lodge(w, h):
             mat('root_dark'))
         box(f'flknob{i}', fx, -h / 2 + 0.62, 0.99, 0.12, 0.12, 0.1,
             mat('oak_light'))
-        box(f'flpelt{i}', fx, -h / 2 + 0.63, 0.20, 0.44, 0.06, 0.62,
-            mat('oak' if i % 2 else 'root'))
+        if i == 2:
+            # The bare rack's pelt (user 2026-08-22: "nicht einfach eine
+            # Fläche... die Form eines aufgespannten Felles"). A flat panel
+            # reads as a board; hoop_pelt() next door already solved this
+            # once with a torso, a head and splayed legs — this is the same
+            # idea shrunk to fit a rack instead of a hoop.
+            fy = -h / 2 + 0.63
+            box(f'flpelt{i}', fx, fy, 0.22, 0.32, 0.06, 0.5, mat('hide'))
+            box(f'flpelth{i}', fx, fy + 0.02, 0.74, 0.2, 0.05, 0.16,
+                mat('hide_dark'))
+            for sx_ in (-1, 1):
+                for sy_, lz in ((1, 0.63), (-1, 0.23)):
+                    leg = box(f'flpleg{i}{sx_}{"t" if sy_ > 0 else "b"}',
+                              fx + sx_ * 0.24, fy + 0.01, lz, 0.15, 0.05,
+                              0.16, mat('hide_dark'))
+                    leg.rotation_euler = (0, 0, sx_ * sy_ * 0.5)
+            for sx_ in (-1, 1):
+                peg(f'flpin{i}{sx_}', fx + sx_ * 0.13, fy - 0.02, 0.86,
+                    r=0.03, facing='y', key='root')
+        else:
+            box(f'flpelt{i}', fx, -h / 2 + 0.63, 0.20, 0.44, 0.06, 0.62,
+                mat('oak' if i % 2 else 'root'))
     # ── The yard was a jumble (user 2026-08-12: "Sieht unaufgeräumt aus") ──
     # Six separate heaps of brown stood in front of the door, all at prop
     # scale and all the same tone. A tannery is a place of ORDER — the whole
@@ -7355,25 +7620,40 @@ def _road_preset(mask):
 
 PRESETS = {
     'breeding_hut': (breeding_hut, 4, 4),
-    # 5 x 5, because that is what the DEF says. It was 6 x 6 here and
-    # nowhere else, so the art was framed for a base a cell wider than the
-    # tile it has to stand on — harmless while the picture was only ever
-    # looked at, and wrong the moment it is bundled and placed.
-    'castle': (castle, 5, 5),
+    # 5 wide x 6 deep (user 2026-08-23: measured against the hand-edited
+    # castle.blend). The gate/tower complex was pushed 0.55 forward into the
+    # vacated bailey earlier this session (2026-08-22), which is what pushed
+    # the model's own depth past the 5 x 5 the def used to agree with — see
+    # _main_hall_plan's own docstring, which argued for exactly this "extra
+    # tile into height" from the start. Both this and the def's gridH move
+    # together, so the two stay in agreement the way the comment below
+    # (formerly a warning about 6 x 6 mismatching a 5 x 5 def) still cares
+    # about — it is the DISAGREEMENT that was ever the bug, not the number.
+    'castle': (castle, 7, 7),
     # ── The era-I roster, on the footprints the game already gives them ──
     # The name on the left is the building_defs id, so `--preset hut` renders
     # what `hut` will show on the map and the upload has nowhere to go wrong.
     'small_house': (small_house, 3, 3),
     'large_house': (large_house, 2, 5),
-    'small_wood_camp': (wood_camp, 4, 3),
-    'small_stone_camp': (stone_camp, 4, 3),
+    'small_wood_camp': (wood_camp, 3, 3),
+    # Renamed from small_stone_camp (user 2026-08-23: their own file is now
+    # small_quarry.blend, a noticeably wider quarry face — 5 x 4, not 4 x 3).
+    # id renamed app-wide alongside this; see building_definitions.dart's
+    # camp loop and supabase/rename_small_quarry.sql for the live-DB side.
+    'small_quarry': (stone_camp, 5, 4),
     'large_wood_camp': (wood_works, 4, 4),
     # The LARGE quarry: the same hole, bigger, with a second face.
     'large_stone_camp': (stone_camp, 4, 4),
     'storehouse': (storehouse, 4, 3),
-    'gold_vault': (gold_vault, 3, 3),
-    'builder_camp': (builder_camp, 6, 6),
-    'healing_hut': (healing_hut, 3, 3),
+    # 4 x 4, not 3 x 3 (user 2026-08-23, rebuilt to a reference photo) — a
+    # keep with a tower, a rampart and one long exterior stair needs real
+    # room; 3 x 3 fit the old dense strongbox, not this.
+    'gold_vault': (gold_vault, 4, 4),
+    # 5 x 5, not 6 x 6 (user 2026-08-23: shrunk in their own builder_camp.blend
+    # edit — measured bbox is ~4.7 x 4.5, comfortably inside 5 x 5 with the
+    # usual roof/gantry overhang margin, and nowhere near filling a 6 x 6).
+    'builder_camp': (builder_camp, 5, 5),
+    'healing_hut': (healing_hut, 5, 4),
     'scout_post': (scout_post, 2, 2),
     'trading_post': (trade_center, 4, 3),
     'caravanserai': (caravanserai, 4, 3),
@@ -7410,6 +7690,58 @@ def guide_plane(w, h):
     mat.node_tree.nodes['Principled BSDF'].inputs['Emission Color'] \
         .default_value = (1.0, 0.0, 0.6, 1)
     ob.data.materials.append(mat)
+
+
+def grid_guide(w, h):
+    """A wireframe of the footprint's own 1 x 1 cells, meant to stay in a
+    saved .blend permanently — unlike [guide_plane], which is solid, exists
+    only to check a RENDER's framing, and says never to ship one.
+
+    ── user 2026-08-23: "kannst du bei allen blender dateien, das grid
+    anzeigen, auf welchem es platziert wird? dort kann ich es besser
+    anpassen" ──
+    Every line lives in its own 'Grid' collection, so it can be hidden with
+    one click in the outliner rather than hunted down object by object, and
+    every one of them is hide_render=True — set once, here, so a render can
+    never pick it up even if it was left visible in the viewport.
+    """
+    coll = bpy.data.collections.new('Grid')
+    bpy.context.scene.collection.children.link(coll)
+    gm = flat('guide_grid', (1.0, 0.0, 0.6))
+    gm.node_tree.nodes['Principled BSDF'].inputs['Emission Strength'] \
+        .default_value = 1.0
+    gm.node_tree.nodes['Principled BSDF'].inputs['Emission Color'] \
+        .default_value = (1.0, 0.0, 0.6, 1)
+
+    hw, hh = w / 2, h / 2
+    z = 0.006
+
+    def line(name, x, y, sx, sy):
+        ob = box(name, x, y, z, sx, sy, 0.01, gm)
+        for c in list(ob.users_collection):
+            c.objects.unlink(ob)
+        coll.objects.link(ob)
+        ob.hide_render = True
+        return ob
+
+    # The footprint's own edge — the number PRESETS gives this building —
+    # thicker than the cells inside it, so it reads as THE boundary.
+    edge = 0.05
+    line('guide_grid_n', 0, hh, w + edge, edge)
+    line('guide_grid_s', 0, -hh, w + edge, edge)
+    line('guide_grid_e', hw, 0, edge, h + edge)
+    line('guide_grid_w', -hw, 0, edge, h + edge)
+
+    # Every internal cell boundary.
+    cell = 0.02
+    for i in range(1, w):
+        line(f'guide_grid_x{i}', -hw + i, 0, cell, h)
+    for i in range(1, h):
+        line(f'guide_grid_y{i}', 0, -hh + i, w, cell)
+
+    # The origin every function in this file builds around.
+    line('guide_grid_o0', 0, 0, 0.18, 0.03)
+    line('guide_grid_o1', 0, 0, 0.03, 0.18)
 
 
 # ── Scene ──────────────────────────────────────────────────

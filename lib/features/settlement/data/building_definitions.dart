@@ -1546,8 +1546,13 @@ List<BuildingDef> _buildRoster() {
     // and the name was the last thing still calling it a camp.
     name: 'Castle',
     color: Color(0xFF7C5CBF),
-    gridW: 5,
-    gridH: 5,
+    // 7x7, not 5x6 (user 2026-08-23, reference: creality "large damaged
+    // castle, triple crenellated towers, wood" — "die Grundfläche darf auch
+    // grösser werden") — grown to fit the half-timbered watch-tower added
+    // the same day. See PRESETS['castle'] / MAIN_HALL_PLAN in
+    // tool/blender/render_building.py for the matching render-side change.
+    gridW: 7,
+    gridH: 7,
     isMainBuilding: true,
     isUnique: true,
     population: 5,
@@ -1585,12 +1590,26 @@ List<BuildingDef> _buildRoster() {
           g?.name ?? const {'wood': 'Wood', 'stone': 'Stone'}[res] ?? res;
       for (final large in const [false, true]) {
         final k = large ? 1.6 : 1.0;
+        // Renamed 2026-08-23: era 1's small stone camp only — the user's own
+        // file is now small_quarry.blend, a noticeably wider quarry face.
+        // Every other combination this loop produces (large_stone_camp, both
+        // wood camps, every era-2+ raw pair) keeps the shared id/footprint.
+        // See PRESETS['small_quarry'] in render_building.py and
+        // supabase/rename_small_quarry.sql for the render and live-DB sides.
+        final isSmallQuarry = era == 1 && res == 'stone' && !large;
+        // small_wood_camp only (user 2026-08-23: "das small_wood_camp soll
+        // nur 3x3 sein") — era 1's small wood camp alone, not every small
+        // camp the loop produces. See PRESETS['small_wood_camp'] in
+        // render_building.py for the matching render-side change.
+        final isSmallWoodCamp = era == 1 && res == 'wood' && !large;
         defs.add(BuildingDef(
-          id: _idFor(
-            era,
-            '${large ? 'large' : 'small'}_${res}_camp',
-            '${res}_${large ? 'works' : 'camp'}_e$era',
-          ),
+          id: isSmallQuarry
+              ? 'small_quarry'
+              : _idFor(
+                  era,
+                  '${large ? 'large' : 'small'}_${res}_camp',
+                  '${res}_${large ? 'works' : 'camp'}_e$era',
+                ),
           // ── SIZE, not era (user 2026-08-12: "primitive wood camp ist
           // das small wood camp usw.") ──
           // The pair is the only place in the roster where two buildings
@@ -1606,9 +1625,11 @@ List<BuildingDef> _buildRoster() {
           color: _rosterColor(res),
           // A camp SHIPS what it gathers, so it needs room for a cart
           // beside the pile (2026-08-09). The works halls were already
-          // 4 x 4 and stay there.
-          gridW: 4,
-          gridH: large ? 4 : 3,
+          // 4 x 4 and stay there. small_quarry is 5 x 4 (measured against
+          // the hand-edited .blend, 2026-08-23). small_wood_camp is 3 x 3
+          // (user 2026-08-23).
+          gridW: isSmallQuarry ? 5 : (isSmallWoodCamp ? 3 : 4),
+          gridH: isSmallQuarry ? 4 : (large ? 4 : 3),
           resourceCost: _rosterCost(era, k),
           constructionHours: _eraBuildHours(large ? 600 : 360, era),
           eraIds: ['era_$era'],
@@ -1753,8 +1774,10 @@ List<BuildingDef> _buildRoster() {
         id: 'builder_camp',
         name: 'Builder Camp',
         color: const Color(0xFF546E7A),
-        gridW: 6,
-        gridH: 6,
+        // 5 x 5, not 6 x 6 (user 2026-08-23) — shrunk in their own
+        // builder_camp.blend edit; the measured model no longer fills 6 x 6.
+        gridW: 5,
+        gridH: 5,
         resourceCost: _rosterCost(1, 1.2),
         constructionHours: _eraBuildHours(480, 1),
         eraIds: const ['era_1'],
@@ -1768,9 +1791,14 @@ List<BuildingDef> _buildRoster() {
         id: 'healing_hut',
         name: 'Healing Hut',
         color: const Color(0xFF4FAE6B),
-        // A drying rack the width of the building, a cauldron and a bench of phials do not fit in two cells of frontage.
-        gridW: 3,
-        gridH: 3,
+        // 5x4, not 4x4 (user 2026-08-23: first "nur 4x4", then "müsste wohl
+        // 5 (x) und 4 (y) sein"). The hand-authored plan is still the 6x5 it
+        // grew to (4x4→5x4→6x5, see prior history in git blame) — it now
+        // gets scaled onto this smaller tile instead of redrawn, matching
+        // the castle's own plan-scaling trick (tool/blender/render_building.py
+        // HEALING_HUT_PLAN_W/H).
+        gridW: 5,
+        gridH: 4,
         resourceCost: _rosterCost(1, 0.6),
         constructionHours: _eraBuildHours(120, 1),
         eraIds: const ['era_1'],
@@ -1922,11 +1950,11 @@ List<BuildingDef> _buildRoster() {
         id: 'gold_vault',
         name: 'Gold Vault',
         color: const Color(0xFFC9A227),
-        // 3 x 3 (user 2026-08-12). The tower stays dense — that is its whole
-        // character — but a vault with a chain round it and a hoard at its
-        // foot needs a yard to be guarded in.
-        gridW: 3,
-        gridH: 3,
+        // 4 x 4, not 3 x 3 (user 2026-08-23, rebuilt to a reference photo):
+        // a keep with a tower, a rampart and one long exterior stair needs
+        // real room to stand in.
+        gridW: 4,
+        gridH: 4,
         resourceCost: _rosterCost(1, 0.7),
         constructionHours: _eraBuildHours(300, 1),
         eraIds: const ['era_1'],
@@ -2070,8 +2098,15 @@ final Map<String, BuildingDef> kBuildingDefs = Map.of(kFallbackBuildingDefs);
 /// map has to be recomputed with it.
 const Map<String, (double, double)> kChimneyAnchor = {
   'breeding_hut': (0.454, 0.220),
-  'castle': (0.562, 0.292),
-  'healing_hut': (0.447, 0.317),
+  // 'castle' had an entry here, but the 2026-08-23 rebuild-to-photo
+  // dropped the keep hall (and its chimney) entirely — the new castle is
+  // a wall and towers, nothing with a fireplace. A stale anchor would
+  // put smoke over open air.
+  // Recomputed for the 5x4 footprint (user 2026-08-23) — the plan-scaling
+  // that fits the building onto its tile also reframes the camera, moving
+  // the chimney mouth in the picture. Projected through the same camera as
+  // before (hhchim-1_pot, the left of the two stacks).
+  'healing_hut': (0.627, 0.5),
   'lux_fish': (0.517, 0.377),
   'lux_fur': (0.863, 0.536),
   'large_stone_camp': (0.454, 0.342),

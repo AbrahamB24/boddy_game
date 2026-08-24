@@ -32,7 +32,7 @@ BuildingDef _camp({
   bool isBuildPlot = false,
   bool isMainBuilding = false,
 }) => BuildingDef(
-  id: 'small_stone_camp',
+  id: 'small_quarry',
   name: 'Small Stone Camp',
   color: const Color(0xFF7A8288),
   gridW: 3,

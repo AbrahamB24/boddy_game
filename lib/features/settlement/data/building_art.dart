@@ -43,7 +43,7 @@ const Set<String> kBundledBuildingArt = {
   'small_house',
   'large_house',
   'small_wood_camp',
-  'small_stone_camp',
+  'small_quarry',
   'large_wood_camp',
   'large_stone_camp',
   'storehouse',

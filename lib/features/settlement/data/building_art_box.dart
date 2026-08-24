@@ -10,24 +10,28 @@ library;
 
 /// (artBaseWidth, artAnchorX, artLift), keyed by building def id.
 const Map<String, (double, double, double)> kBundledArtBox = {
+  // The nine re-measured 2026-08-23 against the user's own hand-edited
+  // .blend files (see Houses\Render) — sizes changed for builder_camp,
+  // castle and small_quarry (renamed from small_stone_camp); the other six
+  // kept their grid but were re-measured anyway since the geometry moved.
   'breeding_hut': (0.98483, 0.49241, 0.00000),
-  'builder_camp': (1.00000, 0.50000, 0.00000),
+  'builder_camp': (1.00000, 0.50000, 0.16458),
   'caravanserai': (0.96933, 0.48466, 0.00000),
   'castle': (1.00000, 0.50000, 0.00000),
   'church': (1.00000, 0.50000, 0.00250),
-  'gold_vault': (0.88113, 0.50000, 0.00000),
+  'gold_vault': (0.96024, 0.51988, 0.00000),
   'hatchery': (0.99404, 0.50298, 0.00000),
-  'healing_hut': (0.95843, 0.47921, 0.00000),
+  'healing_hut': (1.00000, 0.50000, 0.00000),
   'large_house': (1.00000, 0.50000, 0.00000),
   'large_stone_camp': (1.00000, 0.50000, 0.00000),
   'large_wood_camp': (1.00000, 0.50000, 0.00000),
-  'lux_fish': (1.00000, 0.50000, 0.02075),
+  'lux_fish': (0.96906, 0.51547, 0.04224),
   'lux_fur': (0.95855, 0.47928, 0.00000),
   'marketplace': (1.00000, 0.50000, 0.00250),
   'refinery_e2': (1.00000, 0.50000, 0.00000),
   'scout_post': (1.00000, 0.50000, 0.00000),
-  'small_house': (1.00000, 0.50000, 0.00000),
-  'small_stone_camp': (1.00000, 0.50000, 0.00000),
+  'small_house': (0.98674, 0.50000, 0.00000),
+  'small_quarry': (1.00000, 0.50000, 0.00000),
   'small_wood_camp': (1.00000, 0.50000, 0.00000),
   'storehouse': (1.00000, 0.50000, 0.00000),
   'thinker_circle': (1.00000, 0.50000, 0.00000),

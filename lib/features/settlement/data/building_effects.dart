@@ -300,7 +300,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'small_stone_camp': BuildingEffects(
+  'small_quarry': BuildingEffects(
     workshops: [
       WorkshopRole(
         stat: CreatureStat.production,

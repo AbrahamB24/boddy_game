@@ -285,7 +285,7 @@ void main() {
       final start =
           availableBuildings('era_1', 0).map((d) => d.id).toSet();
       expect(start, contains('small_wood_camp'));
-      expect(start, contains('small_stone_camp'));
+      expect(start, contains('small_quarry'));
       expect(start, contains('small_house'));
       expect(start, isNot(contains('healing_hut')));
       expect(start, isNot(contains('breeding_hut')));
