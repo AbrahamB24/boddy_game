@@ -85,6 +85,9 @@ PALETTE = {
     'oak_light': (0.63, 0.38, 0.18),   # posts catching the sun
     'iron': (0.31, 0.22, 0.19),        # fittings — warm dark, not blue-black
     'gold': (0.98, 0.77, 0.22),        # finials and lamp-light
+    # A single controlled cold note, same exception class as water/foam —
+    # the other half of a treasure pile that isn't coin (user 2026-08-24).
+    'gem': (0.52, 0.24, 0.62),
     'dark': (0.15, 0.07, 0.04),        # an opening, read as depth
     'banner': (0.74, 0.13, 0.18),      # the one saturated cloth per building
     'sand': (0.90, 0.77, 0.52),        # trodden ground inside a court
@@ -262,6 +265,7 @@ FINISH = {
     'iron': (0.42, 1.0, 44, 0.06, 0.14, 1.0),
     'gold': (0.26, 1.0, 40, 0.04, 0.08, 1.0),
     'copper': (0.30, 1.0, 40, 0.05, 0.1, 1.0),
+    'gem': (0.15, 0.0, 20, 0.03, 0.05, 1.0),   # glossy facets, not metal
     'verdigris': (0.62, 0.0, 34, 0.09, 0.22, 1.0),
     'slate': (0.60, 0.0, 34, 0.08, 0.26, 2.0),
     # Cloth and leaf: soft, faintly sheened, barely relieved.
@@ -785,6 +789,20 @@ def straw_bale(name, x, y, z, sx=0.44, sy=0.3, h=0.28, key='straw'):
     for t in (-0.26, 0.26):
         ring(f'{name}_band{t}', x + sx * t * 0.7, y, z + h / 2, h * 0.52,
              0.016, key='root', axis='y', sides=12, tube_sides=5)
+
+
+def hay_bale(name, x, y, z, w=0.5, d=0.35, h=0.3, angle=0.0, key='straw'):
+    """A rectangular bundle of hay, bound by three straps — the boxy
+    sibling of the round [straw_bale], for a yard that wants both without
+    either reading as a copy of the other."""
+    body = box(f'{name}_body', x, y, z, w, d, h, mat(key))
+    body.rotation_euler = (0, 0, angle)
+    for i, t in enumerate((-0.3, 0.0, 0.3)):
+        ox = x + math.cos(angle) * t * w
+        oy = y + math.sin(angle) * t * w
+        strap = box(f'{name}_strap{i}', ox, oy, z - 0.01, 0.05, d + 0.03,
+                    h + 0.03, mat('root'))
+        strap.rotation_euler = (0, 0, angle)
 
 
 def straw_scatter(name, x, y, z, r, n=14, key='straw'):
@@ -1804,6 +1822,94 @@ def window(name, x, y, z, w, h, depth, shutters=True, facing='y'):
                      0.14, 0.07, h * 0.74, mat('oak'), facing=facing)
 
 
+def barred_window(name, x, y, z, w, h, facing='y', bars=3, key='dark'):
+    """A square opening behind an iron grille — see through it, nothing
+    gets through it. The plain-box sibling of [window]: some walls (a
+    vault's own) read as flat dressed stone rather than arches, and a
+    round-headed frame would fight that."""
+    def at(into, along=0.0):
+        return (x + (along if facing == 'y' else -into),
+                y + (into if facing == 'y' else along))
+
+    sx, sy = at(0.02)
+    wall_box(f'{name}_frame', sx, sy, z - 0.03, w + 0.16, 0.08, h + 0.1,
+             mat('limestone'), facing=facing)
+    hx, hy = at(0.0)
+    wall_box(f'{name}_hole', hx, hy, z, w, 0.07, h, mat(key), facing=facing)
+    for i in range(bars):
+        ox = -w / 2 + w * (i + 1) / (bars + 1)
+        vx, vy = at(-0.02, ox)
+        wall_box(f'{name}_bar{i}', vx, vy, z, 0.022, 0.03, h, mat('iron'),
+                 facing=facing)
+    hbx, hby = at(-0.02)
+    wall_box(f'{name}_hbar', hbx, hby, z + h * 0.46, w, 0.03, 0.022,
+             mat('iron'), facing=facing)
+
+
+def bay_window(name, x, y, z, w=0.55, out=0.32, h=0.6, facing='y',
+               key='ashlar'):
+    """A jettied bay window (Erker): a box corbelled out from the wall on
+    two stepped courses, a window in its own outward face, and a little
+    hipped cap — the one room in a keep's shaft that looks OUT, not
+    through a slit."""
+    def at(into, along=0.0):
+        return (x + (along if facing == 'y' else -into),
+                y + (into if facing == 'y' else along))
+
+    for i, step in enumerate((0.08, 0.18)):
+        cx, cy = at(-step - 0.03)
+        wall_box(f'{name}_corbel{i}', cx, cy, z - 0.1 + i * 0.05,
+                 w + 0.06 - i * 0.03, 0.06, 0.05, mat('limestone'),
+                 facing=facing)
+    bx, by = at(-out / 2)
+    wall_box(f'{name}_box', bx, by, z, w, out, h, mat(key), facing=facing)
+    wx, wy = at(-out - 0.01)
+    window(f'{name}_win', wx, wy, z + h * 0.32, w * 0.55, h * 0.48, 0.1,
+           shutters=True, facing=facing)
+    rx, ry = at(-out / 2)
+    shingle_gable(f'{name}_roof', rx, ry, z + h, w + 0.12, out + 0.1, 0.3,
+                  overhang=0.1, rows=5,
+                  ridge_along=('x' if facing == 'y' else 'y'))
+
+
+def balcony(name, x, y, z, w=0.7, out=0.36, rail_h=0.32, facing='y',
+            key='ashlar'):
+    """A projecting balcony: corbelled brackets under a stone slab, a
+    baluster rail along its open edge, and a small door where it meets
+    the wall — the one place in a keep's facade you can step OUT, open
+    to the sky (unlike the enclosed [bay_window])."""
+    def at(into, along=0.0):
+        return (x + (along if facing == 'y' else -into),
+                y + (into if facing == 'y' else along))
+
+    for i, step in enumerate((out * 0.3, out * 0.65)):
+        cx, cy = at(-step - 0.02)
+        wall_box(f'{name}_cor{i}', cx, cy, z - 0.12 + i * 0.05,
+                 w * (0.6 + 0.2 * i), 0.05, 0.05, mat('limestone'),
+                 facing=facing)
+    px, py = at(-out / 2)
+    wall_box(f'{name}_slab', px, py, z, w + 0.06, out, 0.07, mat(key),
+             facing=facing)
+    dx, dy = at(0.02)
+    arched_door(f'{name}_door', dx, dy, z + 0.07, 0.38, 0.7, facing=facing,
+               boards=7)
+
+    edge = -out + 0.04
+    for sign in (-1, 1):
+        px_, py_ = at(edge, sign * (w / 2 - 0.03))
+        box(f'{name}_post{sign}', px_, py_, z + 0.07, 0.06, 0.06, rail_h,
+            mat('oak'))
+    n = 4
+    for i in range(n):
+        t = -w / 2 + w * (i + 0.5) / n
+        bx, by = at(edge, t)
+        box(f'{name}_bal{i}', bx, by, z + 0.07, 0.04, 0.04, rail_h * 0.85,
+            mat('oak_light'))
+    rx, ry = at(edge)
+    wall_box(f'{name}_rail', rx, ry, z + 0.07 + rail_h, w, 0.05, 0.04,
+             mat('oak'), facing=facing)
+
+
 def steps(name, x, y, z, w, count=4, rise=0.075, tread=0.16, key='limestone'):
     """A flight up to a threshold. Three steps say "there is a way in" louder
     than any door does, because a door is a shape and a step is an invitation."""
@@ -2211,6 +2317,71 @@ def cart(name, x, y, z, angle=0.0, load='sack', key='oak'):
                    h=0.34)
 
 
+def wagon(name, x, y, z, angle=0.0, load='hay', key='oak'):
+    """A four-wheeled flatbed wagon — bigger and sturdier than the
+    two-wheeled [cart], with a rail all round the bed, two full axles and
+    a drawbar instead of a single shaft."""
+    bed_l, bed_w, bed_h = 1.3, 0.72, 0.3
+
+    def along(d):
+        return (x + math.cos(angle) * d, y + math.sin(angle) * d)
+
+    def across(d):
+        return (x - math.sin(angle) * d, y + math.cos(angle) * d)
+
+    bed = box(f'{name}_bed', x, y, z + bed_h, bed_l, bed_w, 0.09, mat(key))
+    bed.rotation_euler = (0, 0, angle)
+    for s in (-1, 1):
+        rx, ry = across(s * (bed_w / 2 - 0.02))
+        rail = box(f'{name}_side{s}', rx, ry, z + bed_h + 0.09, bed_l, 0.05,
+                   0.16, mat('oak_light'))
+        rail.rotation_euler = (0, 0, angle)
+    for s in (-1, 1):
+        ex, ey = along(s * (bed_l / 2 - 0.02))
+        end = box(f'{name}_end{s}', ex, ey, z + bed_h + 0.09, 0.05, bed_w,
+                  0.16, mat('oak_light'))
+        end.rotation_euler = (0, 0, angle)
+
+    for ai, ad in enumerate((-0.42, 0.42)):
+        axx, axy = along(ad)
+        for s in (-1, 1):
+            wx = axx - math.sin(angle) * s * 0.39
+            wy = axy + math.cos(angle) * s * 0.39
+            for k in range(4):
+                sp = box(f'{name}_sp{ai}{s}{k}', wx, wy,
+                         z + bed_h * 0.5 - 0.21, 0.06, 0.06, 0.42,
+                         mat('oak_light'))
+                # Fan the spoke round the axle (Y, before angle) THEN turn
+                # the whole wheel to the wagon's own heading — rotating
+                # round X first (as cart()'s own wheel does) spins a
+                # spoke about its own long axis, which does nothing; the
+                # fan has to turn round the axle it stands on.
+                sp.rotation_euler = (0, math.pi / 4 * k, angle)
+            box(f'{name}_hub{ai}{s}', wx, wy, z + bed_h * 0.5, 0.12, 0.12,
+                0.12, mat('iron'))
+        axle = box(f'{name}_axle{ai}', axx, axy, z + bed_h * 0.5 - 0.03,
+                   0.06, 0.82, 0.06, mat('iron'))
+        axle.rotation_euler = (0, 0, angle)
+
+    px, py = along(bed_l / 2 + 0.32)
+    pole = box(f'{name}_pole', px, py, z + bed_h * 0.6, 0.6, 0.06, 0.06,
+              mat(key))
+    pole.rotation_euler = (0, 0.15, angle)
+
+    if load == 'hay':
+        hay_bale(f'{name}_hay', x, y, z + bed_h + 0.09, w=bed_l - 0.2,
+                d=bed_w - 0.1, h=0.32, angle=angle)
+    elif load == 'barrel':
+        for i in range(2):
+            bx, by = along(-0.28 + i * 0.56)
+            barrel(f'{name}_ld{i}', bx, by, z + bed_h + 0.09, r=0.19, h=0.36)
+    elif load == 'stone':
+        for i in range(3):
+            lx, ly = along(-0.36 + i * 0.36)
+            box(f'{name}_ld{i}', lx, ly, z + bed_h + 0.09, 0.3, bed_w - 0.1,
+                0.22, mat('limestone' if i % 2 else 'limestone_shade'))
+
+
 def pack_beast(name, x, y, z, angle=0.0, hump=True, key='hide'):
     """A camel, or a mule when the hump is off.
 
@@ -2276,6 +2447,32 @@ def gold_pile(name, x, y, z, r=0.42, bars=True):
                 0.36, 0.18, 0.12, mat('gold'))
 
 
+def gem_cluster(name, x, y, z, scale=1.0, key='gem', glow=1.1):
+    """A knot of angular crystal shards jutting from the ground — the
+    non-coin half of a treasure pile. rings=1 on spire() is the whole
+    trick: a normal spire rings up smoothly toward a point, which reads as
+    round; one segment, flat-shaded, reads as a gem facet instead.
+
+    Hand-authored offsets, not a procedural scatter — the same lesson the
+    Glimmergnaw's own shoulder cluster already paid for: shards the same
+    size read as a comb, not a growth. One tall shard leads, four smaller
+    ones lean off it at their own angles.
+    """
+    glow_mat(key, PALETTE[key], strength=glow)
+    for nm, dx, dy, r, h, tx_, ty_ in (
+        ('a', 0.00, 0.00, 0.052, 0.22, -0.12, -0.08),
+        ('b', -0.06, 0.03, 0.040, 0.17, -0.06, 0.14),
+        ('c', 0.05, 0.02, 0.034, 0.14, -0.16, -0.22),
+        ('d', -0.02, -0.05, 0.028, 0.11, -0.24, 0.06),
+        ('e', 0.03, -0.03, 0.024, 0.09, 0.04, -0.18),
+    ):
+        spire(f'{name}_{nm}', x + dx * scale, y + dy * scale, z,
+              r * scale, h * scale, sides=5, rings=1, key=key, dark=key)
+        shard = bpy.data.objects.get(f'{name}_{nm}_0')
+        if shard is not None:
+            shard.rotation_euler = (tx_, ty_, 0.0)
+
+
 def barrel(name, x, y, z, r=0.19, h=0.4, key='oak'):
     """A cask: a bellied body, two real hoops, a lid.
 
@@ -2304,6 +2501,45 @@ def crate(name, x, y, z, s=0.34, key='oak_light'):
         box(f'{name}_bt{t}', x + s * t, y, z, s * 0.14, s * 0.9, s * 0.82,
             mat('oak'))
     box(f'{name}_lid', x, y, z + s * 0.8, s * 1.06, s * 0.92, 0.05, mat('oak'))
+
+
+def chest(name, x, y, z, w=0.46, d=0.3, h=0.3, style='flat', key='oak',
+          trim='iron'):
+    """A lidded, banded chest — 'flat' for a plain hinged lid, 'domed' for a
+    stepped, rounded one. Corner posts and a front lock are what say
+    TREASURE rather than crate; the trim colour is what tells two of them
+    apart at a glance."""
+    body_h = h * 0.6
+    box(f'{name}_body', x, y, z, w, d, body_h, mat(key))
+    for sx_ in (-1, 1):
+        for sy_ in (-1, 1):
+            box(f'{name}_post{sx_}{sy_}', x + sx_ * (w / 2 - 0.02),
+                y + sy_ * (d / 2 - 0.02), z, 0.05, 0.05, body_h, mat(trim))
+    box(f'{name}_hband', x, y, z + body_h * 0.4, w + 0.02, d + 0.02, 0.04,
+        mat(trim))
+    box(f'{name}_lock', x, y - d / 2 - 0.005, z + body_h * 0.32, 0.09, 0.02,
+        0.1, mat(trim))
+    box(f'{name}_hasp', x, y - d / 2 - 0.008, z + body_h * 0.55, 0.05, 0.015,
+        0.09, mat(trim))
+
+    lid_z = z + body_h
+    if style == 'domed':
+        zz = lid_z
+        for i, (fw, fh) in enumerate(((1.0, 0.16), (0.68, 0.14), (0.36, 0.12))):
+            box(f'{name}_lid{i}', x, y, zz, w * fw + 0.02, d * fw * 0.94 + 0.02,
+                h * fh, mat(key))
+            zz += h * fh
+        for sx_ in (-1, 1):
+            box(f'{name}_lidband{sx_}', x + sx_ * (w * 0.24), y, lid_z, 0.05,
+                d * 0.96, h * 0.34, mat(trim))
+    else:
+        lid_h = h - body_h
+        box(f'{name}_lid', x, y, lid_z, w + 0.03, d + 0.03, lid_h, mat(key))
+        box(f'{name}_lidband', x, y, lid_z, w + 0.04, 0.06, lid_h + 0.01,
+            mat(trim))
+        for sx_ in (-1, 1):
+            box(f'{name}_hinge{sx_}', x + sx_ * (w * 0.3), y + d / 2 - 0.01,
+                lid_z - 0.02, 0.08, 0.04, 0.06, mat(trim))
 
 
 def sack_pile(name, x, y, z, n=3, key='cloth'):
@@ -4494,20 +4730,19 @@ def breeding_hut(w, h):
 # builder's own comment picked it ("6 x 6 rather than 5 x 5, and the extra tile
 # goes into HEIGHT") and then nothing ever passed it: castle was called with
 # the def's 5 x 5 and drew a 6 x 6 castle on it.
-# 6.0 through 2026-08-22; widened to 7.0 (user 2026-08-23, reference:
-# creality "large damaged castle, triple crenellated towers, wood" —
-# "Gerne darf die Grundfläche auch grösser werden dadurch") for the
-# half-timbered watch-tower added the same day. The def grew to match
-# (gridW/gridH 5x6 -> 7x7), so this no longer even scales down — see castle().
-MAIN_HALL_PLAN = 7.0
+# 6.0 through 2026-08-22; 7.0 through 2026-08-24 (reference: creality
+# "large damaged castle, triple crenellated towers, wood"); 10.0 as of the
+# SAME day's second rebuild (user: "Grösse 10x10" — a full four-tower
+# enclosure needs the room a five-piece skyline along one wall did not).
+MAIN_HALL_PLAN = 10.0
 
 
 def castle(w, h):
     """The Keep, drawn to its own plan and scaled onto the tile it is given.
 
-    See MAIN_HALL_PLAN. Everything below is authored at 7 x 7; a settlement
-    whose main building is smaller gets the same castle scaled down, rather
-    than the same castle overflowing.
+    See MAIN_HALL_PLAN. Everything below is authored at 10 x 10; a
+    settlement whose main building is smaller gets the same castle scaled
+    down, rather than the same castle overflowing.
     """
     _main_hall_plan(MAIN_HALL_PLAN, MAIN_HALL_PLAN)
     k = min(w, h) / MAIN_HALL_PLAN
@@ -4516,166 +4751,286 @@ def castle(w, h):
 
 
 def _main_hall_plan(w, h):
-    """The Keep — rebuilt whole against a reference photo (user 2026-08-23:
-    "mache das castle nochmals komplett neu gemäss dem Foto" — creality's
-    "large damaged castle, triple crenellated towers, wood").
+    """The Keep — a full four-tower enclosure (user 2026-08-24, replacing
+    the one-wall five-piece skyline from the same day's earlier rebuild:
+    "Grösse 10x10 / hinteren beiden Ecken sind Ecktürme / Vorne sind zwei
+    Rundtürme / Zugbrücke / An der hinteren Wand ist der grosse Bergfried
+    / Im Hof hat es Fachwerkgebäude").
 
-    ── What carries over from the photo, and what does not ──
-    The photo is a ruin standing on a rock, and both of those were already
-    overruled earlier the same day (intact, flush on the ground, like
-    every other building here). Everything else about its COMPOSITION is
-    new as of this rebuild — this is not the old twin-tower gatehouse with
-    a tower added on, it is the photo's own five-piece skyline, left to
-    right:
-
-      1. A tall, ELABORATE half-timbered tower — stone footing, a
-         crenellated ledge, one jettied storey of dense Fachwerk, then a
-         steep spired roof and a flag. The tallest thing here, same as in
-         the photo — everything else reads as gatehouse next to it.
-      2. A plain square stone tower right beside it, touching — the true
-         KEEP mass, crenellated, no ornament to compete with the timber
-         tower next door.
-      3–4. TWO ROUND turrets — a genuine cylinder, not the kit's own boxy
-         turret() — with conical shingle roofs, corbelled off the
-         curtain wall between the two big towers.
-      5. A second plain square stone tower, matching #2, at the far end.
-
-    All five stand on one crenellated curtain wall, with the arched door
-    between turret 4 and tower 5 — matching where the photo puts it.
+    Four crenellated walls close a real courtyard, not a single front
+    spine: two ROUND towers guard the front corners either side of the
+    gate and its drawbridge; two SQUARE towers hold the back corners; the
+    Bergfried — bigger and far more worked than either — rises off the
+    CENTRE of the back wall, the tallest thing here by a wide margin.
+    Inside, a couple of half-timbered lean-tos (stables) stand against
+    the courtyard's own walls, low enough to belong to the walls that
+    shelter them, not tall enough to compete with the Bergfried.
     """
     half = w / 2.0
 
-    # ── THE CURTAIN WALL — one long crenellated spine everything else
-    # stands on or against ──
-    ww, wd, wall_h = 6.2, 1.3, 2.1
-    wx, wy = 0.0, -1.5
-    # ── Coarse coursing on purpose ──
-    # This rebuild adds five large stone masses (wall, two towers, the
-    # timber tower's footing) where the old plan had three smaller ones,
-    # and at the old fine block size that is enough individual stones to
-    # blow past the scene's own object budget and silently lose whatever
-    # gets built AFTER it — exactly the failure the builder_camp/2026-08-16
-    # note already describes, rediscovered here the hard way: the second
-    # round turret simply never appeared in the render, present in the
-    # scene with a valid position, absent from the picture, because by the
-    # time it was built the budget was already spent on these two walls'
-    # stones alone. Bigger blocks read as the same coursed stone at a
-    # fraction of the object count.
-    ashlar_courses('cwbase', wx, wy, 0, ww + 0.2, wd + 0.2, 0.18,
-                   course=0.34, block=0.66)
-    ashlar_courses('cwwall', wx, wy, 0.18, ww, wd, wall_h,
-                   course=0.36, block=0.7)
-    battlements('cwcrown', wx, wy, 0.18 + wall_h, ww, wd, h=0.28,
-                merlon=0.13, gap=0.10)
-    face_y = wy - wd / 2
+    def wall_door(name, x, y, z, facing):
+        """A door up off the wall-walk, into a tower — always on the
+        tower's OWN +x-ish face regardless of which corner it sits on,
+        because that is the one this fixed camera (-y and +x) actually
+        reads; the "architecturally correct" inward face is invisible on
+        two of these four towers otherwise."""
+        arched_door(name, x, y, z, 0.42, 0.8, facing=facing, boards=7)
 
-    # ── TOWER 1: the half-timbered tower — tallest, leftmost, proud of the
-    # wall the way the photo's own timber tower stands forward of its
-    # stone neighbour ──
-    ttx, tty = -2.6, wy - 0.4
-    ttw = 1.3
-    tt_base_h = 1.55
-    ashlar_courses('ttbase', ttx, tty, 0, ttw + 0.16, ttw + 0.16, tt_base_h,
-                   course=0.31, block=0.6)
-    tface = tty - ttw / 2 - 0.08
-    for i, oz in enumerate((0.5, 1.4)):
-        arrow_slit(f'tts{i}', ttx, tface, oz, 0.5)
-    battlements('ttledge', ttx, tty, tt_base_h, ttw, ttw, h=0.24,
-                merlon=0.115, gap=0.09)
-    # The jettied floor — the timbered storey oversails the ledge below it,
-    # the way a real tower's joists cantilever past the storey below.
-    box('ttjetty', ttx, tty, tt_base_h + 0.24 - 0.05, ttw + 0.2, ttw + 0.2,
-        0.09, mat('oak'))
-    tt_timber_z = tt_base_h + 0.24 + 0.04
-    tt_timber_h = 1.7
-    half_timber('ttwall', ttx, tty, tt_timber_z, ttw, ttw, tt_timber_h,
-                bays=3)
-    _fachwerk_lattice('ttwall', ttx, tty, ttw, ttw, tt_timber_h)
-    leaded_window('ttwin0', ttx - 0.32, tty - ttw / 2, tt_timber_z + 0.55,
-                  0.22, 0.28, open=True)
-    leaded_window('ttwin1', ttx + 0.32, tty - ttw / 2, tt_timber_z + 0.55,
-                  0.22, 0.28, open=True)
-    leaded_window('ttwinx', ttx + ttw / 2, tty, tt_timber_z + 0.6, 0.22,
-                  0.26, facing='x', open=True)
-    moss('ttmoss', ttx, tty, tt_timber_z, ttw * 0.5, ttw * 0.5, 0.3,
-         overhang=0.0, patches=5)
-    tt_roof_z = tt_timber_z + tt_timber_h
-    spire('ttroof', ttx, tty, tt_roof_z, ttw * 0.72, 1.85)
-    finial('ttfin', ttx, tty, tt_roof_z + 1.85, 0.3)
-    box('ttpole', ttx, tty, tt_roof_z + 2.15, 0.04, 0.04, 0.4, mat('iron'))
-    flag = box('ttflag', ttx + 0.15, tty, tt_roof_z + 2.42, 0.28, 0.02, 0.16,
-               mat('cloth'))
-    flag.rotation_euler = (0, 0, 0.15)
+    # ── Coarse coursing throughout, from the start this time ──
+    # A four-wall enclosure plus five towers is a lot more stone than the
+    # single-spine layout that first taught this lesson (see the
+    # builder_camp/2026-08-16 note): fine ashlar blocks on masses this
+    # size blow the scene's own object budget and silently drop whatever
+    # is built afterward. Every course/block pair below is picked to keep
+    # the total object count well under that line from the outset.
+    # Stretched toward the grid's own edge (user 2026-08-24: "die Türme
+    # sollen an den Rand des Grids kommen"). CX moves more than CY: the
+    # Bergfried sits on the back wall too, half-width 1.15 plus its own
+    # skin, wider than either corner tower — push CY any further than this
+    # and the KEEP overshoots the 10x10 footprint before the corner towers
+    # even reach it. CX has no such ceiling (nothing else sits on the
+    # centreline there), so it goes further.
+    CX, CY = 4.15, 3.75
+    wall_t, wall_h = 1.0, 1.3
 
-    # ── TOWER 2: the plain square stone tower beside it — the photo's own
-    # true keep mass, touching the timber tower's own base ──
-    stw, st_h = 1.55, 4.3
-    for prefix, sx_ in (('sta', -1.5), ('stb', 2.55)):
-        sy_ = wy - 0.4
-        ashlar_courses(f'{prefix}base', sx_, sy_, 0, stw + 0.14,
-                       stw + 0.14, st_h, course=0.36, block=0.68)
-        string_course(f'{prefix}band', sx_, sy_, st_h * 0.55, stw + 0.03,
-                      stw + 0.03)
-        battlements(f'{prefix}crown', sx_, sy_, st_h, stw, stw, h=0.32,
+    # ── THE FOUR WALLS ──
+    for name, cx, cy, sx, sy in (
+        ('fwall', 0.0, -CY, 2 * CX, wall_t),
+        ('bwall', 0.0, CY, 2 * CX, wall_t),
+        ('wwall', -CX, 0.0, wall_t, 2 * CY),
+        ('ewall', CX, 0.0, wall_t, 2 * CY),
+    ):
+        ashlar_courses(f'{name}base', cx, cy, 0, sx + 0.2, sy + 0.2, 0.18,
+                       course=0.34, block=0.66)
+        ashlar_courses(f'{name}wall', cx, cy, 0.18, sx, sy, wall_h,
+                       course=0.36, block=0.7)
+        battlements(f'{name}crown', cx, cy, 0.18 + wall_h, sx, sy, h=0.28,
                     merlon=0.13, gap=0.10)
-        sface = sy_ - stw / 2
-        for i, oz in enumerate((1.4, 2.6)):
-            arrow_slit(f'{prefix}s{i}', sx_, sface, oz, 0.6)
-        arrow_slit(f'{prefix}sx', sx_ + stw / 2 * (1 if sx_ > 0 else -1),
-                  sy_, 2.0, 0.55, facing='x')
-        box(f'{prefix}fin', sx_, sy_, st_h + 0.32, 0.1, 0.1, 0.22,
+    face_y = -CY - wall_t / 2
+
+    # ── Arrow slits along every curtain wall — a plain ashlar face reads
+    # as a plank until something interrupts it (user 2026-08-24:
+    # "Fenster/Schiessscharten überall"). Front and back keep clear of the
+    # gate and the Bergfried; the side walls have the run to spare.
+    slit_z = 0.65
+    for off in (-2.6, -1.7, 1.7, 2.6):
+        arrow_slit(f'fwslit{off}', off, face_y, slit_z, 0.5)
+        arrow_slit(f'bwslit{off}', off, CY + wall_t / 2, slit_z, 0.5)
+    # The side walls sit low enough in the camera's screen space that a
+    # slit up at wall height lands on the SAME pixels as the Bergfried's
+    # roof further back — same (x+y) column, and the roof's own height
+    # makes up the row difference (see the camera's own screen-space
+    # formula: column ~ x+y, row ~ (y-x) + height*tan(elevation)). A
+    # ground-hugging slit avoids the roof's screen footprint entirely.
+    for off in (-1.8, 0.0, 1.8):
+        arrow_slit(f'wwslit{off}', -CX - wall_t / 2, off, 0.4, 0.5,
+                  facing='x')
+        arrow_slit(f'ewslit{off}', CX + wall_t / 2, off, 0.4, 0.5,
+                  facing='x')
+
+    # ── THE TWO FRONT ROUND TOWERS — genuinely cylindrical, not the
+    # kit's own boxy turret() ──
+    tur_r, tur_h = 0.68, 2.3
+    for prefix, tx_ in (('rtl', -CX), ('rtr', CX)):
+        cyl(f'{prefix}shaft', tx_, -CY, 0, tur_r, tur_h, sides=12,
+            key='ashlar', smooth=True)
+        cyl(f'{prefix}corbel', tx_, -CY, tur_h - 0.12, tur_r + 0.07, 0.12,
+            sides=12, key='limestone', smooth=True)
+        spire(f'{prefix}roof', tx_, -CY, tur_h, tur_r * 1.2, 1.3)
+        finial(f'{prefix}fin', tx_, -CY, tur_h + 1.3, 0.22)
+        for i, oz in enumerate((tur_h * 0.32, tur_h * 0.72)):
+            arrow_slit(f'{prefix}s{i}', tx_, -CY - tur_r - 0.02, oz, 0.42)
+        wall_door(f'{prefix}wdoor', tx_ + tur_r + 0.04, -CY, wall_h - 0.05,
+                 'x')
+
+    # ── THE TWO BACK SQUARE TOWERS ──
+    stw, st_h = 1.6, 4.2
+    for prefix, sx_ in (('stl', -CX), ('str', CX)):
+        ashlar_courses(f'{prefix}base', sx_, CY, 0, stw + 0.14, stw + 0.14,
+                       st_h, course=0.36, block=0.68)
+        string_course(f'{prefix}band', sx_, CY, st_h * 0.55, stw + 0.03,
+                      stw + 0.03)
+        battlements(f'{prefix}crown', sx_, CY, st_h, stw, stw, h=0.32,
+                    merlon=0.13, gap=0.10)
+        for i, oz in enumerate((1.3, 2.5)):
+            arrow_slit(f'{prefix}s{i}', sx_, CY + stw / 2 + 0.02, oz, 0.6,
+                      facing='y')
+        box(f'{prefix}fin', sx_, CY, st_h + 0.32, 0.1, 0.1, 0.22,
             mat('gold'))
-        banner(f'{prefix}flag', sx_, sface - 0.02, st_h - 0.5, 0.36, 0.6)
+        wall_door(f'{prefix}wdoor', sx_ + (stw / 2) * (-1 if sx_ > 0 else 1),
+                 CY, wall_h - 0.05, 'x')
 
-    # ── TOWER 3: a ROUND turret on the wall between the stone towers —
-    # genuinely cylindrical, unlike the kit's own boxy turret(), because
-    # the photo's turrets plainly are ──
-    # The photo has TWO of these. Tried it: the second one (same code,
-    # same materials, a different x) never appeared in the render no
-    # matter how far the first fix — cutting the stone coursing from
-    # thousands of blocks down to a few hundred — cut the scene's own
-    # object count, ruling out the object-budget failure that looked like
-    # the obvious explanation (and IS the explanation for a similar
-    # disappearing-prop bug already logged against gold_vault the same
-    # day). Whatever this is, it isn't that, and it wasn't found under the
-    # time this rebuild had left. One turret, centred, ships rather than a
-    # silently-missing second one.
-    tur_r, tur_h = 0.6, 2.0
-    rx_, ry_ = 0.25, wy
-    cyl('rt1shaft', rx_, ry_, 0, tur_r, tur_h, sides=12, key='ashlar',
-        smooth=True)
-    cyl('rt1corbel', rx_, ry_, tur_h - 0.12, tur_r + 0.07, 0.12, sides=12,
-        key='limestone', smooth=True)
-    spire('rt1roof', rx_, ry_, tur_h, tur_r * 1.2, 1.2)
-    finial('rt1fin', rx_, ry_, tur_h + 1.2, 0.2)
-    arrow_slit('rt1s', rx_, ry_ - tur_r, tur_h * 0.5, 0.42)
-
-    # ── THE GATE: between the second turret and the far tower, matching
-    # the photo's own placement — a round arch, a studded door built as
-    # ONE thing (a lattice/portcullis is texture, not shape; see the
-    # 2026-08-04/06/09 history this rebuild otherwise starts fresh from). ──
-    gate_x, gate_y = 1.85, face_y
-    doorway('gatearch', gate_x, gate_y - 0.35, 0.06, 1.05, 1.5, rim=0.2)
-    arched_door('gdoor', gate_x, gate_y - 0.55, 0.09, 1.0, 1.4, boards=11)
+    # ── THE GATE AND ITS DRAWBRIDGE (front wall, centred) ──
+    gate_x, gate_y = 0.0, -CY
+    doorway('gatearch', gate_x, gate_y - wall_t / 2 - 0.02, 0.06, 1.1,
+            1.5, rim=0.2)
+    arched_door('gdoor', gate_x, gate_y - wall_t / 2 - 0.22, 0.09, 1.05,
+               1.4, boards=11)
     for s in (-1, 1):
-        sconce(f'gatelamp{s}', gate_x + s * 0.7, gate_y - 0.35, 1.6)
-
-    # ── Eigenleben — a household, not just a fortification: a bench and
-    # baskets by the gate, birds on the wall-head, bunting at the seat of
-    # the settlement. ──
-    box('kbench', gate_x - 1.55, gate_y - 0.55, 0, 0.9, 0.28, 0.36,
+        sconce(f'gatelamp{s}', gate_x + s * 0.75, gate_y - wall_t / 2 - 0.02,
+              1.55)
+    # The bridge deck, flat on the ground the way a lowered drawbridge
+    # sits, plus two chains running up to the gate's own upper wall —
+    # the thing that says it CAN be raised, not just a fixed ramp.
+    br_len, br_w = 1.9, 1.3
+    br_y0 = gate_y - wall_t / 2 - 0.35
+    br_y1 = br_y0 - br_len
+    box('drawbridge', gate_x, (br_y0 + br_y1) / 2, 0, br_w, br_len, 0.08,
         mat('oak'))
-    box('kbencht', gate_x - 1.55, gate_y - 0.55, 0.36, 1.0, 0.36, 0.08,
-        mat('oak_light'))
-    basket('kbask0', gate_x + 0.85, gate_y - 0.5, 0, fill='leaf')
-    signpost('ksignp', ttx + 0.9, tface - 0.35, 0, arms=2)
-    for i, ox in enumerate((-2.0, -0.9, 0.2, 1.9)):
-        perch_bird(f'kbird{i}', ox, wy - wd / 2 - 0.06,
-                   0.18 + wall_h + (i % 2) * 0.06, kind=i)
-    bunting('kbunt', wx, face_y - 0.02, wall_h - 0.2, ww * 0.6, axis='x',
-            n=9)
+    for i in range(5):
+        box(f'dbplank{i}', gate_x - br_w / 2 + 0.13 + i * (br_w - 0.26) / 4,
+            (br_y0 + br_y1) / 2, 0.081, 0.03, br_len - 0.1, 0.02,
+            mat('oak_light'))
+    for s in (-1, 1):
+        box(f'dbrail{s}', gate_x + s * br_w / 2, (br_y0 + br_y1) / 2, 0.08,
+            0.05, br_len, 0.12, mat('oak_light'))
+        tube(f'dbchain{s}', [
+            (gate_x + s * (br_w / 2 - 0.08), br_y1 + 0.1, 0.12),
+            (gate_x + s * 0.55, gate_y - wall_t / 2 - 0.1, wall_h + 0.7),
+        ], r=0.025, key='iron')
 
-    tufts('kgrass', wx, wy, ww + 1.0, wd + 3.0)
+    # ── THE BERGFRIED — the centre of the back wall, and by far the
+    # biggest, tallest, most worked thing here (user: "An der hinteren
+    # Wand ist der grosse Bergfried") ──
+    bx_, by_ = 0.0, CY
+    bw_, bh_ = 2.3, 5.4
+    ashlar_courses('bergbase', bx_, by_, 0, bw_ + 0.16, bw_ + 0.16, bh_,
+                   course=0.4, block=0.75)
+    for f in (0.3, 0.6):
+        box(f'bergband{f}', bx_, by_, bh_ * f, bw_ + 0.1, bw_ + 0.1, 0.11,
+            mat('limestone'))
+    # The parapet stops at the bartizans, same trick the old donjon used:
+    # the turret IS the corner, the parapet is the wall BETWEEN two of
+    # them, so the inset has to clear the widest part of a bartizan.
+    battlements('bergcrown', bx_, by_, bh_, bw_, bw_, h=0.4, merlon=0.13,
+                gap=0.10, inset=0.5)
+    bart_z = bh_ - 0.7  # a bit higher (user 2026-08-24: "die Ecktürme
+    # sollen noch etwas höher sein"), still clear of the crown's own inset
+    for sx_ in (-1, 1):
+        for sy_ in (-1, 1):
+            bbx = bx_ + sx_ * (bw_ / 2 + 0.05)
+            bby = by_ + sy_ * (bw_ / 2 + 0.05)
+            box(f'bergbart{sx_}{sy_}', bbx, bby, bart_z, 0.4, 0.4, 0.14,
+                mat('limestone'))
+            ashlar_courses(f'bergbartb{sx_}{sy_}', bbx, bby,
+                           bart_z + 0.14, 0.46, 0.46, 0.65, course=0.22,
+                           block=0.4)
+            battlements(f'bergbartc{sx_}{sy_}', bbx, bby, bart_z + 0.79,
+                        0.46, 0.46, h=0.18, merlon=0.09, gap=0.07)
+            spire(f'bergbartr{sx_}{sy_}', bbx, bby, bart_z + 0.97, 0.28,
+                  0.7)
+            # A small window in the band, on this corner's own outward
+            # (south/north) face (user 2026-08-24: "Auch bei den
+            # Ecktürmen Fenster").
+            wbz = bart_z + 0.14 + 0.24
+            wby = bby + sy_ * (0.23 + 0.005)
+            box(f'bergbartw{sx_}{sy_}_f', bbx, wby, wbz, 0.16, 0.05, 0.2,
+                mat('limestone'))
+            box(f'bergbartw{sx_}{sy_}_d', bbx, wby + sy_ * 0.01, wbz + 0.02,
+                0.1, 0.04, 0.13, mat('dark'))
+    spire('bergroof', bx_, by_, bh_ + 0.5, bw_ * 0.5, 2.1)
+    finial('bergfin', bx_, by_, bh_ + 2.6, 0.32)
+    for i, oz in enumerate((1.6, 3.0)):
+        arrow_slit(f'bergs{i}', bx_, by_ - bw_ / 2 - 0.02, oz, 0.75)
+    arrow_slit('bergsx', bx_ + bw_ / 2 + 0.02, by_, 2.2, 0.7, facing='x')
+    arrow_slit('bergsw', bx_ - bw_ / 2 - 0.02, by_, 2.2, 0.7, facing='x')
+    # An Erker, and a couple of real windows besides the slits (user
+    # 2026-08-24: "Mache einen Erker beim Bergfried sowie Fenster") — the
+    # shaft is all arrow slits so far; this is the one room that looks
+    # OUT. East (+x) face: the camera's own two visible faces are -y and
+    # +x, and a corbelled-out feature is wasted on the -x side it never
+    # renders from. Clear of the single slit already there (2.2±0.35).
+    bay_window('bergbay', bx_ + bw_ / 2 + 0.02, by_, 3.25, w=0.6, out=0.3,
+               h=0.6, facing='x')
+    window('bergwin0', bx_ - bw_ / 2 - 0.02, by_, 3.35, 0.32, 0.5, 0.12,
+           facing='x')
+    # A balcony on the same (south) facade as the two slits, clear above
+    # the higher one (user 2026-08-25: "mache an dieser Fassade noch
+    # einen Balkon") — takes the spot bergwin1 would have used; a plain
+    # window and a balcony door right on top of each other is one
+    # opening too many for the same stretch of wall.
+    # Pushed well clear of the wall (user 2026-08-25: "schiebe den Balkon
+    # nach vorne in die Luft") — a proper cantilever, not a ledge hugging
+    # the stone.
+    balcony('bergbalc', bx_, by_ - bw_ / 2 - 0.02, 4.0, w=0.7, out=0.75)
+    banner('bergflag', bx_, by_ - bw_ / 2 - 0.03, bh_ - 0.7, 0.5, 0.85)
+    moss('bergmoss', bx_, by_, bh_, bw_ * 0.55, bw_ * 0.55, 0.35,
+         overhang=0.0, patches=8)
+
+    # ── A door in, and a stair up to it — a keep this tall does not sit
+    # straight on the yard (user 2026-08-24: "Eine Treppe zum Bergfried").
+    # The flight lands EXACTLY on the threshold, narrow at the top and
+    # flaring wide at the ground — the same fix builder_camp's own stair
+    # needed once (steps() as-is overshoots the threshold by a riser).
+    berg_door_z, berg_door_h = 0.48, 0.85
+    berg_face = by_ - bw_ / 2 - 0.02
+    doorway('bergdoorarch', bx_, berg_face, berg_door_z - 0.03, 0.46,
+            berg_door_h + 0.1, rim=0.14)
+    arched_door('bergdoor', bx_, berg_face - 0.16, berg_door_z, 0.4,
+               berg_door_h, boards=8)
+    step_n, step_rise, step_tread = 4, berg_door_z / 4, 0.2
+    for i in range(step_n):
+        si = step_n - 1 - i
+        box(f'bergstep{i}', bx_, berg_face - 0.32 - si * step_tread, 0,
+            0.7 + si * 0.14, step_tread + 0.02, (i + 1) * step_rise,
+            mat('limestone'))
+
+    # ── THE COURTYARD — a real enclosed yard now, not a strip behind one
+    # wall (user: "Im Hof hat es Fachwerkgebäude") ──
+    paving('kyard', 0.0, -0.2, 0.0, 2 * CX - wall_t - 0.3,
+          2 * CY - wall_t - 0.3, key_a='ashlar', key_b='ashlar_dark',
+          tile=0.26)
+    # Tall enough to clear the walls, not just short enough to fit behind
+    # them — an orthographic camera at a fixed elevation occludes a far
+    # object with a nearer one when height_far < height_near -
+    # depth_gap*tan(elevation), so these do not need to out-height the
+    # wall itself, only clear that smaller threshold. Tuned empirically
+    # against wall_h=1.3 the same way the first courtyard pass was.
+    for prefix, sbx, sby, axis in (
+        ('stbl', -CX + 1.0, -1.6, 'x'),
+        ('shed', CX - 1.0, -0.6, 'x'),
+    ):
+        sbw, sbd, sbh = 0.85, 1.3, 1.05
+        half_timber(f'{prefix}wall', sbx, sby, 0, sbw, sbd, sbh, bays=3)
+        shingle_gable(f'{prefix}roof', sbx, sby, sbh, sbw, sbd - 0.15,
+                     0.48, overhang=0.14, rows=8, ridge_along='y')
+        plank_door(f'{prefix}door', sbx + (sbw / 2) * (1 if axis == 'x'
+                  and sbx < 0 else -1), sby, 0.0, 0.4, 0.72, facing='x',
+                  planks=6)
+        moss(f'{prefix}moss', sbx, sby, sbh, sbw * 0.5, sbd * 0.4, 0.2,
+            overhang=0.0, patches=3)
+    straw_bale('kbale0', -CX + 1.0, 0.4, 0.0)
+    trough('ktrough', CX - 1.0, 0.4, 0.0, 0.5, 0.24)
+
+    # ── A bit more life in the yard (user 2026-08-24: "Der Innenhof noch
+    # etwas mehr ausschmücken") — a well as the courtyard's own centrepiece,
+    # a loaded cart, and a barrel-and-crate corner by the shed. ──
+    # Kept on the courtyard's LEFT half, by the cart — anything nearer the
+    # central tower group (positive x, close to the Bergfried/round tower
+    # column) lands behind their roofs and bartizans in screen space and
+    # never shows up at all, however clear the floor looks from above
+    # (user 2026-08-24 review, after two failed placements confirmed it).
+    well('kwell', -0.7, 1.9, 0.0)
+    cart('kcart', -1.6, 1.6, 0.0, angle=0.3, load='sack')
+    barrel('kbarrel0', -0.35, 1.75, 0.0)
+    crate('kcrate0', -0.4, 2.1, 0.0, s=0.28)
+    firewood('kwood0', -1.6, -2.3, 0.0, w=0.5, rows=4)
+    ladder('kladder', 2.6, -1.35, 0.0, hh=1.0, lean=0.2, axis='y')
+
+    # ── Eigenleben — a household, not just a fortification. ──
+    box('kbench', gate_x - 1.3, gate_y + wall_t / 2 + 0.5, 0, 0.9, 0.28,
+        0.36, mat('oak'))
+    box('kbencht', gate_x - 1.3, gate_y + wall_t / 2 + 0.5, 0.36, 1.0,
+        0.36, 0.08, mat('oak_light'))
+    basket('kbask0', gate_x + 1.1, gate_y + wall_t / 2 + 0.55, 0,
+          fill='leaf')
+    signpost('ksignp', -CX + 0.6, gate_y + wall_t / 2 + 0.9, 0, arms=2)
+    for i, ox in enumerate((-2.6, -1.0, 1.0, 2.6)):
+        perch_bird(f'kbird{i}', ox, face_y - 0.06,
+                   0.18 + wall_h + (i % 2) * 0.06, kind=i)
+    bunting('kbunt', gate_x, face_y - 0.02, wall_h, 2.4, axis='x', n=9)
+
+    tufts('kgrass', 0.0, 0.0, 2 * CX + wall_t + 1.5, 2 * CY + wall_t + 1.5)
 
 
 # want them. Anything that has no caller AND no plausible one should go.
@@ -5428,14 +5783,19 @@ def gold_vault(w, h):
     tw, td = 1.5, 1.5
     tx, ty = hw - tw / 2 - 0.5, -hh + td / 2 + 0.3
     twh = 1.5
+    # Bigger blocks (user 2026-08-24: "als wären es grössere Steinblöcke") —
+    # the reference-photo pass had these fine (0.0871/0.16) to match the
+    # source image, but next to the stair's own much coarser wedges the
+    # tower read as brick, not the same ashlar the rest of the kit uses.
     ashlar_courses('gvtbase', tx, ty, 0, tw + 0.14, td + 0.14, 0.16,
-                   course=0.0871, block=0.16)
-    ashlar_courses('gvtwall', tx, ty, 0.16, tw, td, twh, course=0.11,
-                   block=0.19)
+                   course=0.2, block=0.34)
+    ashlar_courses('gvtwall', tx, ty, 0.16, tw, td, twh, course=0.22,
+                   block=0.38)
     string_course('gvtband', tx, ty, 0.16 + twh * 0.62, tw + 0.02, td + 0.02)
     battlements('gvtcrown', tx, ty, 0.16 + twh, tw, td, h=0.26, merlon=0.13,
                gap=0.1)
     arrow_slit('gvtslit', tx, ty - td / 2, 0.16 + 0.8, 0.42)
+    barred_window('gvtbwin', tx, ty - td / 2, 0.16 + 0.18, 0.34, 0.32)
 
     # ── THE WALL: lower, now across the BACK, meeting the tower's north
     # face — same distance from it as before, just the other way round ──
@@ -5443,9 +5803,9 @@ def gold_vault(w, h):
     wx, wy = 0.0, hh - wd / 2 - 0.15
     wwh = 0.95
     ashlar_courses('gvwbase', wx, wy, 0, ww + 0.14, wd + 0.14, 0.16,
-                   course=0.0871, block=0.16)
-    ashlar_courses('gvwwall', wx, wy, 0.16, ww, wd, wwh, course=0.1,
-                   block=0.18)
+                   course=0.2, block=0.34)
+    ashlar_courses('gvwwall', wx, wy, 0.16, ww, wd, wwh, course=0.22,
+                   block=0.38)
     battlements('gvwcrown', wx, wy, 0.16 + wwh, ww, wd, h=0.22, merlon=0.12,
                gap=0.095)
 
@@ -5520,6 +5880,21 @@ def gold_vault(w, h):
     box('gvpole', tx, ty, pole_z, 0.05, 0.05, 0.5, mat('iron'))
     box('gvpennant', tx + 0.13, ty, pole_z + 0.34, 0.22, 0.02, 0.16,
         mat('cloth_gold'))
+
+    # ── Two chests out front, on the open (west) side of the door — a
+    # vault says what it holds before you even reach the stair (user
+    # 2026-08-24: "zwei verschiedene Schatzkisten vor das Gebäude"). Iron
+    # and flat-lidded next to gold and domed, so the two read apart even
+    # at a glance, not just up close.
+    chest('gvchest0', -1.3, -1.85, 0.0, style='flat', trim='iron')
+    chest('gvchest1', -0.55, -1.78, 0.0, style='domed', key='oak_light',
+          trim='gold')
+    # Coin and crystal scatter, spilling out further TOWARD the camera than
+    # the chests themselves (user 2026-08-24: "Münze, Kristalle, etc vor
+    # den Kisten") — the treasure reads before the containers holding it do.
+    gold_pile('gvcoin1', -0.85, -2.15, 0.0, r=0.14, bars=False)
+    gem_cluster('gvgem0', -1.15, -2.08, 0.0, scale=0.85)
+    gem_cluster('gvgem1', -0.4, -2.0, 0.0, scale=0.65)
 
 def _timbered_wing(prefix, cx, cy, sx, sy, ridge_along, bays=5, jetty_out=0.16):
     """One jettied, two-storey, timber-framed volume — the repeating unit an
@@ -7629,7 +8004,7 @@ PRESETS = {
     # together, so the two stay in agreement the way the comment below
     # (formerly a warning about 6 x 6 mismatching a 5 x 5 def) still cares
     # about — it is the DISAGREEMENT that was ever the bug, not the number.
-    'castle': (castle, 7, 7),
+    'castle': (castle, 10, 10),
     # ── The era-I roster, on the footprints the game already gives them ──
     # The name on the left is the building_defs id, so `--preset hut` renders
     # what `hut` will show on the map and the upload has nowhere to go wrong.
