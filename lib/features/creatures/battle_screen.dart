@@ -1782,6 +1782,8 @@ class _BattleScreenState extends State<BattleScreen>
             children: [
               Expanded(
                 child: Wrap(
+                  alignment: WrapAlignment.center,
+                  runAlignment: WrapAlignment.center,
                   spacing: _kTileGap,
                   runSpacing: _kTileGap,
                   children: [

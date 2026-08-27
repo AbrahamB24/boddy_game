@@ -284,6 +284,15 @@ class _SettlementScreenState extends State<SettlementScreen>
     final log = GameEventLog();
     final events = log.unreadEvents;
 
+    // Nothing to report (user 2026-08-27: "wenn bei meiner Abwesenheit
+    // nichts nennenswertes passiert ist, dann soll der 'while you were away'
+    // screen nicht auftauchen") — an empty gathered list AND an empty event
+    // feed means the away period produced nothing worth a whole dialog over.
+    // kDigestMinAwayHours already filters trivially SHORT absences; this
+    // filters LONG-but-idle ones (an empty settlement, or one with nothing
+    // left to produce) the same way.
+    if (d.gained.isEmpty && events.isEmpty) return;
+
     const ink = kParchmentInk;
     final inkSoft = kParchmentInk.withValues(alpha: 0.78);
     final inkFaint = kParchmentInk.withValues(alpha: 0.55);
