@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../../core/theme/foe_theme.dart';
+import '../onboarding/intro_flow.dart';
+import '../onboarding/intro_spotlight.dart';
 import '../settlement/data/item_definitions.dart';
 import '../settlement/services/crafting.dart';
 import '../settlement/services/daily_tasks.dart' show DailyTaskKind;
@@ -164,9 +166,39 @@ class _BattleScreenState extends State<BattleScreen>
   ({double lo, double hi}) _catchWindow = (lo: 0.3, hi: 0.4);
   SpeciesDef? _catchSpecies;
 
+  // ── Guided intro: turn order → AP → actions → HP (user 2026-08-24) ──
+  // Only ever set on the tutorial's own first fight — every anchored widget
+  // is dimmed-and-dead except the one this index points at, so the player
+  // physically cannot act until they have tapped through all four, and
+  // "explain the parts of a battle" cannot be skipped by accident.
+  int? _battleCallout;
+  static const _battleCalloutAnchors = [
+    'battle-turnorder',
+    'battle-ap',
+    'battle-actions',
+    'battle-hp',
+  ];
+  static const _battleCalloutHints = [
+    'Turn order — whoever is next lights up here.',
+    'AP — every move spends Action Points; they refill each turn.',
+    'Attack and abilities — spend AP here to act.',
+    'HP — the ring around your monster. It never heals on its own.',
+  ];
+
+  void _advanceBattleCallout() {
+    final i = _battleCallout;
+    if (i == null) return;
+    setState(() {
+      _battleCallout = i + 1 < _battleCalloutAnchors.length ? i + 1 : null;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    if (SettlementController().introStep == IntroStep.firstNode) {
+      _battleCallout = 0;
+    }
     _engine = CombatEngine(
       players: widget.team.map(Combatant.fromInstance).toList(),
       enemies: widget.enemies,
@@ -189,20 +221,21 @@ class _BattleScreenState extends State<BattleScreen>
     // Entry animation (user 2026-07-24): the fighters slide onto the field
     // before the fight begins, so the combat has a proper "Auftritt". The
     // action loop is held until they've arrived.
-    _entry = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 620),
-    )
-      ..addListener(() {
-        if (mounted) setState(() {});
-      })
-      ..addStatusListener((s) {
-        if (s == AnimationStatus.completed && mounted) {
-          setState(() => _entering = false);
-          // Kick the loop now (an enemy may be fastest and act first).
-          _onEngineChanged();
-        }
-      });
+    _entry =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 620),
+          )
+          ..addListener(() {
+            if (mounted) setState(() {});
+          })
+          ..addStatusListener((s) {
+            if (s == AnimationStatus.completed && mounted) {
+              setState(() => _entering = false);
+              // Kick the loop now (an enemy may be fastest and act first).
+              _onEngineChanged();
+            }
+          });
     WidgetsBinding.instance.addPostFrameCallback((_) => _entry.forward());
   }
 
@@ -289,19 +322,21 @@ class _BattleScreenState extends State<BattleScreen>
     final tag = (e.heal || e.miss)
         ? null
         : e.typeMult > 1.0
-            ? 'Super effective!'
-            : e.typeMult < 1.0
-                ? 'Resisted'
-                : null;
-    _floats.add(_FloatText(
-      id: id,
-      text: text,
-      color: color,
-      scale: scale,
-      onEnemy: !e.target.isPlayerSide,
-      alignX: _slotAlignX(e.target),
-      tag: tag,
-    ));
+        ? 'Super effective!'
+        : e.typeMult < 1.0
+        ? 'Resisted'
+        : null;
+    _floats.add(
+      _FloatText(
+        id: id,
+        text: text,
+        color: color,
+        scale: scale,
+        onEnemy: !e.target.isPlayerSide,
+        alignX: _slotAlignX(e.target),
+        tag: tag,
+      ),
+    );
   }
 
   void _removeFloat(int id) {
@@ -347,9 +382,7 @@ class _BattleScreenState extends State<BattleScreen>
     final actorIsPlayer = _engine.isPlayerTurn;
     if (!actorIsPlayer || _autoBattle) {
       _autoTimer = Timer(const Duration(milliseconds: 700), () {
-        if (mounted &&
-            _engine.outcome == null &&
-            !_engine.needsPlayerSwitch) {
+        if (mounted && _engine.outcome == null && !_engine.needsPlayerSwitch) {
           _engine.performAutoAction();
         }
       });
@@ -427,7 +460,8 @@ class _BattleScreenState extends State<BattleScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                forced ? 'Your monster fainted — send in a reserve'
+                forced
+                    ? 'Your monster fainted — send in a reserve'
                     : 'Switch monster (free — costs no turn)',
                 style: FoE.title(size: 14),
               ),
@@ -447,11 +481,16 @@ class _BattleScreenState extends State<BattleScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('${c.element.emoji} ${c.name} · Lv ${c.level}',
-                                  style: FoE.label(size: 13)),
+                              Text(
+                                '${c.element.emoji} ${c.name} · Lv ${c.level}',
+                                style: FoE.label(size: 13),
+                              ),
                               const SizedBox(height: 4),
-                              _bar(c.hp / c.maxHp, FoE.positive,
-                                  '${c.hp}/${c.maxHp}'),
+                              _bar(
+                                c.hp / c.maxHp,
+                                FoE.positive,
+                                '${c.hp}/${c.maxHp}',
+                              ),
                             ],
                           ),
                         ),
@@ -500,78 +539,89 @@ class _BattleScreenState extends State<BattleScreen>
   @override
   Widget build(BuildContext context) {
     final body = SafeArea(
-          child: Stack(
+      child: Stack(
+        children: [
+          Column(
             children: [
-              Column(
-                children: [
-                  _topBar(),
-                  // Type-matchup key between the turn order and the arena (user
-                  // request): the fire/water/plant RPS ring + light↔shadow.
-                  _typeChart(),
-                  // Split battlefield (user 2026-07-18): the enemy up top on
-                  // ITS type backdrop, my monster below on MINE. The two type
-                  // tiles now run all the way to the middle and MEET there; the
-                  // battle log is overlaid on that seam rather than sitting in a
-                  // gap between them (user request). My monster faces away (back
-                  // art). It keeps its FULL size but is nudged DOWN toward the
-                  // buttons (user request); the small bottom overshoot tucks
-                  // behind the (opaque) command deck.
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        // ONE battlefield behind BOTH ranks (user 2026-07-31).
-                        // The two element tiles that used to meet at a seam are
-                        // gone: a rank of three can hold three types, so the
-                        // ground says WHERE you are and each monster's own plate
-                        // says WHAT it is. See widgets/battle_scene.dart.
-                        Positioned.fill(
-                          child: BattleScene(
-                            imageUrl: widget.area?.imageUrl,
-                            era: widget.area?.battleStage ?? 1,
-                          ),
-                        ),
-                        // The sprites (and only the sprites) sit slightly low in
-                        // the arena, tucking the player's rank toward the deck.
-                        LayoutBuilder(
-                          builder: (context, box) => Transform.translate(
-                            offset: Offset(0, box.maxHeight * _kArenaDrop),
-                            child: Stack(
+              _topBar(),
+              // Type-matchup key between the turn order and the arena (user
+              // request): the fire/water/plant RPS ring + light↔shadow.
+              _typeChart(),
+              // Split battlefield (user 2026-07-18): the enemy up top on
+              // ITS type backdrop, my monster below on MINE. The two type
+              // tiles now run all the way to the middle and MEET there; the
+              // battle log is overlaid on that seam rather than sitting in a
+              // gap between them (user request). My monster faces away (back
+              // art). It keeps its FULL size but is nudged DOWN toward the
+              // buttons (user request); the small bottom overshoot tucks
+              // behind the (opaque) command deck.
+              Expanded(
+                child: Stack(
+                  children: [
+                    // ONE battlefield behind BOTH ranks (user 2026-07-31).
+                    // The two element tiles that used to meet at a seam are
+                    // gone: a rank of three can hold three types, so the
+                    // ground says WHERE you are and each monster's own plate
+                    // says WHAT it is. See widgets/battle_scene.dart.
+                    Positioned.fill(
+                      child: BattleScene(
+                        imageUrl: widget.area?.imageUrl,
+                        era: widget.area?.battleStage ?? 1,
+                      ),
+                    ),
+                    // The sprites (and only the sprites) sit slightly low in
+                    // the arena, tucking the player's rank toward the deck.
+                    LayoutBuilder(
+                      builder: (context, box) => Transform.translate(
+                        offset: Offset(0, box.maxHeight * _kArenaDrop),
+                        child: Stack(
+                          children: [
+                            Column(
                               children: [
-                                Column(
-                                  children: [
-                                    Expanded(child: _rank(isEnemy: true)),
-                                    const Expanded(child: SizedBox()),
-                                  ],
-                                ),
-                                // On the seam where the two ranks face off.
-                                Align(
-                                  alignment: Alignment.center,
-                                  child: _logLine(),
-                                ),
-                                // MY rank last, so it stands in FRONT of the
-                                // battle log (user request, kept).
-                                Column(
-                                  children: [
-                                    const Expanded(child: SizedBox()),
-                                    Expanded(child: _rank(isEnemy: false)),
-                                  ],
+                                Expanded(child: _rank(isEnemy: true)),
+                                const Expanded(child: SizedBox()),
+                              ],
+                            ),
+                            // On the seam where the two ranks face off.
+                            Align(
+                              alignment: Alignment.center,
+                              child: _logLine(),
+                            ),
+                            // MY rank last, so it stands in FRONT of the
+                            // battle log (user request, kept).
+                            Column(
+                              children: [
+                                const Expanded(child: SizedBox()),
+                                Expanded(
+                                  child: KeyedSubtree(
+                                    key: IntroSpotlightAnchors.of('battle-hp'),
+                                    child: _rank(isEnemy: false),
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                  _actionPanel(),
-                ],
+                  ],
+                ),
               ),
-              if (_floats.isNotEmpty) _floatsLayer(),
-              if (_catchOpen) _catchOverlay(),
-              if (_engine.outcome != null) _endOverlay(),
+              _actionPanel(),
             ],
           ),
-        );
+          if (_floats.isNotEmpty) _floatsLayer(),
+          if (_catchOpen) _catchOverlay(),
+          if (_engine.outcome != null) _endOverlay(),
+          if (_battleCallout != null)
+            IntroSpotlightOverlay(
+              anchorName: _battleCalloutAnchors[_battleCallout!],
+              hint: _battleCalloutHints[_battleCallout!],
+              onScrimTap: _advanceBattleCallout,
+            ),
+        ],
+      ),
+    );
     return PopScope(
       canPop: _engine.outcome != null || _exitingToCatch,
       onPopInvokedWithResult: (didPop, _) {
@@ -618,7 +668,10 @@ class _BattleScreenState extends State<BattleScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: FoE.panelDark,
-        shape: FoE.facet(radius: 12, side: const BorderSide(color: FoE.borderGold)),
+        shape: FoE.facet(
+          radius: 12,
+          side: const BorderSide(color: FoE.borderGold),
+        ),
         title: Text('Flee?', style: FoE.title(size: 15)),
         content: Text(
           'The battle ends with no reward. HP and energy stay as they are.',
@@ -669,11 +722,16 @@ class _BattleScreenState extends State<BattleScreen>
     final rarity = wild.rarity;
     final catchRate = _engine.activePlayer?.stat(CreatureStat.catchRate) ?? 0;
     final hpFraction = wild.maxHp <= 0 ? 0.0 : wild.hp / wild.maxHp;
-    _catchSpecies = wild.speciesId == null ? null : kSpeciesDefs[wild.speciesId];
+    _catchSpecies = wild.speciesId == null
+        ? null
+        : kSpeciesDefs[wild.speciesId];
     _catchHits = 0;
     _catchHitsNeeded = qteHitsRequired(rarity);
-    _catchWindow =
-        qteWindow(rarity, hpFraction: hpFraction, catchRate: catchRate);
+    _catchWindow = qteWindow(
+      rarity,
+      hpFraction: hpFraction,
+      catchRate: catchRate,
+    );
     _catchMissed = false;
     _catchResolving = false;
     setState(() => _catchOpen = true);
@@ -777,34 +835,39 @@ class _BattleScreenState extends State<BattleScreen>
   Widget _topBar() => ParchmentHeader.band(
     height: 44,
     child: Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 8),
-    child: Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.flag, color: FoE.parchment, size: 18),
-          tooltip: 'Flee',
-          onPressed: _engine.outcome == null ? _confirmFlee : null,
-        ),
-        // The upcoming-turn queue now rides on THIS row, between Flee and AUTO
-        // (user request), instead of on a row of its own.
-        Expanded(child: _initiativeStrip()),
-        const SizedBox(width: 6),
-        // Same tint as the other deck buttons (user request); the ✔ marks it on.
-        _deckButton(
-          icon: Icons.smart_toy,
-          label: _autoBattle ? 'AUTO ✔' : 'AUTO',
-          base: _kUtilTint,
-          enabled: true,
-          onTap: () {
-            setState(() => _autoBattle = !_autoBattle);
-            _scheduleAutoIfNeeded();
-          },
-          width: 62,
-          height: 32,
-        ),
-        const SizedBox(width: 4),
-      ],
-    ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.flag, color: FoE.parchment, size: 18),
+            tooltip: 'Flee',
+            onPressed: _engine.outcome == null ? _confirmFlee : null,
+          ),
+          // The upcoming-turn queue now rides on THIS row, between Flee and AUTO
+          // (user request), instead of on a row of its own.
+          Expanded(
+            child: KeyedSubtree(
+              key: IntroSpotlightAnchors.of('battle-turnorder'),
+              child: _initiativeStrip(),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Same tint as the other deck buttons (user request); the ✔ marks it on.
+          _deckButton(
+            icon: Icons.smart_toy,
+            label: _autoBattle ? 'AUTO ✔' : 'AUTO',
+            base: _kUtilTint,
+            enabled: true,
+            onTap: () {
+              setState(() => _autoBattle = !_autoBattle);
+              _scheduleAutoIfNeeded();
+            },
+            width: 62,
+            height: 32,
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
     ),
   );
 
@@ -1004,7 +1067,7 @@ class _BattleScreenState extends State<BattleScreen>
                                 !wedge
                                     ? 0
                                     : (_isCentreSlot(i) ? step : -step * 0.5) *
-                                        (isEnemy ? 1 : -1),
+                                          (isEnemy ? 1 : -1),
                               ),
                               child: _fieldSlot(
                                 field[i],
@@ -1074,7 +1137,8 @@ class _BattleScreenState extends State<BattleScreen>
     required bool back,
   }) {
     if (c == null || !c.alive) return const SizedBox.shrink();
-    final acting = identical(c, _engine.currentActor) && _engine.outcome == null;
+    final acting =
+        identical(c, _engine.currentActor) && _engine.outcome == null;
     final targeted = isEnemy && identical(c, _target);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1089,8 +1153,7 @@ class _BattleScreenState extends State<BattleScreen>
             child: AnimatedBuilder(
               animation: _entry,
               builder: (context, child) {
-                final raw =
-                    (_entry.value * 1.3 - slot * 0.12).clamp(0.0, 1.0);
+                final raw = (_entry.value * 1.3 - slot * 0.12).clamp(0.0, 1.0);
                 final t = Curves.easeOutCubic.transform(raw);
                 final dx = (1 - t) * (isEnemy ? 300.0 : -300.0);
                 return Transform.translate(
@@ -1122,8 +1185,9 @@ class _BattleScreenState extends State<BattleScreen>
                         // THE RIM IS THE HEALTH BAR (user 2026-07-31). The
                         // straight bar under the name is gone with it — two bars
                         // for one number is one bar too many.
-                        hpFraction:
-                            c.maxHp <= 0 ? 0.0 : (c.hp / c.maxHp).clamp(0.0, 1.0),
+                        hpFraction: c.maxHp <= 0
+                            ? 0.0
+                            : (c.hp / c.maxHp).clamp(0.0, 1.0),
                         hpColor: _hpColor(
                           c.maxHp <= 0 ? 0.0 : (c.hp / c.maxHp).clamp(0.0, 1.0),
                         ),
@@ -1168,15 +1232,21 @@ class _BattleScreenState extends State<BattleScreen>
     final ring = targeted
         ? FoE.danger
         : acting
-            ? FoE.goldBright
-            : FoE.lit(_flatSurfaceHi);
+        ? FoE.goldBright
+        : FoE.lit(_flatSurfaceHi);
     final marks = <Widget>[
       if (c.hasted)
-        const Icon(Icons.keyboard_double_arrow_up,
-            size: 11, color: FoE.positive),
+        const Icon(
+          Icons.keyboard_double_arrow_up,
+          size: 11,
+          color: FoE.positive,
+        ),
       if (c.slowed)
-        const Icon(Icons.keyboard_double_arrow_down,
-            size: 11, color: FoE.accentBlue),
+        const Icon(
+          Icons.keyboard_double_arrow_down,
+          size: 11,
+          color: FoE.accentBlue,
+        ),
       if (c.mainStatus != null)
         Text(c.mainStatus!.emoji, style: const TextStyle(fontSize: 10)),
     ];
@@ -1202,10 +1272,7 @@ class _BattleScreenState extends State<BattleScreen>
             shadows: FoE.drop(dy: 2, alpha: 0.4),
             shape: FoE.facet(
               radius: 7,
-              side: BorderSide(
-                color: ring,
-                width: targeted || acting ? 2 : 1,
-              ),
+              side: BorderSide(color: ring, width: targeted || acting ? 2 : 1),
             ),
           ),
           child: Row(
@@ -1216,10 +1283,9 @@ class _BattleScreenState extends State<BattleScreen>
                   c.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: FoE.label(size: 11).copyWith(
-                    color: FoE.parchment,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: FoE.label(
+                    size: 11,
+                  ).copyWith(color: FoE.parchment, fontWeight: FontWeight.w800),
                 ),
               ),
               const SizedBox(width: 6),
@@ -1241,7 +1307,9 @@ class _BattleScreenState extends State<BattleScreen>
   /// switch, or the forced replacement); the enemy's are just counted — its
   /// bench is unlimited and there is nothing to decide about it.
   Widget _reserveStrip(List<Combatant> bench, {required bool isEnemy}) => Row(
-    mainAxisAlignment: isEnemy ? MainAxisAlignment.start : MainAxisAlignment.end,
+    mainAxisAlignment: isEnemy
+        ? MainAxisAlignment.start
+        : MainAxisAlignment.end,
     children: [
       Padding(
         padding: const EdgeInsets.only(right: 4),
@@ -1253,8 +1321,10 @@ class _BattleScreenState extends State<BattleScreen>
       ),
       // A long enemy wave would run off the edge — past four, say the number.
       if (isEnemy && bench.length > 4)
-        Text('+${bench.length} waiting',
-            style: FoE.dim(size: 10).copyWith(color: FoE.textDim))
+        Text(
+          '+${bench.length} waiting',
+          style: FoE.dim(size: 10).copyWith(color: FoE.textDim),
+        )
       else
         for (final c in bench) _benchChip(c, isEnemyRow: isEnemy),
     ],
@@ -1263,7 +1333,8 @@ class _BattleScreenState extends State<BattleScreen>
   /// A small bench portrait. Player chips are tappable on the player's turn to
   /// switch (free); enemy chips are just shown.
   Widget _benchChip(Combatant c, {required bool isEnemyRow}) {
-    final canSwitchTo = !isEnemyRow &&
+    final canSwitchTo =
+        !isEnemyRow &&
         _engine.outcome == null &&
         (_engine.isPlayerTurn || _engine.needsPlayerSwitch);
     return GestureDetector(
@@ -1277,7 +1348,13 @@ class _BattleScreenState extends State<BattleScreen>
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 3),
         padding: const EdgeInsets.all(3),
-        decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 6, side: BorderSide(color: canSwitchTo ? FoE.goldBright : FoE.border))),
+        decoration: ShapeDecoration(
+          color: FoE.panelDark,
+          shape: FoE.facet(
+            radius: 6,
+            side: BorderSide(color: canSwitchTo ? FoE.goldBright : FoE.border),
+          ),
+        ),
         child: SizedBox(width: 30, height: 30, child: _portrait(c, size: 22)),
       ),
     );
@@ -1287,11 +1364,7 @@ class _BattleScreenState extends State<BattleScreen>
   /// [back] picks the back-view art (player) over the front (enemy). Plays the
   /// hit pulse (shake + white flash) when this side was just acted upon (user
   /// 2026-07-18). Whose turn it is is shown in the turn-order bar, not here.
-  Widget _bigSprite(
-    Combatant c, {
-    required bool back,
-    required double height,
-  }) {
+  Widget _bigSprite(Combatant c, {required bool back, required double height}) {
     final url = back ? (c.backImageUrl ?? c.imageUrl) : c.imageUrl;
     final imgH = (height - 12).clamp(72.0, double.infinity);
     // Per COMBATANT (user 2026-07-27): this sprite flinches only if IT was the
@@ -1328,9 +1401,7 @@ class _BattleScreenState extends State<BattleScreen>
                 child: SizedBox(
                   width: imgH * 0.96,
                   height: imgH * 0.28,
-                  child: CustomPaint(
-                    painter: _HpArcPainter(hpFrac, hpColor),
-                  ),
+                  child: CustomPaint(painter: _HpArcPainter(hpFrac, hpColor)),
                 ),
               ),
               Transform.translate(
@@ -1408,10 +1479,7 @@ class _BattleScreenState extends State<BattleScreen>
             scale: 0.94,
             alignment: Alignment.bottomCenter,
             child: ColorFiltered(
-              colorFilter: ColorFilter.mode(
-                shadowColor,
-                BlendMode.srcATop,
-              ),
+              colorFilter: ColorFilter.mode(shadowColor, BlendMode.srcATop),
               child: img(FilterQuality.none),
             ),
           ),
@@ -1453,7 +1521,7 @@ class _BattleScreenState extends State<BattleScreen>
   Widget _portrait(Combatant c, {required double size}) => c.imageUrl == null
       ? Icon(Icons.pets, color: FoE.gold, size: size)
       : Image.network(
-        filterQuality: FilterQuality.none,
+          filterQuality: FilterQuality.none,
           c.imageUrl!,
           fit: BoxFit.contain,
           errorBuilder: (_, _, _) =>
@@ -1512,7 +1580,9 @@ class _BattleScreenState extends State<BattleScreen>
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: FoE.label(size: 11).copyWith(
-                      color: i == lines.length - 1 ? FoE.parchment : FoE.textDim,
+                      color: i == lines.length - 1
+                          ? FoE.parchment
+                          : FoE.textDim,
                     ),
                   ),
               ],
@@ -1536,6 +1606,7 @@ class _BattleScreenState extends State<BattleScreen>
   static const double _kAbilityH = 56;
   static const double _kTileGap = 8;
   static const double _kMenuH = 44;
+
   /// The AP row's height including the gap under it — one line, not a column.
   static const double _kApRowH = 14;
   // Shared tint for EVERY non-type deck button (Auto/End Turn/Items/Catch/Change)
@@ -1548,8 +1619,9 @@ class _BattleScreenState extends State<BattleScreen>
         // The AP row sits ABOVE the moves now, so the tiles have the full
         // width (2026-08-01).
         final usable = box.maxWidth - 20;
-        final perRow =
-            ((usable + _kTileGap) / (_kAbilityW + _kTileGap)).floor().clamp(1, 6);
+        final perRow = ((usable + _kTileGap) / (_kAbilityW + _kTileGap))
+            .floor()
+            .clamp(1, 6);
         final abilities = _engine.activePlayer?.abilities.length ?? 0;
         final boxes = 1 + abilities; // attack + abilities
         final rows = (boxes / perRow).ceil().clamp(1, 6);
@@ -1563,7 +1635,8 @@ class _BattleScreenState extends State<BattleScreen>
         final contentH = _kMenuH + 8 + apRowH + 6 + abilitiesH;
         final panelH = contentH + 22; // top 8 / bottom 10 padding + buffer
 
-        final showStatus = _engine.outcome == null && !_engine.needsPlayerSwitch;
+        final showStatus =
+            _engine.outcome == null && !_engine.needsPlayerSwitch;
         final myTurn = showStatus && _engine.isPlayerTurn && !_autoBattle;
 
         Widget content;
@@ -1572,8 +1645,10 @@ class _BattleScreenState extends State<BattleScreen>
         } else if (_entering) {
           // Hold input while the fighters are still sliding on.
           content = Center(
-            child: Text('Get ready…',
-                style: FoE.title(size: 15).copyWith(color: FoE.goldBright)),
+            child: Text(
+              'Get ready…',
+              style: FoE.title(size: 15).copyWith(color: FoE.goldBright),
+            ),
           );
         } else if (_engine.needsPlayerSwitch) {
           content = Center(
@@ -1624,7 +1699,8 @@ class _BattleScreenState extends State<BattleScreen>
   Widget _playerActions() {
     // MY turn = actionable. During the enemy's turn (or auto-battle) the same
     // buttons show but are greyed and inert (user 2026-07-18).
-    final myTurn = _engine.outcome == null &&
+    final myTurn =
+        _engine.outcome == null &&
         !_engine.needsPlayerSwitch &&
         _engine.isPlayerTurn &&
         !_autoBattle;
@@ -1691,34 +1767,46 @@ class _BattleScreenState extends State<BattleScreen>
         ),
         const SizedBox(height: 8),
         // The cost, then what it buys (2026-08-01).
-        Align(alignment: Alignment.centerLeft, child: _apBar(ap, maxAp)),
+        KeyedSubtree(
+          key: IntroSpotlightAnchors.of('battle-ap'),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _apBar(ap, maxAp),
+          ),
+        ),
         const SizedBox(height: 6),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Wrap(
-                spacing: _kTileGap,
-                runSpacing: _kTileGap,
-                children: [
-                  _abilityBtn('Attack', kBasicAttackApCost,
+        KeyedSubtree(
+          key: IntroSpotlightAnchors.of('battle-actions'),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: _kTileGap,
+                  runSpacing: _kTileGap,
+                  children: [
+                    _abilityBtn(
+                      'Attack',
+                      kBasicAttackApCost,
                       element: CreatureElement.neutral,
                       enabled: myTurn && ap >= kBasicAttackApCost,
-                      onTap: _attack),
-                  for (final ability in actor.abilities)
-                    _abilityBtn(
-                      ability.name,
-                      CombatEngine.abilityApCost(ability),
-                      element: ability.element,
-                      enabled:
-                          myTurn && ap >= CombatEngine.abilityApCost(ability),
-                      onTap: () => _useAbility(ability),
-                      ability: ability,
+                      onTap: _attack,
                     ),
-                ],
+                    for (final ability in actor.abilities)
+                      _abilityBtn(
+                        ability.name,
+                        CombatEngine.abilityApCost(ability),
+                        element: ability.element,
+                        enabled:
+                            myTurn && ap >= CombatEngine.abilityApCost(ability),
+                        onTap: () => _useAbility(ability),
+                        ability: ability,
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -1820,11 +1908,9 @@ class _BattleScreenState extends State<BattleScreen>
           name,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: FoE.label(size: 12).copyWith(
-            color: fg,
-            fontWeight: FontWeight.w800,
-            height: 1.1,
-          ),
+          style: FoE.label(
+            size: 12,
+          ).copyWith(color: fg, fontWeight: FontWeight.w800, height: 1.1),
         ),
       ),
     );
@@ -1843,8 +1929,8 @@ class _BattleScreenState extends State<BattleScreen>
     final effColor = mult > 1.0
         ? FoE.positive
         : mult < 1.0
-            ? FoE.danger
-            : null;
+        ? FoE.danger
+        : null;
     if (effColor != null) {
       tile = Container(
         decoration: ShapeDecoration(
@@ -1958,18 +2044,30 @@ class _BattleScreenState extends State<BattleScreen>
     if (isDamage && enemy != null && element != CreatureElement.neutral) {
       final mult = _effectivenessVsEnemy(element);
       final (label, icon, color) = mult > 1.0
-          ? ('Super effective vs ${enemy.name}', Icons.keyboard_arrow_up, FoE.positive)
+          ? (
+              'Super effective vs ${enemy.name}',
+              Icons.keyboard_arrow_up,
+              FoE.positive,
+            )
           : mult < 1.0
-              ? ('Resisted by ${enemy.name}', Icons.keyboard_arrow_down, FoE.danger)
-              : ('Neutral vs ${enemy.name}', Icons.remove, FoE.textDim);
+          ? ('Resisted by ${enemy.name}', Icons.keyboard_arrow_down, FoE.danger)
+          : ('Neutral vs ${enemy.name}', Icons.remove, FoE.textDim);
       rows.add(_previewRow(icon, '$label  (×${_fmtMult(mult)})', color: color));
     }
 
     if (a == null) {
-      rows.add(_previewRow(
-          Icons.bolt, 'Basic attack · Power ${CombatEngine.basicAttackPower}'));
-      rows.add(_previewRow(
-          Icons.info_outline, 'Free, typeless strike — never lands bonus damage.'));
+      rows.add(
+        _previewRow(
+          Icons.bolt,
+          'Basic attack · Power ${CombatEngine.basicAttackPower}',
+        ),
+      );
+      rows.add(
+        _previewRow(
+          Icons.info_outline,
+          'Free, typeless strike — never lands bonus damage.',
+        ),
+      );
     } else {
       if (a.kind == AbilityKind.damage) {
         rows.add(_previewRow(Icons.bolt, 'Power ${a.power}'));
@@ -1980,34 +2078,35 @@ class _BattleScreenState extends State<BattleScreen>
       // two moves with that exact line can be wildly different fights.
       // Same text the Dev-Mode form previews, so the card cannot drift from it.
       for (final e in a.effects) {
-        rows.add(_previewRow(
-          switch (e.kind.family) {
-            AbilityEffectFamily.mainStatus => Icons.local_fire_department,
-            AbilityEffectFamily.debuff => Icons.visibility_off,
-            AbilityEffectFamily.selfBuff => Icons.shield,
-            AbilityEffectFamily.heal => Icons.favorite,
-            AbilityEffectFamily.regen => Icons.eco,
-            AbilityEffectFamily.recoil => Icons.dangerous,
-            AbilityEffectFamily.lifesteal => Icons.bloodtype,
-            AbilityEffectFamily.selfPenalty => Icons.warning_amber,
-          },
-          summariseAbilityEffect(e),
-          color: switch (e.kind.family) {
-            AbilityEffectFamily.heal ||
-            AbilityEffectFamily.regen ||
-            AbilityEffectFamily.selfBuff ||
-            AbilityEffectFamily.lifesteal =>
-              FoE.positive,
-            AbilityEffectFamily.selfPenalty ||
-            AbilityEffectFamily.recoil =>
-              FoE.danger,
-            _ => null,
-          },
-        ));
+        rows.add(
+          _previewRow(
+            switch (e.kind.family) {
+              AbilityEffectFamily.mainStatus => Icons.local_fire_department,
+              AbilityEffectFamily.debuff => Icons.visibility_off,
+              AbilityEffectFamily.selfBuff => Icons.shield,
+              AbilityEffectFamily.heal => Icons.favorite,
+              AbilityEffectFamily.regen => Icons.eco,
+              AbilityEffectFamily.recoil => Icons.dangerous,
+              AbilityEffectFamily.lifesteal => Icons.bloodtype,
+              AbilityEffectFamily.selfPenalty => Icons.warning_amber,
+            },
+            summariseAbilityEffect(e),
+            color: switch (e.kind.family) {
+              AbilityEffectFamily.heal ||
+              AbilityEffectFamily.regen ||
+              AbilityEffectFamily.selfBuff ||
+              AbilityEffectFamily.lifesteal => FoE.positive,
+              AbilityEffectFamily.selfPenalty ||
+              AbilityEffectFamily.recoil => FoE.danger,
+              _ => null,
+            },
+          ),
+        );
       }
       if (a.priority > 0) {
-        rows.add(_previewRow(
-            Icons.flash_on, 'Priority +${a.priority} — acts sooner'));
+        rows.add(
+          _previewRow(Icons.flash_on, 'Priority +${a.priority} — acts sooner'),
+        );
       }
       rows.add(_previewRow(Icons.gps_fixed, 'Target: ${a.target.label}'));
     }
@@ -2020,7 +2119,11 @@ class _BattleScreenState extends State<BattleScreen>
       ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(
-            16, 14, 16, 16 + MediaQuery.of(ctx).viewPadding.bottom),
+          16,
+          14,
+          16,
+          16 + MediaQuery.of(ctx).viewPadding.bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2028,9 +2131,14 @@ class _BattleScreenState extends State<BattleScreen>
             Row(
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: ShapeDecoration(color: element.color, shape: FoE.facet(radius: 6)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: ShapeDecoration(
+                    color: element.color,
+                    shape: FoE.facet(radius: 6),
+                  ),
                   child: Text(
                     element.label,
                     style: FoE.label(size: 11).copyWith(
@@ -2044,12 +2152,20 @@ class _BattleScreenState extends State<BattleScreen>
                 const SizedBox(width: 8),
                 Expanded(child: Text(name, style: FoE.title(size: 16))),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: ShapeDecoration(color: _kUtilTint, shape: FoE.facet(radius: 6)),
-                  child: Text('$ap AP',
-                      style: FoE.label(size: 11)
-                          .copyWith(fontWeight: FontWeight.w800)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: ShapeDecoration(
+                    color: _kUtilTint,
+                    shape: FoE.facet(radius: 6),
+                  ),
+                  child: Text(
+                    '$ap AP',
+                    style: FoE.label(
+                      size: 11,
+                    ).copyWith(fontWeight: FontWeight.w800),
+                  ),
                 ),
               ],
             ),
@@ -2078,18 +2194,18 @@ class _BattleScreenState extends State<BattleScreen>
     double? width,
     double? height,
   }) {
-    final onColor =
-        base.computeLuminance() > 0.5 ? const Color(0xFF1A1300) : Colors.white;
+    final onColor = base.computeLuminance() > 0.5
+        ? const Color(0xFF1A1300)
+        : Colors.white;
     final fg = enabled ? onColor : FoE.textMuted;
     final content = FittedBox(
       fit: BoxFit.scaleDown,
       child: Text(
         label,
         maxLines: 1,
-        style: FoE.label(size: 12).copyWith(
-          color: fg,
-          fontWeight: FontWeight.w800,
-        ),
+        style: FoE.label(
+          size: 12,
+        ).copyWith(color: fg, fontWeight: FontWeight.w800),
       ),
     );
     final radius = FoE.radiusSmall + 2;
@@ -2105,7 +2221,10 @@ class _BattleScreenState extends State<BattleScreen>
         : Container(
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: radius)),
+            decoration: ShapeDecoration(
+              color: FoE.panelDark,
+              shape: FoE.facet(radius: radius),
+            ),
             child: content,
           );
     if (enabled) {
@@ -2133,16 +2252,21 @@ class _BattleScreenState extends State<BattleScreen>
   }) {
     final text = Text(
       label,
-      style: FoE.label(size: 13).copyWith(
-        color: FoE.goldBright,
-        fontWeight: FontWeight.w700,
-      ),
+      style: FoE.label(
+        size: 13,
+      ).copyWith(color: FoE.goldBright, fontWeight: FontWeight.w700),
     );
     return GestureDetector(
       onTap: enabled ? onTap : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: ShapeDecoration(color: FoE.panelMid, shape: FoE.facet(radius: FoE.radiusSmall + 3, side: BorderSide(color: FoE.gold, width: 1.5))),
+        decoration: ShapeDecoration(
+          color: FoE.panelMid,
+          shape: FoE.facet(
+            radius: FoE.radiusSmall + 3,
+            side: BorderSide(color: FoE.gold, width: 1.5),
+          ),
+        ),
         child: icon == null
             ? text
             : Row(
@@ -2182,7 +2306,11 @@ class _BattleScreenState extends State<BattleScreen>
       ),
       builder: (_) => Padding(
         padding: EdgeInsets.fromLTRB(
-            16, 16, 16, 16 + MediaQuery.of(context).viewPadding.bottom),
+          16,
+          16,
+          16,
+          16 + MediaQuery.of(context).viewPadding.bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2238,8 +2366,10 @@ class _BattleScreenState extends State<BattleScreen>
         actor.applySelfBuff(buff, value: chosen.magnitude);
         _flashMessage('${chosen.emoji} ${actor.name} — ${buff.name}!');
       default: // heal
-        final heal =
-            healFromItem(chosen, (actor.maxHp - actor.hp).toDouble()).round();
+        final heal = healFromItem(
+          chosen,
+          (actor.maxHp - actor.hp).toDouble(),
+        ).round();
         actor.hp = (actor.hp + heal).clamp(0, actor.maxHp).toInt();
         _flashMessage('${chosen.emoji} ${actor.name} +$heal HP');
     }
@@ -2281,36 +2411,36 @@ class _BattleScreenState extends State<BattleScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(title, style: FoE.title(size: 20)),
-            const SizedBox(height: 8),
-            Text(subtitle, style: FoE.label(size: 13)),
-            if (outcome == CombatOutcome.victory) ...[
+              const SizedBox(height: 8),
+              Text(subtitle, style: FoE.label(size: 13)),
+              if (outcome == CombatOutcome.victory) ...[
+                const SizedBox(height: 16),
+                _victoryRewards(),
+                if (_levelUps.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _levelUpSection(),
+                ],
+                if (widget.victoryRewards.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _unlockSection(),
+                ],
+              ],
               const SizedBox(height: 16),
-              _victoryRewards(),
-              if (_levelUps.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                _levelUpSection(),
-              ],
-              if (widget.victoryRewards.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                _unlockSection(),
-              ],
-            ],
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(outcome),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: FoE.btn(active: true),
-                  alignment: Alignment.center,
-                  child: Text(
-                    'Continue',
-                    style: FoE.label(size: 14).copyWith(color: Colors.white),
+              SizedBox(
+                width: double.infinity,
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop(outcome),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: FoE.btn(active: true),
+                    alignment: Alignment.center,
+                    child: Text(
+                      'Continue',
+                      style: FoE.label(size: 14).copyWith(color: Colors.white),
+                    ),
                   ),
                 ),
               ),
-            ),
             ],
           ),
         ),
@@ -2331,8 +2461,10 @@ class _BattleScreenState extends State<BattleScreen>
           children: [
             Icon(Icons.military_tech, size: 15, color: FoE.gold),
             const SizedBox(width: 6),
-            Text('Defeated $foes ${foes == 1 ? 'foe' : 'foes'}',
-                style: FoE.dim(size: 12)),
+            Text(
+              'Defeated $foes ${foes == 1 ? 'foe' : 'foes'}',
+              style: FoE.dim(size: 12),
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -2352,13 +2484,21 @@ class _BattleScreenState extends State<BattleScreen>
                       width: 44,
                       height: 44,
                       padding: const EdgeInsets.all(3),
-                      decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.border))),
+                      decoration: ShapeDecoration(
+                        color: FoE.panelDark,
+                        shape: FoE.facet(
+                          radius: 8,
+                          side: BorderSide(color: FoE.border),
+                        ),
+                      ),
                       child: _portrait(p, size: 30),
                     ),
                   ),
                   const SizedBox(height: 3),
-                  Text('+$_xpEach XP',
-                      style: FoE.label(size: 10).copyWith(color: FoE.gold)),
+                  Text(
+                    '+$_xpEach XP',
+                    style: FoE.label(size: 10).copyWith(color: FoE.gold),
+                  ),
                 ],
               ),
           ],
@@ -2369,12 +2509,8 @@ class _BattleScreenState extends State<BattleScreen>
           tween: Tween(begin: 0, end: 1),
           duration: const Duration(milliseconds: 900),
           curve: Curves.easeOutCubic,
-          builder: (context, v, _) => RecessBar(
-            value: v,
-            color: FoE.gold,
-            height: 11,
-            onDark: true,
-          ),
+          builder: (context, v, _) =>
+              RecessBar(value: v, color: FoE.gold, height: 11, onDark: true),
         ),
       ],
     );
@@ -2392,8 +2528,10 @@ class _BattleScreenState extends State<BattleScreen>
         children: [
           const Text('⬆️', style: TextStyle(fontSize: 15)),
           const SizedBox(width: 6),
-          Text('Level Up!',
-              style: FoE.title(size: 14).copyWith(color: FoE.goldBright)),
+          Text(
+            'Level Up!',
+            style: FoE.title(size: 14).copyWith(color: FoE.goldBright),
+          ),
         ],
       ),
       const SizedBox(height: 8),
@@ -2413,12 +2551,21 @@ class _BattleScreenState extends State<BattleScreen>
     curve: Curves.easeOutBack,
     builder: (context, v, child) => Opacity(
       opacity: v.clamp(0.0, 1.0),
-      child: Transform.scale(scale: 0.9 + 0.1 * v.clamp(0.0, 1.0), child: child),
+      child: Transform.scale(
+        scale: 0.9 + 0.1 * v.clamp(0.0, 1.0),
+        child: child,
+      ),
     ),
     child: Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 12, side: BorderSide(color: FoE.goldBright.withValues(alpha: 0.6)))),
+      decoration: ShapeDecoration(
+        color: FoE.panelDark,
+        shape: FoE.facet(
+          radius: 12,
+          side: BorderSide(color: FoE.goldBright.withValues(alpha: 0.6)),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2427,8 +2574,10 @@ class _BattleScreenState extends State<BattleScreen>
             children: [
               const Text('🎁', style: TextStyle(fontSize: 15)),
               const SizedBox(width: 6),
-              Text('Unlocked!',
-                  style: FoE.title(size: 14).copyWith(color: FoE.goldBright)),
+              Text(
+                'Unlocked!',
+                style: FoE.title(size: 14).copyWith(color: FoE.goldBright),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -2462,11 +2611,20 @@ class _BattleScreenState extends State<BattleScreen>
       curve: Curves.easeOutBack,
       builder: (context, v, child) => Opacity(
         opacity: v.clamp(0.0, 1.0),
-        child: Transform.scale(scale: 0.85 + 0.15 * v.clamp(0.0, 1.0), child: child),
+        child: Transform.scale(
+          scale: 0.85 + 0.15 * v.clamp(0.0, 1.0),
+          child: child,
+        ),
       ),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 10, side: BorderSide(color: FoE.gold.withValues(alpha: 0.55)))),
+        decoration: ShapeDecoration(
+          color: FoE.panelDark,
+          shape: FoE.facet(
+            radius: 10,
+            side: BorderSide(color: FoE.gold.withValues(alpha: 0.55)),
+          ),
+        ),
         child: Row(
           children: [
             SizedBox(
@@ -2495,18 +2653,23 @@ class _BattleScreenState extends State<BattleScreen>
                           up.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: FoE.label(size: 12)
-                              .copyWith(color: FoE.parchment),
+                          style: FoE.label(
+                            size: 12,
+                          ).copyWith(color: FoE.parchment),
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text('Lv ${up.fromLevel}',
-                          style: FoE.dim(size: 11)),
-                      const Text('  →  ',
-                          style: TextStyle(color: FoE.textDim, fontSize: 11)),
-                      Text('${up.toLevel}',
-                          style: FoE.value(size: 13)
-                              .copyWith(color: FoE.goldBright)),
+                      Text('Lv ${up.fromLevel}', style: FoE.dim(size: 11)),
+                      const Text(
+                        '  →  ',
+                        style: TextStyle(color: FoE.textDim, fontSize: 11),
+                      ),
+                      Text(
+                        '${up.toLevel}',
+                        style: FoE.value(
+                          size: 13,
+                        ).copyWith(color: FoE.goldBright),
+                      ),
                     ],
                   ),
                   if (up.statGains.isNotEmpty) ...[
@@ -2531,7 +2694,10 @@ class _BattleScreenState extends State<BattleScreen>
 
   Widget _statGainChip(CreatureStat stat, int gain) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: ShapeDecoration(color: FoE.positive.withValues(alpha: 0.16), shape: FoE.facet(radius: 6)),
+    decoration: ShapeDecoration(
+      color: FoE.positive.withValues(alpha: 0.16),
+      shape: FoE.facet(radius: 6),
+    ),
     child: Text(
       '${_statAbbrev(stat)} +$gain',
       style: FoE.label(size: 10).copyWith(color: FoE.positive),
@@ -2564,8 +2730,10 @@ class _BattleScreenState extends State<BattleScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Catch it!',
-                  style: FoE.title(size: 18).copyWith(color: FoE.goldBright)),
+              Text(
+                'Catch it!',
+                style: FoE.title(size: 18).copyWith(color: FoE.goldBright),
+              ),
               const SizedBox(height: 4),
               Text(
                 _catchMissed && _catchBetween
@@ -2606,7 +2774,10 @@ class _BattleScreenState extends State<BattleScreen>
                                 filterQuality: FilterQuality.none,
                                 fit: BoxFit.contain,
                                 errorBuilder: (_, _, _) => const Icon(
-                                    Icons.pets, color: FoE.gold, size: 80),
+                                  Icons.pets,
+                                  color: FoE.gold,
+                                  size: 80,
+                                ),
                               ),
                       ),
                     ),
@@ -2639,7 +2810,8 @@ class _HpArcPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final stroke = size.height * (3 / 57); // same stroke:height ratio as the XP arc
+    final stroke =
+        size.height * (3 / 57); // same stroke:height ratio as the XP arc
     final rect = (Offset.zero & size).deflate(stroke);
     final track = Paint()
       ..style = PaintingStyle.stroke
@@ -2664,7 +2836,11 @@ class _HpArcPainter extends CustomPainter {
       rect.center.dy + rect.height / 2 * math.sin(angle),
     );
     final dotR = stroke * 0.9;
-    canvas.drawCircle(pos, dotR * 1.6, Paint()..color = Colors.black.withValues(alpha: 0.35));
+    canvas.drawCircle(
+      pos,
+      dotR * 1.6,
+      Paint()..color = Colors.black.withValues(alpha: 0.35),
+    );
     canvas.drawCircle(pos, dotR, Paint()..color = color);
   }
 
@@ -2740,8 +2916,15 @@ class _RpsRingPainter extends CustomPainter {
     return Offset(v.dx * c - v.dy * s, v.dx * s + v.dy * c);
   }
 
-  void _arc(Canvas canvas, Offset c, double r, double startDeg, double endDeg,
-      Paint stroke, Paint fill) {
+  void _arc(
+    Canvas canvas,
+    Offset c,
+    double r,
+    double startDeg,
+    double endDeg,
+    Paint stroke,
+    Paint fill,
+  ) {
     canvas.drawArc(
       Rect.fromCircle(center: c, radius: r),
       startDeg * _d2r,
@@ -2920,12 +3103,13 @@ class _FloatingNumberState extends State<_FloatingNumber>
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    )..addStatusListener((s) {
-        if (s == AnimationStatus.completed) widget.onDone();
-      });
+    _c =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 1100),
+        )..addStatusListener((s) {
+          if (s == AnimationStatus.completed) widget.onDone();
+        });
     _c.forward();
   }
 
@@ -2946,8 +3130,7 @@ class _FloatingNumberState extends State<_FloatingNumber>
         // over the last 30%.
         final pop = t < 0.18 ? Curves.easeOutBack.transform(t / 0.18) : 1.0;
         final rise = -34.0 * Curves.easeOut.transform(t);
-        final opacity =
-            t < 0.7 ? 1.0 : (1 - (t - 0.7) / 0.3).clamp(0.0, 1.0);
+        final opacity = t < 0.7 ? 1.0 : (1 - (t - 0.7) / 0.3).clamp(0.0, 1.0);
         return Transform.translate(
           offset: Offset(0, rise),
           child: Opacity(
@@ -2974,10 +3157,9 @@ class _FloatingNumberState extends State<_FloatingNumber>
                   if (d.tag != null)
                     Text(
                       d.tag!,
-                      style: FoE.label(size: 10).copyWith(
-                        color: d.color,
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: FoE.label(
+                        size: 10,
+                      ).copyWith(color: d.color, fontWeight: FontWeight.w800),
                     ),
                 ],
               ),
@@ -3007,9 +3189,17 @@ class _EffectivenessMark extends CustomPainter {
     final h = size.height;
     final p = Path();
     if (strong) {
-      p..moveTo(w, 0)..lineTo(w, h)..lineTo(0, h)..close();
+      p
+        ..moveTo(w, 0)
+        ..lineTo(w, h)
+        ..lineTo(0, h)
+        ..close();
     } else {
-      p..moveTo(w, h)..lineTo(w, 0)..lineTo(0, 0)..close();
+      p
+        ..moveTo(w, h)
+        ..lineTo(w, 0)
+        ..lineTo(0, 0)
+        ..close();
     }
     canvas.drawPath(p, Paint()..color = color);
   }

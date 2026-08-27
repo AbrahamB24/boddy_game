@@ -37,11 +37,12 @@ void main() {
   });
 
   test('a hut only shelters anyone while a road reaches the hall', () {
-    // The hall is 5x5 at (0,0), so it fills x 0..4. One road cell at (5,0)
-    // touches its edge, and the hut at (6,0) touches that road.
+    // The hall is 10x10 at (0,0) (grown from 5x5 — user 2026-08-24's castle
+    // rebuild), so it fills x 0..9. One road cell at (10,0) touches its
+    // edge, and the hut at (11,0) touches that road.
     final hall = _b('hall', 'castle', 0, 0);
-    final road = _b('road1', 'road', 5, 0);
-    final hut = _b('hut1', 'small_house', 6, 0);
+    final road = _b('road1', 'road', 10, 0);
+    final hut = _b('hut1', 'small_house', 11, 0);
 
     final connected = GameEngine.housingCapacity([hall, road, hut]);
     final severed = GameEngine.housingCapacity([hall, hut]);

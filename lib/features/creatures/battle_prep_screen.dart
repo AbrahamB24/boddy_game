@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
 import '../common/widgets/parchment_page.dart';
+import '../onboarding/intro_flow.dart';
+import '../onboarding/intro_spotlight.dart';
+import '../settlement/settlement_controller.dart';
 import 'models/combatant.dart';
 import 'models/creature_instance.dart';
 import 'widgets/creature_backdrop.dart';
@@ -42,6 +45,11 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
   /// monster that leads the fight).
   final List<String> _selected = [];
 
+  // Tutorial's first fight: nothing to pick (there's only the one starter),
+  // so the whole screen is just "here's your team, hit Fight" — one
+  // spotlight rather than the battle screen's own 4-part sequence.
+  bool _showFightSpotlight = false;
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +61,8 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
         ? defaults
         : _ctrl.battleReadyCreatures.take(widget.partySize).toList();
     _selected.addAll(seed.map((c) => c.id));
+    _showFightSpotlight =
+        SettlementController().introStep == IntroStep.firstNode;
   }
 
   void _toggle(CreatureInstance c) {
@@ -66,65 +76,84 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
     });
   }
 
-  List<CreatureInstance> get _team => _selected
-      .map(_ctrl.byId)
-      .whereType<CreatureInstance>()
-      .toList();
+  List<CreatureInstance> get _team =>
+      _selected.map(_ctrl.byId).whereType<CreatureInstance>().toList();
 
   @override
   Widget build(BuildContext context) {
     final ready = _ctrl.battleReadyCreatures;
     return ParchmentPage(
       title: widget.title,
-      child: Column(
+      child: Stack(
         children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(ParchmentPage.kParchmentPagePad, 12, ParchmentPage.kParchmentPagePad, 16),
-              children: [
-
-                _sectionTitle('⚔️ You face'),
-                const SizedBox(height: 8),
-                _enemyRow(),
-                const SizedBox(height: 20),
-                if (widget.rewards.isNotEmpty) ...[
-                  _sectionTitle('🎁 Rewards for clearing this'),
-                  const SizedBox(height: 8),
-                  _rewardList(),
-                  const SizedBox(height: 20),
-                ],
-                _sectionTitle(
-                  'Your team · ${_selected.length}/${widget.partySize}',
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  ready.isEmpty
-                      ? 'No battle-ready monster — heal your team first.'
-                      : 'Tap to pick up to ${widget.partySize} '
-                          'monster${widget.partySize > 1 ? 's' : ''}. '
-                          'Everyone you bring earns XP.',
-                  style: FoE.dim(size: 12),
-                ),
-                // WHO ACTUALLY STANDS THERE (user 2026-07-27): up to three
-                // fight at once and the rest wait. Worth saying here — you
-                // pick six and see three, and the ORDER you pick in decides
-                // which three, which nothing else on this screen reveals.
-                if (widget.partySize > CombatEngine.kFieldSlots) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    'The first ${CombatEngine.kFieldSlots} fight together — '
-                    'the rest wait in reserve and step in when one falls.',
-                    style: FoE.dim(size: 12).copyWith(color: FoE.gold),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                _teamGrid(ready),
-              ],
+          _body(ready),
+          if (_showFightSpotlight)
+            IntroSpotlightOverlay(
+              anchorName: 'battleprep-fight',
+              hint: 'Your team is already picked — hit Fight when ready.',
+              onScrimTap: () => setState(() => _showFightSpotlight = false),
             ),
-          ),
-          _fightBar(),
         ],
       ),
+    );
+  }
+
+  Widget _body(List<CreatureInstance> ready) {
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              ParchmentPage.kParchmentPagePad,
+              12,
+              ParchmentPage.kParchmentPagePad,
+              16,
+            ),
+            children: [
+              _sectionTitle('⚔️ You face'),
+              const SizedBox(height: 8),
+              _enemyRow(),
+              const SizedBox(height: 20),
+              if (widget.rewards.isNotEmpty) ...[
+                _sectionTitle('🎁 Rewards for clearing this'),
+                const SizedBox(height: 8),
+                _rewardList(),
+                const SizedBox(height: 20),
+              ],
+              _sectionTitle(
+                'Your team · ${_selected.length}/${widget.partySize}',
+              ),
+              const SizedBox(height: 4),
+              Text(
+                ready.isEmpty
+                    ? 'No battle-ready monster — heal your team first.'
+                    : 'Tap to pick up to ${widget.partySize} '
+                          'monster${widget.partySize > 1 ? 's' : ''}. '
+                          'Everyone you bring earns XP.',
+                style: FoE.dim(size: 12),
+              ),
+              // WHO ACTUALLY STANDS THERE (user 2026-07-27): up to three
+              // fight at once and the rest wait. Worth saying here — you
+              // pick six and see three, and the ORDER you pick in decides
+              // which three, which nothing else on this screen reveals.
+              if (widget.partySize > CombatEngine.kFieldSlots) ...[
+                const SizedBox(height: 3),
+                Text(
+                  'The first ${CombatEngine.kFieldSlots} fight together — '
+                  'the rest wait in reserve and step in when one falls.',
+                  style: FoE.dim(size: 12).copyWith(color: FoE.gold),
+                ),
+              ],
+              const SizedBox(height: 10),
+              _teamGrid(ready),
+            ],
+          ),
+        ),
+        KeyedSubtree(
+          key: IntroSpotlightAnchors.of('battleprep-fight'),
+          child: _fightBar(),
+        ),
+      ],
     );
   }
 
@@ -208,8 +237,10 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
                     SizedBox(
                       height: stripH,
                       child: Padding(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,7 +255,8 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
                               ),
                             ),
                             Text(
-                              e.isBoss ? '👑 Boss · Lv ${e.level}'
+                              e.isBoss
+                                  ? '👑 Boss · Lv ${e.level}'
                                   : '${e.element.emoji} Lv ${e.level}',
                               maxLines: 1,
                               style: FoE.dim(size: 10).copyWith(
@@ -249,8 +281,11 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
                   ? const Icon(Icons.pets, color: FoE.gold, size: 34)
                   : CreatureSprite(
                       url: e.imageUrl!,
-                      fallback:
-                          const Icon(Icons.pets, color: FoE.gold, size: 34),
+                      fallback: const Icon(
+                        Icons.pets,
+                        color: FoE.gold,
+                        size: 34,
+                      ),
                     ),
             ),
           ],
@@ -368,9 +403,9 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
             canFight
                 ? '⚔️ Fight  (${_selected.length}/${widget.partySize})'
                 : 'Pick at least one monster',
-            style: FoE.label(size: 15).copyWith(
-              color: canFight ? Colors.white : FoE.textDim,
-            ),
+            style: FoE.label(
+              size: 15,
+            ).copyWith(color: canFight ? Colors.white : FoE.textDim),
           ),
         ),
       ),

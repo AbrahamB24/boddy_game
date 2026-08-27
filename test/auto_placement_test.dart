@@ -51,10 +51,13 @@ void main() {
     final hutDef = kFallbackBuildingDefs['small_house']!;
     final dx = (spot.$1 + hutDef.gridW / 2) - (kInitialPlotX + 8 + hallDef.gridW / 2);
     final dy = (spot.$2 + hutDef.gridH / 2) - (kInitialPlotY + 8 + hallDef.gridH / 2);
-    // Adjacent-ish: within a couple of cells of the hall's footprint, not the
-    // 20+ cells the plot is wide.
-    expect(dx.abs(), lessThan(6), reason: 'dx=$dx');
-    expect(dy.abs(), lessThan(6), reason: 'dy=$dy');
+    // Adjacent-ish: within about one hall-width of its centre, not the 20+
+    // cells the plot is wide. Scaled off the hall's OWN size (not a fixed
+    // cell count) so a future footprint change — like the 5x5→10x10 castle
+    // rebuild that broke the old fixed bound of 6 — doesn't retrip this.
+    final bound = hallDef.gridW.toDouble();
+    expect(dx.abs(), lessThan(bound), reason: 'dx=$dx');
+    expect(dy.abs(), lessThan(bound), reason: 'dy=$dy');
   });
 
   test('it does not overlap what is already standing', () {

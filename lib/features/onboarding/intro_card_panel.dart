@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
@@ -45,13 +47,15 @@ class IntroCardPanel extends StatelessWidget {
 
     // The catch step spans a trip: once the hunt is out, the job is playing
     // it from the Trips list, not sending another one — the CTA follows.
-    final capturePending = step == IntroStep.firstCapture &&
-        ExpeditionController()
-            .expeditions
-            .any((e) => e.type == ExpeditionType.capture);
+    final capturePending =
+        step == IntroStep.firstCapture &&
+        ExpeditionController().expeditions.any(
+          (e) => e.type == ExpeditionType.capture,
+        );
     final ctaLabel = capturePending ? '🎒 Open Trips' : card.ctaLabel;
-    final destination =
-        capturePending ? IntroDestination.trips : card.destination;
+    final destination = capturePending
+        ? IntroDestination.trips
+        : card.destination;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -77,17 +81,26 @@ class IntroCardPanel extends StatelessWidget {
           Text(card.body, style: FoE.label(size: 11)),
           if (ctaLabel != null && destination != null) ...[
             const SizedBox(height: 12),
-            _ctaButton(ctaLabel, destination),
+            _ctaButton(ctaLabel, destination, step),
           ],
         ],
       ),
     );
   }
 
-  Widget _ctaButton(String label, IntroDestination destination) => Material(
+  Widget _ctaButton(
+    String label,
+    IntroDestination destination,
+    IntroStep step,
+  ) => Material(
     color: Colors.transparent,
     child: InkWell(
-      onTap: () => onNavigate(destination),
+      onTap: () {
+        // welcome has no milestone of its own to advance from elsewhere —
+        // its CTA both advances the chain AND opens the starter picker.
+        if (step == IntroStep.welcome) unawaited(ctrl.advanceIntro(step));
+        onNavigate(destination);
+      },
       borderRadius: BorderRadius.circular(FoE.radiusSmall),
       child: Container(
         width: double.infinity,
@@ -114,7 +127,10 @@ class IntroCardPanel extends StatelessWidget {
         context: context,
         builder: (dialogContext) => AlertDialog(
           backgroundColor: FoE.panelMid,
-          shape: FoE.facet(radius: FoE.radius, side: const BorderSide(color: FoE.border, width: 2)),
+          shape: FoE.facet(
+            radius: FoE.radius,
+            side: const BorderSide(color: FoE.border, width: 2),
+          ),
           title: Text('Skip the intro?', style: FoE.title(size: 13)),
           content: Text(
             'You will lose the head start that comes with it: faster '

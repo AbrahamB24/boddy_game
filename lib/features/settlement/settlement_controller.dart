@@ -234,8 +234,16 @@ class SettlementController extends ChangeNotifier {
       // reads the statics live, so nothing awaits it.
       unawaited(CombatTuning().load());
       await Future.wait([
-        resourcesF, energyF, buildingsF, profileF, isDevF, introF,
-        defsF, creatureDefsF, creaturesF, tuningF,
+        resourcesF,
+        energyF,
+        buildingsF,
+        profileF,
+        isDevF,
+        introF,
+        defsF,
+        creatureDefsF,
+        creaturesF,
+        tuningF,
       ]);
 
       resources = await resourcesF;
@@ -373,8 +381,7 @@ class SettlementController extends ChangeNotifier {
           final def = placed == null
               ? null
               : kBuildingDefs[placed.buildingTypeId];
-          final valid =
-              def != null && def.workshops.any((w) => w.stat == stat);
+          final valid = def != null && def.workshops.any((w) => w.stat == stat);
           if (!valid) {
             await assignCreatureToWorkshop(c.id, null, null);
           }
@@ -444,7 +451,8 @@ class SettlementController extends ChangeNotifier {
 
   int get housingUsed => CreaturesController().creatures.length;
 
-  int get housingFree => (housingCapacity - housingUsed).clamp(0, housingCapacity);
+  int get housingFree =>
+      (housingCapacity - housingUsed).clamp(0, housingCapacity);
 
   bool get housingFull => housingUsed >= housingCapacity;
 
@@ -464,7 +472,7 @@ class SettlementController extends ChangeNotifier {
   /// "alle hardcoded boni bitte löschen … es zählt nur das, was bei den
   /// Effekten steht") — a building amplifies trips only if its effects say so.
   ({double carryMult, double travelMult, double goodsMult})
-      get expeditionBonuses {
+  get expeditionBonuses {
     final connected = connectedBuildingIds;
     final era = settlement?.eraIndex ?? 1;
     double carry = 0, travel = 0, goods = 0;
@@ -508,10 +516,11 @@ class SettlementController extends ChangeNotifier {
       if (e == null) continue;
       // An explicit levelSteps ladder is the natural shape for a count ("one
       // more hunt variant at level 3"), so it wins where it is authored.
-      total += (e.levelSteps.isNotEmpty
-              ? e.valueAtLevel(b.level)
-              : e.value * e.levelScaleExplicit(b.level))
-          .floor();
+      total +=
+          (e.levelSteps.isNotEmpty
+                  ? e.valueAtLevel(b.level)
+                  : e.value * e.levelScaleExplicit(b.level))
+              .floor();
     }
     return total;
   }
@@ -583,7 +592,9 @@ class SettlementController extends ChangeNotifier {
   /// before the first unit of that good ever arrives.
   Map<String, double> get storageCaps {
     final keys = <String>{
-      'wood', 'stone', 'gold',
+      'wood',
+      'stone',
+      'gold',
       ...?resources?.goods.keys,
       ...kGoodsDefs.keys,
     };
@@ -643,21 +654,25 @@ class SettlementController extends ChangeNotifier {
     }
     for (final e in totals.entries) {
       final def = kBuildingDefs[e.key];
-      out.add(ProductionSource(
-        emoji: '🏚',
-        imageUrl: def?.imageUrl,
-        label: def?.name ?? e.key,
-        count: counts[e.key] ?? 1,
-        amount: e.value,
-      ));
+      out.add(
+        ProductionSource(
+          emoji: '🏚',
+          imageUrl: def?.imageUrl,
+          label: def?.name ?? e.key,
+          count: counts[e.key] ?? 1,
+          amount: e.value,
+        ),
+      );
     }
     if (staffRoom > 0) {
-      out.add(ProductionSource(
-        emoji: '👷',
-        label: 'Logisticians on duty',
-        count: staffed,
-        amount: staffRoom,
-      ));
+      out.add(
+        ProductionSource(
+          emoji: '👷',
+          label: 'Logisticians on duty',
+          count: staffed,
+          amount: staffRoom,
+        ),
+      );
     }
     return out;
   }
@@ -750,6 +765,11 @@ class SettlementController extends ChangeNotifier {
       final def = kBuildingDefs[b.buildingTypeId];
       if (def == null || !def.hasEffect('healSlots', era)) continue;
       authored = true;
+      // A hut with nobody stationed contributes NOTHING (user 2026-08-24):
+      // still `authored`, so the building keeps reading as "a real healing
+      // building at 0 capacity" rather than vanishing from the null-means-
+      // unlimited case above — it just heals no one until someone works it.
+      if (workshopOccupancy(b.id, CreatureStat.medicine) <= 0) continue;
       total += def.healSlotsAt(b.level, eraOrder: era);
     }
     return authored ? total : null;
@@ -803,12 +823,10 @@ class SettlementController extends ChangeNotifier {
   List<CraftJob> get craftJobs => settlement?.craftJobs ?? const [];
 
   /// The ones actually being made — the first [craftCapacity] of them.
-  List<CraftJob> get activeCraftJobs =>
-      craftJobs.take(craftCapacity).toList();
+  List<CraftJob> get activeCraftJobs => craftJobs.take(craftCapacity).toList();
 
   /// The ones waiting for a bench.
-  List<CraftJob> get queuedCraftJobs =>
-      craftJobs.skip(craftCapacity).toList();
+  List<CraftJob> get queuedCraftJobs => craftJobs.skip(craftCapacity).toList();
 
   /// Whether another item can be put in at all — benches plus line.
   bool get canQueueCraft {
@@ -908,10 +926,10 @@ class SettlementController extends ChangeNotifier {
   /// hatching one: every Hatchery saved before the split staffs that role, and
   /// silently reading 0 would have stopped those eggs from ever speeding up.
   double hatchingPower(String buildingTypeId) => _postPower(
-        buildingTypeId,
-        WorkshopRole.kHatching,
-        fallbackResource: WorkshopRole.kBreeding,
-      );
+    buildingTypeId,
+    WorkshopRole.kHatching,
+    fallbackResource: WorkshopRole.kBreeding,
+  );
 
   double _postPower(
     String buildingTypeId,
@@ -1052,7 +1070,8 @@ class SettlementController extends ChangeNotifier {
     // A store's post amplifies what that store HOLDS. Without this the fallback
     // dial would happily make room for a good the building has no shelf for —
     // and every caller would have to remember to ask first.
-    if (def.effectEntry('storage', resource, settlement?.eraIndex ?? 1) == null) {
+    if (def.effectEntry('storage', resource, settlement?.eraIndex ?? 1) ==
+        null) {
       return 0;
     }
     final creatures = CreaturesController();
@@ -1221,11 +1240,12 @@ class SettlementController extends ChangeNotifier {
   }
 
   Set<String> get connectedBuildingIds {
-    // Tutorial: roads are deliberately NOT one of the guided steps (user
-    // script 2026-07-17), so while it runs every building counts as
-    // connected — otherwise the Healing Hut the script just had the player
-    // place would refuse to heal. The moment the tutorial ends the real
-    // road rule takes over (the completion message says so).
+    // Tutorial: every building counts as connected while it runs, road or
+    // not — otherwise the Healing Hut the script just had the player place
+    // would refuse to heal before the buildRoad step even gets to it. That
+    // step (user script 2026-08-24) still has the player lay a real road,
+    // so the mechanic is taught, but enforcement only starts once the
+    // tutorial ends (the completion message says so).
     if (introStep.isActive) return {for (final b in buildings) b.id};
     _refreshDerived();
     return _connectedCache ??= GameEngine.connectedBuildingIds(buildings);
@@ -1266,9 +1286,21 @@ class SettlementController extends ChangeNotifier {
       // Must extend the territory: adjacent to it, but NOT entirely on ground
       // you can already build on (user 2026-07-17).
       return GameEngine.touchesBuildableRegion(
-            x, y, def.gridW, def.gridH, buildings, region: region) &&
+            x,
+            y,
+            def.gridW,
+            def.gridH,
+            buildings,
+            region: region,
+          ) &&
           !GameEngine.isAreaBuildable(
-            x, y, def.gridW, def.gridH, buildings, region: region);
+            x,
+            y,
+            def.gridW,
+            def.gridH,
+            buildings,
+            region: region,
+          );
     }
     return GameEngine.isAreaBuildable(
       x,
@@ -1352,11 +1384,17 @@ class SettlementController extends ChangeNotifier {
     final job = activeCraftJobs.firstOrNull;
     final def = job == null ? null : kItemDefs[job.itemId];
     if (def == null) return null;
-    final total = craftSecondsAt(def, craftRatePerHour,
-        timeScale: jumpstartTimeScale(jumpstartActive));
+    final total = craftSecondsAt(
+      def,
+      craftRatePerHour,
+      timeScale: jumpstartTimeScale(jumpstartActive),
+    );
     if (total == null) return null;
-    final done = craftProgress(def, job!.secondsBuilt,
-        timeScale: jumpstartTimeScale(jumpstartActive));
+    final done = craftProgress(
+      def,
+      job!.secondsBuilt,
+      timeScale: jumpstartTimeScale(jumpstartActive),
+    );
     return total * (1 - done);
   }
 
@@ -1364,8 +1402,11 @@ class SettlementController extends ChangeNotifier {
   double craftJobProgress(CraftJob job) {
     final def = kItemDefs[job.itemId];
     if (def == null) return 0;
-    return craftProgress(def, job.secondsBuilt,
-        timeScale: jumpstartTimeScale(jumpstartActive));
+    return craftProgress(
+      def,
+      job.secondsBuilt,
+      timeScale: jumpstartTimeScale(jumpstartActive),
+    );
   }
 
   int get activeConstructionCount =>
@@ -1467,10 +1508,12 @@ class SettlementController extends ChangeNotifier {
     // _applyTick is sync (it runs on the 5s ticker and on the load path), and
     // a level-up is reported through the event log rather than a return value.
     unawaited(
-      CreaturesController().accruePassiveXp(result.effectiveHours).then(
-        (messages) =>
-            GameEventLog().addAll(GameEventKind.levelUp, messages),
-      ),
+      CreaturesController()
+          .accruePassiveXp(result.effectiveHours)
+          .then(
+            (messages) =>
+                GameEventLog().addAll(GameEventKind.levelUp, messages),
+          ),
     );
 
     // Finished treatments. Resolved here rather than on a timer of their own:
@@ -1528,8 +1571,9 @@ class SettlementController extends ChangeNotifier {
       // Charging up front would mean a player who cancels — or whose crafters
       // get sent on an expedition — silently loses what they paid.
       final cost = craftCost(def, currentEra?.order ?? 1, stock.asMap);
-      final canPay =
-          cost.entries.every((e) => (stock.asMap[e.key] ?? 0) >= e.value);
+      final canPay = cost.entries.every(
+        (e) => (stock.asMap[e.key] ?? 0) >= e.value,
+      );
       if (!canPay) {
         // Hold at exactly full rather than letting seconds pile up: banking
         // overflow would hand the player a burst of free items the moment
@@ -1548,13 +1592,18 @@ class SettlementController extends ChangeNotifier {
     }
     // Sweeping the finished jobs is what PULLS THE QUEUE FORWARD: the next
     // waiting item simply becomes one of the first `benches` entries.
-    jobs = [for (final j in jobs) if (j.secondsBuilt >= 0) j];
+    jobs = [
+      for (final j in jobs)
+        if (j.secondsBuilt >= 0) j,
+    ];
     resources = stock;
     var items = s.items;
     for (final def in finished) {
       items = addItem(items, def.id);
-      GameEventLog()
-          .add(GameEventKind.craft, '${def.emoji} ${def.name} crafted');
+      GameEventLog().add(
+        GameEventKind.craft,
+        '${def.emoji} ${def.name} crafted',
+      );
     }
     settlement = s.copyWith(craftJobs: jobs, items: items);
   }
@@ -1574,7 +1623,7 @@ class SettlementController extends ChangeNotifier {
       return queueCap == 0
           ? 'Every bench is busy — level the Workshop for room to queue.'
           : 'The Workshop holds $craftCapacity on the bench and $queueCap in '
-              'line, and both are full.';
+                'line, and both are full.';
     }
     settlement = s.copyWith(craftJobs: [...s.craftJobs, CraftJob(itemId)]);
     notifyListeners();
@@ -1589,9 +1638,7 @@ class SettlementController extends ChangeNotifier {
     final s = settlement;
     if (s == null) return 'Not loaded';
     if (index < 0 || index >= s.craftJobs.length) return null;
-    settlement = s.copyWith(
-      craftJobs: [...s.craftJobs]..removeAt(index),
-    );
+    settlement = s.copyWith(craftJobs: [...s.craftJobs]..removeAt(index));
     notifyListeners();
     await _persist();
     return null;
@@ -1612,7 +1659,8 @@ class SettlementController extends ChangeNotifier {
     if (s == null || res == null) return 'Not loaded';
     final def = kItemDefs[itemId];
     if (def == null) return 'Unknown item';
-    if (def.kind != ItemKind.resourcePack) return '${def.name} is not a package.';
+    if (def.kind != ItemKind.resourcePack)
+      return '${def.name} is not a package.';
     final resourceId = def.resourceId;
     if (resourceId == null || def.magnitude <= 0) {
       return '${def.name} is empty — check its Dev-Mode definition.';
@@ -1766,8 +1814,11 @@ class SettlementController extends ChangeNotifier {
   // How many creatures currently fill a given work role of a building — used
   // by the assignment UI to show "N/slots" and to gate new assignments.
   int workshopOccupancy(String buildingId, CreatureStat stat) {
-    return CreaturesController().creatures.where((c) =>
-        c.assignedBuildingId == buildingId && c.assignedStat == stat).length;
+    return CreaturesController().creatures
+        .where(
+          (c) => c.assignedBuildingId == buildingId && c.assignedStat == stat,
+        )
+        .length;
   }
 
   // Stations [creatureId] in [buildingId]'s [stat] work role (moving it from
@@ -1813,10 +1864,12 @@ class SettlementController extends ChangeNotifier {
     }
     if (role == null) return 'This building has no such work role';
     final occupied = creatures.creatures
-        .where((c) =>
-            c.id != creatureId &&
-            c.assignedBuildingId == buildingId &&
-            c.assignedStat == stat)
+        .where(
+          (c) =>
+              c.id != creatureId &&
+              c.assignedBuildingId == buildingId &&
+              c.assignedStat == stat,
+        )
         .length;
     // Slots grow with the building's level (user 2026-07-22) — the guard has
     // to agree with what the dialog shows.
@@ -2211,7 +2264,8 @@ class SettlementController extends ChangeNotifier {
     // undeletable in practice (reported from a real run). The guard exists to
     // stop you DESTROYING housing you need; a road destroys nothing, it only
     // disconnects, and you're mid-edit and about to reconnect it.
-    final isRoad = kBuildingDefs[buildings[idx].buildingTypeId]?.isRoad ?? false;
+    final isRoad =
+        kBuildingDefs[buildings[idx].buildingTypeId]?.isRoad ?? false;
     if (!isRoad) {
       final remainingCapacity = resources == null
           ? 0
@@ -2398,7 +2452,12 @@ class SettlementController extends ChangeNotifier {
       // Dev-authored `production` effects (e.g. a house's own gold effect, the
       // special buildings) — they carry their own level scaling, added AFTER
       // the global factor, matching workshopPower so the rows sum to the header.
-      final effVal = def.effectAt('production', resourceId, era, level: b.level);
+      final effVal = def.effectAt(
+        'production',
+        resourceId,
+        era,
+        level: b.level,
+      );
       if (effVal != 0) {
         out += effVal * _legendaryBoostFactor(b, def, creatures);
       }
@@ -2436,23 +2495,29 @@ class SettlementController extends ChangeNotifier {
       if (per == null || per <= 0) continue;
       final made = rates[g.id] ?? 0;
       if (made <= 0) continue;
-      sources.add(ProductionSource(
-        emoji: g.emoji,
-        label: 'Refined into ${g.name}',
-        count: 1,
-        amount: -made * per,
-      ));
+      sources.add(
+        ProductionSource(
+          emoji: g.emoji,
+          label: 'Refined into ${g.name}',
+          count: 1,
+          amount: -made * per,
+        ),
+      );
     }
 
     // Goods consumption row (creatures eating).
     final gDef = kGoodsDefs[resourceId];
-    if (gDef != null && gDef.consumptionPerCapitaPerHour > 0 && housingUsed > 0) {
-      sources.add(ProductionSource(
-        emoji: '🐾',
-        label: 'Creature upkeep',
-        count: housingUsed,
-        amount: -housingUsed * gDef.consumptionPerCapitaPerHour,
-      ));
+    if (gDef != null &&
+        gDef.consumptionPerCapitaPerHour > 0 &&
+        housingUsed > 0) {
+      sources.add(
+        ProductionSource(
+          emoji: '🐾',
+          label: 'Creature upkeep',
+          count: housingUsed,
+          amount: -housingUsed * gDef.consumptionPerCapitaPerHour,
+        ),
+      );
     }
     return sources;
   }
@@ -2617,8 +2682,7 @@ class SettlementController extends ChangeNotifier {
     if (earned <= 0) return '${def.name} can\'t be sold.';
     final next = removeItem(s.items, itemId);
     if (next == null) return 'You have none left';
-    resources = res.grant({'gold': earned.toDouble()})
-        .capped(storageCaps);
+    resources = res.grant({'gold': earned.toDouble()}).capped(storageCaps);
     settlement = s.copyWith(items: next);
     notifyListeners();
     await _persist();
@@ -2704,8 +2768,9 @@ class SettlementController extends ChangeNotifier {
     if (introStep == IntroStep.done) {
       GameEventLog().add(
         GameEventKind.building,
-        '🎓 Tutorial complete! From now on buildings need a ROAD to the '
-        'Castle to work — paint roads via Build ▸ Roads.',
+        '🎓 Tutorial complete! Road connectivity is enforced for real now '
+        '— keep every new building linked back to the Main Hall via '
+        'Build ▸ Roads.',
       );
     }
   }
@@ -2716,7 +2781,7 @@ class SettlementController extends ChangeNotifier {
   /// Dev-mode only: replays the intro from the top. Existing accounts are
   /// backfilled to `done` by migration 0005, so without this there is no way
   /// to see the flow again on an account that already has progress.
-  Future<void> restartIntro() => _setIntroStep(IntroStep.pickStarter);
+  Future<void> restartIntro() => _setIntroStep(IntroStep.welcome);
 
   Future<void> _setIntroStep(IntroStep step) async {
     if (introStep == step) return;
@@ -2725,5 +2790,4 @@ class SettlementController extends ChangeNotifier {
     final userId = supabase.auth.currentUser?.id;
     if (userId != null) await _svc.saveIntroStep(userId, step.index);
   }
-
 }

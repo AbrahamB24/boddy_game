@@ -48,12 +48,19 @@ class _OverworldScreenState extends State<OverworldScreen>
     duration: const Duration(milliseconds: 1700),
   )..repeat(reverse: true);
 
+  // One-time explanation on the tutorial's first visit here — the node
+  // lock/current/done states already make "only the next battle is
+  // playable" true on their own, so this only needs to SAY so, not enforce
+  // it (user 2026-08-24: "Overworld map wird kurz erklärt").
+  bool _showMapIntro = false;
+
   @override
   void initState() {
     super.initState();
     _settlement.addListener(_onChange);
     CreaturesController().load();
     WidgetsBinding.instance.addPostFrameCallback((_) => _centerOnCurrent());
+    _showMapIntro = _settlement.introStep == IntroStep.firstNode;
   }
 
   @override
@@ -77,8 +84,9 @@ class _OverworldScreenState extends State<OverworldScreen>
     final key = '${_settlement.battlesCleared}|${kAreaDefs.length}';
     if (_nodesKey == key && _nodesCache != null) return _nodesCache!;
     _nodesKey = key;
-    return _nodesCache =
-        buildLinearOverworld(battlesCleared: _settlement.battlesCleared);
+    return _nodesCache = buildLinearOverworld(
+      battlesCleared: _settlement.battlesCleared,
+    );
   }
 
   Size get _canvas => overworldCanvasSize(_nodes);
@@ -117,8 +125,10 @@ class _OverworldScreenState extends State<OverworldScreen>
     _transform.value = Matrix4.identity()
       ..translateByDouble(
         0,
-        (size.height / 2 - focusY * fill)
-            .clamp(size.height - canvas.height * fill, 0.0),
+        (size.height / 2 - focusY * fill).clamp(
+          size.height - canvas.height * fill,
+          0.0,
+        ),
         0,
         1,
       )
@@ -215,19 +225,56 @@ class _OverworldScreenState extends State<OverworldScreen>
             ),
           ),
           Positioned(top: 0, left: 0, right: 0, child: _topBar()),
+          if (_showMapIntro) _mapIntroOverlay(),
         ],
       ),
     );
   }
 
+  Widget _mapIntroOverlay() => Positioned.fill(
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _showMapIntro = false),
+      child: Container(
+        color: const Color(0xB3000000),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: FoE.panel(overrideBorder: FoE.borderGold, glow: true),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('The Overworld', style: FoE.title(size: 15)),
+              const SizedBox(height: 8),
+              Text(
+                'One path, one battle at a time. The glowing node is the '
+                'only one you can fight — win it and the next one lights '
+                'up.',
+                style: FoE.label(size: 12),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Tap anywhere to continue',
+                  style: FoE.dim(size: 11).copyWith(color: FoE.gold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
   /// THE bar (user 2026-07-31: "überall wo es einen header hat, soll dieser
   /// immer genau gleich aussehen"). This screen had its own: a flat box, its own
   /// padding, its own back button and its own title size — three values that had
   /// all drifted from the shared one.
-  Widget _topBar() => const SafeArea(
-    bottom: false,
-    child: ParchmentHeader(title: 'Overworld'),
-  );
+  Widget _topBar() =>
+      const SafeArea(bottom: false, child: ParchmentHeader(title: 'Overworld'));
 
   // ── Nodes ──────────────────────────────────────────────────
   Widget _nodeWidget(OverworldNode node) {
@@ -277,13 +324,15 @@ class _OverworldScreenState extends State<OverworldScreen>
       context.snack('No battle-ready monster — heal up first!');
       return;
     }
-    final title =
-        node.isBoss ? '👑 ${area.name} — Boss' : 'Battle ${node.battleNumber}';
+    final title = node.isBoss
+        ? '👑 ${area.name} — Boss'
+        : 'Battle ${node.battleNumber}';
     // Only clearing the CURRENT node grants the map unlocks, so only preview
     // rewards there (a re-fight just gives XP).
     final isFrontier = node.state == OverworldNodeState.current;
-    final rewards =
-        isFrontier ? battleRewardsFor(node.battleNumber) : const <RewardLine>[];
+    final rewards = isFrontier
+        ? battleRewardsFor(node.battleNumber)
+        : const <RewardLine>[];
 
     // PRE-BATTLE briefing: pick the team, see the foes + rewards (user
     // 2026-07-24). Cancelling (null) backs out without a fight.
@@ -346,12 +395,13 @@ class _OverworldScreenState extends State<OverworldScreen>
       force: true,
     );
     if (!mounted) return;
-    context.snack(caught != null
-        ? '👑 ${caught.displayName} joins you! The next region is open — '
-            'push on at the Castle.'
-        : 'The next region is open — push on at the Castle.');
+    context.snack(
+      caught != null
+          ? '👑 ${caught.displayName} joins you! The next region is open — '
+                'push on at the Castle.'
+          : 'The next region is open — push on at the Castle.',
+    );
   }
-
 }
 
 // ── Node ────────────────────────────────────────────────────
@@ -445,10 +495,7 @@ class _MapNode extends StatelessWidget {
       // moment you tap it. The caption repeated the number, and the badge
       // stacked level, foe count and party size under every single node — three
       // rows of chrome per stop, on a map whose whole subject is one line.
-      child: SizedBox(
-        width: size,
-        child: disc,
-      ),
+      child: SizedBox(width: size, child: disc),
     );
   }
 
@@ -468,7 +515,6 @@ class _MapNode extends StatelessWidget {
       ),
     );
   }
-
 }
 
 // ── Trail ───────────────────────────────────────────────────
@@ -573,9 +619,12 @@ class _TrailPainter extends CustomPainter {
       final amp = (i.isEven ? 1 : -1) * 22.0;
       final dy = b.dy - a.dy;
       path.cubicTo(
-        a.dx + amp, a.dy + dy * 0.35,
-        b.dx + amp, b.dy - dy * 0.35,
-        b.dx, b.dy,
+        a.dx + amp,
+        a.dy + dy * 0.35,
+        b.dx + amp,
+        b.dy - dy * 0.35,
+        b.dx,
+        b.dy,
       );
     }
     return path;

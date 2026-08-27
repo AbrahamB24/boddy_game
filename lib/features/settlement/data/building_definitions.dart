@@ -1546,13 +1546,14 @@ List<BuildingDef> _buildRoster() {
     // and the name was the last thing still calling it a camp.
     name: 'Castle',
     color: Color(0xFF7C5CBF),
-    // 7x7, not 5x6 (user 2026-08-23, reference: creality "large damaged
-    // castle, triple crenellated towers, wood" — "die Grundfläche darf auch
-    // grösser werden") — grown to fit the half-timbered watch-tower added
-    // the same day. See PRESETS['castle'] / MAIN_HALL_PLAN in
+    // 10x10, not 7x7 (user 2026-08-24: "Grösse 10x10 / hinteren beiden
+    // Ecken sind Ecktürme / Vorne sind zwei Rundtürme / Zugbrücke / An der
+    // hinteren Wand ist der grosse Bergfried") — a full four-tower
+    // enclosure needs the room a five-piece skyline along one wall
+    // didn't. See PRESETS['castle'] / MAIN_HALL_PLAN in
     // tool/blender/render_building.py for the matching render-side change.
-    gridW: 7,
-    gridH: 7,
+    gridW: 10,
+    gridH: 10,
     isMainBuilding: true,
     isUnique: true,
     population: 5,

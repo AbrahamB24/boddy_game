@@ -48,9 +48,11 @@ const bool kIntroEnabled = false;
 /// `profiles.intro_step`; anything out of range reads as [done] so an older
 /// or newer client can never trap a player in a step it doesn't know.
 enum IntroStep {
+  welcome,
   pickStarter,
   firstNode,
   buildHealingHut,
+  buildRoad,
   assignHealer,
   healStarter,
   firstCapture,
@@ -75,13 +77,7 @@ enum IntroStep {
 /// navigation — the settlement screen maps these onto its existing routes
 /// (and, for [healingHut]/[mainHall], opens the building's dialog directly:
 /// the tutorial routes the player rather than hoping they find the building).
-enum IntroDestination {
-  collection,
-  map,
-  trips,
-  build,
-  healingHut,
-}
+enum IntroDestination { collection, map, trips, build, healingHut }
 
 /// One step's player-facing content.
 class IntroCard {
@@ -104,6 +100,15 @@ class IntroCard {
 /// Written to teach the *why* along with the *what* — a new player has no way
 /// to know that monsters are the workforce or that HP never regenerates.
 IntroCard? introCardFor(IntroStep step) => switch (step) {
+  IntroStep.welcome => const IntroCard(
+    title: 'Welcome to Boddy Builder',
+    body:
+        'Grow a settlement, raise monsters, and send them out to fight, '
+        'gather and explore. Buildings need staff, staff are monsters, and '
+        'monsters come from you. Let\'s get your first one.',
+    ctaLabel: 'Let\'s go',
+    destination: IntroDestination.collection,
+  ),
   IntroStep.pickStarter => const IntroCard(
     title: 'Choose your first monster',
     body:
@@ -128,6 +133,17 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
         'That fight cost your monster some HP — and HP never comes back on '
         'its own. Healing is what the Healing Hut is for. Build one now.',
     ctaLabel: '🏕 Build the Healing Hut',
+    destination: IntroDestination.build,
+  ),
+  IntroStep.buildRoad => const IntroCard(
+    title: 'Connect it with a road',
+    body:
+        'Right now every building works without one — that is only true '
+        'while this tutorial runs. From here on, a building needs a road '
+        'linking it back to your Main Hall to do anything at all. Open '
+        'Build ▸ Roads and lay one from the Hall to the Healing Hut before '
+        'that rule catches you out.',
+    ctaLabel: '🛤 Build a road',
     destination: IntroDestination.build,
   ),
   IntroStep.assignHealer => const IntroCard(
@@ -176,6 +192,7 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
 /// and by the build menu to know which row to spotlight.
 const Map<String, IntroStep> kIntroBuildSteps = {
   'healing_hut': IntroStep.buildHealingHut,
+  'road': IntroStep.buildRoad,
 };
 
 /// The building type a build step wants, or null when [step] isn't one.

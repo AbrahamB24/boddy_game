@@ -27,8 +27,7 @@ class IntroSpotlightAnchors {
 
   /// The key for [name], created on first use. Using the same name from the
   /// overlay and from the target widget is the whole contract.
-  static GlobalKey of(String name) =>
-      _keys.putIfAbsent(name, GlobalKey.new);
+  static GlobalKey of(String name) => _keys.putIfAbsent(name, GlobalKey.new);
 }
 
 /// Dims and dead-zones everything except the widget carrying
@@ -48,11 +47,20 @@ class IntroSpotlightOverlay extends StatefulWidget {
   /// Breathing room around the target's own bounds.
   final double padding;
 
+  /// Tapping the DIMMED area (not the hole) runs this instead of doing
+  /// nothing — used by a screen's own sequential callouts ("turn order →
+  /// AP → actions → HP") to advance on any tap, since the highlighted
+  /// target itself is sometimes a real button the callout must not trigger
+  /// (see battle_screen.dart's action-row explanation). Null keeps the
+  /// original behaviour: the scrim only ever blocks.
+  final VoidCallback? onScrimTap;
+
   const IntroSpotlightOverlay({
     super.key,
     required this.anchorName,
     this.hint,
     this.padding = 6,
+    this.onScrimTap,
   });
 
   @override
@@ -89,7 +97,7 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
 
     return Positioned.fill(
       child: hole == null
-          ? const _Scrim(rect: null, color: scrim)
+          ? _Scrim(rect: null, color: scrim, onTap: widget.onScrimTap)
           : Stack(
               children: [
                 // Four scrims around the hole; the gap between them is the
@@ -99,28 +107,44 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
                   top: 0,
                   right: 0,
                   height: hole.top,
-                  child: const _Scrim(rect: null, color: scrim),
+                  child: _Scrim(
+                    rect: null,
+                    color: scrim,
+                    onTap: widget.onScrimTap,
+                  ),
                 ),
                 Positioned(
                   left: 0,
                   top: hole.bottom,
                   right: 0,
                   bottom: 0,
-                  child: const _Scrim(rect: null, color: scrim),
+                  child: _Scrim(
+                    rect: null,
+                    color: scrim,
+                    onTap: widget.onScrimTap,
+                  ),
                 ),
                 Positioned(
                   left: 0,
                   top: hole.top,
                   width: hole.left,
                   height: hole.height,
-                  child: const _Scrim(rect: null, color: scrim),
+                  child: _Scrim(
+                    rect: null,
+                    color: scrim,
+                    onTap: widget.onScrimTap,
+                  ),
                 ),
                 Positioned(
                   left: hole.right,
                   top: hole.top,
                   right: 0,
                   height: hole.height,
-                  child: const _Scrim(rect: null, color: scrim),
+                  child: _Scrim(
+                    rect: null,
+                    color: scrim,
+                    onTap: widget.onScrimTap,
+                  ),
                 ),
                 // Glow frame around the hole — draws attention without
                 // intercepting the pointer.
@@ -128,7 +152,12 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
                   rect: hole,
                   child: IgnorePointer(
                     child: DecoratedBox(
-                      decoration: ShapeDecoration(shape: FoE.facet(radius: 10, side: BorderSide(color: FoE.goldBright, width: 2))),
+                      decoration: ShapeDecoration(
+                        shape: FoE.facet(
+                          radius: 10,
+                          side: BorderSide(color: FoE.goldBright, width: 2),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -140,12 +169,15 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
 
   void _measure() {
     if (!mounted) return;
-    final targetContext =
-        IntroSpotlightAnchors.of(widget.anchorName).currentContext;
+    final targetContext = IntroSpotlightAnchors.of(
+      widget.anchorName,
+    ).currentContext;
     final box = targetContext?.findRenderObject() as RenderBox?;
     final overlayBox = context.findRenderObject() as RenderBox?;
     Rect? next;
-    if (box != null && box.hasSize && overlayBox != null &&
+    if (box != null &&
+        box.hasSize &&
+        overlayBox != null &&
         overlayBox.hasSize) {
       final topLeft = box.localToGlobal(Offset.zero, ancestor: overlayBox);
       next = (topLeft & box.size).inflate(widget.padding);
@@ -187,12 +219,13 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
 class _Scrim extends StatelessWidget {
   final Rect? rect; // unused, kept for readability at call sites
   final Color color;
-  const _Scrim({required this.rect, required this.color});
+  final VoidCallback? onTap;
+  const _Scrim({required this.rect, required this.color, this.onTap});
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {},
-        child: ColoredBox(color: color),
-      );
+    behavior: HitTestBehavior.opaque,
+    onTap: onTap ?? () {},
+    child: ColoredBox(color: color),
+  );
 }

@@ -69,6 +69,23 @@ void main() {
     return c;
   }
 
+  // A hut with nobody stationed contributes 0 capacity (user 2026-08-24) —
+  // orthogonal to what this file actually pins (slot-vs-line routing), so
+  // every test gets one full-health medicine worker for free.
+  CreatureInstance healer() => CreatureInstance(
+        id: 'healer',
+        userId: 'u',
+        speciesId: 's',
+        gender: CreatureGender.female,
+        level: 1,
+        statBase: {for (final s in CreatureStat.values) s: 20.0},
+        statSlope: {for (final s in CreatureStat.values) s: 1.0},
+        // 'b' — the PLACED building's own id from layout(), not the type id
+        // (_hutId): workshopOccupancy matches on PlacedBuilding.id.
+        assignedBuildingId: 'b',
+        assignedStat: CreatureStat.medicine,
+      );
+
   setUp(() {
     // ONE treatment slot, so "full" and "free" are one monster apart.
     kBuildingDefs[_hutId] = BuildingDef(
@@ -101,7 +118,9 @@ void main() {
       goods: {for (final g in kGoodsDefs.keys) g: 99999},
       lastUpdatedAt: DateTime.now(),
     );
-    creatures.creatures.clear();
+    creatures.creatures
+      ..clear()
+      ..add(healer());
   });
 
   tearDown(() {
@@ -118,6 +137,18 @@ void main() {
     expect(settlement.healCapacity, 1);
     expect(settlement.healQueueCapacity, 5);
   });
+
+  test(
+    'a hut with nobody stationed reads as 0 capacity, not "no hut" '
+    '(user 2026-08-24)',
+    () {
+      creatures.creatures.clear(); // pull the healer set up in setUp()
+      // Still a real healing building — authored=true keeps the null-means-
+      // unlimited branch from kicking in — it just heals nobody until
+      // someone works it.
+      expect(settlement.healCapacity, 0);
+    },
+  );
 
   test('with a slot FREE, nothing is put in the line', () async {
     final c = mob('hurt');

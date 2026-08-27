@@ -13,6 +13,7 @@ import 'models/creature_instance.dart';
 import 'models/species_def.dart';
 import 'services/breeding_controller.dart';
 import 'services/creatures_controller.dart';
+import 'starter_preview_screen.dart';
 import 'teams_screen.dart';
 import 'widgets/creature_backdrop.dart';
 import 'widgets/creature_card.dart';
@@ -139,42 +140,11 @@ class _CollectionScreenState extends State<CollectionScreen> {
     super.dispose();
   }
 
-  Future<void> _adoptStarter(SpeciesDef species) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: FoE.panelDark,
-        shape: FoE.facet(radius: 12, side: const BorderSide(color: FoE.borderGold)),
-        title: Text('Choose ${species.name}?', style: FoE.title(size: 15)),
-        content: Text(
-          'Your starter accompanies you from the very beginning. This choice is final!',
-          style: FoE.label(size: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: FoE.dim(size: 13)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              'Choose',
-              style: FoE.label(size: 13).copyWith(color: FoE.goldBright),
-            ),
-          ),
-        ],
-      ),
+  void _previewStarter(SpeciesDef species) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => StarterPreviewScreen(species: species)),
     );
-    if (ok != true) return;
-    final created = await _ctrl.adoptStarter(species);
-    if (created != null && mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CreatureDetailScreen(creatureId: created.id),
-        ),
-      );
-    }
   }
 
   @override
@@ -188,7 +158,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
           if (_ctrl.creatures.isNotEmpty) _sortFilterBar(),
           Expanded(
             child: _ctrl.isLoading && _ctrl.creatures.isEmpty
-                ? const Center(child: CircularProgressIndicator(color: FoE.gold))
+                ? const Center(
+                    child: CircularProgressIndicator(color: FoE.gold),
+                  )
                 : _ctrl.creatures.isEmpty
                 ? _starterPicker()
                 : _collectionGrid(),
@@ -197,7 +169,6 @@ class _CollectionScreenState extends State<CollectionScreen> {
       ),
     ),
   );
-
 
   // One row of ICON buttons (user decision 2026-07-17): Teams, Breeding and
   // dev-Heal to the left of Bestiary, which sits rightmost and carries the
@@ -218,15 +189,22 @@ class _CollectionScreenState extends State<CollectionScreen> {
         if (mounted) setState(() {});
       }),
       if (_ctrl.creatures.isNotEmpty)
-        _iconBtn('🥚', tooltip: 'Breeding', () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const BreedingScreen()),
-        )),
+        _iconBtn(
+          '🥚',
+          tooltip: 'Breeding',
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const BreedingScreen()),
+          ),
+        ),
       if (_settlement.isDev && _ctrl.creatures.isNotEmpty)
         // free: this is the dev tool — it deliberately skips the goods cost AND
         // the wait the Healing Hut charges players.
-        _iconBtn('🛠', tooltip: 'Heal all (dev)', () =>
-            _ctrl.healAll(free: true)),
+        _iconBtn(
+          '🛠',
+          tooltip: 'Heal all (dev)',
+          () => _ctrl.healAll(free: true),
+        ),
       _iconBtn(
         '📖',
         tooltip: 'Bestiary',
@@ -267,8 +245,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   const SizedBox(width: 4),
                   Text(
                     badge,
-                    style: FoE.value(size: 11)
-                        .copyWith(color: gold ? Colors.white : FoE.goldBright),
+                    style: FoE.value(
+                      size: 11,
+                    ).copyWith(color: gold ? Colors.white : FoE.goldBright),
                   ),
                 ],
               ],
@@ -335,7 +314,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   Widget _speciesCard(SpeciesDef species) {
     return GestureDetector(
-      onTap: () => _adoptStarter(species),
+      onTap: () => _previewStarter(species),
       child: Container(
         decoration: FoE.panel(radius: 10, overrideBorder: species.rarity.color),
         padding: const EdgeInsets.all(10),
@@ -442,9 +421,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
         // several — "3 filters" beats a lit icon that hides which three.
         label: switch (count) {
           0 => 'All monsters',
-          1 => _elementFilters.isNotEmpty
-              ? _elementFilters.first.label
-              : _rarityFilters.first.label,
+          1 =>
+            _elementFilters.isNotEmpty
+                ? _elementFilters.first.label
+                : _rarityFilters.first.label,
           _ => '$count filters',
         },
         engaged: count > 0,
@@ -518,7 +498,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.6,
         ),
-        decoration: ShapeDecoration(color: FoE.panelMid, shape: FoE.facet(radius: 10, side: BorderSide(color: FoE.borderGold))),
+        decoration: ShapeDecoration(
+          color: FoE.panelMid,
+          shape: FoE.facet(radius: 10, side: BorderSide(color: FoE.borderGold)),
+        ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Column(
@@ -605,10 +588,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
     final list = _visibleCreatures();
     if (list.isEmpty) {
       return Center(
-        child: Text(
-          'Nothing matches the filter.',
-          style: FoE.dim(size: 12),
-        ),
+        child: Text('Nothing matches the filter.', style: FoE.dim(size: 12)),
       );
     }
     return GridView.builder(
@@ -641,13 +621,16 @@ class _CollectionScreenState extends State<CollectionScreen> {
     );
   }
 
-  Widget _creatureImage(String? url, {Alignment alignment = Alignment.center}) =>
-      url == null
+  Widget _creatureImage(
+    String? url, {
+    Alignment alignment = Alignment.center,
+  }) => url == null
       ? const Center(child: Icon(Icons.pets, color: FoE.gold, size: 40))
       : CreatureSprite(
           url: url,
           alignment: alignment,
-          fallback:
-              const Center(child: Icon(Icons.pets, color: FoE.gold, size: 40)),
+          fallback: const Center(
+            child: Icon(Icons.pets, color: FoE.gold, size: 40),
+          ),
         );
 }

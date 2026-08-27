@@ -5,7 +5,7 @@ import '../../core/theme/foe_theme.dart';
 import '../../core/ui/duration_format.dart';
 import '../creatures/models/creature_enums.dart'
     show kTrainingXpPerHour, workXpPerHourAt;
-import '../onboarding/intro_flow.dart' show introBuildTarget;
+import '../onboarding/intro_flow.dart' show IntroStep, introBuildTarget;
 import '../onboarding/intro_spotlight.dart';
 import 'data/building_definitions.dart';
 import 'data/road_tiles.dart';
@@ -132,6 +132,20 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
   /// left edge, so there is no scroll state to track.
   final _cardScroll = ScrollController();
 
+  // One combined explanation of the menu's own parts (categories, workers,
+  // queue, resources, time, limits) — shown once, before the existing
+  // target-row spotlight takes over to point at the actual building to
+  // build (user 2026-08-24: "Buildmenü erklären ... Healing Hut bauen").
+  // Six separate taps for six labels would be more friction than the
+  // screen's density justifies, so this is one card, not a sequence.
+  bool _showMenuIntro = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _showMenuIntro = ctrl.introStep == IntroStep.buildHealingHut;
+  }
+
   @override
   void dispose() {
     _cardScroll.dispose();
@@ -151,10 +165,13 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
     final sections = _sections(available);
 
     // Guided tutorial: the step's target building is the only tappable card —
-    // everything else is dimmed and dead by the spotlight overlay.
+    // everything else is dimmed and dead by the spotlight overlay. Held off
+    // while the menu's own one-time intro card is still up top.
     final introTarget = introBuildTarget(ctrl.introStep);
     final spotlight =
-        introTarget != null && available.any((d) => d.id == introTarget);
+        !_showMenuIntro &&
+        introTarget != null &&
+        available.any((d) => d.id == introTarget);
 
     // Land on a sensible category: the tutorial's, else the first non-empty.
     final selected = _resolveSelected(sections, spotlight ? introTarget : null);
@@ -192,9 +209,52 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
         ),
         if (spotlight)
           const IntroSpotlightOverlay(anchorName: 'build-target-row'),
+        if (_showMenuIntro) _menuIntroOverlay(),
       ],
     );
   }
+
+  /// One dim scrim + a single card covering every part of this screen
+  /// (categories, workers, queue, resources, time, limits) at once — see
+  /// [_showMenuIntro] for why this is one card rather than a sequence.
+  Widget _menuIntroOverlay() => Positioned.fill(
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _showMenuIntro = false),
+      child: Container(
+        color: const Color(0xB3000000),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: FoE.panel(overrideBorder: FoE.borderGold, glow: true),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('The Build menu', style: FoE.title(size: 15)),
+              const SizedBox(height: 8),
+              Text(
+                'Pick a category up top. Each card shows the workers it '
+                'needs, the resources and time it costs, and how many '
+                'you can build. The bar at the top tracks your build '
+                'slots and queue.',
+                style: FoE.label(size: 12),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Tap anywhere to continue',
+                  style: FoE.dim(size: 11).copyWith(color: FoE.gold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 
   /// Leaves with [choice] — or with nothing, which is what the back arrow does.
   void _close([BuildChoice? choice]) => Navigator.of(context).pop(choice);
@@ -218,7 +278,9 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
         children: [
           for (final s in sections) ...[
             if (s != sections.first) const SizedBox(width: 6),
-            Expanded(child: _categoryTab(s.cat, s.defs.length, s.cat == selected)),
+            Expanded(
+              child: _categoryTab(s.cat, s.defs.length, s.cat == selected),
+            ),
           ],
         ],
       ),
@@ -288,9 +350,9 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
             'Nothing here yet — research opens new buildings.',
             textAlign: TextAlign.center,
             // On the parchment, so ink rather than the app's silver.
-            style: FoE.dim(size: 12).copyWith(
-              color: _paperInk.withValues(alpha: 0.65),
-            ),
+            style: FoE.dim(
+              size: 12,
+            ).copyWith(color: _paperInk.withValues(alpha: 0.65)),
           ),
         ),
       );
@@ -532,7 +594,8 @@ class _BuildCard extends StatelessWidget {
               bottom: 0,
               height: height,
               child: DecoratedBox(
-                decoration: ShapeDecoration(// Green when buildable, faded parchment when not (user
+                decoration: ShapeDecoration(
+                  // Green when buildable, faded parchment when not (user
                   // 2026-07-23) — the scroll's own palette. A soft brown shadow
                   // so the card reads as LYING ON the paper.
                   color: enabled ? _cardActive : _cardInactive,
@@ -542,7 +605,9 @@ class _BuildCard extends StatelessWidget {
                       blurRadius: 0,
                       offset: const Offset(0, 3),
                     ),
-                  ], shape: FoE.facet(radius: 16)),
+                  ],
+                  shape: FoE.facet(radius: 16),
+                ),
                 child: Padding(
                   // Top padding = the art's footprint inside the tile, which
                   // the Stack draws over.
@@ -653,7 +718,10 @@ class _BuildCard extends StatelessWidget {
     if (label == null) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: ShapeDecoration(color: FoE.danger.withValues(alpha: 0.9), shape: FoE.facet(radius: 6)),
+      decoration: ShapeDecoration(
+        color: FoE.danger.withValues(alpha: 0.9),
+        shape: FoE.facet(radius: 6),
+      ),
       child: Text(
         label,
         style: FoE.dim(size: 8).copyWith(
@@ -693,7 +761,10 @@ class _BuildCard extends StatelessWidget {
     // light blue.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-      decoration: ShapeDecoration(color: enabled ? _insetActive : _insetInactive, shape: FoE.facet(radius: 8)),
+      decoration: ShapeDecoration(
+        color: enabled ? _insetActive : _insetInactive,
+        shape: FoE.facet(radius: 8),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -747,7 +818,8 @@ class _BuildCard extends StatelessWidget {
     // buildRatePerHour ALREADY includes buildSpeedMultiplier — multiplying
     // again squares it.
     // Empty tank = floor rate, not zero (energy boosts, it no longer gates).
-    final rate = ctrl.buildRatePerHour /
+    final rate =
+        ctrl.buildRatePerHour /
         3600.0 *
         (e.currentEnergy > 0 ? 1.0 : kEnergyFloorRate);
     if (rate <= 0) return active >= ctrl.maxBuildSlots ? 'Queued (∞)' : '∞';
@@ -863,6 +935,5 @@ class _BuildCard extends StatelessWidget {
     );
   }
 
-  static String _resourceIcon(String key) =>
-      resourceEmoji(key);
+  static String _resourceIcon(String key) => resourceEmoji(key);
 }

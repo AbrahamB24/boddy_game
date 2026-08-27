@@ -129,7 +129,7 @@ void main() {
 
   group('IntroStep', () {
     test('walks the chain in order and terminates at done', () {
-      var step = IntroStep.pickStarter;
+      var step = IntroStep.values.first;
       final seen = <IntroStep>[step];
       while (step != IntroStep.done) {
         step = step.next;
@@ -143,16 +143,23 @@ void main() {
     test('the script order encodes its causal chain', () {
       // Each bound is a real dependency of the guided script, not taste:
       int at(IntroStep s) => s.index;
+      // The welcome blurb comes before anything is asked of the player.
+      expect(at(IntroStep.welcome), 0);
       // Nothing works without a creature.
-      expect(at(IntroStep.pickStarter), 0);
+      expect(at(IntroStep.pickStarter), lessThan(at(IntroStep.firstNode)));
       // The first node fight is what leaves the starter hurt.
       expect(
         at(IntroStep.firstNode),
         lessThan(at(IntroStep.buildHealingHut)),
       );
-      // The hut must stand before a healer can be stationed there.
+      // The hut must stand before it can be linked up...
       expect(
         at(IntroStep.buildHealingHut),
+        lessThan(at(IntroStep.buildRoad)),
+      );
+      // ...and connected before a healer can be stationed there.
+      expect(
+        at(IntroStep.buildRoad),
         lessThan(at(IntroStep.assignHealer)),
       );
       // ...and before it can treat anyone.
@@ -191,7 +198,7 @@ void main() {
       // must NOT be dropped back into the tutorial with a fresh jumpstart.
       expect(IntroStep.fromIndex(-1), IntroStep.done);
       expect(IntroStep.fromIndex(99), IntroStep.done);
-      expect(IntroStep.fromIndex(0), IntroStep.pickStarter);
+      expect(IntroStep.fromIndex(0), IntroStep.welcome);
       expect(
         IntroStep.fromIndex(IntroStep.done.index),
         IntroStep.done,

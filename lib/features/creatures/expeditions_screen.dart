@@ -8,6 +8,7 @@ import '../../core/ui/snack.dart';
 import '../common/widgets/parchment_kit.dart';
 import '../common/widgets/parchment_page.dart';
 import '../common/widgets/recess_bar.dart';
+import '../onboarding/intro_flow.dart';
 import '../settlement/data/gather_defs.dart';
 import '../settlement/settlement_controller.dart';
 import 'capture_encounter_screen.dart';
@@ -120,11 +121,16 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   final _settlement = SettlementController();
   Timer? _ticker;
 
+  // One-time explanation on the tutorial's own catch step (user 2026-08-24:
+  // "Trips erklären, Ressourcen sammeln, dass diese regenerieren").
+  bool _showTripsIntro = false;
+
   @override
   void initState() {
     super.initState();
     _ctrl.addListener(_onChange);
     _ctrl.collectFinished(); // pull any already-due rewards forward
+    _showTripsIntro = _settlement.introStep == IntroStep.firstCapture;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_ctrl.expeditions.any((e) => e.isReadyToCollect(DateTime.now()))) {
         _ctrl.collectFinished();
@@ -171,6 +177,15 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         if (!ExpeditionController.isCaravan(e)) e,
     ];
     final areas = unlockedAreas(_settlement.dungeonMaxStage);
+    return Stack(
+      children: [
+        _list(running, areas),
+        if (_showTripsIntro) _tripsIntroOverlay(),
+      ],
+    );
+  }
+
+  Widget _list(List<Expedition> running, List<AreaDef> areas) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         ParchmentPage.kParchmentPagePad,
@@ -182,10 +197,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         // WHY NOTHING CAN GO, before the list of things that can't (user
         // 2026-07-29: the base pool is 0, so a settlement with no Scout Post
         // has an empty screen and no idea it is missing a building).
-        if (_ctrl.noSlots) ...[
-          _noSlotsBanner(),
-          const SizedBox(height: 14),
-        ],
+        if (_ctrl.noSlots) ...[_noSlotsBanner(), const SizedBox(height: 14)],
         // The caption counts who is still AWAY, not how many cards are listed
         // (user 2026-07-27): a hunt that has landed keeps its card until you
         // play its encounter, but it stopped occupying a slot and its party is
@@ -213,6 +225,44 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
       ],
     );
   }
+
+  Widget _tripsIntroOverlay() => Positioned.fill(
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _showTripsIntro = false),
+      child: Container(
+        color: const Color(0xB3000000),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: FoE.panel(overrideBorder: FoE.borderGold, glow: true),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Trips', style: FoE.title(size: 15)),
+              const SizedBox(height: 8),
+              Text(
+                'Send monsters out to gather resources or hunt a wild one. '
+                'A spot you empty out regenerates over time, so it is worth '
+                'a return trip later.',
+                style: FoE.label(size: 12),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Tap anywhere to continue',
+                  style: FoE.dim(size: 11).copyWith(color: FoE.gold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 
   String _outHint(List<Expedition> running) {
     final away = _ctrl.activeCount;
@@ -403,12 +453,17 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
                     horizontal: 7,
                     vertical: 2,
                   ),
-                  decoration: ShapeDecoration(color: dangerColor(area.dangerLevel).withValues(alpha: 0.18), shape: FoE.facet(radius: 5)),
+                  decoration: ShapeDecoration(
+                    color: dangerColor(
+                      area.dangerLevel,
+                    ).withValues(alpha: 0.18),
+                    shape: FoE.facet(radius: 5),
+                  ),
                   child: Text(
                     'Danger ${area.dangerLevel}',
-                    style: FoE.label(size: 9).copyWith(
-                      color: dangerColor(area.dangerLevel),
-                    ),
+                    style: FoE.label(
+                      size: 9,
+                    ).copyWith(color: dangerColor(area.dangerLevel)),
                   ),
                 ),
               ],
@@ -438,10 +493,10 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
     final reason = busy
         ? 'A group is working this spot'
         : empty
-            ? 'Mined out — it regrows'
-            : full
-                ? (_ctrl.noSlots ? 'Needs a Scout Post' : 'Every slot is busy')
-                : null;
+        ? 'Mined out — it regrows'
+        : full
+        ? (_ctrl.noSlots ? 'Needs a Scout Post' : 'Every slot is busy')
+        : null;
 
     return ParchmentCard(
       padding: const EdgeInsets.all(11),
@@ -525,7 +580,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         _ctrl.noSlots
             ? 'No expedition slots — build a Scout Post to open them.'
             : 'All ${_ctrl.maxSlots} expedition slots are busy. Recall one, '
-                'or wait.',
+                  'or wait.',
       );
       return;
     }

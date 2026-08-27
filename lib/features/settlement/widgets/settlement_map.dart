@@ -35,6 +35,7 @@ import '../../creatures/models/creature_enums.dart'
 import '../../creatures/models/creature_instance.dart';
 import '../../creatures/models/species_def.dart';
 import '../../creatures/services/creatures_controller.dart';
+import '../../onboarding/intro_flow.dart';
 import 'assign_workers_sheet.dart';
 import '../data/building_art.dart';
 import '../data/building_definitions.dart';
@@ -266,9 +267,10 @@ class SettlementMapState extends State<SettlementMap>
         .clamp(math.min(0.0, view.height - mapH), 0.0)
         .toDouble();
     final target = mapTransform(scale, tx, ty);
-    _panAnim = Matrix4Tween(begin: _txCtrl.value, end: target).animate(
-      CurvedAnimation(parent: _panCtrl, curve: Curves.easeOutCubic),
-    );
+    _panAnim = Matrix4Tween(
+      begin: _txCtrl.value,
+      end: target,
+    ).animate(CurvedAnimation(parent: _panCtrl, curve: Curves.easeOutCubic));
     _panCtrl
       ..reset()
       ..forward();
@@ -435,6 +437,9 @@ class SettlementMapState extends State<SettlementMap>
     }
     Feel.place();
     final isNewRoad = moveId == null && (kBuildingDefs[type]?.isRoad ?? false);
+    if (isNewRoad) {
+      unawaited(widget.ctrl.advanceIntro(IntroStep.buildRoad));
+    }
     final chainHead = widget.ctrl.lastPlacedId;
     _clearAim();
     if (isNewRoad && chainHead != null) {
@@ -475,7 +480,8 @@ class SettlementMapState extends State<SettlementMap>
     }
     if (_chainErase) {
       final hit = _hitTest(nx, ny);
-      if (hit == null || !(kBuildingDefs[hit.buildingTypeId]?.isRoad ?? false)) {
+      if (hit == null ||
+          !(kBuildingDefs[hit.buildingTypeId]?.isRoad ?? false)) {
         Feel.deny();
         return;
       }
@@ -809,11 +815,7 @@ class SettlementMapState extends State<SettlementMap>
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  BuildingIcon(
-                    imageUrl: def.imageUrl,
-                    defId: def.id,
-                    size: 18,
-                  ),
+                  BuildingIcon(imageUrl: def.imageUrl, defId: def.id, size: 18),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
@@ -860,9 +862,17 @@ class SettlementMapState extends State<SettlementMap>
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          decoration: ShapeDecoration(color: danger
+          decoration: ShapeDecoration(
+            color: danger
                 ? Colors.red.shade900.withValues(alpha: 0.4)
-                : FoE.panelMid, shape: FoE.facet(radius: 6, side: BorderSide(color: danger ? Colors.red.shade700 : FoE.border))),
+                : FoE.panelMid,
+            shape: FoE.facet(
+              radius: 6,
+              side: BorderSide(
+                color: danger ? Colors.red.shade700 : FoE.border,
+              ),
+            ),
+          ),
           child: Text(
             label,
             style: FoE.label().copyWith(
@@ -969,6 +979,39 @@ class SettlementMapState extends State<SettlementMap>
                                   //    pill, what it does ───────────────────────────
                                   // Footprint + level + XP/state now live in the hero masthead
                                   // (user 2026-07-24) — the separate stat-chip box is gone.
+                                  // Guided tutorial: one banner explaining
+                                  // this whole dialog's parts, right where
+                                  // the player lands after tapping the
+                                  // spotlit Healing Hut (user 2026-08-24:
+                                  // "Detailscreen erklären: Xp, Effekte,
+                                  // Upgrade, Monster einsetzen").
+                                  if (widget.ctrl.introStep ==
+                                          IntroStep.assignHealer &&
+                                      liveB.buildingTypeId ==
+                                          kHealingHutBuildingId) ...[
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: FoE.gold.withValues(alpha: 0.14),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: FoE.borderGold,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'The level bar up top tracks its XP. '
+                                        '"Effects" is what it produces right '
+                                        'now; "Upgrade" makes it produce '
+                                        'more. Below that, post a monster to '
+                                        'its medicine role — a hut with '
+                                        'nobody stationed heals no one.',
+                                        style: FoE.label(
+                                          size: 11,
+                                        ).copyWith(color: _dlgInk),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                  ],
                                   _heroRow(liveB, def, functional),
                                   const SizedBox(height: 10),
                                   // Under construction: the countdown replaces the
@@ -1068,10 +1111,7 @@ class SettlementMapState extends State<SettlementMap>
                                     liveB,
                                     def,
                                     functional,
-                                  )) ...[
-                                    const SizedBox(height: 12),
-                                    action,
-                                  ],
+                                  )) ...[const SizedBox(height: 12), action],
                                   const SizedBox(height: 2),
                                 ],
                               ),
@@ -1530,7 +1570,6 @@ class SettlementMapState extends State<SettlementMap>
     ];
   }
 
-
   /// The prominent form: full width, tall, the settlement's action green, with
   /// a chevron so it reads as "this opens something".
   ///
@@ -1625,10 +1664,9 @@ class SettlementMapState extends State<SettlementMap>
     String res,
     double power, {
     bool withGlyph = false,
-  }) =>
-      withGlyph
-          ? '${workshopRoleEffect(res, power)} ${workshopRoleEmoji(res)}'
-          : workshopRoleEffect(res, power);
+  }) => withGlyph
+      ? '${workshopRoleEffect(res, power)} ${workshopRoleEmoji(res)}'
+      : workshopRoleEffect(res, power);
 
   /// One resource/role glyph — kResourceEmoji is the app-wide source, goods
   /// bring their own, and the three non-resource role keys get their own icon.
@@ -1796,19 +1834,14 @@ class SettlementMapState extends State<SettlementMap>
       for (final key in storageKeys) {
         if (def.effectEntry('storage', key, era) == null) continue;
         final v = buildingEffectValueAt(def, 'storage', key, era, b.level);
-        final posted =
-            functional ? widget.ctrl.storageRoomPosted(b, key) : 0.0;
+        final posted = functional ? widget.ctrl.storageRoomPosted(b, key) : 0.0;
         rows.add(
-          headline(
-            _resLabel(key),
-            [
-              formatBuildingEffect('storage', key, v + posted),
-              if (posted > 0)
-                '${formatBuildingEffect('storage', key, v)} + '
-                    '${shortNumberAbove(posted)} 👷',
-            ],
-            color: functional ? _dlgInk : _dlgInkFaint,
-          ),
+          headline(_resLabel(key), [
+            formatBuildingEffect('storage', key, v + posted),
+            if (posted > 0)
+              '${formatBuildingEffect('storage', key, v)} + '
+                  '${shortNumberAbove(posted)} 👷',
+          ], color: functional ? _dlgInk : _dlgInkFaint),
         );
       }
     }
@@ -1821,11 +1854,9 @@ class SettlementMapState extends State<SettlementMap>
       if (def.effectAt('production', res, era, level: b.level) != 0) continue;
       final at = firstLevelWithEffect(def, 'production', res, era);
       rows.add(
-        headline(
-          _resLabel(res),
-          [at != null ? 'from Lv $at ${_resEmoji(res)}' : '—'],
-          color: _dlgInkFaint,
-        ),
+        headline(_resLabel(res), [
+          at != null ? 'from Lv $at ${_resEmoji(res)}' : '—',
+        ], color: _dlgInkFaint),
       );
     }
     // Housing capacity (a count, not a /h rate — its own row; icon after the
@@ -1839,11 +1870,9 @@ class SettlementMapState extends State<SettlementMap>
     } else if (def.hasEffect('housing', era)) {
       final at = firstLevelWithEffect(def, 'housing', '', era);
       rows.add(
-        headline(
-          'Housing',
-          [at != null ? 'from Lv $at 🏠' : '0 🏠'],
-          color: _dlgInkFaint,
-        ),
+        headline('Housing', [
+          at != null ? 'from Lv $at 🏠' : '0 🏠',
+        ], color: _dlgInkFaint),
       );
     }
 
@@ -1860,11 +1889,9 @@ class SettlementMapState extends State<SettlementMap>
     // Storage has its own grouped block above, so it is left out here.
     for (final row in buildingEffectCardRows(def, era, b.level)) {
       rows.add(
-        headline(
-          row.label,
-          [row.value],
-          color: !functional || row.pending ? _dlgInkFaint : _dlgInk,
-        ),
+        headline(row.label, [
+          row.value,
+        ], color: !functional || row.pending ? _dlgInkFaint : _dlgInk),
       );
     }
 
@@ -1964,7 +1991,7 @@ class SettlementMapState extends State<SettlementMap>
           for (final p in role.parts.entries)
             if ((role.mults[p.key] ?? 0) != 0)
               '${workshopRoleEmoji(p.value)} '
-              '${workshopRoleName(p.value) ?? p.value}',
+                  '${workshopRoleName(p.value) ?? p.value}',
         ];
         if (parts.isNotEmpty) {
           rows.add(
@@ -1990,9 +2017,7 @@ class SettlementMapState extends State<SettlementMap>
       // Gebäude, welches Monster anstellt soll EP geben") — a legendary parked
       // in a special building is stationed like anyone else and earns like
       // anyone else, and this row was the one that used to deny it.
-      final postXp = training
-          ? kTrainingXpPerHour
-          : workXpPerHourAt(b.level);
+      final postXp = training ? kTrainingXpPerHour : workXpPerHourAt(b.level);
       rows.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 2),
@@ -2091,11 +2116,7 @@ class SettlementMapState extends State<SettlementMap>
         // uses — one breeder's 25 % and another's 25 % are not 50 %.
         if (functional)
           for (final e in systemPower.entries)
-            _systemRoleValue(
-              e.key,
-              e.value,
-              withGlyph: systemPower.length > 1,
-            ),
+            _systemRoleValue(e.key, e.value, withGlyph: systemPower.length > 1),
       ];
       // AN EMPTY TANK PRODUCES NOTHING (user 2026-07-30: "fur lodge produziert
       // 3.5 pro Stunde, oben wird mir dies aber nicht angezeigt").
@@ -2106,13 +2127,15 @@ class SettlementMapState extends State<SettlementMap>
       // card promised +3.5/h and never mentioned why the two disagreed. The
       // figures above stay (they are what the building CAN do); the Total says
       // what it currently banks, which is nothing.
-      final halted = functional && parts.isNotEmpty &&
+      final halted =
+          functional &&
+          parts.isNotEmpty &&
           (b.isPaused || !widget.ctrl.hasEnergy || starved.isNotEmpty);
       final haltReason = b.isPaused
           ? '0/h · paused'
           : !widget.ctrl.hasEnergy
-              ? '0/h · no energy'
-              : '0/h · no ${starved.map(_resLabel).join(' / ')}';
+          ? '0/h · no energy'
+          : '0/h · no ${starved.map(_resLabel).join(' / ')}';
       rows
         ..add(const SizedBox(height: 8))
         ..add(
@@ -2161,7 +2184,7 @@ class SettlementMapState extends State<SettlementMap>
             child: Text(
               '${e.value.entries.map((i) => '${_num(i.value)} '
                   '${_resEmoji(i.key)}').join(' + ')}'
-                  ' → 1 ${_resEmoji(e.key)}',
+              ' → 1 ${_resEmoji(e.key)}',
               textAlign: TextAlign.end,
               style: FoE.dim(size: 11),
             ),
@@ -2174,7 +2197,7 @@ class SettlementMapState extends State<SettlementMap>
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               'Out of ${starved.map(_resLabel).join(' and ')} — nothing is '
-                  'being refined.',
+              'being refined.',
               style: FoE.dim(size: 11).copyWith(color: FoE.danger),
             ),
           ),
@@ -2201,6 +2224,7 @@ class SettlementMapState extends State<SettlementMap>
     int level,
     bool training, [
     bool boost = false,
+
     /// The resources this building STORES — what a store post's per-resource
     /// dials are read for (user 2026-07-30). Empty for every other post.
     List<String> storageKeys = const [],
@@ -2253,28 +2277,29 @@ class SettlementMapState extends State<SettlementMap>
                   '${_resEmoji(key)}',
           ]
         : const <String>[];
-    final value = absence ??
+    final value =
+        absence ??
         (storeRoom.isNotEmpty
-        ? storeRoom.first
-        : boost
-        ? (legendary
-              ? '⭐ ×${(1 + role.mult).toStringAsFixed(1)}'
-              : '⚠ not legendary')
-        : training
-        ? '+${kTrainingXpPerHour.toStringAsFixed(0)} XP/h'
-        : construction
-        ? '+${contrib.toStringAsFixed(0)} points 🔨'
-        // A system role's contribution is a cut or a bonus, not an hourly
-        // amount — and it is only meaningful TOGETHER with its colleagues'
-        // (the cut is soft-capped over the summed power), so the row shows
-        // what this one monster is worth ALONE and the Total line adds them up.
-        : workshopRoleFeedsSystem(role.resource)
-        // A combined post says all three of its parts, each with its glyph —
-        // that IS the row's content, and one bare percentage could only be one
-        // of the three (user 2026-07-29). They are STACKED below, not joined.
-        ? workshopPowerLabel(contribution, withGlyph: role.isCombined)
-        // Icon after the value (user 2026-07-24).
-        : '+${contrib.toStringAsFixed(1)}/h ${_resEmoji(role.resource)}');
+            ? storeRoom.first
+            : boost
+            ? (legendary
+                  ? '⭐ ×${(1 + role.mult).toStringAsFixed(1)}'
+                  : '⚠ not legendary')
+            : training
+            ? '+${kTrainingXpPerHour.toStringAsFixed(0)} XP/h'
+            : construction
+            ? '+${contrib.toStringAsFixed(0)} points 🔨'
+            // A system role's contribution is a cut or a bonus, not an hourly
+            // amount — and it is only meaningful TOGETHER with its colleagues'
+            // (the cut is soft-capped over the summed power), so the row shows
+            // what this one monster is worth ALONE and the Total line adds them up.
+            : workshopRoleFeedsSystem(role.resource)
+            // A combined post says all three of its parts, each with its glyph —
+            // that IS the row's content, and one bare percentage could only be one
+            // of the three (user 2026-07-29). They are STACKED below, not joined.
+            ? workshopPowerLabel(contribution, withGlyph: role.isCombined)
+            // Icon after the value (user 2026-07-24).
+            : '+${contrib.toStringAsFixed(1)}/h ${_resEmoji(role.resource)}');
     // The stacked form of that same value. A combined post and a STORE post have
     // more than one line; every other row keeps its single [value] string.
     final lines = absent || training || boost || construction
@@ -2317,10 +2342,7 @@ class SettlementMapState extends State<SettlementMap>
               mainAxisSize: MainAxisSize.min,
               children: [
                 for (final l in lines)
-                  Text(
-                    l,
-                    style: FoE.value(size: 11).copyWith(color: _dlgInk),
-                  ),
+                  Text(l, style: FoE.value(size: 11).copyWith(color: _dlgInk)),
               ],
             )
           else
@@ -2813,7 +2835,10 @@ class SettlementMapState extends State<SettlementMap>
     required Set<String> faded,
   }) {
     final withGhost =
-        ghostDef != null && gx != null && gy != null && ghostDef.isRoad == roads;
+        ghostDef != null &&
+        gx != null &&
+        gy != null &&
+        ghostDef.isRoad == roads;
     final out = <Widget>[];
     var pending = withGhost;
     for (final b in _sortedForPainting(roads: roads)) {
@@ -3237,11 +3262,13 @@ class SettlementMapState extends State<SettlementMap>
               child: Opacity(
                 opacity: 0.75,
                 child: Image.asset(
-                  roadAsset(roadMask(
-                    {...widget.ctrl.roadCells, roadCellKey(gx, gy)},
-                    gx,
-                    gy,
-                  )),
+                  roadAsset(
+                    roadMask(
+                      {...widget.ctrl.roadCells, roadCellKey(gx, gy)},
+                      gx,
+                      gy,
+                    ),
+                  ),
                   fit: BoxFit.fill,
                   filterQuality: FilterQuality.medium,
                   cacheWidth: 256,
@@ -3888,7 +3915,7 @@ class _BuildingTile extends StatelessWidget {
         left: 2,
         right: 2,
         child: ClipPath(
-      clipper: ShapeBorderClipper(shape: FoE.facet(radius: 2)),
+          clipper: ShapeBorderClipper(shape: FoE.facet(radius: 2)),
           child: LinearProgressIndicator(
             value: building.constructionProgress,
             minHeight: 3,
