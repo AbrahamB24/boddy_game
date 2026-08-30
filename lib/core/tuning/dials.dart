@@ -688,8 +688,13 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Kampf',
     label: 'Schaden pro Treffer höchstens',
-    help: 'Anteil der max. HP des Ziels. Verhindert One-Shots.',
-    def: 0.5,
+    help: 'Anteil der max. HP des Ziels. Verhindert One-Shots. 0 = aus.',
+    // Off by default (user 2026-08-29: "es soll keine Grenze geben") — at a
+    // big enough level gap this cap made every move a fight's attacker had
+    // land on the exact SAME clamped number regardless of its own power,
+    // which read as "power does nothing" instead of as the anti-one-shot
+    // floor it actually was.
+    def: 0.0,
     kind: DialKind.percent,
     felt: (v) => v <= 0
         ? '—'

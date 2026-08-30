@@ -7,6 +7,7 @@ import 'package:boddygame/features/creatures/models/combatant.dart';
 import 'package:boddygame/features/creatures/models/creature_enums.dart';
 import 'package:boddygame/features/creatures/models/species_def.dart';
 import 'package:boddygame/features/creatures/models/status_effects.dart';
+import 'package:boddygame/core/tuning/game_tuning.dart';
 import 'package:boddygame/features/creatures/services/combat_engine.dart';
 import 'package:boddygame/features/creatures/services/combat_tuning.dart';
 import 'package:boddygame/features/creatures/services/overworld_path.dart';
@@ -102,12 +103,18 @@ void main() {
     });
   });
 
-  test('one hit can never take a full-HP combatant out (no one-shots)', () {
-    // User requirement 2026-07-17: two starters must NEVER one-shot each
-    // other, however the STAB × type × crit stack lands. An absurdly strong
-    // attacker vs a fragile full-HP target still leaves it alive, and the
-    // hit never exceeds kMaxHitHpFraction of max HP.
-    for (var seed = 0; seed < 40; seed++) {
+  group('the per-hit cap (user 2026-08-29: "es soll keine Grenze geben")', () {
+    // Reversed from the 2026-07-17 requirement this replaced: a big enough
+    // level gap made every move an overleveled attacker owned land on the
+    // exact same clamped number regardless of its own power — Forest
+    // Sovereign Lv50's Vine Strike and Leaf Storm, different power stats,
+    // both dealing exactly 21 to a Lv13 Umbros. That read as "power does
+    // nothing" rather than as the anti-one-shot floor it actually was, so
+    // the floor is off by default now; the mechanism itself stays, for
+    // anyone who wants it back via the dial.
+    tearDown(GameTuning.i.debugClear);
+
+    test('off by default — an absurd attacker CAN one-shot', () {
       final glass = make(id: 'glass', hp: 30, defense: 1, speed: 5);
       final monster = make(
         id: 'monster',
@@ -118,20 +125,42 @@ void main() {
       final engine = armedEngine(
         players: [glass],
         enemies: [monster],
-        rng: math.Random(seed),
+        rng: math.Random(0),
       );
-      // Monster is faster — its opening strike is the very first action.
       engine.performAutoAction();
-      expect(glass.alive, isTrue, reason: 'seed $seed: one-shot from full HP');
-      expect(
-        glass.maxHp - glass.hp,
-        lessThanOrEqualTo(
-          (glass.maxHp * CombatEngine.kMaxHitHpFraction).floor(),
-        ),
-        reason: 'seed $seed: single hit exceeded the cap',
-      );
+      expect(glass.alive, isFalse);
       engine.dispose();
-    }
+    });
+
+    test('a positive dial value still caps the hit, same as before', () {
+      GameTuning.i.set(Dials.maxHitHpFraction, 0.5);
+      for (var seed = 0; seed < 40; seed++) {
+        final glass = make(id: 'glass', hp: 30, defense: 1, speed: 5);
+        final monster = make(
+          id: 'monster',
+          player: false,
+          attack: 9999,
+          speed: 99,
+        );
+        final engine = armedEngine(
+          players: [glass],
+          enemies: [monster],
+          rng: math.Random(seed),
+        );
+        engine.performAutoAction();
+        expect(
+          glass.alive,
+          isTrue,
+          reason: 'seed $seed: one-shot from full HP',
+        );
+        expect(
+          glass.maxHp - glass.hp,
+          lessThanOrEqualTo((glass.maxHp * 0.5).floor()),
+          reason: 'seed $seed: single hit exceeded the cap',
+        );
+        engine.dispose();
+      }
+    });
   });
 
   // ── Simultaneous field (user design 2026-07-27) ───────────────────────

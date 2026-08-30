@@ -7,7 +7,14 @@ import 'overworld_path.dart';
 class RewardLine {
   final String emoji;
   final String text;
-  const RewardLine(this.emoji, this.text);
+
+  /// Set only for a "new building" line. Lets a screen that wants to show
+  /// the building's own preview picture instead of the emoji+text pair find
+  /// it (user 2026-08-28: battle_prep_screen's brief now does this) without
+  /// every OTHER reader of [RewardLine] — battle_screen's victory list still
+  /// reads emoji/text and needs no change.
+  final String? buildingId;
+  const RewardLine(this.emoji, this.text, {this.buildingId});
 }
 
 /// What CLEARING [battleNumber] unlocks — the things worth previewing before the
@@ -49,7 +56,11 @@ List<RewardLine> battleRewardsFor(int battleNumber) {
     }
     for (final id in node.rewards.buildings) {
       final def = kBuildingDefs[id];
-      lines.add(RewardLine('🏛️', 'New building: ${def?.name ?? id}'));
+      lines.add(RewardLine(
+        '🏛️',
+        'New building: ${def?.name ?? id}',
+        buildingId: id,
+      ));
     }
     if (node.rewards.expansions > 0) {
       lines.add(RewardLine(
@@ -63,7 +74,13 @@ List<RewardLine> battleRewardsFor(int battleNumber) {
     for (final e in kBuildingUnlockBattle.entries) {
       if (e.value != battleNumber) continue;
       final def = kBuildingDefs[e.key];
-      if (def != null) lines.add(RewardLine('🏛️', 'New building: ${def.name}'));
+      if (def != null) {
+        lines.add(RewardLine(
+          '🏛️',
+          'New building: ${def.name}',
+          buildingId: e.key,
+        ));
+      }
     }
   }
 

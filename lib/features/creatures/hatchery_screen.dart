@@ -67,9 +67,10 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
   static const Color _accent = FoE.gold;
   static final Color _cardFill = kParchmentInk.withValues(alpha: 0.06);
 
-  /// The Monsters-grid cell shape (crossAxisCount 3, childAspectRatio 0.70) —
-  /// the breeding screen's parent slots use the same constant.
-  static const double _kTileAspect = 0.70;
+  /// The Monsters-grid cell shape (crossAxisCount 3, childAspectRatio 0.60,
+  /// user 2026-08-28: taller, more room for the art) — the breeding
+  /// screen's parent slots use the same constant.
+  static const double _kTileAspect = 0.60;
 
   final _breeding = BreedingController();
   final _creatures = CreaturesController();

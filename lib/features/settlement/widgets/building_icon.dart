@@ -217,10 +217,14 @@ class ShadowedBuildingIcon extends StatelessWidget {
       dimmed: dimmed && !asShadow,
     );
     if (!asShadow) return image;
+    // Lighter and closer than before (user 2026-08-27: "das Gebäude ist
+    // anscheinend etwas durchsichtig") — at the card's small size the old
+    // 0.32/offset(4,7) read less like a shadow grounding the building and
+    // more like a second, fainter copy of it peeking out past the edges.
     return Opacity(
-      opacity: 0.32,
+      opacity: 0.22,
       child: Transform.translate(
-        offset: const Offset(4, 7),
+        offset: const Offset(3, 5),
         child: Transform.scale(
           scale: 0.92,
           alignment: Alignment.bottomCenter,

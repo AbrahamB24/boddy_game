@@ -533,20 +533,22 @@ class _BuildCard extends StatelessWidget {
 
   /// Height of the TILE. The card is this plus [overhang]; the grid sizes its
   /// cells from the sum, so every card in the grid keeps the same shape.
-  static const double height = 164;
+  static const double height = 172;
 
   /// The art's footprint inside the tile: the building stands on this band and
   /// grows upward out of it.
-  static const double _artH = 44;
+  static const double _artH = 52;
 
   /// Room the card reserves ABOVE the tile for the part of the art that rises
   /// past its top edge. It has to keep up with [_artW] — the art is
   /// width-driven, so wider art is also taller art.
-  static const double overhang = 54;
+  static const double overhang = 67;
 
-  /// Width of the building art. Height follows its own aspect ratio, so the
-  /// taller the art the further it rises over the tile's edge.
-  static const double _artW = 98;
+  /// Width of the building art (user request 2026-08-27, up from 98). Height
+  /// follows its own aspect ratio, so the taller the art the further it rises
+  /// over the tile's edge. Still comfortably inside the ~170pt two-column
+  /// cell this sits in — see the grid's crossAxisCount above.
+  static const double _artW = 122;
 
   const _BuildCard({
     required this.def,
@@ -845,6 +847,16 @@ class _BuildCard extends StatelessWidget {
     if (travel > 0) parts.add('-${(travel * 100).round()}% travel time');
     if (goods > 0) parts.add('+${(goods * 100).round()}% goods hauls');
     if (def.housingCapacity > 0) parts.add('shelters ${def.housingCapacity}');
+    // Passive production (Church, Marketplace, the Castle…) has no workshop
+    // post at all — it just makes resources by existing, so the loop below
+    // never sees it. Without this a building whose ENTIRE bonus is passive
+    // output showed "No bonus" (user request 2026-08-27: list the level-1
+    // effects under the title).
+    final era = ctrl.settlement?.eraIndex ?? 1;
+    for (final res in def.effectKeys('production')) {
+      final rate = def.effectAt('production', res, era, level: 1);
+      if (rate > 0) parts.add('${resourceEmoji(res)} +${rate.toStringAsFixed(1)}/h');
+    }
     for (final w in def.workshops) {
       // Training roles read no stat — sell what the building actually does.
       // A system post is named by what it shortens, not by its internal key:

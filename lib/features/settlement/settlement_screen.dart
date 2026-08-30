@@ -12,6 +12,7 @@ import 'data/goods_definitions.dart';
 import 'dev/dev_mode_screen.dart';
 import 'services/daily_tasks.dart';
 import 'services/game_engine.dart';
+import 'services/new_items.dart';
 import 'services/step_tracker_service.dart';
 import 'settlement_controller.dart';
 import 'build_menu_screen.dart';
@@ -71,6 +72,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     WidgetsBinding.instance.addObserver(this);
     _ctrl.addListener(_rebuild);
+    NewItems().addListener(_rebuild);
     _ctrl.load();
     // Real step counter: watches the hardware sensor and credits steps as
     // energy automatically (user 2026-07-18).
@@ -82,6 +84,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     WidgetsBinding.instance.removeObserver(this);
     _ctrl.removeListener(_rebuild);
+    NewItems().removeListener(_rebuild);
     _ctrl.stopTicker();
     super.dispose();
   }
@@ -1414,7 +1417,11 @@ class _SettlementScreenState extends State<SettlementScreen>
         Icons.backpack,
         'Bag',
         () => openBag(context),
-        badge: _ctrl.items.values.fold<int>(0, (s, n) => s + n),
+        // NEW items, not the total held (user 2026-08-29) — a badge that
+        // always shows "how many things you own" never goes away, which is
+        // not what a badge is for. Clears the moment the Bag opens; see
+        // NewItems and BagScreen.
+        badge: NewItems().total,
       ),
       QuickPadItem(
         Icons.flag,

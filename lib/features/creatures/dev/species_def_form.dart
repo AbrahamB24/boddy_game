@@ -12,6 +12,7 @@ import '../models/species_def.dart';
 import '../services/creature_defs_controller.dart';
 import '../services/creature_defs_service.dart';
 import '../services/stat_budget.dart';
+import '../widgets/creature_sprite.dart' show decodeWidthFor;
 import 'ability_def_form.dart';
 
 // Create/edit form for one SpeciesDef: element/rarity/role, per-species
@@ -730,6 +731,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                     filterQuality: FilterQuality.none,
                     width: 40,
                     height: 40,
+                    cacheWidth: decodeWidthFor(context, 40),
                     fit: BoxFit.contain,
                     errorBuilder: (_, _, _) =>
                         const Icon(Icons.broken_image, color: FoE.gold),

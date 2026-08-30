@@ -126,7 +126,7 @@ void main() {
       expect(calls, greaterThan(0));
       expect('cacheWidth:'.allMatches(src).length, calls,
           reason: 'an Image.asset on the map decodes at full size — the '
-              'background alone is 4096 x 2048');
+              'background alone is 8192 x 4096');
     });
   });
 }

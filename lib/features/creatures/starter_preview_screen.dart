@@ -35,16 +35,10 @@ class _StarterPreviewScreenState extends State<StarterPreviewScreen> {
     final created = await _ctrl.adoptStarter(widget.species);
     if (!mounted) return;
     if (created == null) {
+      // No pop-up any more (user 2026-08-29: "wirklich alle pop up
+      // nachrichten... löschen") — the button re-enabling (_adopting back to
+      // false) is the signal to try again.
       setState(() => _adopting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not adopt ${widget.species.name}. Try again.',
-            style: FoE.label(size: 12),
-          ),
-          backgroundColor: FoE.panelDark,
-        ),
-      );
       return;
     }
     Navigator.of(context).popUntil((r) => r.isFirst);

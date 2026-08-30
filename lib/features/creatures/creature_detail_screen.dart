@@ -7,8 +7,10 @@ import '../settlement/widgets/scroll_paper.dart'
     show kParchmentInk, kParchmentLight, kParchmentMid;
 import '../common/widgets/app_back_button.dart';
 import '../../core/ui/snack.dart';
+import '../settlement/data/building_definitions.dart';
 import '../settlement/data/item_definitions.dart';
 import '../settlement/services/crafting.dart';
+import '../settlement/widgets/building_icon.dart';
 import '../settlement/settlement_controller.dart';
 import 'models/ability_def.dart';
 import 'models/creature_enums.dart';
@@ -16,6 +18,7 @@ import 'models/creature_instance.dart';
 import 'models/species_def.dart';
 import 'services/combat_engine.dart';
 import 'widgets/creature_backdrop.dart';
+import 'widgets/creature_sprite.dart' show decodeWidthFor;
 import 'widgets/gene_bar_toggle.dart';
 import 'widgets/xp_arc.dart';
 import 'services/creature_power.dart';
@@ -88,6 +91,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         .withLightness(lightness)
         .toColor();
   }
+
   static const _ink = kParchmentInk; // primary text
   // Literal ARGB rather than withValues: these are used in `const` widgets all
   // over this file, and a computed colour is not a constant.
@@ -100,7 +104,6 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   /// Ornament ink for the meander bordure — the page's own shade.
   static const _ornament = Color(0x38EDE3CB); // ink @ 22 %
 
-
   CreatureInstance? get _creature {
     for (final c in _ctrl.creatures) {
       if (c.id == widget.creatureId) return c;
@@ -110,20 +113,13 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
 
   Future<void> _evolve(CreatureInstance creature) async {
     setState(() => _evolving = true);
-    final error = await _ctrl.evolve(creature);
+    // No pop-up confirmation any more (user 2026-08-29: "bitte wirklich alle
+    // pop up nachrichten... löschen") — the screen's own state already shows
+    // the result (the new stage's art/name), so this was a message about
+    // something already visible.
+    await _ctrl.evolve(creature);
     if (!mounted) return;
     setState(() => _evolving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          error ?? '✨ ${creature.displayName} evolved!',
-          style: FoE.label(size: 13).copyWith(
-            color: error == null ? FoE.goldBright : Colors.redAccent,
-          ),
-        ),
-        backgroundColor: FoE.panelDark,
-      ),
-    );
   }
 
   // Rename dialog, styled to match this screen (dark sheet, Outfit font, the
@@ -136,7 +132,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       context.snack(err, error: true);
     } else {
       setState(() {});
-      final name = creature.species?.stageAt(creature.stage).name ?? 'its next form';
+      final name =
+          creature.species?.stageAt(creature.stage).name ?? 'its next form';
       context.snack('🛠 Evolved to $name (Lv ${creature.level})');
     }
   }
@@ -149,9 +146,14 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: _paper(element, 0.16),
         shape: FoE.facet(radius: 20),
-        title: Text('Rename',
-            style: GoogleFonts.outfit(
-                color: _ink, fontSize: 18, fontWeight: FontWeight.w800)),
+        title: Text(
+          'Rename',
+          style: GoogleFonts.outfit(
+            color: _ink,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -161,24 +163,36 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             hintText: 'Empty = species name',
             hintStyle: GoogleFonts.outfit(color: _inkDim, fontSize: 13),
             enabledBorder: const UnderlineInputBorder(
-                borderSide: BorderSide(color: _track)),
+              borderSide: BorderSide(color: _track),
+            ),
             focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: element, width: 2)),
+              borderSide: BorderSide(color: element, width: 2),
+            ),
           ),
           onSubmitted: (v) => Navigator.pop(ctx, v),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel',
-                style: GoogleFonts.outfit(
-                    color: _inkDim, fontSize: 14, fontWeight: FontWeight.w600)),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(
+                color: _inkDim,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
-            child: Text('Save',
-                style: GoogleFonts.outfit(
-                    color: element, fontSize: 14, fontWeight: FontWeight.w800)),
+            child: Text(
+              'Save',
+              style: GoogleFonts.outfit(
+                color: element,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
         ],
       ),
@@ -191,7 +205,10 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: FoE.panelDark,
-        shape: FoE.facet(radius: 12, side: const BorderSide(color: FoE.borderGold)),
+        shape: FoE.facet(
+          radius: 12,
+          side: const BorderSide(color: FoE.borderGold),
+        ),
         title: Text('Release?', style: FoE.title(size: 15)),
         content: Text(
           '${creature.displayName} leaves you forever.',
@@ -215,15 +232,10 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     if (ok == true) {
       final error = await _ctrl.release(creature);
       if (!mounted) return;
-      if (error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error, style: FoE.label(size: 13)),
-            backgroundColor: FoE.panelDark,
-          ),
-        );
-        return;
-      }
+      // No pop-up on failure any more (user 2026-08-29: "wirklich alle pop
+      // up nachrichten... löschen") — the dialog simply doesn't proceed;
+      // staying on this screen with nothing released IS the signal.
+      if (error != null) return;
       Navigator.of(context).pop();
     }
   }
@@ -243,8 +255,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   Widget build(BuildContext context) {
     // The scaffold under the sheet takes the same tint — an overscroll bounce
     // that revealed beige would say the page was two pages.
-    final scaffoldElement =
-        _creature?.species?.element.color ?? FoE.gold;
+    final scaffoldElement = _creature?.species?.element.color ?? FoE.gold;
     return Scaffold(
       backgroundColor: _paper(scaffoldElement, 0.10),
       body: ListenableBuilder(
@@ -252,7 +263,9 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         builder: (context, _) {
           final creature = _creature;
           if (creature == null) {
-            return Center(child: Text('Creature not found', style: FoE.label()));
+            return Center(
+              child: Text('Creature not found', style: FoE.label()),
+            );
           }
           final species = creature.species;
           final element = species?.element.color ?? FoE.gold;
@@ -263,7 +276,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 final h = c.maxHeight;
                 final sheetTop = h * 0.30;
                 final imgTop = h * 0.03;
-                final imgH = h * 0.35; // spans imgTop..imgTop+imgH, over the seam
+                final imgH =
+                    h * 0.35; // spans imgTop..imgTop+imgH, over the seam
                 final contentTop = (imgTop + imgH) - sheetTop - 30;
                 return Stack(
                   children: [
@@ -299,8 +313,9 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                               _paper(element, 0.10),
                             ],
                           ),
-                          borderRadius:
-                              BorderRadius.vertical(top: Radius.circular(30)),
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(30),
+                          ),
                         ),
                         padding: EdgeInsets.only(top: contentTop),
                         // The bordure, on the sheet only — it is the page's
@@ -342,6 +357,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                         child: _art(
                           creature,
                           backdropBottom: sheetTop - imgTop,
+                          displayHeight: imgH,
                         ),
                       ),
                     ),
@@ -368,14 +384,19 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Text('⚡', style: TextStyle(fontSize: 28)),
+                                  const Text(
+                                    '⚡',
+                                    style: TextStyle(fontSize: 28),
+                                  ),
                                   const SizedBox(width: 4),
-                                  Text('${totalPower(creature)}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 30,
-                                        fontWeight: FontWeight.w900,
-                                      )),
+                                  Text(
+                                    '${totalPower(creature)}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
                                 ],
                               ),
                               if (species != null)
@@ -403,7 +424,11 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     );
   }
 
-  Widget _art(CreatureInstance creature, {required double backdropBottom}) {
+  Widget _art(
+    CreatureInstance creature, {
+    required double backdropBottom,
+    required double displayHeight,
+  }) {
     final url = creature.imageUrl;
     if (url == null) {
       return const Icon(Icons.pets, color: Colors.white70, size: 90);
@@ -413,38 +438,68 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     final shadowColor =
         (creature.species?.element ?? CreatureElement.fire).shadowColor;
     Widget image({FilterQuality quality = FilterQuality.none}) => Image.network(
-          url,
-          filterQuality: quality,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) =>
-              const Icon(Icons.pets, color: Colors.white70, size: 90),
-        );
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Drop shadow behind the monster: the sprite's SHARP silhouette in the
-        // element's shadow tone, a bit SMALLER than the sprite and clipped to
-        // the coloured backdrop — so there is NO shadow on the dark sheet below
-        // (user request).
-        Positioned.fill(
-          child: ClipRect(
-            clipper: _TopRectClipper(backdropBottom),
-            child: Transform.translate(
-              offset: const Offset(2, 8),
-              child: Transform.scale(
-                scale: 0.9,
-                alignment: Alignment.bottomCenter,
-                child: ColorFiltered(
-                  colorFilter: ColorFilter.mode(
-                      shadowColor, BlendMode.srcATop),
-                  child: image(),
+      url,
+      filterQuality: quality,
+      fit: BoxFit.contain,
+      // Decode at DISPLAY size, not native (user 2026-08-29: "die
+      // Monsterassets werden sehr langsam geladen").
+      cacheWidth: decodeWidthFor(context, displayHeight),
+      errorBuilder: (_, _, _) =>
+          const Icon(Icons.pets, color: Colors.white70, size: 90),
+    );
+    // 20% bigger, CENTRED again (user 2026-08-28: "Nein das Monster wieder
+    // auf die Position setzen wie vorher, aber den Schatten neu
+    // kalibrieren") — back to matching [CreatureCard]'s own fix, with the
+    // shadow's clip line recalibrated instead of giving up the centring.
+    const scale = 1.20;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Centring this Transform.scale maps every LOCAL y toward
+        // `center + (y - center) * scale`. The shadow's clip line is drawn
+        // in this same local space (see _TopRectClipper) and gets mapped by
+        // that SAME formula once the scale is applied around it — so
+        // without correction it lands at the wrong absolute y and the
+        // shadow bleeds onto the dark sheet below (user 2026-08-28: "der
+        // Schatten ... ragt in den dunklen Bereich"). Solving that formula
+        // for the LOCAL y that maps back to the true, fixed sheet boundary
+        // is this line — the inverse of the map the Transform.scale below
+        // applies.
+        final center = constraints.maxHeight / 2;
+        final adjustedClip = center + (backdropBottom - center) / scale;
+        return Transform.scale(
+          scale: scale,
+          alignment: Alignment.center,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Drop shadow behind the monster: the sprite's SHARP
+              // silhouette in the element's shadow tone, a bit SMALLER than
+              // the sprite and clipped to the coloured backdrop — so there
+              // is NO shadow on the dark sheet below (user request).
+              Positioned.fill(
+                child: ClipRect(
+                  clipper: _TopRectClipper(adjustedClip),
+                  child: Transform.translate(
+                    offset: const Offset(2, 8),
+                    child: Transform.scale(
+                      scale: 0.9,
+                      alignment: Alignment.bottomCenter,
+                      child: ColorFiltered(
+                        colorFilter: ColorFilter.mode(
+                          shadowColor,
+                          BlendMode.srcATop,
+                        ),
+                        child: image(),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              Positioned.fill(child: image()),
+            ],
           ),
-        ),
-        Positioned.fill(child: image()),
-      ],
+        );
+      },
     );
   }
 
@@ -459,122 +514,132 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     return DefaultTextStyle.merge(
       style: GoogleFonts.outfit(),
       child: Padding(
-      // CLEAR OF THE BORDURE (user 2026-07-29: "alles etwas weiter nach innen
-      // schieben, damit es nicht so nahe an der Dekoration ist"). The meander
-      // bands sit at 4 and run 14 wide, so they end at exactly 18 — which is
-      // where the content used to start, i.e. touching them. 28 leaves ten
-      // pixels of paper on either side; [ParchmentPage] does the same thing
-      // with its own 24 against the same bands.
-      padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Column(
-        children: [
-          // The arc stays exactly where it was (its 34px box pinned to the
-          // bottom of this 58px region = the old 24px gap above it). The Level
-          // sits in that gap, between the image and the arc; being last in the
-          // Stack it draws ON TOP of the arc's raised ends if they overlap
-          // (user 2026-07-18).
-          SizedBox(
-            width: double.infinity,
-            height: 58,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: 34,
-                  child: _xpBase(xpFrac),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 25,
-                  child: Center(
-                    child: Text('Level ${creature.level}',
+        // CLEAR OF THE BORDURE (user 2026-07-29: "alles etwas weiter nach innen
+        // schieben, damit es nicht so nahe an der Dekoration ist"). The meander
+        // bands sit at 4 and run 14 wide, so they end at exactly 18 — which is
+        // where the content used to start, i.e. touching them. 28 leaves ten
+        // pixels of paper on either side; [ParchmentPage] does the same thing
+        // with its own 24 against the same bands.
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(
+          children: [
+            // The arc stays exactly where it was (its 34px box pinned to the
+            // bottom of this 58px region = the old 24px gap above it). The Level
+            // sits in that gap, between the image and the arc; being last in the
+            // Stack it draws ON TOP of the arc's raised ends if they overlap
+            // (user 2026-07-18).
+            SizedBox(
+              width: double.infinity,
+              height: 58,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 34,
+                    child: _xpBase(xpFrac),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 25,
+                    child: Center(
+                      child: Text(
+                        'Level ${creature.level}',
                         style: TextStyle(
-                            color: element,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800)),
+                          color: element,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              atMax ? 'MAX' : '${creature.xp} / $need EP',
+              style: const TextStyle(
+                color: _inkDim,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Name + gender. The row is centre-aligned so the edit icon sits at
+            // the name's mid-height (not raised); only the gender is lifted into
+            // a superscript (user 2026-07-18).
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    creature.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _ink,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Transform.translate(
+                  offset: const Offset(4, -7),
+                  child: Text(
+                    creature.gender.symbol,
+                    style: TextStyle(
+                      color: creature.gender.color,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                // Small edit (rename) button, right of the name/gender.
+                GestureDetector(
+                  onTap: () => _rename(creature),
+                  behavior: HitTestBehavior.opaque,
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Icon(Icons.edit, size: 16, color: _inkDim),
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            atMax ? 'MAX' : '${creature.xp} / $need EP',
-            style: const TextStyle(
-                color: _inkDim, fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          // Name + gender. The row is centre-aligned so the edit icon sits at
-          // the name's mid-height (not raised); only the gender is lifted into
-          // a superscript (user 2026-07-18).
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  creature.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _ink,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              Transform.translate(
-                offset: const Offset(4, -7),
-                child: Text(
-                  creature.gender.symbol,
-                  style: TextStyle(
-                    color: creature.gender.color,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              // Small edit (rename) button, right of the name/gender.
-              GestureDetector(
-                onTap: () => _rename(creature),
-                behavior: HitTestBehavior.opaque,
-                child: const Padding(
-                  padding: EdgeInsets.only(left: 8),
-                  child: Icon(Icons.edit, size: 16, color: _inkDim),
+            if (desc.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                desc,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: _inkDim,
+                  fontSize: 12,
+                  height: 1.35,
                 ),
               ),
             ],
-          ),
-          if (desc.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              desc,
-              textAlign: TextAlign.center,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: _inkDim, fontSize: 12, height: 1.35),
+            const SizedBox(height: 14),
+            _tabBar(element),
+            const SizedBox(height: 12),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: switch (_tab) {
+                  1 => _statsTab(creature, element),
+                  2 => _evolutionTab(creature),
+                  3 => _abilitiesTab(creature),
+                  _ => _generalTab(creature, element),
+                },
+              ),
             ),
           ],
-          const SizedBox(height: 14),
-          _tabBar(element),
-          const SizedBox(height: 12),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: switch (_tab) {
-                1 => _statsTab(creature, element),
-                2 => _evolutionTab(creature),
-                3 => _abilitiesTab(creature),
-                _ => _generalTab(creature, element),
-              },
-            ),
-          ),
-        ],
-      ),
+        ),
       ),
     );
   }
@@ -670,7 +735,11 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   /// captions and stat lines all at the same visual level, with only blank space
   /// between groups. On the Stats tab that is thirteen rows and three headings
   /// with nothing holding them apart.
-  Widget _panel({String? title, required Widget child}) => Padding(
+  Widget _panel({
+    String? title,
+    required Widget child,
+    TextAlign titleAlign = TextAlign.left,
+  }) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: _recess(
       radius: 16,
@@ -680,7 +749,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _panelTitle(title),
+                _panelTitle(title, textAlign: titleAlign),
                 const SizedBox(height: 10),
                 child,
               ],
@@ -708,16 +777,27 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   }) => Container(
     width: double.infinity,
     padding: padding,
-    decoration: ShapeDecoration(color: kParchmentInk.withValues(alpha: 0.07), shape: FoE.facet(radius: radius, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.14)))),
+    decoration: ShapeDecoration(
+      color: kParchmentInk.withValues(alpha: 0.07),
+      shape: FoE.facet(
+        radius: radius,
+        side: BorderSide(color: kParchmentInk.withValues(alpha: 0.14)),
+      ),
+    ),
     child: child,
   );
 
   /// A panel's heading — small, spaced capitals, cut into the card.
-  static Widget _panelTitle(String label, {Widget? trailing}) => Row(
+  static Widget _panelTitle(
+    String label, {
+    Widget? trailing,
+    TextAlign textAlign = TextAlign.left,
+  }) => Row(
     children: [
       Expanded(
         child: Text(
           label.toUpperCase(),
+          textAlign: textAlign,
           // NO cut-in highlight (2026-07-31): the white line under the letters
           // is how you carve text INTO a surface, and there is no hollow left
           // for it to be carved into.
@@ -735,7 +815,6 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
 
   // ── Tabs ──────────────────────────────────────────────────
   Widget _generalTab(CreatureInstance creature, Color element) {
-    final atMax = creature.level >= kCreatureMaxLevel;
     final hpFrac = creature.maxHp > 0 ? creature.hp / creature.maxHp : 0.0;
     // Keep the HP-bar colour thresholds identical to the collection card's
     // _hpBar (2026-07-18): red is the signal for "needs attention", not only K.O.
@@ -750,41 +829,38 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     // The Combat/Civil split bar was removed (user 2026-07-24): the split is now
     // fixed for every species (≈49:51), so the bar looked identical on every
     // monster and carried no information. Total Power still lives top-right.
-    // CONDITION first, then what it is GOOD AT, then what you can do about
-    // either. Each is a card of its own, so the three questions stop running
-    // together down one column.
+    // Only healing/potion now (user 2026-08-28: "Working.... Text löschen")
+    // — the passive-XP-rate caption this used to fall back to is gone; WHERE
+    // a monster works has its own box below now instead of a rate here.
     final care = creature.isHealing
         ? _healingInline(creature, element)
         : creature.hp < creature.maxHp
         ? _potionInline(creature, element)
-        : !atMax
-        ? Text(_passiveXpText(creature),
-            style: const TextStyle(color: _inkDim, fontSize: 11))
         : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _panel(
-          title: 'Condition',
+        // No more "CONDITION" box or title (user 2026-08-28: "Condition Box
+        // und Text löschen") — the HP bar and, when relevant, the heal/potion
+        // control stay (a way to treat a hurt monster from this screen is
+        // worth keeping), just not framed as a card of their own any more.
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // The bar's own bottom padding is what separated it from the next
-              // block; inside a card the card's padding does that job.
-              Padding(
-                padding: const EdgeInsets.only(bottom: 0),
-                child: _barRow(
-                  'HP',
-                  '${creature.hp} / ${creature.maxHp}',
-                  hpFrac,
-                  hpColor,
-                  bottomPad: care == null ? 0 : 12,
-                ),
+              _barRow(
+                'HP',
+                '${creature.hp} / ${creature.maxHp}',
+                hpFrac,
+                hpColor,
+                bottomPad: care == null ? 0 : 12,
               ),
               if (care != null) care,
             ],
           ),
         ),
+        _workPanel(creature),
         if (top.isNotEmpty)
           _panel(
             title: 'Strengths',
@@ -797,12 +873,20 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             ),
           ),
         const SizedBox(height: 8),
-        _pillBtn('Release', Colors.redAccent, filled: false,
-            onTap: () => _release(creature)),
+        _pillBtn(
+          'Release',
+          Colors.redAccent,
+          filled: false,
+          onTap: () => _release(creature),
+        ),
         if (_settlement.isDev) ...[
           const SizedBox(height: 8),
-          _pillBtn('🛠 +500 XP (Dev)', _inkDim,
-              filled: false, onTap: () => _ctrl.devGainXp(creature, 500)),
+          _pillBtn(
+            '🛠 +500 XP (Dev)',
+            _inkDim,
+            filled: false,
+            onTap: () => _ctrl.devGainXp(creature, 500),
+          ),
           // Straight to the next form: the level is raised to the threshold
           // first, so the monster that comes out is a legitimate over-levelled
           // one rather than a stage-2 body with stage-1 stats (user
@@ -833,7 +917,13 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     Color element,
   ) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    decoration: ShapeDecoration(color: element.withValues(alpha: 0.14), shape: FoE.facet(radius: 11, side: BorderSide(color: element.withValues(alpha: 0.5)))),
+    decoration: ShapeDecoration(
+      color: element.withValues(alpha: 0.14),
+      shape: FoE.facet(
+        radius: 11,
+        side: BorderSide(color: element.withValues(alpha: 0.5)),
+      ),
+    ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -872,10 +962,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     // scale follows it: a growth of +1.6 against a stat of 80 would otherwise
     // be a hairline on every row.
     final barValues = _barsShowGrowth
-        ? {
-            for (final s in CreatureStat.values)
-              s: (creature.statSlope[s] ?? 0),
-          }
+        ? {for (final s in CreatureStat.values) s: (creature.statSlope[s] ?? 0)}
         : {for (final s in CreatureStat.values) s: values[s]!.toDouble()};
     final maxVal = barValues.values.reduce((a, b) => a > b ? a : b);
     int totalOf(List<CreatureStat> group) =>
@@ -889,10 +976,15 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         children: [
           SizedBox(
             width: 32,
-            child: Text('$total',
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                    color: _ink, fontSize: 14, fontWeight: FontWeight.w800)),
+            child: Text(
+              '$total',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: _ink,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
           // Holds the total over the VALUE column now that growth sits to its
           // right — a group's sum is a sum of values, not of growths.
@@ -914,8 +1006,10 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           children: [
             SizedBox(
               width: 86,
-              child: Text(stat.label,
-                  style: const TextStyle(color: _ink, fontSize: 12)),
+              child: Text(
+                stat.label,
+                style: const TextStyle(color: _ink, fontSize: 12),
+              ),
             ),
             Expanded(
               child: RecessBar(
@@ -926,20 +1020,28 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             ),
             SizedBox(
               width: 32,
-              child: Text('${values[stat]}',
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                      color: _ink, fontSize: 12, fontWeight: FontWeight.w700)),
+              child: Text(
+                '${values[stat]}',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: _ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
             // Growth per level (the sampled slope gene).
             SizedBox(
               width: 42,
-              child: Text('+${growth.toStringAsFixed(1)}',
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                      color: _inkDim,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600)),
+              child: Text(
+                '+${growth.toStringAsFixed(1)}',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: _inkDim,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         ),
@@ -1001,12 +1103,10 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         // as dark silhouettes (user 2026-07-18).
         _panel(title: 'Line', child: _evoChain(species, creature)),
         const SizedBox(height: 6),
-        if (isFinal)
-          const Center(
-            child: Text('✨ Final form — fully evolved.',
-                style: TextStyle(color: _inkDim, fontSize: 13)),
-          )
-        else
+        // Final form now shows nothing here (user 2026-08-28: "Final form-
+        // fully evolved löschen") — the evo chain above already says a
+        // creature has reached its last stage; this line only repeated it.
+        if (!isFinal)
           // Just the button — greyed out until the creature can evolve. No
           // level number or requirement list (user 2026-07-18).
           _pillBtn(
@@ -1061,27 +1161,29 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     );
   }
 
-  Widget _evoNode(SpeciesStage stage,
-      {required bool revealed, required bool current}) {
+  Widget _evoNode(
+    SpeciesStage stage, {
+    required bool revealed,
+    required bool current,
+  }) {
     final url = stage.imageUrl;
     Widget art;
     if (url == null) {
-      art = Icon(Icons.pets, color: revealed ? _inkDim : FoE.bg,
-          size: 40);
+      art = Icon(Icons.pets, color: revealed ? _inkDim : FoE.bg, size: 40);
     } else {
       final img = Image.network(
         url,
         filterQuality: FilterQuality.none,
         fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => Icon(Icons.pets,
-            color: revealed ? _inkDim : FoE.bg, size: 40),
+        cacheWidth: decodeWidthFor(context, 40),
+        errorBuilder: (_, _, _) =>
+            Icon(Icons.pets, color: revealed ? _inkDim : FoE.bg, size: 40),
       );
       // Locked stage → paint every opaque pixel near-black for a silhouette.
       art = revealed
           ? img
           : ColorFiltered(
-              colorFilter: const ColorFilter.mode(
-                  FoE.bg, BlendMode.srcATop),
+              colorFilter: const ColorFilter.mode(FoE.bg, BlendMode.srcATop),
               child: img,
             );
     }
@@ -1113,8 +1215,10 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 20),
         child: Center(
-          child: Text('No abilities defined.',
-              style: TextStyle(color: _inkDim, fontSize: 13)),
+          child: Text(
+            'No abilities defined.',
+            style: TextStyle(color: _inkDim, fontSize: 13),
+          ),
         ),
       );
     }
@@ -1122,15 +1226,16 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final sa in abilities)
-          _panel(
-            child: _abilityRow(creature, sa.abilityId, sa.unlockStage),
-          ),
+          _panel(child: _abilityRow(creature, sa.abilityId, sa.unlockStage)),
       ],
     );
   }
 
   Widget _abilityRow(
-      CreatureInstance creature, String abilityId, int unlockStage) {
+    CreatureInstance creature,
+    String abilityId,
+    int unlockStage,
+  ) {
     final ability = kAbilityDefs[abilityId];
     final unlocked = creature.stage >= unlockStage;
     return Padding(
@@ -1140,18 +1245,23 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         opacity: unlocked ? 1 : 0.5,
         child: Row(
           children: [
-            Text(ability?.element.emoji ?? '⚔️',
-                style: const TextStyle(fontSize: 18)),
+            Text(
+              ability?.element.emoji ?? '⚔️',
+              style: const TextStyle(fontSize: 18),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(ability?.name ?? abilityId,
-                      style: const TextStyle(
-                          color: _ink,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700)),
+                  Text(
+                    ability?.name ?? abilityId,
+                    style: const TextStyle(
+                      color: _ink,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   Text(
                     ability == null
                         ? 'Unknown ability'
@@ -1161,11 +1271,14 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 ],
               ),
             ),
-            Text(unlocked ? '✓' : 'Stage ${unlockStage + 1}',
-                style: TextStyle(
-                    color: unlocked ? FoE.positive : _inkDim,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600)),
+            Text(
+              unlocked ? '✓' : 'Stage ${unlockStage + 1}',
+              style: TextStyle(
+                color: unlocked ? FoE.positive : _inkDim,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
@@ -1173,22 +1286,36 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   }
 
   // ── Shared white-theme widgets ────────────────────────────
-  Widget _barRow(String label, String value, double frac, Color color,
-          {double bottomPad = 12}) =>
-      Padding(
+  Widget _barRow(
+    String label,
+    String value,
+    double frac,
+    Color color, {
+    double bottomPad = 12,
+  }) => Padding(
     padding: EdgeInsets.only(bottom: bottomPad),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Text(label,
-                style: const TextStyle(
-                    color: _inkDim, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(
+              label,
+              style: const TextStyle(
+                color: _inkDim,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const Spacer(),
-            Text(value,
-                style: const TextStyle(
-                    color: _ink, fontSize: 12, fontWeight: FontWeight.w700)),
+            Text(
+              value,
+              style: const TextStyle(
+                color: _ink,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 5),
@@ -1197,9 +1324,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     ),
   );
 
-  Widget _pillBtn(String label, Color color,
-          {required bool filled, VoidCallback? onTap}) =>
-      SizedBox(
+  Widget _pillBtn(
+    String label,
+    Color color, {
+    required bool filled,
+    VoidCallback? onTap,
+  }) => SizedBox(
     width: double.infinity,
     child: GestureDetector(
       onTap: onTap,
@@ -1208,12 +1338,21 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 13),
           alignment: Alignment.center,
-          decoration: ShapeDecoration(color: filled ? color : Colors.transparent, shape: FoE.facet(radius: 15, side: BorderSide(color: color, width: 1.6))),
-          child: Text(label,
-              style: TextStyle(
-                  color: filled ? Colors.white : color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700)),
+          decoration: ShapeDecoration(
+            color: filled ? color : Colors.transparent,
+            shape: FoE.facet(
+              radius: 15,
+              side: BorderSide(color: color, width: 1.6),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: filled ? Colors.white : color,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
       ),
     ),
@@ -1228,32 +1367,46 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         const Text('🩹', style: TextStyle(fontSize: 18)),
         const SizedBox(width: 8),
         Expanded(
-          child: Text('In treatment · ${_fmt(left)} left',
-              style: const TextStyle(color: _inkDim, fontSize: 12)),
+          child: Text(
+            'In treatment · ${_fmt(left)} left',
+            style: const TextStyle(color: _inkDim, fontSize: 12),
+          ),
         ),
         GestureDetector(
           onTap: canPay
               ? () async {
-                  final err = await _ctrl.skipHealWithGold(creature);
-                  if (!mounted || err == null) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(err, style: FoE.label(size: 12))),
-                  );
+                  await _ctrl.skipHealWithGold(creature);
+                  if (!mounted) return;
                 }
               : null,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: ShapeDecoration(color: canPay ? element : _track, shape: FoE.facet(radius: 12)),
-            child: Text('🪙 $cost',
-                style: TextStyle(
-                    color: canPay ? Colors.white : _inkDim,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700)),
+            decoration: ShapeDecoration(
+              color: canPay ? element : _track,
+              shape: FoE.facet(radius: 12),
+            ),
+            child: Text(
+              '🪙 $cost',
+              style: TextStyle(
+                color: canPay ? Colors.white : _inkDim,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
       ],
     );
   }
+
+  /// This item's resulting HP if used now — the RIGHT unit to compare heal
+  /// and revive items on (they express their strength differently: a heal
+  /// item in flat HP capped at what's missing, a revive item as a fraction
+  /// of max HP).
+  double _healResult(ItemDef d, CreatureInstance creature, int missing) =>
+      d.kind == ItemKind.revive
+      ? creature.maxHp * d.magnitude
+      : creature.hp + healFromItem(d, missing.toDouble());
 
   Widget _potionInline(CreatureInstance creature, Color element) {
     final missing = creature.maxHp - creature.hp;
@@ -1268,57 +1421,171 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           (d, e.value),
     ];
     if (held.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(ko ? 'Revive · K.O.' : 'Use an item · missing $missing HP',
-            style: const TextStyle(color: _inkDim, fontSize: 12)),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final (def, count) in held)
-              GestureDetector(
-                onTap: () => _usePotion(def, creature),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: ShapeDecoration(color: element, shape: FoE.facet(radius: 12)),
-                  child: Text(
-                    def.kind == ItemKind.revive
-                        ? '${def.emoji} ${def.name} ×$count · → ${(creature.maxHp * def.magnitude).round()} HP'
-                        : '${def.emoji} ${def.name} ×$count · +${healFromItem(def, missing.toDouble()).round()} HP',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-          ],
+    // The ONE potion closest to topping the creature off (user 2026-08-28:
+    // "Use an item - missing n hp löschen. Dafür automatisch den Trank
+    // anzeigen, welcher am nächsten an die max. HP auffüllt") — replaces
+    // the old caption + pick-one-of-several row. Ties (several potions
+    // that all fully heal) break toward the SMALLEST of them, so a big
+    // potion isn't spent on a wound a small one already covers.
+    final sorted = [...held]
+      ..sort((a, b) {
+        final gapA = (creature.maxHp - _healResult(a.$1, creature, missing))
+            .abs();
+        final gapB = (creature.maxHp - _healResult(b.$1, creature, missing))
+            .abs();
+        final byGap = gapA.compareTo(gapB);
+        if (byGap != 0) return byGap;
+        final costA = a.$1.kind == ItemKind.revive
+            ? a.$1.magnitude
+            : a.$1.healHp;
+        final costB = b.$1.kind == ItemKind.revive
+            ? b.$1.magnitude
+            : b.$1.healHp;
+        return costA.compareTo(costB);
+      });
+    final (def, count) = sorted.first;
+    // Back to the LEFT (user 2026-08-29: "tausche es wieder: use item
+    // button links") — the right-align from earlier that day is undone.
+    return GestureDetector(
+      onTap: () => _usePotion(def, creature),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: ShapeDecoration(
+          color: element,
+          shape: FoE.facet(radius: 12),
         ),
-      ],
+        // "(N)" for how many are in storage now, not "×N" (user 2026-08-29:
+        // "Anzahl nicht xn sondern die Anzahl im Lager befindlichen als (n)
+        // schreiben") — [count] already IS the stored amount ([_settlement]
+        // .items), only the format changes.
+        child: Text(
+          def.kind == ItemKind.revive
+              ? '${def.emoji} ${def.name} ($count) · → '
+                    '${_healResult(def, creature, missing).round()} HP'
+              : '${def.emoji} ${def.name} ($count) · '
+                    '+${healFromItem(def, missing.toDouble()).round()} HP',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
     );
   }
 
-  String _passiveXpText(CreatureInstance creature) {
-    if (!creature.isAssigned) {
-      return '💤 Idle — station it in the Training Grounds to level it over '
-          'time, or fight: a won battle is the fastest XP there is.';
+  /// WHERE the monster works, if anywhere (user 2026-08-28: "Workbox
+  /// einführen: wo arbeitet das Monster"), the BUILDING'S OWN icon instead
+  /// of a generic glyph (same day: "Icon löschen dafür das Haus Icon
+  /// hinzufügen"), and the rate/ETA the old Condition box's caption used to
+  /// carry, back but living HERE (same day: "Ep pro Stunde hinzufügen und
+  /// wie lange es geht, bis das nächste Level erreicht wird").
+  Widget _workPanel(CreatureInstance creature) {
+    final id = creature.assignedBuildingId;
+    final buildings = SettlementController().buildings;
+    final idx = id == null ? -1 : buildings.indexWhere((b) => b.id == id);
+    if (idx < 0) {
+      return _panel(
+        title: 'Work',
+        child: const Text(
+          '💤 Not stationed anywhere.',
+          style: TextStyle(color: _inkDim, fontSize: 12),
+        ),
+      );
     }
-    final training = CreaturesController().isInTrainingRole(creature);
+    final building = buildings[idx];
+    final name =
+        kBuildingDefs[building.buildingTypeId]?.name ?? building.buildingTypeId;
+    final atMax = creature.level >= kCreatureMaxLevel;
     final rate = CreaturesController().xpRatePerHour(creature);
-    // Every building with a work post pays the same work rate since 2026-07-30,
-    // so a zero here means the rate itself is dialled to nothing — say so
-    // instead of dividing by zero into "∞ to Lv N".
-    if (rate <= 0) {
-      return '🔨 Working — no XP here. The work rate is set to zero; the '
-          'Training Grounds and fighting still level a monster.';
+    // Every building with a work post pays the same work rate since
+    // 2026-07-30, so a zero here means the rate itself is dialled to
+    // nothing — say so instead of dividing by zero into "∞ to Lv N".
+    String? rateXpLine;
+    String? etaLine;
+    if (!atMax) {
+      if (rate <= 0) {
+        rateXpLine = 'Work rate is set to zero — no XP here right now.';
+      } else {
+        rateXpLine = '+${rate.toStringAsFixed(0)} XP/h';
+        // Its OWN line under the rate now (user 2026-08-28: "nd to lv n.
+        // eine Zeile unter der xp/h Anzeige").
+        etaLine =
+            '~${_fmtDays((xpToNextLevel(creature.level) - creature.xp) / rate)}'
+            ' to Lv ${creature.level + 1}.';
+      }
     }
-    final hours = (xpToNextLevel(creature.level) - creature.xp) / rate;
-    return '${training ? '🏋️ Training' : '🔨 Working'}: '
-        '+${rate.toStringAsFixed(0)} XP/h · ~${_fmtDays(hours)} to Lv ${creature.level + 1}.';
+    return _panel(
+      title: 'Work',
+      // Back to the LEFT, title included (user 2026-08-29: "tausche es
+      // wieder: ... text links" — undoes that same day's right-align).
+      child: SizedBox(
+        width: double.infinity,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Padding(
+              // Room on the RIGHT again for the icon, which moved back
+              // there too (user 2026-08-29: "tausche es wieder: ... Icon
+              // rechts").
+              padding: const EdgeInsets.only(right: 130),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // White, not the dim ink (user 2026-08-29: "Name des
+                  // Gebäudes in weiss, damit es besser auffällt") — the
+                  // only line in the box worth making stand out; the rate
+                  // and ETA under it stay dim.
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (rateXpLine != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      rateXpLine,
+                      style: const TextStyle(color: _inkDim, fontSize: 11),
+                    ),
+                  ],
+                  if (etaLine != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      etaLine,
+                      style: const TextStyle(color: _inkDim, fontSize: 11),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            // [ShadowedBuildingIcon] — the exact widget the build-menu
+            // cards and the map's building-detail dialog use: natural
+            // aspect, standing on its own cast shadow. Bottom-anchored ONLY
+            // (no `top`) is what makes it rise up past its own slot on its
+            // own — the slot behind it (the text column) is far shorter
+            // than the icon's own rendered height, so the art's top simply
+            // ends up above the card without a guessed offset for it.
+            Positioned(
+              right: -16,
+              bottom: -6,
+              // The extra Transform.scale tried here (user 2026-08-29) was
+              // taken back out the same day ("Icon zoom wieder
+              // hinausnehmen bei work") — plain width again.
+              child: ShadowedBuildingIcon(
+                imageUrl: null,
+                defId: building.buildingTypeId,
+                width: 185,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   static String _fmt(Duration d) =>

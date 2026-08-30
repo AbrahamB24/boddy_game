@@ -450,9 +450,10 @@ void main() {
     });
 
     test('zooming IN stops where the player asked it to', () {
-      // Measured off a screenshot the user labelled "das soll der maximal zoom
-      // in sein": a 1x1 road cell about 50 px wide on a 432 px phone.
-      expect(kIsoTileW * kMaxMapZoom, closeTo(51.2, 0.001));
+      // Raised one level again (user 2026-08-27): a cell at its own native 64
+      // px, one round step past the 51.2 px measured off the 2026-08-09
+      // screenshot.
+      expect(kIsoTileW * kMaxMapZoom, closeTo(64.0, 0.001));
       // And it must still be a range worth having — a max below the min would
       // mean a map that cannot be zoomed at all on some screen.
       expect(kMaxMapZoom, greaterThan(minMapScale(const Size(430, 932))));

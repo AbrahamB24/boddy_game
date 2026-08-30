@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math' show max;
 import 'dart:math' as math;
 import '../../../core/ui/duration_format.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/number_format.dart';
@@ -53,7 +54,6 @@ import '../management_screen.dart';
 import '../settlement_controller.dart';
 import 'building_icon.dart';
 import 'building_life.dart';
-import 'meander_strip.dart';
 import '../../common/widgets/recess_bar.dart';
 import 'scroll_paper.dart'
     show
@@ -125,18 +125,10 @@ class SettlementMapState extends State<SettlementMap>
   Future<void> _startTrainingBattle() async {
     final creatures = CreaturesController();
     final team = creatures.battleTeam();
-    if (team.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'No battle-ready creature — all K.O.!',
-            style: FoE.label(size: 13),
-          ),
-          backgroundColor: FoE.panelDark,
-        ),
-      );
-      return;
-    }
+    // No pop-up any more (user 2026-08-29: "wirklich alle pop up
+    // nachrichten... löschen") — tapping Training with nobody battle-ready
+    // just does nothing.
+    if (team.isEmpty) return;
     final species = kSpeciesDefs.values.toList();
     if (species.isEmpty) return;
     final rng = math.Random();
@@ -943,19 +935,28 @@ class SettlementMapState extends State<SettlementMap>
                       // Ornament FIRST — it is wallpaper, so it belongs behind
                       // the content and never over a line of text (user
                       // 2026-07-22).
-                      Positioned(
+                      //
+                      // The meander band of triangles (user 2026-08-27: "lösche
+                      // die Dreieckverzierung und ersetze sie mit etwas, was
+                      // mehr passt") is gone from THIS dialog specifically — a
+                      // carved groove instead, the same lit/shaded pairing
+                      // every facet edge in the app already wears (see
+                      // ParchmentHeader.band), so the margin reads as part of
+                      // the same low-poly material rather than as print
+                      // ornament dropped onto it.
+                      const Positioned(
                         left: 14,
                         top: 0,
                         bottom: 0,
                         width: 16,
-                        child: MeanderStrip(color: _dlgOrnament),
+                        child: Center(child: _DlgMarginGroove()),
                       ),
-                      Positioned(
+                      const Positioned(
                         right: 14,
                         top: 0,
                         bottom: 0,
                         width: 16,
-                        child: MeanderStrip(color: _dlgOrnament, flip: true),
+                        child: Center(child: _DlgMarginGroove()),
                       ),
                       Column(
                         mainAxisSize: MainAxisSize.min,
@@ -1030,6 +1031,43 @@ class SettlementMapState extends State<SettlementMap>
                                     // the card is "Effects", not just "Production".)
                                     _sectionCard(
                                       title: 'Effects',
+                                      // PAUSE, as a small trailing button (user
+                                      // 2026-08-27) — moved off the bottom
+                                      // pill row and onto this title, the
+                                      // same "green circle" the Upgrade card
+                                      // wears. Only for buildings that
+                                      // actually RUN something: pausing a
+                                      // house or a store would be a switch
+                                      // with nothing behind it, since housing
+                                      // and storage are what a building IS,
+                                      // not what it does, and keep counting
+                                      // either way.
+                                      trailing: _canPause(def)
+                                          ? GestureDetector(
+                                              behavior:
+                                                  HitTestBehavior.opaque,
+                                              onTap: () => widget.ctrl
+                                                  .setPaused(
+                                                    liveB.id,
+                                                    !liveB.isPaused,
+                                                  ),
+                                              child: Container(
+                                                width: 24,
+                                                height: 24,
+                                                decoration: const BoxDecoration(
+                                                  color: kActionGreen,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: Icon(
+                                                  liveB.isPaused
+                                                      ? Icons.play_arrow
+                                                      : Icons.pause,
+                                                  size: 15,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            )
+                                          : null,
                                       child: _productionSection(
                                         liveB,
                                         def,
@@ -1371,19 +1409,9 @@ class SettlementMapState extends State<SettlementMap>
     bool functional,
   ) {
     final pills = <Widget>[
-      // ── PAUSE (user 2026-08-01: "ich will gebäude pausieren können") ──
-      // Only for buildings that actually RUN something. Pausing a house or a
-      // store would be a switch with nothing behind it: housing and storage are
-      // what a building is, not what it does, and they keep counting either way.
-      if (b.isComplete && _canPause(def))
-        _actionPill(
-          // WITH the emoji variation selector: bare U+23F8/U+25B6 ask for a
-          // TEXT glyph, which the app's font does not have — Flutter then looks
-          // for a Noto fallback, fails, and throws on every frame (2026-08-01).
-          b.isPaused ? '▶️' : '⏸️',
-          b.isPaused ? 'Resume' : 'Pause',
-          () => widget.ctrl.setPaused(b.id, !b.isPaused),
-        ),
+      // PAUSE moved to a small button on the Effects card's title row (user
+      // 2026-08-27) — the same "green circle" trailing action Upgrade's
+      // title wears. See _sectionCard(title: 'Effects', trailing: ...).
       if (b.isComplete && def.isMainBuilding)
         _actionPill(
           '🏠',
@@ -1606,11 +1634,14 @@ class SettlementMapState extends State<SettlementMap>
   /// 2026-07-22). Bottom-anchored in a fixed slot so taller art rises out of
   /// the dialog's top edge, exactly like the build-menu cards.
   Widget _artPanel(BuildingDef def) => SizedBox(
-    width: 140,
+    // Bigger (user request 2026-08-27), from 140 — Clip.none twice over (here
+    // and the scroll view above) is what lets the extra height rise past the
+    // dialog's own top edge instead of needing more room reserved for it.
+    width: 175,
     // Deliberately much shorter than the art is wide: the sprite is
     // bottom-anchored, so a short slot is what PUSHES it up and out over the
     // dialog's top edge (user 2026-07-22).
-    height: 72,
+    height: 85,
     child: Stack(
       clipBehavior: Clip.none,
       children: [
@@ -1624,7 +1655,7 @@ class SettlementMapState extends State<SettlementMap>
             child: ShadowedBuildingIcon(
               imageUrl: def.imageUrl,
               defId: def.id,
-              width: 140,
+              width: 175,
             ),
           ),
         ),
@@ -1639,10 +1670,6 @@ class SettlementMapState extends State<SettlementMap>
   static const Color _dlgInk = kParchmentInk;
   static final Color _dlgInkSoft = kParchmentInk.withValues(alpha: 0.78);
   static final Color _dlgInkFaint = kParchmentInk.withValues(alpha: 0.55);
-
-  /// Ornament ink (the meander bands) — a shade you notice only when you look
-  /// for it. Anything stronger and the frame competes with the content.
-  static final Color _dlgOrnament = kParchmentInk.withValues(alpha: 0.22);
 
   /// The warm ACCENT for labels on the parchment (user 2026-07-23) — see
   /// [_kDlgAccent]. Buttons keep goldBright: they wear the dark FoE.btn
@@ -2311,16 +2338,20 @@ class SettlementMapState extends State<SettlementMap>
         : const <String>[];
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
+      // Shared by every building's worker list (user 2026-08-30: "bitte bei
+      // allen Gebäuden anpassen") — this one row IS all of them, so the
+      // bigger icon and the explicit centring land everywhere at once.
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
-            width: 26,
-            height: 26,
+            width: 32,
+            height: 32,
             child: c.imageUrl == null
-                ? Icon(Icons.pets, size: 18, color: _dlgAccent)
+                ? Icon(Icons.pets, size: 22, color: _dlgAccent)
                 : CreatureSprite(
                     url: c.imageUrl!,
-                    fallback: Icon(Icons.pets, size: 18, color: _dlgAccent),
+                    fallback: Icon(Icons.pets, size: 22, color: _dlgAccent),
                   ),
           ),
           const SizedBox(width: 6),
@@ -2371,14 +2402,9 @@ class SettlementMapState extends State<SettlementMap>
       () async {
         if (!canPay) return;
         Navigator.pop(context);
-        final err = await ctrl.skipBuildWithGold(b);
-        if (!context.mounted || err == null) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(err, style: FoE.label(size: 13)),
-            backgroundColor: FoE.danger,
-          ),
-        );
+        // No pop-up on failure any more (user 2026-08-29: "wirklich alle pop
+        // up nachrichten... löschen").
+        await ctrl.skipBuildWithGold(b);
       },
     );
   }
@@ -2523,6 +2549,9 @@ class SettlementMapState extends State<SettlementMap>
               now: fmtOut(k, now[k]),
               next: fmtOut(k, next[k]),
               atMax: atMax,
+              // Just the new number (user request) — the old value cost a
+              // reader two numbers to find the one that changed.
+              onlyNext: true,
             ),
           // Worker slots and per-worker yield, after the outputs: the outputs
           // are WHAT it makes, these are what makes them.
@@ -2610,14 +2639,11 @@ class SettlementMapState extends State<SettlementMap>
   }
 
   Future<void> _doUpgrade(String buildingId) async {
-    final messenger = ScaffoldMessenger.of(context);
     final err = await widget.ctrl.upgradeBuilding(buildingId);
     if (!mounted) return;
-    if (err != null) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(err), backgroundColor: FoE.danger),
-      );
-    } else {
+    // No pop-up on failure any more (user 2026-08-29: "wirklich alle pop up
+    // nachrichten... löschen") — the dialog just stays open.
+    if (err == null) {
       Navigator.pop(context); // close dialog; the building is now rebuilding
     }
   }
@@ -2753,11 +2779,14 @@ class SettlementMapState extends State<SettlementMap>
     );
   }
 
-  void _openAssignPicker(PlacedBuilding b, WorkshopRole role) => showDialog(
-    context: context,
-    builder: (_) =>
-        AssignWorkersSheet(ctrl: widget.ctrl, building: b, role: role),
-  );
+  void _openAssignPicker(PlacedBuilding b, WorkshopRole role) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) =>
+            AssignWorkersSheet(ctrl: widget.ctrl, building: b, role: role),
+      );
 
   /// What this Workshop is making. Settlement-wide rather than per-building:
   /// there is one recipe at a time (SettlementModel.activeCraftId), so showing
@@ -2784,8 +2813,8 @@ class SettlementMapState extends State<SettlementMap>
     if (queueSlots > 0) lines.add('+${queueSlots.round()} build queue slot');
     final buildSlots = def.effectAt('buildSlots', '', 99);
     if (buildSlots > 0) lines.add('+${buildSlots.round()} build site');
-    final healSlots = def.effectAt('healSlots', '', 99);
-    if (healSlots > 0) lines.add('🩺 Heals ${healSlots.round()} at once');
+    // Heal capacity dropped from this line (user request) — it repeated the
+    // hut's own "Heals N at once" workshop note for no new information.
     if (lines.isEmpty && def.workshops.isEmpty) {
       lines.add('Decorative building');
     }
@@ -3007,11 +3036,27 @@ class SettlementMapState extends State<SettlementMap>
                             'assets/images/map_background.png',
                             fit: BoxFit.cover,
                             filterQuality: FilterQuality.medium,
-                            // 4096 x 2048 decodes to 32 MB of RGBA for a
-                            // backdrop that is never read closely. Half that
-                            // in each direction is a quarter of the memory and
-                            // indistinguishable under a town.
-                            cacheWidth: 2048,
+                            // Raised from 2048 (user 2026-08-27: "den
+                            // Hintergrund genau gleich scharf auflösen wie
+                            // die Gebäude") — kMaxMapZoom went from 0.8 to
+                            // 1.0 the same day, and at 1.0 this single image,
+                            // stretched over the WHOLE map canvas
+                            // (isoCanvasSize, several times the image's own
+                            // 4096 x 2048), is what a player is now actually
+                            // looking at up close rather than glancing past.
+                            //
+                            // 2026-08-28 (user: "der Hintergrund muss noch
+                            // deutlich besser aufgelöst sein"): the source
+                            // was re-rendered at 8192 x 4096 (terrain.py
+                            // --scale 0.8) specifically so the decode target
+                            // could move too — a bigger source file alone
+                            // changes nothing, since cacheWidth is what
+                            // actually caps the pixels a player sees. Split
+                            // by platform because the ceiling that matters is
+                            // the canvaskit web decode that OOM'd at 4096
+                            // (32 MB) last time; native has no such budget
+                            // and gets the sharper decode.
+                            cacheWidth: kIsWeb ? 3072 : 6144,
                           ),
                         ),
                       ),
@@ -3156,7 +3201,11 @@ class SettlementMapState extends State<SettlementMap>
             if (!def.isRoad && !def.isBuildPlot)
               Positioned.fill(
                 child: CustomPaint(
-                  painter: _ContactShadowPainter(w: def.gridW, h: def.gridH),
+                  painter: _ContactShadowPainter(
+                    w: def.gridW,
+                    h: def.gridH,
+                    seed: b.id.hashCode,
+                  ),
                 ),
               ),
             // Isolated raster: the whole buildings layer rebuilds on every 5s
@@ -3607,6 +3656,27 @@ class SettlementMapState extends State<SettlementMap>
 // Resyncing (via ctrl.addListener) just moves the anchor to a newer snapshot
 // — since both the anchor and the per-frame formula agree by construction,
 // a resync only changes what's on screen if the real rate actually changed.
+/// The building dialog's side margin, carved rather than printed on (user
+/// 2026-08-27: replaces [MeanderStrip] in [SettlementMapState._showDetail]
+/// only — every other sheet keeps its meander band). A lit sliver against a
+/// shaded one, full height: the same two-facet pairing [ParchmentHeader.band]
+/// cuts its own edges with, so the margin reads as a fold in the same
+/// material instead of a motif laid over it.
+class _DlgMarginGroove extends StatelessWidget {
+  const _DlgMarginGroove();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 3,
+    child: Row(
+      children: [
+        Expanded(child: ColoredBox(color: FoE.lit(kParchmentMid))),
+        Expanded(child: ColoredBox(color: FoE.shade(kParchmentMid))),
+      ],
+    ),
+  );
+}
+
 class _BuildCountdown extends StatefulWidget {
   final SettlementController ctrl;
   final String buildingId;
@@ -4010,33 +4080,97 @@ class _LifeOverlay extends StatelessWidget {
   }
 }
 
-/// A soft pool of shade on the ground a building occupies (2026-08-03).
+/// Scattered mud and dirt on the ground a building occupies (2026-08-03,
+/// redrawn 2026-08-27: "den dunklen Schatten um die Gebäude löschen. Dafür
+/// aber dort wo gebäude sind, vereinzelt Matsch und Dreck entstehen lassen").
 ///
-/// The shape is the FOOTPRINT, not the sprite's box: those two differ for
-/// anything that is not square, and a shadow that disagrees with the ground it
-/// lies on is worse than none. It is offset up-left because the renders are lit
-/// from the camera's right — the shadow has to fall away from the light or the
-/// building looks lit from two directions at once.
+/// The single blurred FOOTPRINT shape it replaces always read as a shadow
+/// tracing the tile's own straight edges — softer or darker, it was still one
+/// coherent outline, and any outline that isn't the building's own silhouette
+/// eventually reads as a box under it. A handful of small, irregular, earth-
+/// toned patches has no edge to trace: each one is deterministic (seeded off
+/// the building, [seed]) so it never shimmers between rebuilds, but the SET
+/// of them has no outline at all, only ground that has clearly been stood on.
 class _ContactShadowPainter extends CustomPainter {
   final int w;
   final int h;
-  const _ContactShadowPainter({required this.w, required this.h});
+  final int seed;
+  const _ContactShadowPainter({
+    required this.w,
+    required this.h,
+    required this.seed,
+  });
+
+  static const _mud = Color(0xFF4A3B26); // wet, darker
+  static const _dirt = Color(0xFF6B5A3E); // dry, dustier
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.save();
-    canvas.translate(-2.5, 2.0);
-    canvas.drawPath(
-      footprintPathLocal(w, h),
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.26)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-    );
-    canvas.restore();
+    final path = footprintPathLocal(w, h);
+    final bounds = path.getBounds();
+    if (bounds.isEmpty) return;
+    final rnd = math.Random(seed);
+    final short = math.min(bounds.width, bounds.height);
+    // MORE of it, and REALLY dirt now (user 2026-08-27: "das kann noch mehr
+    // sein, als wäre es wirklich Dreck") — bigger clusters, more of them,
+    // stronger tone.
+    final clusters = 6 + rnd.nextInt(4);
+    for (var i = 0; i < clusters; i++) {
+      // Biased toward the SOUTH half of the footprint — local y grows toward
+      // south (see footprintPathLocal: south is the (w+h)*b corner, the
+      // largest y), which in this camera is the NEAR corner facing the
+      // viewer, exactly where a courtyard or gate passage sits (user: "die
+      // Innenhöfe und die Torwege... sollten davon besonders betroffen
+      // sein"). sqrt() pushes a uniform draw toward 1, i.e. toward south,
+      // for most clusters; the rest stay unbiased so the yard doesn't read
+      // as a hard line.
+      final biasSouth = rnd.nextDouble() < 0.7;
+      final ty = biasSouth
+          ? math.sqrt(rnd.nextDouble())
+          : rnd.nextDouble();
+      // Rejection sample a centre actually ON the footprint — the diamond's
+      // corners would otherwise catch clusters from its bounding rect.
+      Offset centre;
+      var tries = 0;
+      do {
+        centre = Offset(
+          bounds.left + rnd.nextDouble() * bounds.width,
+          bounds.top + ty * bounds.height,
+        );
+        tries++;
+      } while (!path.contains(centre) && tries < 8);
+      if (!path.contains(centre)) continue;
+
+      final tone = rnd.nextBool() ? _mud : _dirt; // one tone per CLUSTER
+      final clusterR = short * (0.11 + rnd.nextDouble() * 0.09);
+      final blobs = 4 + rnd.nextInt(3);
+      for (var j = 0; j < blobs; j++) {
+        final jitter = clusterR * 0.6;
+        final p = j == 0
+            ? centre
+            : centre +
+                  Offset(
+                    (rnd.nextDouble() * 2 - 1) * jitter,
+                    (rnd.nextDouble() * 2 - 1) * jitter,
+                  );
+        final r = clusterR * (0.6 + rnd.nextDouble() * 0.5);
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: p,
+            width: r * (1.3 + rnd.nextDouble() * 0.6),
+            height: r,
+          ),
+          Paint()
+            ..color = tone.withValues(alpha: 0.28 + rnd.nextDouble() * 0.14)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.8),
+        );
+      }
+    }
   }
 
   @override
-  bool shouldRepaint(_ContactShadowPainter old) => old.w != w || old.h != h;
+  bool shouldRepaint(_ContactShadowPainter old) =>
+      old.w != w || old.h != h || old.seed != seed;
 }
 
 /// The footprint diamond, filled and outlined — the ghost preview's "can I

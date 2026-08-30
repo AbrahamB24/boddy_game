@@ -15,19 +15,18 @@ import 'package:boddygame/features/creatures/widgets/battle_scene.dart';
 // could never manage. The risk in a scene is the day it has no art: "no image
 // yet" must look finished, never broken.
 void main() {
-  testWidgets('a region with no art borrows the overworld ground',
+  testWidgets('a region with no art paints its own arena ground',
       (tester) async {
-    // User 2026-07-31: "nimm den Hintergrund von der Overworld vorerst als
-    // Hintergrund für den Kampfscreen" — the trail you walked in on, under the
-    // fight it led to.
+    // User request: "eine Art Kampfplatz auf dem Rasen" — a painted lawn +
+    // pitch rather than a fixed picture, since a fixed picture can only agree
+    // with one arena aspect ratio.
     await tester.pumpWidget(
       const MaterialApp(home: Scaffold(body: BattleScene(era: 3))),
     );
     await tester.pump();
-    final img = tester.widget<Image>(find.byType(Image));
-    expect(img.image, isA<AssetImage>());
-    expect((img.image as AssetImage).assetName, kOverworldGroundAsset);
-    // And the era palette stays under it as the last resort.
+    // No Image at all in the no-art path any more — it's a CustomPaint.
+    expect(find.byType(Image), findsNothing);
+    expect(find.byType(CustomPaint), findsWidgets);
     expect(find.byType(BattleScene), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

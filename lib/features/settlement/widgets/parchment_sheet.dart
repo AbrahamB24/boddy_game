@@ -77,6 +77,16 @@ class ParchmentSheet extends StatelessWidget {
             ),
           ),
           child: Column(
+            // STRETCH (user 2026-08-30: "die Deko an den Rand nehmen") — was
+            // the Column default (centre), which gives a loose-width child
+            // its own preferred width and then centres the RESULT. The
+            // header's Row survives that by accident (an Expanded inside it
+            // forces a finite width), but the Stack below it has no such
+            // child: it shrank to fit the tile grid's content and got
+            // centred, carrying the meander strips in from the true edge
+            // with it — not a fixed inset, but drifting with however wide
+            // the content happened to be.
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ── The BAND stays, the handle goes (user 2026-08-01: "lösche
               //    den oberen Balken und den hellen grauen", then "Das Header
@@ -105,15 +115,22 @@ class ParchmentSheet extends StatelessWidget {
                 child: Stack(
                   children: [
                     // Wallpaper first, so a band can never land over a card.
+                    //
+                    // Flush at the sheet's own edge now (user 2026-08-30:
+                    // "die Deko an den Rand nehmen, wie bei anderen Screens
+                    // auch") — the strip already keeps its own air on both
+                    // sides ([_FacetPainter._inset]), so the outer 4px this
+                    // Positioned added on top of that was pure dead margin,
+                    // not part of the motif.
                     Positioned(
-                      left: 4,
+                      left: 0,
                       top: 0,
                       bottom: 0,
                       width: 14,
                       child: MeanderStrip(color: ornament),
                     ),
                     Positioned(
-                      right: 4,
+                      right: 0,
                       top: 0,
                       bottom: 0,
                       width: 14,

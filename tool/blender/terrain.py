@@ -376,6 +376,25 @@ def meadow(t, count=650):
         # Turned off the grid, so a patch is a patch rather than a field.
         ob.rotation_euler = (0, 0, rb._hash01(f'mr{i}') * 3.14159)
 
+    # A finer grain OVER the broad patches above (user 2026-08-29: "mehr
+    # Struktur in den Rasen") — real turf breaks up at more than one scale;
+    # the patches alone read as a few big blotches, not texture. Same hash
+    # placement, the same z as the patches (proven not to bury itself under
+    # the base slab — see the comment above), just far smaller and far more
+    # numerous, so it reads as grain rather than as a second layer of
+    # patches.
+    for i in range(count * 3):
+        gx = rb._hash01(f'sx{i}') * COLS
+        gy = rb._hash01(f'sy{i}') * ROWS
+        if t.at(int(gx), int(gy)) != GRASS:
+            continue
+        j = rb._hash01(f'ss{i}')
+        s = 0.6 + 1.6 * j
+        x, y = world(gx, gy)
+        ob = slab(f'speck{i}', x, y, s, s * (0.7 + 0.4 * j), -0.20, 0.06,
+                  'grass_dry' if i % 2 else 'grass_dark')
+        ob.rotation_euler = (0, 0, rb._hash01(f'sr{i}') * 3.14159)
+
 
 def _touches(t, gx, gy, kinds, reach=1):
     """Is any cell within [reach] one of [kinds]?"""
@@ -523,20 +542,15 @@ def detail(t):
                         tmat('rock' if k % 2 else 'rock_dark'))
             ob.rotation_euler = (0, 0, a * 3.0)
 
-    def scrape(nm, x, y, j, i):
-        # Bare earth: a patch worn through the turf. Cheap, and it does more for
-        # "somebody walks here" than any amount of green.
-        ob = slab(f'{nm}', x, y, 1.6 + 2.6 * j, 1.2 + 2.0 * j, -0.19, 0.11,
-                  'dirt')
-        ob.rotation_euler = (0, 0, j * 3.1)
-
     scatter(t, 'boulder', 420, (GRASS,), boulder)
     scatter(t, 'bush', 1600, (GRASS,), bush)
     scatter(t, 'reeds', 700, (BEACH,), reeds, near=(SEA, RIVER))
     scatter(t, 'flowers', 1100, (GRASS,), flowers)
     scatter(t, 'stone', 150, (SEA, RIVER), stone, near=(BEACH,))
     scatter(t, 'pebbles', 450, (BEACH,), pebbles)
-    scatter(t, 'scrape', 300, (GRASS,), scrape)
+    # scrape (bare-earth dirt patches) removed (user 2026-08-29: "die
+    # Dreckflecken auf der Karte wieder entfernen") — see meadow() below for
+    # the grass's own texture instead.
 
 
 def canopy_mass(t, name='cm'):

@@ -550,8 +550,10 @@ class _BreedingScreenState extends State<BreedingScreen> {
               ),
       );
 
-  /// The Monsters-grid cell shape (crossAxisCount 3, childAspectRatio 0.70).
-  static const double _kTileAspect = 0.70;
+  /// The Monsters-grid cell shape (crossAxisCount 3, childAspectRatio 0.60 —
+  /// user 2026-08-28: "diese Boxen etwas länger machen, besonders der obere
+  /// Teil mit dem Monster").
+  static const double _kTileAspect = 0.60;
 
   /// An unfilled parent slot, in the BUILD MENU'S dead-card style (user
   /// 2026-07-27: "Nimm für die Kacheln die Kacheln der Gebäude, welche nicht

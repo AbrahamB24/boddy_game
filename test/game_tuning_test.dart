@@ -121,7 +121,9 @@ void main() {
       expect(kStartApSecond, 3);
       expect(CombatEngine.kFieldSlots, 3);
       expect(CombatEngine.kBaseAccuracy, 0.92);
-      expect(CombatEngine.kMaxHitHpFraction, 0.5);
+      // 0 = off by default now (user 2026-08-29: "es soll keine Grenze
+      // geben") — was 0.5.
+      expect(CombatEngine.kMaxHitHpFraction, 0.0);
       expect(kWildStatMult, 0.85);
       expect(kBaseSigmaPct, 0.08);
       expect(kSlopeSigmaPct, 0.06);

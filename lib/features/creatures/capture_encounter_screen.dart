@@ -17,6 +17,7 @@ import 'services/capture_math.dart';
 import 'services/combat_engine.dart';
 import 'services/expedition_controller.dart';
 import 'services/creatures_controller.dart';
+import 'widgets/creature_sprite.dart' show decodeWidthFor;
 
 // The catch moment (user design, 2026-07-15; QTE moved INTO the battle
 // 2026-07-18): fight the found monster down into its catchable band — the rarer
@@ -298,6 +299,7 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
             species.stageAt(0).imageUrl!,
             filterQuality: FilterQuality.none,
             fit: BoxFit.contain,
+            cacheWidth: decodeWidthFor(context, 180),
             errorBuilder: (_, _, _) =>
                 const Icon(Icons.pets, color: kAccent, size: 80),
           ),

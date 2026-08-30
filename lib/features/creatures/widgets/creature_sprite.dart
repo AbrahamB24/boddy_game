@@ -1,6 +1,25 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+/// How wide to DECODE a creature sprite, in device pixels — the monster art
+/// equivalent of settlement/widgets/building_icon.dart's own _decodeWidth
+/// (same reasoning duplicated rather than shared across features on purpose;
+/// see that file for the full story). Without this, every sprite — network
+/// art at whatever resolution it was uploaded at — decodes at its FULL
+/// native size regardless of how small it is actually drawn, which is what
+/// made monster art the slow, memory-heavy load (user 2026-08-29: "die
+/// Monsterassets werden sehr langsam geladen").
+///
+/// Device pixels plus a quarter of headroom for zooming in, floored so a
+/// tiny icon still decodes cleanly. [displayWidth] is whichever of the
+/// widget's own width/height is known — for BoxFit.contain art the two are
+/// close enough that either bounds the decode sensibly.
+int decodeWidthFor(BuildContext context, double displayWidth) {
+  final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+  final want = (displayWidth * (dpr > 3 ? 3 : dpr) * 1.25).ceil();
+  return want < 96 ? 96 : want;
+}
+
 /// Shared renderer for a creature's PNG sprite (user 2026-07-25). Backed by
 /// [CachedNetworkImage] so sprites are cached to DISK — the raw `Image.network`
 /// this replaces only lived in the in-memory cache, so every eviction / cold
@@ -31,16 +50,25 @@ class CreatureSprite extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => CachedNetworkImage(
-    imageUrl: url,
-    fit: fit,
-    alignment: alignment,
-    width: width,
-    height: height,
-    filterQuality: FilterQuality.none,
-    fadeInDuration: Duration.zero,
-    fadeOutDuration: Duration.zero,
-    placeholder: (_, __) => const SizedBox.shrink(),
-    errorWidget: (_, __, ___) => fallback,
-  );
+  Widget build(BuildContext context) {
+    // Whichever dimension is known bounds the decode — for BoxFit.contain
+    // art the two are close enough that either is a sensible cap, and most
+    // callers here only ever pass one of the two anyway.
+    final knownWidth = width ?? height;
+    final memWidth =
+        knownWidth == null ? null : decodeWidthFor(context, knownWidth);
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: fit,
+      alignment: alignment,
+      width: width,
+      height: height,
+      memCacheWidth: memWidth,
+      filterQuality: FilterQuality.none,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholder: (_, __) => const SizedBox.shrink(),
+      errorWidget: (_, __, ___) => fallback,
+    );
+  }
 }

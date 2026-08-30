@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
@@ -19,10 +21,6 @@ import 'creature_backdrop.dart';
 // era's painted gradient — a fallback that has to look deliberate, because most
 // regions will not have art for a long time and "no image yet" must never read
 // as "something failed to load".
-/// The overworld's own ground, used as the stand-in battlefield until a region
-/// has art of its own (user 2026-07-31). Same file the map draws.
-const String kOverworldGroundAsset = 'assets/images/overworld_grass.png';
-
 class BattleScene extends StatelessWidget {
   /// The region's scene art. Null = the era gradient.
   final String? imageUrl;
@@ -75,22 +73,14 @@ class BattleScene extends StatelessWidget {
             errorBuilder: (_, _, _) => const SizedBox.shrink(),
           )
         else
-          // ── Für's Erste der Overworld-Boden (user 2026-07-31) ──
-          // "nimm den Hintergrund von der Overworld vorerst als Hintergrund für
-          //  den Kampfscreen"
-          //
-          // The trail you walked in on, under the fight it led to — which is
-          // truer than any gradient while no region has its own art yet, and it
-          // is one asset the game already ships. The era palette stays UNDER it
-          // as the last resort: it is what tints the scene if this asset ever
-          // goes missing, and what a later era will fall back to before its own
-          // ground exists.
-          Image.asset(
-            kOverworldGroundAsset,
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.medium,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
+          // ── Ein Kampfplatz auf dem Rasen (user request) ──
+          // A photographic map texture (tried first) reads as a zoomed-in
+          // crop the moment the arena is this small and this tall a strip —
+          // no fixed image agrees with every phone's aspect ratio at once.
+          // Painted ground does: a lawn with a worn earthen pitch trodden
+          // into its middle, sized off the arena's OWN bounds every time, so
+          // it always looks like it was made for this fight.
+          const _ArenaGround(),
         // The horizon: a band of light across the middle, where the two ranks
         // meet. It gives the field a floor without drawing a line on it, and it
         // is what keeps a photographic region image from swallowing the sprites.
@@ -116,6 +106,92 @@ class BattleScene extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A lawn with an earthen pitch trodden into its middle — the stand-in
+/// battlefield until a region has art of its own (user request: "eine Art
+/// Kampfplatz auf dem Rasen").
+///
+/// Painted, not a fixed picture: a single photo can only agree with ONE arena
+/// aspect ratio, and [BattleScene] is drawn at whatever the phone leaves for
+/// it. [CustomPaint] re-solves the ground and the pitch off the ACTUAL box
+/// every time, so a tall narrow arena and a short wide one both read as "a
+/// clearing sized for this fight" rather than a crop of something bigger.
+class _ArenaGround extends StatelessWidget {
+  const _ArenaGround();
+
+  @override
+  Widget build(BuildContext context) => const CustomPaint(
+    painter: _ArenaGroundPainter(),
+    size: Size.infinite,
+  );
+}
+
+class _ArenaGroundPainter extends CustomPainter {
+  const _ArenaGroundPainter();
+
+  static const _grassLight = Color(0xFF598349);
+  static const _grassDark = Color(0xFF33502A);
+  static const _dirt = Color(0xFF8F714C);
+  static const _dirtDark = Color(0xFF6B4F32);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [_grassLight, _grassDark],
+        ).createShader(rect),
+    );
+
+    // Mottling: a handful of soft, deterministic patches so the lawn is not
+    // one flat fill. Fixed seed — repaints (a hit's shake, the idle bob)
+    // happen every frame, and a random lawn would shimmer with them.
+    final rnd = math.Random(7);
+    for (var i = 0; i < 24; i++) {
+      final c = Offset(rnd.nextDouble() * size.width,
+          rnd.nextDouble() * size.height);
+      final r = size.shortestSide * (0.04 + rnd.nextDouble() * 0.05);
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..color = (rnd.nextBool() ? _grassLight : _grassDark)
+              .withValues(alpha: 0.16),
+      );
+    }
+
+    // The pitch itself: worn earth where the two ranks actually meet, roughly
+    // centred and sized off the arena rather than off a fixed image.
+    final pitch = Rect.fromCenter(
+      center: rect.center,
+      width: size.width * 0.94,
+      height: size.height * 0.7,
+    );
+    canvas.drawOval(
+      pitch,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [_dirt, _dirtDark],
+        ).createShader(pitch),
+    );
+    // A darker worn rim — trodden ground meeting the lawn, not a sticker cut
+    // out and dropped onto it.
+    canvas.drawOval(
+      pitch,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.shortestSide * 0.012
+        ..color = _dirtDark.withValues(alpha: 0.55),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArenaGroundPainter old) => false;
 }
 
 class _Horizon extends StatelessWidget {
@@ -176,6 +252,12 @@ class TypePodium extends StatelessWidget {
   /// widget inventing a second one.
   final Color hpColor;
 
+  /// Which side the embossed type glyph sits on — true (default) is the
+  /// enemy's own podium; the player's own monster mirrors it to the right
+  /// (user 2026-08-28: "bei den eigenen Monster das Typicon gespiegelt auf
+  /// der rechten Seite").
+  final bool watermarkLeft;
+
   const TypePodium({
     super.key,
     required this.element,
@@ -183,6 +265,7 @@ class TypePodium extends StatelessWidget {
     this.dim = false,
     this.hpFraction,
     this.hpColor = const Color(0xFF6FBF73),
+    this.watermarkLeft = true,
   });
 
   @override
@@ -222,14 +305,15 @@ class TypePodium extends StatelessWidget {
               ),
             ),
             // THE CARD'S OWN SURFACE — same gradient, same embossed glyph.
-            // Watermarked to the LEFT because the monster stands in the middle
-            // and would otherwise be standing on its own type symbol.
+            // Watermarked to one SIDE because the monster stands in the
+            // middle and would otherwise be standing on its own type symbol
+            // — [watermarkLeft] picks which.
             ClipRRect(
               borderRadius: oval,
               child: CreatureBackdrop(
                 element: element,
                 radius: 0,
-                watermarkLeft: true,
+                watermarkLeft: watermarkLeft,
                 // The platform is a wide, shallow strip, so the glyph is scaled
                 // off its SHORT side and needs the boost to fill it the way it
                 // fills a card.

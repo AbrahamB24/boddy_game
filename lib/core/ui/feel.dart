@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../features/creatures/models/creature_enums.dart';
+
 // ── How an action FEELS (user 2026-07-30) ────────────────────
 // "Finde in der gesamten App Verbesserungen zum Ui und UX, so dass es sich
 // besser anfühlt, das Spiel zu spielen."
@@ -84,6 +86,26 @@ class Feel {
     } catch (e) {
       debugPrint('[Feel] preferences unavailable, using defaults: $e');
     }
+    // ── "der Sound am Handy verschwindet nach der ersten Aktion" (user
+    //    2026-08-29) ──
+    // A known audioplayers/mobile gotcha, not a bug in any one clip: every
+    // FeelEvent, every attack element and the battle theme each get their OWN
+    // AudioPlayer (see _sound/attackSound/startBattleMusic above), and without
+    // an explicit AudioContext, iOS leaves the shared AVAudioSession in
+    // whatever ad-hoc state the FIRST player's own activate/deactivate cycle
+    // left it in — the second player's .play() can then land on a session
+    // that already tore itself down and produce nothing, silently. Setting
+    // ONE global context up front (mixWithOthers, so no player's session
+    // lifecycle fights another's for exclusive focus) is the documented fix.
+    try {
+      await AudioPlayer.global.setAudioContext(
+        AudioContextConfig(
+          focus: AudioContextConfigFocus.mixWithOthers,
+        ).build(),
+      );
+    } catch (e) {
+      debugPrint('[Feel] audio context unavailable: $e');
+    }
   }
 
   static Future<void> setSoundOn(bool on) async {
@@ -92,6 +114,15 @@ class Feel {
       for (final p in _players.values) {
         try {
           await p.stop();
+        } catch (_) {}
+      }
+      // The music player is not in [_players] (see [startBattleMusic]) and,
+      // unlike a one-shot cue, keeps looping until told to stop — muting sound
+      // mid-battle must silence it too, not just future cues.
+      final music = _musicPlayer;
+      if (music != null) {
+        try {
+          await music.stop();
         } catch (_) {}
       }
     }
@@ -206,6 +237,79 @@ class Feel {
     } catch (e) {
       debugPrint('[Feel] could not play ${_asset(event)}: $e');
     }
+  }
+
+  // ── Attack sounds, by element (user 2026-08-29) ──────────────
+  // "Hier sind die Sound effects für die Attacken. Bitte für die jeweiligen
+  // Elemente hinzufügen." One clip per CreatureElement (including `neutral`,
+  // the basic attack's type). Kept OUT of FeelEvent on purpose: FeelEvent
+  // names UI moments (tap, place, success…), not "which of six battle clips
+  // to play", and battle_screen already knows the struck event's element —
+  // no mapping to a UI moment would add anything. Same soundOn switch (one
+  // mute for the whole game) and the same lazy-player/low-latency/test-mute
+  // technique as [_sound], just keyed by element instead of by FeelEvent.
+  static final Map<CreatureElement, AudioPlayer> _attackPlayers = {};
+
+  static String _attackAsset(CreatureElement element) =>
+      'sfx/${element.name}_attack.mp3';
+
+  /// Plays the element's attack clip. Called from battle_screen at the
+  /// moment a struck event lands (hit or miss — the clip is the attack being
+  /// thrown, not the impact).
+  static void attackSound(CreatureElement element) {
+    if (!_soundOn) return;
+    if (kIsWeb == false && _muteForTests) return;
+    final asset = _attackAsset(element);
+    try {
+      final player = _attackPlayers.putIfAbsent(element, () {
+        final p = AudioPlayer();
+        _fireAndForget(p.setPlayerMode(PlayerMode.lowLatency), 'player mode');
+        _fireAndForget(p.setReleaseMode(ReleaseMode.stop), 'release mode');
+        return p;
+      });
+      _fireAndForget(player.play(AssetSource(asset), volume: 1.0), asset);
+    } catch (e) {
+      debugPrint('[Feel] could not play $asset: $e');
+    }
+  }
+
+  // ── Battle music (user 2026-08-29) ────────────────────────────
+  // "Hier die Musik einfügen für den Battle screen als Loop." One long track
+  // for the length of a battle. mediaPlayer mode (the default), not
+  // lowLatency — that mode is built for short one-shot cues, not a streamed
+  // loop — with ReleaseMode.loop so it repeats without a gap. Ducked to half
+  // volume so it sits under the attack/hit cues above rather than fighting
+  // them; those keep playing at full volume.
+  static AudioPlayer? _musicPlayer;
+
+  /// Starts the battle theme looping. Safe to call again while it's already
+  /// playing (a no-op, since the source doesn't change). Call from
+  /// battle_screen when a fight begins.
+  static void startBattleMusic() {
+    if (!_soundOn) return;
+    if (kIsWeb == false && _muteForTests) return;
+    try {
+      final player = _musicPlayer ??= AudioPlayer();
+      _fireAndForget(
+        player.setReleaseMode(ReleaseMode.loop),
+        'music release mode',
+      );
+      _fireAndForget(
+        player.play(AssetSource('music/battle_theme.mp3'), volume: 0.5),
+        'battle music',
+      );
+    } catch (e) {
+      debugPrint('[Feel] could not play battle music: $e');
+    }
+  }
+
+  /// Stops the battle theme. Call when the battle screen closes (win, loss,
+  /// flee, or the player navigating away) — a loop left running is the one
+  /// sound bug a player cannot miss.
+  static void stopBattleMusic() {
+    final player = _musicPlayer;
+    if (player == null) return;
+    _fireAndForget(player.stop(), 'stop battle music');
   }
 
   /// Set by the test harness (and anything else that must stay silent) so a

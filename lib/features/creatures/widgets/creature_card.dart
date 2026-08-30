@@ -26,9 +26,10 @@ class CreatureCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   /// The VITALS: the XP arc under the monster's feet and the HP bar in the
-  /// strip. Both off in the breeding screen (user 2026-07-27) — a parent is
-  /// chosen on its GENES, and neither its level progress nor its wounds are
-  /// part of that decision, so they are noise there.
+  /// strip. XP defaults OFF everywhere now (user 2026-08-28: "Der EP Balken
+  /// kann entfernt werden" — the small arc at the feet, not the HP bar) —
+  /// no caller had ever asked for it on. Kept as a flag rather than deleted
+  /// outright in case a screen wants it back.
   final bool showXp;
   final bool showHp;
 
@@ -38,13 +39,24 @@ class CreatureCard extends StatelessWidget {
   /// current one.
   final bool showLevelOnePower;
 
+  /// Replaces the top-right ⚡power readout with a different number — for a
+  /// screen where overall power isn't what the reader is judging this
+  /// monster by (user 2026-08-30, the work-post picker: "wobei der
+  /// entsprechende Wert prominent gezeigt werden soll" — the STAT this post
+  /// reads, not power). [statOverrideLabel] takes the rarity word's place
+  /// underneath, so the reader still knows what the big number means.
+  final String? statOverrideLabel;
+  final int? statOverrideValue;
+
   const CreatureCard({
     super.key,
     required CreatureInstance this.creature,
     this.onTap,
-    this.showXp = true,
+    this.showXp = false,
     this.showHp = true,
     this.showLevelOnePower = false,
+    this.statOverrideLabel,
+    this.statOverrideValue,
   }) : shrouded = false,
        shroudImageUrl = null;
 
@@ -54,7 +66,9 @@ class CreatureCard extends StatelessWidget {
       // An undiscovered species shows no data at all — the flags are moot.
       showXp = false,
       showHp = false,
-      showLevelOnePower = false;
+      showLevelOnePower = false,
+      statOverrideLabel = null,
+      statOverrideValue = null;
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +189,9 @@ class CreatureCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        '⚡${totalPower(inst!)}',
+                        statOverrideValue != null
+                            ? '$statOverrideValue'
+                            : '⚡${totalPower(inst!)}',
                         style: FoE.value(size: showLevelOnePower ? 14 : 11)
                             .copyWith(
                           color: Colors.white,
@@ -184,18 +200,19 @@ class CreatureCard extends StatelessWidget {
                       ),
                       // The genes, small, under the current power (user
                       // 2026-07-27): the big number stays the one every other
-                      // screen shows.
-                      if (showLevelOnePower)
+                      // screen shows. Only meaningful next to POWER.
+                      if (showLevelOnePower && statOverrideValue == null)
                         Text(
                           // "lv", not "lvl" (user 2026-07-29).
-                          'lv 1  ${levelOnePower(inst)}',
+                          'lv 1  ${levelOnePower(inst!)}',
                           style: FoE.dim(size: 10).copyWith(
                             color: Colors.white.withValues(alpha: 0.85),
                             shadows: _stripShadow,
                           ),
                         ),
-                      // THE RARITY, UNDER THE ENERGY (user 2026-07-27:
-                      // "schreibe die Seltenheit unter die Energie").
+                      // Either the override's own label, or — THE RARITY,
+                      // UNDER THE ENERGY (user 2026-07-27: "schreibe die
+                      // Seltenheit unter die Energie").
                       //
                       // It left the tile when the strip became one type colour,
                       // and a monster's rarity is worth knowing at a glance —
@@ -203,7 +220,17 @@ class CreatureCard extends StatelessWidget {
                       // own colour, lightened so it holds against any element
                       // backdrop, and small: it is a label on the power block,
                       // not a second headline.
-                      if (inst.species case final sp?)
+                      if (statOverrideLabel != null)
+                        Text(
+                          statOverrideLabel!,
+                          style: FoE.dim(size: 9).copyWith(
+                            color: Colors.white.withValues(alpha: 0.75),
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3,
+                            shadows: _stripShadow,
+                          ),
+                        )
+                      else if (inst!.species case final sp?)
                         Text(
                           sp.rarity.label,
                           style: FoE.dim(size: 9).copyWith(
@@ -230,25 +257,48 @@ class CreatureCard extends StatelessWidget {
                 child: IgnorePointer(
                   child: Opacity(
                     opacity: ko ? 0.35 : 1,
-                    child: shrouded
-                        ? _silhouette(imageUrl)
-                        : Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              // Drop shadow behind the sprite — its silhouette
-                              // in the element's shadow tone (matching its type
-                              // icon), blurred + nudged down.
-                              Positioned.fill(
-                                child: _creatureShadow(imageUrl, elementShadow),
-                              ),
-                              Positioned.fill(
-                                child: _creatureImage(
-                                  imageUrl,
-                                  alignment: Alignment.bottomCenter,
+                    // A taller box (user 2026-08-28) doesn't by itself grow
+                    // a sprite that BoxFit.contain was already fitting by
+                    // WIDTH rather than height — same lesson as the battle
+                    // arena's own sprites. A flat zoom grows the art
+                    // regardless of which side the fit was bound by.
+                    //
+                    // 20%, not 15% (user 2026-08-28, same day: "die Monster
+                    // allgemein um 20% grösser machen"), and anchored at
+                    // CENTRE rather than the bottom now — bottomCenter grew
+                    // the art keeping the feet fixed and put the WHOLE 20%
+                    // into the head, which is what "das Monster ist zu hoch"
+                    // was about: it pushed further into the tile's pop-out
+                    // allowance than the tile has room for. Centring splits
+                    // the growth, so the head rises by half as much for the
+                    // same size increase.
+                    child: Transform.scale(
+                      scale: shrouded ? 1.0 : 1.20,
+                      alignment: Alignment.center,
+                      child: shrouded
+                          ? _silhouette(imageUrl)
+                          : Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                // Drop shadow behind the sprite — its
+                                // silhouette in the element's shadow tone
+                                // (matching its type icon), blurred + nudged
+                                // down.
+                                Positioned.fill(
+                                  child: _creatureShadow(
+                                    imageUrl,
+                                    elementShadow,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
+                                Positioned.fill(
+                                  child: _creatureImage(
+                                    imageUrl,
+                                    alignment: Alignment.bottomCenter,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
                   ),
                 ),
               ),

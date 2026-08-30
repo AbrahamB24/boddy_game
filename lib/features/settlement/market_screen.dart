@@ -449,7 +449,8 @@ class _MarketScreenState extends State<MarketScreen> {
 
   /// The Monsters-grid cell shape, which every monster tile in the game is
   /// drawn in — the Hatchery's egg slot and the breeding parents included.
-  static const double _kTileAspect = 0.70;
+  /// 0.60, not 0.70 (user 2026-08-28: taller, more room for the art).
+  static const double _kTileAspect = 0.60;
 
   /// An unfilled place, in the BUILD MENU'S dead-card style — the same frame the
   /// Hatchery's egg slot and the breeding screen's parent slots wear, so an

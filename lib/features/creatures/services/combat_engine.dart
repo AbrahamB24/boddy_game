@@ -18,6 +18,16 @@ enum CombatOutcome { victory, defeat, fled }
 class CombatEvent {
   final Combatant target;
 
+  /// Whoever's turn this was — the log line's own subject ("X attacks...",
+  /// "X builds AP…", "X is afflicted by..."). Added so the UI can put that
+  /// monster's own portrait beside its log line without re-deriving "who
+  /// acted" from mutable engine state at a different point in time than the
+  /// event was actually created — [currentActor] can already have moved on
+  /// by the time a ChangeNotifier listener gets to react (user 2026-08-29:
+  /// "vor den Namen der Monster jeweils ein kleines Icon des Monsterassets
+  /// zeigen").
+  final Combatant? actor;
+
   /// Magnitude (always ≥ 0): damage dealt, or HP restored when [heal].
   final int amount;
 
@@ -38,14 +48,35 @@ class CombatEvent {
   /// the reacting sprite. Neutral for the basic attack, heals and status DoT.
   final CreatureElement element;
 
+  /// A positive status landed on [target] (a self-buff, a regen tick) — the
+  /// UI sweeps white lines bottom-to-top over it. Independent of [amount]:
+  /// most buffs carry no number at all.
+  final bool buff;
+
+  /// A negative status (a secondary debuff — stat drop, etc.) landed on
+  /// [target] — the UI sweeps red lines top-to-bottom over it. Rides
+  /// alongside the damage event that caused it, not a separate hit.
+  final bool debuff;
+
+  /// [target] ended its turn WITHOUT spending it on an action — banking AP
+  /// for a stronger move, out of AP entirely, or the player's own "End Turn"
+  /// button (user 2026-08-29: "Wenn die KI nichts macht... " / "Das ist
+  /// immer so, wenn End Turn gedrückt wird" — the same visual either way).
+  /// The UI closes a big yellow ring over it, reading as "AP recharging".
+  final bool charging;
+
   const CombatEvent({
     required this.target,
+    this.actor,
     this.amount = 0,
     this.heal = false,
     this.crit = false,
     this.miss = false,
     this.typeMult = 1.0,
     this.element = CreatureElement.neutral,
+    this.buff = false,
+    this.debuff = false,
+    this.charging = false,
   });
 }
 
@@ -122,6 +153,15 @@ class CombatEngine extends ChangeNotifier {
 
   CombatOutcome? outcome;
   String lastAction = '';
+
+  /// Bumped once per resolved action (basic attack, ability use, forced/
+  /// voluntary switch, a frozen/feared skip) — a monotonic identity for "a
+  /// new action happened" that the UI can compare, because [lastAction] alone
+  /// cannot: two buffs in a row with nothing numeric in their text (user
+  /// 2026-08-29: "Wenn ich mehrere Buffs/Debuffs pro Runde mache, dann kommt
+  /// die Animation nicht mehr") produce the IDENTICAL string, and the battle
+  /// screen was comparing by string equality.
+  int actionSeq = 0;
 
   /// Visible effects of the most recent action (damage/heal numbers), read by
   /// the battle screen for floating combat text. Cleared at the start of every
@@ -461,6 +501,7 @@ class CombatEngine extends ChangeNotifier {
       playerField[slot] = target;
       _sendIn(target);
       lastEvents.clear();
+      actionSeq++;
       lastAction = '🔄 ${target.name} steps up!';
       // Resume whatever the empty slot interrupted — the end of a turn, or
       // nothing at all when an ally fell during somebody else's.
@@ -484,6 +525,7 @@ class CombatEngine extends ChangeNotifier {
     playerField[slot] = target;
     _acting = target;
     lastEvents.clear();
+    actionSeq++;
     lastAction = '🔄 ${target.name} steps up!';
     _afterAction(target);
     return null;
@@ -520,9 +562,10 @@ class CombatEngine extends ChangeNotifier {
     actor.ap -= kBasicAttackApCost;
     _countAction(actor);
     lastEvents.clear();
+    actionSeq++;
     String msg;
     if (!_rollAccuracy(actor)) {
-      lastEvents.add(CombatEvent(target: target, miss: true));
+      lastEvents.add(CombatEvent(target: target, actor: actor, miss: true));
       msg = '${actor.name} attacks ${target.name} — miss!';
     } else {
       final roll = _rollDamage(
@@ -535,6 +578,7 @@ class CombatEngine extends ChangeNotifier {
       target.hp = math.max(target.cannotBeKoed ? 1 : 0, target.hp - roll.dmg);
       lastEvents.add(CombatEvent(
         target: target,
+        actor: actor,
         amount: roll.dmg,
         crit: roll.crit,
         typeMult: roll.typeMult,
@@ -561,6 +605,7 @@ class CombatEngine extends ChangeNotifier {
     _countAction(actor, ability);
     _turnPriority = math.max(_turnPriority, ability.priority);
     lastEvents.clear();
+    actionSeq++;
 
     // Self-penalty (Power Surge/Gaia's Wrath): always applies on use, hit or miss.
     if (ability.selfPenaltyStat != null) {
@@ -597,6 +642,11 @@ class CombatEngine extends ChangeNotifier {
           );
           parts.add('🌱 regenerating');
         }
+        // One event for the whole buff action, win or no self-buff/regen was
+        // even rolled into it — the UI's white-lines-rising cue reads off
+        // this (see battle_screen's _consumeCombatEvents), and a buff that
+        // adds no number to the log still needs SOMETHING to animate against.
+        lastEvents.add(CombatEvent(target: actor, actor: actor, buff: true));
       case AbilityKind.heal:
         // REGEN (user 2026-07-30, Pokémon's Wish): a heal move may leave a trickle
         // behind as well as topping the target up right now.
@@ -616,14 +666,19 @@ class CombatEngine extends ChangeNotifier {
           final before = t.hp;
           t.hp = math.min(t.maxHp, t.hp + amount);
           lastEvents.add(
-            CombatEvent(target: t, amount: t.hp - before, heal: true),
+            CombatEvent(
+              target: t,
+              actor: actor,
+              amount: t.hp - before,
+              heal: true,
+            ),
           );
           parts.add('${t.name} +${t.hp - before} HP');
         }
       case AbilityKind.damage:
         for (final t in targets) {
           if (!_rollAccuracy(actor)) {
-            lastEvents.add(CombatEvent(target: t, miss: true));
+            lastEvents.add(CombatEvent(target: t, actor: actor, miss: true));
             parts.add('misses ${t.name}');
             continue;
           }
@@ -637,6 +692,7 @@ class CombatEngine extends ChangeNotifier {
           t.hp = math.max(t.cannotBeKoed ? 1 : 0, t.hp - dmg);
           lastEvents.add(CombatEvent(
             target: t,
+            actor: actor,
             amount: dmg,
             crit: roll.crit,
             typeMult: roll.typeMult,
@@ -653,6 +709,7 @@ class CombatEngine extends ChangeNotifier {
             if (actor.hp > before) {
               lastEvents.add(CombatEvent(
                 target: actor,
+                actor: actor,
                 amount: actor.hp - before,
                 heal: true,
               ));
@@ -670,7 +727,9 @@ class CombatEngine extends ChangeNotifier {
                 actor.cannotBeKoed ? 1 : 0,
                 actor.hp - back,
               );
-              lastEvents.add(CombatEvent(target: actor, amount: back));
+              lastEvents.add(
+                CombatEvent(target: actor, actor: actor, amount: back),
+              );
               parts.add('${actor.name} takes $back recoil');
             }
           }
@@ -696,6 +755,13 @@ class CombatEngine extends ChangeNotifier {
               );
               parts.add(
                 '${t.name} ${ability.inflictDebuff!.emoji} ${ability.inflictDebuff!.label}',
+              );
+              // Rides alongside the damage event just added above, rather
+              // than replacing it — the hit still flashes/shakes AND the
+              // red-lines-falling cue plays over the same target (see
+              // battle_screen's _consumeCombatEvents).
+              lastEvents.add(
+                CombatEvent(target: t, actor: actor, debuff: true),
               );
             }
           }
@@ -745,12 +811,23 @@ class CombatEngine extends ChangeNotifier {
   /// banks the leftover AP and advances the CTB queue.
   void endTurn() {
     if (outcome != null || needsPlayerSwitch || !isPlayerTurn) return;
-    lastEvents.clear();
     _endTurn();
   }
 
+  /// The shared tail of every turn that ends WITHOUT spending it on an
+  /// action — the player's own "End Turn" button and both AI cases below
+  /// (banking, out of AP) all funnel through here, so the "AP recharging"
+  /// visual is one thing to get right rather than three copies that could
+  /// drift (user 2026-08-29, after confirming the AI's silent bank should
+  /// look the same as the player's own End Turn: "Das ist immer so, wenn End
+  /// Turn gedrückt wird").
   void _endTurn() {
-    _finishActorTurn(currentActor, priority: _turnPriority);
+    final actor = currentActor;
+    lastEvents.clear();
+    lastEvents.add(CombatEvent(target: actor, actor: actor, charging: true));
+    actionSeq++;
+    lastAction = '${actor.name} builds AP…';
+    _finishActorTurn(actor, priority: _turnPriority);
   }
 
   /// True while a turn has ended but the next actor has not been chosen,
@@ -1055,11 +1132,20 @@ class CombatEngine extends ChangeNotifier {
         : 1.0;
     final variance = 0.85 + rng.nextDouble() * 0.15;
     final raw = (basis * stab * typeMult * critMult * variance).floor();
-    // Hard cap: never more than kMaxHitHpFraction of the target's max HP in
-    // one hit, so a full-HP combatant can never be one-shot (see the const).
-    final cap = math.max(1, (target.maxHp * kMaxHitHpFraction).floor());
+    // The cap is now OFF by default (user 2026-08-29: "es soll keine Grenze
+    // geben" — a big enough level gap made every move land on the exact
+    // same capped number regardless of its own power, which read as "power
+    // does nothing" rather than as the anti-one-shot floor it actually was).
+    // <= 0 means disabled — the dial's own `felt` text already promised this
+    // ("—" instead of a hit count), but the maths here used to fold straight
+    // into `math.max(1, ...)` without ever checking for it, so "0" quietly
+    // meant "cap every hit at 1 damage" instead of "no cap at all".
+    final capFraction = kMaxHitHpFraction;
+    final dmg = capFraction <= 0
+        ? math.max(1, raw)
+        : math.max(1, math.min(raw, math.max(1, (target.maxHp * capFraction).floor())));
     return (
-      dmg: math.max(1, math.min(raw, cap)),
+      dmg: dmg,
       crit: critMult > 1.0,
       typeMult: typeMult,
     );
@@ -1068,14 +1154,19 @@ class CombatEngine extends ChangeNotifier {
   void _finishActorTurn(Combatant actor, {int priority = 0}) {
     final dot = actor.tickStatusEndOfRound();
     if (dot > 0) {
-      lastEvents.add(CombatEvent(target: actor, amount: dot));
+      lastEvents.add(CombatEvent(target: actor, actor: actor, amount: dot));
       lastAction = '$lastAction · ${actor.name} takes $dot status damage';
     }
     // The mirror of the DoT line — regen ticks in the same upkeep (user
     // 2026-07-30), so it has to be as visible as the damage is.
     if (actor.lastRegenHeal > 0) {
       lastEvents.add(
-        CombatEvent(target: actor, amount: actor.lastRegenHeal, heal: true),
+        CombatEvent(
+          target: actor,
+          actor: actor,
+          amount: actor.lastRegenHeal,
+          heal: true,
+        ),
       );
       lastAction = '$lastAction · ${actor.name} regenerates '
           '${actor.lastRegenHeal} HP';
@@ -1108,7 +1199,10 @@ class CombatEngine extends ChangeNotifier {
       final status = actor.mainStatus!;
       final dot = actor.tickStatusEndOfRound();
       lastEvents.clear();
-      if (dot > 0) lastEvents.add(CombatEvent(target: actor, amount: dot));
+      actionSeq++;
+      if (dot > 0) {
+        lastEvents.add(CombatEvent(target: actor, actor: actor, amount: dot));
+      }
       lastAction =
           '${actor.name} is afflicted by ${status.label} and skips its turn!'
           '${dot > 0 ? ' ($dot status damage)' : ''}';

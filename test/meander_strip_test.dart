@@ -7,17 +7,19 @@ import 'package:boddygame/features/settlement/widgets/meander_strip.dart';
 // from looking broken: only WHOLE motifs are drawn — a shape cut in half at the
 // bottom edge reads as a rendering bug.
 //
-// The motif itself changed on 2026-07-31 (a Greek-key spiral became a facet
-// triangle, with the low-poly pass); this rule did not, which is exactly why it
+// The motif itself changed twice — a Greek-key spiral became a facet triangle
+// with the 2026-07-31 low-poly pass, then back to a (redrawn) Greek-key square
+// spiral on 2026-08-30 ("das dreieck mäander durch das ursprüngliche viereckige
+// spiralenmäander ersetzen"); this rule survived both, which is exactly why it
 // is tested as a rule and not as a picture.
 void main() {
   group('MeanderStrip.repeatCount', () {
-    // Width 16 → one motif is 1.6 × 16 = 25.6pt tall.
+    // Width 10 → one motif is 1.4 × 10 = 14pt tall.
     test('only whole motifs count; the remainder becomes margin', () {
-      expect(MeanderStrip.repeatCount(16, 25), 0);
-      expect(MeanderStrip.repeatCount(16, 26), 1);
-      expect(MeanderStrip.repeatCount(16, 51), 1);
-      expect(MeanderStrip.repeatCount(16, 52), 2);
+      expect(MeanderStrip.repeatCount(10, 13), 0);
+      expect(MeanderStrip.repeatCount(10, 14), 1);
+      expect(MeanderStrip.repeatCount(10, 27), 1);
+      expect(MeanderStrip.repeatCount(10, 28), 2);
     });
 
     test('a taller dialog simply fits more of them', () {

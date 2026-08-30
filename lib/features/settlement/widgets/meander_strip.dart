@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 
-/// A vertical FACET BAND — the ornament that runs down the left and right inside
-/// edges of every page (user 2026-07-22, faceted 2026-07-31).
+/// A vertical GREEK-KEY BAND — the ornament that runs down the left and right
+/// inside edges of every page (user 2026-07-22).
 ///
-/// It was a Greek-key meander: a square spiral hanging off a rail, the ornament
-/// of a printed page. The app is low poly now (user: "alles soll im low poly
-/// flatdesign sein, so wie dieses Monster"), and the meander's whole character
-/// was a STROKE of even weight turning corners — a drawn line, where a faceted
-/// world has only filled shapes. This is the same idea in the new language: a
-/// column of triangles, alternating which edge they point at, filled with the
-/// one tone.
+/// Back to the ORIGINAL square-spiral meander (user 2026-08-30: "das dreieck
+/// mäander durch das ursprüngliche viereckige spiralenmäander ersetzen") — a
+/// 2026-07-31 "low poly" pass had swapped it for a column of filled triangles,
+/// which read as a row of arrows rather than a meander. This restores the
+/// classic shape: a single STROKE of even weight, turning only at right
+/// angles, stepping side to side as it runs down the page — a running key
+/// pattern, not a spiral coiled into each motif (there is no room to coil at
+/// 14px wide), but square-cornered throughout, never curved or pointed.
 ///
-/// Drawn rather than shipped as an image so it scales with the page: the unit is
-/// derived from the strip's WIDTH, and as many whole triangles as fit are
-/// centred vertically. A clipped facet reads as a bug, so the leftover always
-/// goes to the margins, never into a half-drawn shape.
+/// Drawn rather than shipped as an image so it scales with the page: the unit
+/// is derived from the strip's WIDTH, and as many whole steps fit are centred
+/// vertically. A clipped step reads as a bug, so the leftover always goes to
+/// the margins, never into a half-drawn turn.
 class MeanderStrip extends StatelessWidget {
   /// Ink of the band. Alpha is the whole styling story here — this is a
   /// decoration, and it must never compete with the text it frames.
@@ -26,33 +27,34 @@ class MeanderStrip extends StatelessWidget {
 
   const MeanderStrip({super.key, required this.color, this.flip = false});
 
-  /// How many whole motifs fit a strip of [width] × [height] — 0 when not even
-  /// one does. THE rule that keeps a clipped facet off the screen; the painter
+  /// How many whole steps fit a strip of [width] × [height] — 0 when not even
+  /// one does. THE rule that keeps a clipped turn off the screen; the painter
   /// draws exactly this many and turns the leftover into margin.
   static int repeatCount(double width, double height) {
     if (width <= 0 || height <= 0) return 0;
-    return (height / (width * _FacetPainter.unit)).floor();
+    return (height / (width * _KeyPainter.unit)).floor();
   }
 
   @override
   Widget build(BuildContext context) =>
-      CustomPaint(painter: _FacetPainter(color: color, flip: flip));
+      CustomPaint(painter: _KeyPainter(color: color, flip: flip));
 }
 
-class _FacetPainter extends CustomPainter {
+class _KeyPainter extends CustomPainter {
   final Color color;
   final bool flip;
 
-  _FacetPainter({required this.color, required this.flip});
+  _KeyPainter({required this.color, required this.flip});
 
-  /// One motif's height, as a multiple of the strip's width. Taller than it is
-  /// wide: a squat triangle reads as a chevron pointing sideways, and the band
-  /// should read as running DOWN the page.
-  static const double unit = 1.6;
+  /// One step's height, as a multiple of the strip's width. Taller than it is
+  /// wide, so the band reads as running DOWN the page rather than as a
+  /// staircase climbing sideways.
+  static const double unit = 1.4;
 
-  /// The share of the strip's width a triangle spans, so the band keeps air on
-  /// both sides and never touches what it frames.
-  static const double _inset = 0.16;
+  /// The two x-positions the line steps between, as a share of the strip's
+  /// width — kept off both true edges so the band keeps air on either side.
+  static const double _near = 0.22;
+  static const double _far = 0.78;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -64,40 +66,41 @@ class _FacetPainter extends CustomPainter {
     if (n <= 0) return;
 
     // Centre the whole run: the leftover becomes equal margins top and bottom
-    // rather than a partial triangle at the foot.
+    // rather than a partial step at the foot.
     final top = (h - n * motif) / 2;
-    final left = w * _inset;
-    final right = w * (1 - _inset);
+    final xA = flip ? w * _far : w * _near;
+    final xB = flip ? w * _near : w * _far;
 
     final paint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = color
-      ..isAntiAlias = true;
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.22
+      ..strokeJoin = StrokeJoin.miter
+      ..strokeCap = StrokeCap.square
+      ..isAntiAlias = true
+      ..color = color;
 
+    // ONE continuous path for the whole strip — a square wave, turning only
+    // at right angles: straight down, step sideways, straight down, alternating
+    // which side each step lands on. That single unbroken line IS the meander;
+    // it is what the old doc comment meant by "a stroke of even weight turning
+    // corners," just running the strip's full length instead of one motif at a
+    // time.
+    final path = Path()..moveTo(xA, top);
+    var cur = xA;
     for (var i = 0; i < n; i++) {
-      final y = top + i * motif;
-      // Alternating: one triangle points at the page, the next at the edge. The
-      // PAIR is what makes it a band rather than a row of arrows.
-      final pointsIn = i.isEven != flip;
-      final path = Path();
-      if (pointsIn) {
-        path
-          ..moveTo(left, y)
-          ..lineTo(left, y + motif * 0.72)
-          ..lineTo(right, y + motif * 0.36)
-          ..close();
-      } else {
-        path
-          ..moveTo(right, y)
-          ..lineTo(right, y + motif * 0.72)
-          ..lineTo(left, y + motif * 0.36)
-          ..close();
-      }
-      canvas.drawPath(path, paint);
+      final yMid = top + i * motif + motif * 0.5;
+      final yEnd = top + (i + 1) * motif;
+      final next = cur == xA ? xB : xA;
+      path
+        ..lineTo(cur, yMid)
+        ..lineTo(next, yMid)
+        ..lineTo(next, yEnd);
+      cur = next;
     }
+    canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(_FacetPainter old) =>
+  bool shouldRepaint(_KeyPainter old) =>
       old.color != color || old.flip != flip;
 }

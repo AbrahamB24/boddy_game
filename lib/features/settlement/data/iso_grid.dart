@@ -47,11 +47,14 @@ const double kIsoTileH = kIsoTileW / 2;
 
 /// The closest the map may be zoomed (user 2026-08-09: "Ich will nicht ganz so
 /// nahe heranzoomen können wie aktuell", then a screenshot: "das soll der
-/// maximal zoom in sein").
+/// maximal zoom in sein"; raised one level again 2026-08-27: "eine Zoomstufe
+/// mehr hinzufügen, dass ich doch etwas näher an die Gebäude heranzoomen
+/// kann").
 ///
-/// 0.8, measured off that screenshot rather than argued from the art: a road
-/// cell came out about 50 px on a 432 px phone, and a cell is [kIsoTileW] = 64
-/// px at scale 1.
+/// 0.8 was measured off that 2026-08-09 screenshot rather than argued from the
+/// art: a road cell came out about 50 px on a 432 px phone, and a cell is
+/// [kIsoTileW] = 64 px at scale 1. 1.0 is one round step closer than that —
+/// a cell at its own native 64 px.
 ///
 /// It was 4.0 first, on the reasoning that 4 is where the sprites are drawn at
 /// their own resolution (everything renders at SCALE = 4 in tool/blender). That
@@ -60,7 +63,7 @@ const double kIsoTileH = kIsoTileW / 2;
 /// and five times too close is still five times too close even when every pixel
 /// of it is real. Down here the art is simply downsampled, which is the safe
 /// direction.
-const double kMaxMapZoom = 0.8;
+const double kMaxMapZoom = 1.0;
 
 /// The map's view transform: [scale] about the origin, then a screen-space
 /// shift of ([tx], [ty]).

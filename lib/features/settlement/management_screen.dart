@@ -45,14 +45,11 @@ class _ManagementScreenState extends State<ManagementScreen>
   // ── Assignment helpers ────────────────────────────────────
   Future<void> _assign(
       String creatureId, PlacedBuilding b, WorkshopRole role) async {
-    final err =
-        await _settlement.assignCreatureToWorkshop(creatureId, b.id, role.stat);
+    // No pop-up on failure any more (user 2026-08-29: "wirklich alle pop up
+    // nachrichten... löschen") — a failed assignment just leaves the
+    // creature unassigned.
+    await _settlement.assignCreatureToWorkshop(creatureId, b.id, role.stat);
     if (!mounted) return;
-    if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(err, style: FoE.label(size: 12))),
-      );
-    }
   }
 
   Future<void> _unassign(String creatureId) async {

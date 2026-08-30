@@ -4,18 +4,13 @@ import '../../../core/ui/feel.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../creatures/models/creature_instance.dart';
 import '../../creatures/services/creatures_controller.dart';
-import '../../creatures/widgets/creature_sprite.dart';
+import '../../creatures/widgets/creature_card.dart';
+import '../../common/widgets/parchment_page.dart' show ParchmentHeader;
 import '../data/building_definitions.dart';
 import '../models/placed_building.dart';
 import '../settlement_controller.dart';
-import 'meander_strip.dart';
-import 'scroll_paper.dart'
-    show
-        kActionGreen,
-        kParchmentInk,
-        kParchmentMid,
-        parchmentButton,
-        parchmentButtonInk;
+import 'parchment_sheet.dart';
+import 'scroll_paper.dart' show kActionGreen, kParchmentInk;
 
 // ── Posting monsters to a work post (user 2026-07-26) ───────────────────────
 // "mache dieses pop up menü neu und übersichtlicher. Ich brauche sicher eine
@@ -55,11 +50,8 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
   // The dark FoE palette is invisible on this surface, so every colour here is
   // the building dialog's: one brown ink at three strengths, plus the accent it
   // uses for labels.
-  static const Color _ink = kParchmentInk;
   static final Color _inkSoft = kParchmentInk.withValues(alpha: 0.78);
-  static final Color _inkFaint = kParchmentInk.withValues(alpha: 0.55);
   static const Color _accent = FoE.gold;
-  static final Color _ornament = kParchmentInk.withValues(alpha: 0.22);
 
   /// The "already employed somewhere else" mark. A rust/amber that is neither
   /// the green of a free hire nor the red of an error — this is a MOVE, and it
@@ -71,6 +63,24 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
   /// inside this dialog, and pushing a page would put the map back on screen
   /// between two halves of one decision.
   bool _adding = false;
+
+  /// Set while [_adding] when the roster was opened from a FILLED seat (user
+  /// 2026-08-30: "+ Kacheln in der Anzahl der Plätze... Wenn ich auf ein
+  /// bereits eingestelltes Monster klicke, dann kann ich es austauschen") —
+  /// the tile itself is the trigger now, one per seat, instead of a single +
+  /// button that only ever adds. A pick here REPLACES this monster instead of
+  /// filling a fresh seat; null means an empty tile opened the roster, so a
+  /// pick just fills the next open seat as before.
+  String? _swapTargetId;
+
+  CreatureInstance? get _swapTarget {
+    final id = _swapTargetId;
+    if (id == null) return null;
+    for (final c in CreaturesController().creatures) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
 
   WorkshopRole get _role => widget.role;
   bool get _training => _role.resource == WorkshopRole.kTraining;
@@ -85,13 +95,18 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
       .toList()
     ..sort((x, y) => _rank(x).compareTo(_rank(y)));
 
-  /// Everyone else, best first.
+  /// Everyone else, best first — PLUS the seat's own current occupant when
+  /// this roster was opened to swap it (user 2026-08-30: "sollen mir alle
+  /// verfügbaren Monster angezeigt werden, inkl. dem abgewählten") — the tap
+  /// that opened this view already took that monster off the seat in the
+  /// UI's own eyes, but it is still a real, pickable option, not a stranger
+  /// to hide.
   ///
   /// A TRAINING post ranks lowest LEVEL first instead: every trainee earns the
   /// same XP/h, and against the 6·L^2.5 curve that hour is worth most to the
   /// least-levelled monster.
   List<CreatureInstance> get _candidates {
-    final hereIds = _posted.map((c) => c.id).toSet();
+    final hereIds = _posted.map((c) => c.id).toSet()..remove(_swapTargetId);
     return CreaturesController()
         .creatures
         .where((c) => !hereIds.contains(c.id))
@@ -102,10 +117,6 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
   /// Sort key — smaller is better, so one comparator serves both orders.
   int _rank(CreatureInstance c) =>
       _training ? c.level : -c.statValue(_role.stat);
-
-  /// The number this post is judged on.
-  String _score(CreatureInstance c) =>
-      _training ? 'Lv ${c.level}' : '${c.statValue(_role.stat)}';
 
   /// The building a monster is posted to, when it is NOT this one — the mark
   /// the user asked for. Naming the building beats a bare "elsewhere": taking
@@ -121,17 +132,15 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
   }
 
   Future<void> _set(CreatureInstance c, bool post) async {
-    final messenger = ScaffoldMessenger.of(context);
     final err = post
         ? await widget.ctrl
             .assignCreatureToWorkshop(c.id, widget.building.id, _role.stat)
         : await widget.ctrl.assignCreatureToWorkshop(c.id, null, null);
     if (!mounted) return;
     if (err != null) {
+      // The buzz alone now (user 2026-08-29: "wirklich alle pop up
+      // nachrichten... löschen") — no pop-up explaining why.
       Feel.deny();
-      messenger.showSnackBar(
-        SnackBar(content: Text(err), backgroundColor: FoE.danger),
-      );
       return;
     }
     // Hiring and letting go are both decisions that land — the sheet redraws
@@ -140,363 +149,351 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
     Feel.success();
   }
 
+  /// A pick made while [_swapTargetId] is set: the outgoing monster is freed
+  /// FIRST — the seat is already full, so posting the new one before that
+  /// would just bounce off the same capacity check hiring into a full post
+  /// does.
+  Future<void> _swapWith(CreatureInstance candidate) async {
+    final outgoing = _swapTarget;
+    if (outgoing != null) await _set(outgoing, false);
+    await _set(candidate, true);
+    if (!mounted) return;
+    setState(() {
+      _adding = false;
+      _swapTargetId = null;
+    });
+  }
+
+  /// "Remove from post" — vacates the seat the tapped tile stood for without
+  /// picking a replacement. The only way to empty a seat now that there is no
+  /// bare crew list with its own ✕ per row.
+  Future<void> _removeSwapTarget() async {
+    final outgoing = _swapTarget;
+    if (outgoing == null) return;
+    await _set(outgoing, false);
+    if (!mounted) return;
+    setState(() {
+      _adding = false;
+      _swapTargetId = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     // Rebuilds on every assignment: both lists are derived from the live
     // collection, so posting someone moves them between the two views.
+    //
+    // A bottom sheet now, not a centred dialog (user 2026-08-30: "einen
+    // Screen…, welcher von unten kommt" — pointing at the daily-tasks sheet)
+    // — [ParchmentSheet] is the same surface "the worker picker" already
+    // names itself after in its own doc comment, just never wired up here.
+    // Full sheet width also fixes the tiles being smaller than everywhere
+    // else (user, same message: "die Kacheln sollen genau so gross sein wie
+    // andernorts") — they were shrunk to fit the old dialog's fixed 340px.
     return AnimatedBuilder(
       animation: widget.ctrl,
-      builder: (context, _) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          width: 340,
-          constraints: const BoxConstraints(maxHeight: 520),
-          // The SAME parchment surface and meander ornament as the building
-          // dialog (user 2026-07-26: "optisch an das andere Pop Up anpassen").
-          // This sheet is opened FROM that dialog and edits what it shows —
-          // a dark panel over a parchment one read as a different app.
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: kParchmentMid,
-          ),
-          child: Stack(
-            children: [
-              // Wallpaper first, so it can never land over a line of text.
-              Positioned(
-                left: 12,
-                top: 0,
-                bottom: 0,
-                width: 14,
-                child: MeanderStrip(color: _ornament),
-              ),
-              Positioned(
-                right: 12,
-                top: 0,
-                bottom: 0,
-                width: 14,
-                child: MeanderStrip(color: _ornament, flip: true),
-              ),
-              Padding(
-                // Wide sides: the meander bands live in that margin.
-                padding: const EdgeInsets.fromLTRB(34, 16, 34, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: _adding ? _addView() : _crewView(),
-                ),
-              ),
-            ],
+      builder: (context, _) => ParchmentSheet(
+        title: _sheetTitle,
+        trailing: _sheetTrailing,
+        builder: (context, scrollCtrl) => SingleChildScrollView(
+          controller: scrollCtrl,
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _adding ? _addView() : _crewView(),
           ),
         ),
+      ),
+    );
+  }
+
+  /// The sheet's own header band names the view — no more duplicate title
+  /// printed again inside the content below it.
+  String get _sheetTitle {
+    if (_adding) {
+      final swapping = _swapTarget;
+      if (swapping != null) return 'Swap ${swapping.displayName}';
+      return _training ? 'Add · lowest level first' : 'Add';
+    }
+    return _training ? 'Training' : _role.stat.label;
+  }
+
+  /// The seat count, bare, on the header band — only in the crew view; the
+  /// roster reads its own ranking line instead.
+  Widget? get _sheetTrailing {
+    if (_adding) return null;
+    final free = _slots - _posted.length;
+    return Text(
+      '${_posted.length} / $_slots',
+      style: ParchmentHeader.titleStyle(size: 13).copyWith(
+        color: free <= 0 ? _accent : ParchmentHeader.engravedInk,
       ),
     );
   }
 
   // ── View 1: who works here ────────────────────────────────
+  // Was a list of the crew plus one "Add a monster" button below it (user
+  // 2026-08-30: "einen Screen haben bei welchen '+ Kacheln' angezeigt werden
+  // in der Anzahl der Plätze. Wenn ich auf ein bereits eingestelltes Monster
+  // klicke, dann kann ich es austauschen") — now every seat gets its own
+  // tile, filled ones ARE the monster, empty ones are a "+", and a tap on a
+  // filled tile opens the roster to SWAP that seat instead of a separate
+  // hire-only button.
   List<Widget> _crewView() {
     final posted = _posted;
-    final free = _slots - posted.length;
     return [
-      _header(
-        _training ? 'Training' : _role.stat.label,
-        // The seat count IS the headline: it decides whether the + button
-        // below is even offered.
-        '${posted.length} / $_slots',
-        full: free <= 0,
-      ),
-      const SizedBox(height: 10),
-      Flexible(
-        child: posted.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                child: Text(
-                  'Nobody works here.\nThis building produces nothing.',
-                  style: FoE.dim(size: 12).copyWith(color: FoE.danger),
-                ),
-              )
-            : ListView(
-                shrinkWrap: true,
-                children: [for (final c in posted) _crewRow(c)],
-              ),
-      ),
-      const SizedBox(height: 12),
-      if (free > 0)
-        _bigButton(
-          label: 'Add a monster',
-          sub: '$free ${free == 1 ? 'seat' : 'seats'} free',
-          gold: true,
-          onTap: () => setState(() => _adding = true),
-        )
-      else
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          alignment: Alignment.center,
-          child: Text('Every seat taken',
-              style: FoE.dim(size: 11).copyWith(color: _inkFaint)),
+      if (posted.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(
+            'Nobody works here.\nThis building produces nothing.',
+            style: FoE.dim(size: 12).copyWith(color: FoE.danger),
+          ),
         ),
-      const SizedBox(height: 8),
-      _bigButton(label: 'Close', onTap: () => Navigator.pop(context)),
+      _slotsGrid(posted),
     ];
   }
 
-  Widget _crewRow(CreatureInstance c) {
+  // The one tile size for every grid this sheet draws — the crew's seats AND
+  // the roster's candidates (user 2026-08-30: "beim Swap screen die genau
+  // gleichen Kacheln verwenden"), same as [battle_prep_screen.dart]'s own
+  // slot grid.
+  static const int _gridCols = 3;
+  static const double _gridSpacing = 10.0;
+  static const double _gridAspect = 0.60;
+
+  /// One tile per seat this post HAS — not per free seat, so the whole crew
+  /// is visible at a glance instead of counted against a headline number.
+  Widget _slotsGrid(List<CreatureInstance> posted) => _tileGrid([
+        for (var i = 0; i < _slots; i++)
+          i < posted.length ? _filledSlotTile(posted[i]) : _emptySlotTile(),
+      ]);
+
+  Widget _tileGrid(List<Widget> tiles) => LayoutBuilder(
+        builder: (context, box) {
+          final tileW =
+              (box.maxWidth - _gridSpacing * (_gridCols - 1)) / _gridCols;
+          return Wrap(
+            spacing: _gridSpacing,
+            runSpacing: _gridSpacing,
+            children: [
+              for (final t in tiles)
+                SizedBox(width: tileW, height: tileW / _gridAspect, child: t),
+            ],
+          );
+        },
+      );
+
+  /// A tap opens the roster in SWAP mode for this exact monster — the tile
+  /// itself is now the only entry point, filling the role the ✕ and the
+  /// crew-list row used to split between them.
+  ///
+  /// The card's top-right readout is overridden with THIS post's stat (user
+  /// 2026-08-30: "wobei der entsprechende Wert prominent gezeigt werden
+  /// soll") — power is not what decides who belongs in this seat.
+  Widget _filledSlotTile(CreatureInstance c) {
     final creatures = CreaturesController();
     final away = creatures.isOnExpedition(c.id);
-    final idle = c.isKo || creatures.isBreeding(c.id);
-    return _row(
-      c: c,
-      // A posted monster that isn't actually in the building is the one thing
-      // this list must not hide: the post looks staffed and yields nothing.
-      note: away
-          ? '🎒 Away — seat held, no output'
-          : idle
-              ? '💤 Unfit for work — no output'
-              : null,
-      noteColor: away || idle ? _accent : null,
-      trailing: const Icon(Icons.remove_circle_outline,
-          size: 20, color: FoE.danger),
-      onTap: () => _set(c, false),
+    final breeding = creatures.isBreeding(c.id);
+    return Stack(
+      children: [
+        CreatureCard(
+          creature: c,
+          statOverrideLabel: _training ? 'Level' : _role.stat.label,
+          statOverrideValue: _training ? c.level : c.statValue(_role.stat),
+          onTap: () => setState(() {
+            _adding = true;
+            _swapTargetId = c.id;
+          }),
+        ),
+        // A posted monster that isn't actually IN the building is the one
+        // thing this tile must not hide: the post looks staffed and yields
+        // nothing. K.O. already shows on the card itself; away/breeding
+        // don't, so they get their own mark.
+        if (away || breeding)
+          Positioned(
+            left: 6,
+            top: 6,
+            child: IgnorePointer(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: ShapeDecoration(
+                  color: _takenInk,
+                  shape: FoE.facet(radius: 6),
+                ),
+                child: Text(
+                  away ? '🎒 no output' : '💤 no output',
+                  style: FoE.label(size: 9).copyWith(color: Colors.white),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
+
+  /// A place waiting to be filled — a tap opens the roster the same way the
+  /// old "Add a monster" button did. The exact tile [battle_prep_screen.dart]
+  /// uses for an open party slot, not a parchment-tinted version of it — this
+  /// sheet's surface is parchment, but the tile pairs with a dark
+  /// [CreatureCard] beside it and has to read as the SAME kind of empty seat.
+  Widget _emptySlotTile() => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() {
+          _adding = true;
+          _swapTargetId = null;
+        }),
+        child: LayoutBuilder(
+          // The tile reserves its top 17% for the art that pops out of a
+          // filled tile's card, so the empty one leaves the same gap to stay
+          // lined up with it.
+          builder: (context, box) => Padding(
+            padding: EdgeInsets.only(top: box.maxHeight * 0.17),
+            child: Container(
+              decoration: ShapeDecoration(
+                color: FoE.panelDark,
+                shadows: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.24),
+                    blurRadius: 0,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+                shape: FoE.facet(radius: 22),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_circle_outline, size: 24, color: FoE.textMuted),
+                  const SizedBox(height: 5),
+                  Text('Add', style: FoE.label(size: 11).copyWith(color: FoE.textMuted)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
 
   // ── View 2: hire, ranked by the stat this post reads ───────
   List<Widget> _addView() {
     final candidates = _candidates;
+    final swapping = _swapTarget;
     return [
-      Row(
-        children: [
-          GestureDetector(
-            onTap: () => setState(() => _adding = false),
-            child: const Padding(
-              padding: EdgeInsets.only(right: 8),
-              child: Icon(Icons.arrow_back, size: 18, color: _accent),
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() {
+          _adding = false;
+          _swapTargetId = null;
+        }),
+        child: const Padding(
+          padding: EdgeInsets.only(bottom: 6),
+          child: Icon(Icons.arrow_back, size: 20, color: _accent),
+        ),
+      ),
+      // Only offered from a filled tile — an empty seat has nothing to
+      // vacate, so this would just duplicate "back".
+      if (swapping != null) ...[
+        GestureDetector(
+          onTap: _removeSwapTarget,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            decoration: ShapeDecoration(
+              color: _takenInk.withValues(alpha: 0.12),
+              shape: FoE.facet(radius: 8),
             ),
-          ),
-          Expanded(
+            alignment: Alignment.center,
             child: Text(
-              _training ? 'Add · lowest level first' : 'Add',
-              style: FoE.title(size: 15).copyWith(color: _ink),
+              'Remove from post',
+              style: FoE.label(size: 12).copyWith(color: _takenInk),
             ),
           ),
-        ],
-      ),
-      Text(
-        _training
-            ? 'An hour of training is worth most to the lowest level.'
-            : 'Ranked by ${_role.stat.label} — best first.',
-        style: FoE.dim(size: 10).copyWith(color: _inkSoft),
-      ),
-      const SizedBox(height: 10),
-      Flexible(
-        child: candidates.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                child: Text('No other monsters.',
-                    style: FoE.dim(size: 12).copyWith(color: _inkSoft)),
-              )
-            : ListView(
-                shrinkWrap: true,
-                children: [for (final c in candidates) _candidateRow(c)],
-              ),
-      ),
-      const SizedBox(height: 12),
-      _bigButton(
-        label: 'Done',
-        onTap: () => setState(() => _adding = false),
-      ),
+        ),
+        const SizedBox(height: 10),
+      ],
+      if (candidates.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          child: Text('No other monsters.',
+              style: FoE.dim(size: 12).copyWith(color: _inkSoft)),
+        )
+      else
+        _tileGrid([for (final c in candidates) _candidateTile(c)]),
     ];
   }
 
-  Widget _candidateRow(CreatureInstance c) {
+  /// Exactly [_filledSlotTile]'s tile — the same [CreatureCard], the same
+  /// stat readout — plus the one thing a crew tile never needs: whether
+  /// picking this monster is a free hire or a TRANSFER out of another post.
+  Widget _candidateTile(CreatureInstance c) {
     final creatures = CreaturesController();
     final away = creatures.isOnExpedition(c.id);
     final idle = c.isKo || creatures.isBreeding(c.id);
     final elsewhere = _postedElsewhere(c);
     // ALREADY EMPLOYED is the state that has to jump out (user 2026-07-26:
     // "besser markieren, dass das Monster bereits eingestellt ist an einem
-    // anderen Ort"). A faint border and a caption did not: it looked like any
-    // other free monster, one tap from quietly gutting another building.
-    //
-    // So it stops wearing the "hire" costume entirely: warm wash, solid border,
-    // a badge naming the building, and — the honest part — a TRANSFER arrow in
-    // amber instead of the green plus, because that is what the tap does.
+    // anderen Ort") — taking this monster costs THAT building its worker.
     final taken = elsewhere != null && !away && !idle;
-    return _row(
-      c: c,
-      // Priority: away/K.O. first (it can't work at all), then the posting it
-      // would be taken from.
-      note: away
-          ? '🎒 Away'
-          : idle
-              ? '💤 Unfit for work'
-              : null,
-      noteColor: _accent,
-      badge: taken ? elsewhere : null,
-      trailing: Container(
-        width: 22,
-        height: 22,
-        decoration: BoxDecoration(
-          color: taken ? _takenInk : kActionGreen,
-          shape: BoxShape.circle,
+    final label = away
+        ? '🎒 Away'
+        : idle
+            ? '💤 Unfit for work'
+            : taken
+                ? 'Works in $elsewhere'
+                : null;
+    return Stack(
+      children: [
+        CreatureCard(
+          creature: c,
+          statOverrideLabel: _training ? 'Level' : _role.stat.label,
+          statOverrideValue: _training ? c.level : c.statValue(_role.stat),
+          onTap: () => _swapTargetId == null ? _set(c, true) : _swapWith(c),
         ),
-        child: Icon(
-          taken ? Icons.swap_horiz : Icons.add,
-          size: 15,
-          color: Colors.white,
+        if (label != null)
+          Positioned(
+            left: 6,
+            top: 6,
+            child: IgnorePointer(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: ShapeDecoration(
+                  color: _takenInk,
+                  shape: FoE.facet(radius: 6),
+                ),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FoE.label(size: 9).copyWith(color: Colors.white),
+                ),
+              ),
+            ),
+          ),
+        // The honest icon (user 2026-07-26): a TRANSFER arrow in amber
+        // instead of the green plus, because that is what the tap does.
+        Positioned(
+          right: 6,
+          bottom: 6,
+          child: IgnorePointer(
+            child: Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: taken ? _takenInk : kActionGreen,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                taken ? Icons.swap_horiz : Icons.add,
+                size: 15,
+                color: Colors.white,
+              ),
+            ),
+          ),
         ),
-      ),
-      onTap: () => _set(c, true),
+      ],
     );
   }
 
-  // ── Shared bits ───────────────────────────────────────────
-  /// Title on the left, the seat count on the right — BARE (user 2026-07-26:
-  /// "n/n ohne hintergrund/Box"). On paper a boxed number reads as a button;
-  /// the count is a readout, and a full post says so by going accent-coloured.
-  Widget _header(String title, String count, {required bool full}) => Row(
-    children: [
-      Expanded(
-        child: Text(title, style: FoE.title(size: 15).copyWith(color: _ink)),
-      ),
-      const SizedBox(width: 8),
-      Text(
-        count,
-        style: FoE.value(size: 13).copyWith(color: full ? _accent : _ink),
-      ),
-    ],
-  );
-
-  /// One monster: its SPRITE, its name, the number this post judges it on, and
-  /// the action.
-  ///
-  /// No box (user 2026-07-26: "box entfernen, dafür das Icon des Monsters
-  /// hinzufügen") — on parchment a bordered row per monster made a short list
-  /// look like a form to fill in, and the sprite tells you who this is faster
-  /// than any frame around the name.
-  ///
-  /// [badge] is what carries the "already employed" mark now that there is no
-  /// row colour to carry it: a filled chip naming the building this monster
-  /// would be taken FROM. A plain caption was too quiet for a tap that empties
-  /// a post somewhere else on the map.
-  Widget _row({
-    required CreatureInstance c,
-    required String? note,
-    required Color? noteColor,
-    required Widget trailing,
-    required VoidCallback onTap,
-    String? badge,
-  }) =>
-      GestureDetector(
-        // Opaque: without a filled box the row is mostly transparent, and
-        // deferToChild would drop every tap that misses the text.
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 28,
-                height: 28,
-                child: c.imageUrl == null
-                    ? Icon(Icons.pets, size: 18, color: _accent)
-                    : CreatureSprite(
-                        url: c.imageUrl!,
-                        fallback: Icon(Icons.pets, size: 18, color: _accent),
-                      ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      c.displayName,
-                      style: FoE.label(size: 13).copyWith(color: _ink),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (badge != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 3),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: ShapeDecoration(color: _takenInk, shape: FoE.facet(radius: 4)),
-                          child: Text(
-                            'Works in $badge',
-                            style: FoE.label(size: 9)
-                                .copyWith(color: Colors.white),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    if (note != null)
-                      Text(
-                        note,
-                        style: FoE.dim(size: 9)
-                            .copyWith(color: noteColor ?? _inkFaint),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _score(c),
-                style: FoE.value(size: 13).copyWith(color: _accent),
-              ),
-              const SizedBox(width: 8),
-              trailing,
-            ],
-          ),
-        ),
-      );
-
-  /// The building dialog's Upgrade button, to the pixel (user 2026-07-26:
-  /// "monster hinzufügen bitte genau gleich gestalten") — same pill, same
-  /// vertical padding, same 13pt label over a 10pt sub-line. The count lives on
-  /// that second line, exactly where Upgrade puts its cost and build time,
-  /// instead of being packed into the label.
-  Widget _bigButton({
-    required String label,
-    String? sub,
-    bool gold = false,
-    required VoidCallback onTap,
-  }) =>
-      GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: parchmentButton(active: gold),
-          alignment: Alignment.center,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: FoE.label(size: 13)
-                    .copyWith(color: parchmentButtonInk(active: gold)),
-              ),
-              if (sub != null) ...[
-                const SizedBox(height: 3),
-                Text(
-                  sub,
-                  textAlign: TextAlign.center,
-                  style: FoE.dim(size: 10)
-                      .copyWith(color: parchmentButtonInk(active: gold)),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
 }

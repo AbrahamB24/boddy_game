@@ -54,6 +54,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
   // mode's natural direction.
   _SortMode _sort = _SortMode.newest;
   bool _sortReversed = false;
+  // Search folded away behind its own icon (user 2026-08-28: "den Filter und
+  // die Such- und Sortierfunktion in Icons umwandeln") — reverses the
+  // 2026-07-27 call to spell every value out on a pill; only this screen's
+  // bar changes, [SearchPill]/[MenuPill]/[ActionPill] stay the shared look
+  // everywhere else (egg picker, breeding).
+  bool _searchOpen = false;
   // Multi-select filters (user 2026-07-18): the filter dropdown stays open and
   // lets you toggle any number of elements/rarities; empty set = no constraint.
   final Set<CreatureElement> _elementFilters = {};
@@ -345,90 +351,196 @@ class _CollectionScreenState extends State<CollectionScreen> {
   }
 
   // ── Search + filter + sort bar ─────────────────────────────
-  // THE EGG PICKER'S PILLS (user 2026-07-27: "alle filter und
-  // sortierfunktionien sollen so aussehen wie bei den eggs") — the shared
-  // widgets in features/common/widgets/filter_pills.dart, in the DARK palette
-  // because this page is FoE's panels, not parchment.
-  //
-  // Two rows now, laid out exactly as over there: the search full width, the
-  // filter and the sort beside each other under it. It was one row of icon
-  // squares with the search field folded away behind a toggle — a row that
-  // showed three glyphs and no values, so "is anything filtered?" took a tap to
-  // answer. The pills spend a line to say it outright.
+  // ICONS, not pills (user 2026-08-28: "den Filter und die Such- und
+  // Sortierfunktion in Icons umwandeln") — the row this screen had before the
+  // 2026-07-27 pills, brought back: three glyphs, no values spelled out on the
+  // face. The current value still isn't hidden — it moved to the tooltip and
+  // to a count badge — so a lit icon reads as "something is set" even without
+  // a permanent line of text for it. Everywhere ELSE that took the pills over
+  // (egg picker, breeding) is untouched; only this bar reverses the call.
   Widget _sortFilterBar() => Padding(
     padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
     child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SearchPill(
-          controller: _searchCtrl,
-          onChanged: (v) => setState(() => _searchQuery = v),
-          palette: _pills,
-        ),
-        const SizedBox(height: 8),
         Row(
           children: [
-            Expanded(child: _filterPill()),
-            const SizedBox(width: 8),
-            Expanded(child: _sortPill()),
+            _glyphBtn(
+              _searchOpen ? Icons.search_off : Icons.search,
+              () => setState(() {
+                _searchOpen = !_searchOpen;
+                if (!_searchOpen && _searchQuery.isNotEmpty) {
+                  _searchCtrl.clear();
+                  _searchQuery = '';
+                }
+              }),
+              tooltip: _searchQuery.isEmpty
+                  ? 'Search'
+                  : 'Search: "$_searchQuery"',
+              engaged: _searchOpen || _searchQuery.isNotEmpty,
+            ),
+            CompositedTransformTarget(link: _filterLink, child: _filterGlyphBtn()),
+            _sortGlyphBtn(),
           ],
         ),
+        if (_searchOpen) ...[
+          const SizedBox(height: 8),
+          SearchPill(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _searchQuery = v),
+            palette: _pills,
+          ),
+        ],
       ],
     ),
   );
 
-  /// The sort pill. The direction toggle predates the pills here (user
-  /// 2026-07-18) and survives unchanged — the pill just shows the arrow on its
-  /// face instead of only inside the menu.
-  Widget _sortPill() => MenuPill<String>(
-    palette: _pills,
-    icon: Icons.swap_vert,
-    label: _sort.label,
-    engaged: _sort != _SortMode.newest || _sortReversed,
-    value: _sort.name,
-    entries: [
-      for (final mode in _SortMode.values) MapEntry(mode.name, mode.label),
-    ],
-    trailing: Icon(
-      _sortReversed ? Icons.arrow_upward : Icons.arrow_downward,
-      size: 14,
-      color: FoE.goldBright,
+  /// One small square glyph button — the same container [_iconBtn] draws for
+  /// the title-bar row, but taking an [IconData] instead of an emoji so it can
+  /// share Material icons with the filter/sort menus it replaces.
+  Widget _glyphBtn(
+    IconData icon,
+    VoidCallback onTap, {
+    required String tooltip,
+    String? badge,
+    bool engaged = false,
+  }) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(FoE.radiusSmall),
+          child: Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            alignment: Alignment.center,
+            decoration: FoE.btn(active: engaged),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 17,
+                  color: engaged ? Colors.white : FoE.goldBright,
+                ),
+                if (badge != null) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    badge,
+                    style: FoE.value(
+                      size: 11,
+                    ).copyWith(color: engaged ? Colors.white : FoE.goldBright),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     ),
-    selectedTrailing: _sortReversed ? '↑' : '↓',
-    onSelected: (name) => setState(() {
-      final mode = _SortMode.values.byName(name);
-      if (mode == _sort) {
-        _sortReversed = !_sortReversed;
-      } else {
-        _sort = mode;
-        _sortReversed = false;
-      }
-    }),
   );
 
   // Filter: a CUSTOM overlay dropdown (not a PopupMenu) so it stays open across
   // multiple toggles and dismisses only when you tap outside its box (user
-  // 2026-07-18). Multiple elements/rarities can be active at once — which is
-  // why this one is an [ActionPill] and not a [MenuPill]: a popup menu picks
-  // ONE value, and this control's whole point is that it does not.
-  Widget _filterPill() {
+  // 2026-07-18). Multiple elements/rarities can be active at once, which is
+  // why a tap opens [_openFilterMenu] rather than a single-choice PopupMenu.
+  /// What the filter is doing, in words — now only in the tooltip, since the
+  /// button face went back to a bare icon.
+  String get _filterTooltip {
     final count = _elementFilters.length + _rarityFilters.length;
-    return CompositedTransformTarget(
-      link: _filterLink,
-      child: ActionPill(
-        palette: _pills,
-        icon: count > 0 ? Icons.filter_alt : Icons.filter_alt_outlined,
-        // Names the ONE filter when there is one, counts them when there are
-        // several — "3 filters" beats a lit icon that hides which three.
-        label: switch (count) {
-          0 => 'All monsters',
-          1 =>
-            _elementFilters.isNotEmpty
-                ? _elementFilters.first.label
-                : _rarityFilters.first.label,
-          _ => '$count filters',
-        },
-        engaged: count > 0,
-        onTap: _toggleFilterMenu,
+    return switch (count) {
+      0 => 'All monsters',
+      1 =>
+        _elementFilters.isNotEmpty
+            ? _elementFilters.first.label
+            : _rarityFilters.first.label,
+      _ => '$count filters',
+    };
+  }
+
+  Widget _filterGlyphBtn() {
+    final count = _elementFilters.length + _rarityFilters.length;
+    return _glyphBtn(
+      count > 0 ? Icons.filter_alt : Icons.filter_alt_outlined,
+      _toggleFilterMenu,
+      tooltip: _filterTooltip,
+      engaged: count > 0,
+      badge: count > 0 ? '$count' : null,
+    );
+  }
+
+  /// The sort trigger. Its own [PopupMenuButton] rather than [_glyphBtn]
+  /// because the menu IS the tap target here, same as [MenuPill] elsewhere —
+  /// only the face is bare instead of carrying the mode's name.
+  Widget _sortGlyphBtn() {
+    final engaged = _sort != _SortMode.newest || _sortReversed;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Tooltip(
+        message:
+            'Sort: ${_sort.label}${_sortReversed ? ' (reversed)' : ''}',
+        child: PopupMenuButton<String>(
+          tooltip: '',
+          color: FoE.panelMid,
+          elevation: 10,
+          position: PopupMenuPosition.under,
+          padding: EdgeInsets.zero,
+          shape: FoE.facet(
+            radius: 12,
+            side: BorderSide(color: FoE.borderGold),
+          ),
+          onSelected: (name) => setState(() {
+            final mode = _SortMode.values.byName(name);
+            if (mode == _sort) {
+              _sortReversed = !_sortReversed;
+            } else {
+              _sort = mode;
+              _sortReversed = false;
+            }
+          }),
+          itemBuilder: (_) => [
+            for (final mode in _SortMode.values)
+              PopupMenuItem<String>(
+                value: mode.name,
+                height: 40,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        mode.label,
+                        style: FoE.label(size: 12).copyWith(
+                          color: mode == _sort
+                              ? FoE.goldBright
+                              : FoE.parchment,
+                        ),
+                      ),
+                    ),
+                    if (mode == _sort)
+                      Text(
+                        _sortReversed ? '↑' : '↓',
+                        style: FoE.value(
+                          size: 13,
+                        ).copyWith(color: FoE.goldBright),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+          child: Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            alignment: Alignment.center,
+            decoration: FoE.btn(active: engaged),
+            child: Icon(
+              Icons.swap_vert,
+              size: 17,
+              color: engaged ? Colors.white : FoE.goldBright,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -603,10 +715,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
         // and the next row's popped-out monster — they can never overlap.
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        // Shorter tiles than before so a square sprite nearly fills the art area
-        // — this shrinks the empty space above the sprite that used to push the
-        // rows apart (user 2026-07-18).
-        childAspectRatio: 0.70,
+        // Taller again (user 2026-08-28: "diese Boxen etwas länger machen,
+        // besonders der obere Teil mit dem Monster") — reverses the
+        // 2026-07-18 call the comment above used to describe.
+        childAspectRatio: 0.60,
       ),
       itemCount: list.length,
       itemBuilder: (_, i) => CreatureCard(

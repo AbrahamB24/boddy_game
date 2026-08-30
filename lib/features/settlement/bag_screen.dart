@@ -10,6 +10,7 @@ import '../creatures/services/breeding_controller.dart';
 import '../creatures/widgets/egg_card.dart';
 import '../creatures/services/creatures_controller.dart';
 import 'data/item_definitions.dart';
+import 'services/new_items.dart';
 import 'settlement_controller.dart';
 import '../common/widgets/parchment_page.dart';
 import 'widgets/parchment_sheet.dart';
@@ -77,9 +78,20 @@ class _BagScreenState extends State<BagScreen> {
 
   _BagTab _tab = _BagTab.items;
 
+  /// A frozen copy of NewItems' counts, taken the instant this screen opens
+  /// — BEFORE [NewItems.markSeen] clears the live map (user 2026-08-29:
+  /// "Wenn ich einmal den entsprechenden Reiter geöffnet habe, dann soll
+  /// der Counter für neue Items verschwinden. Dafür die entsprechenden
+  /// Items markieren, welche neu sind und wieviele"). The QuickPad badge
+  /// reads the LIVE map, so it goes to 0 right away; this screen keeps
+  /// showing what WAS new, off its own snapshot, for as long as it's open.
+  late final Map<String, int> _newSnapshot;
+
   @override
   void initState() {
     super.initState();
+    _newSnapshot = NewItems().snapshot();
+    NewItems().markSeen();
     // The eggs drawer reads BreedingController's list, which is loaded lazily.
     // Both halves matter (user 2026-07-27): [load] fetches the rows if no
     // screen has yet, and [refreshEggs] promotes a mating that finished while
@@ -99,12 +111,10 @@ class _BagScreenState extends State<BagScreen> {
     if (mounted) setState(() {});
   }
 
-  void _say(String message) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(message, style: FoE.label(size: 12)),
-      backgroundColor: FoE.panelDark,
-    ),
-  );
+  // No pop-up any more (user 2026-08-29: "wirklich alle pop up
+  // nachrichten... löschen") — kept as a real no-op method rather than
+  // removed so its call sites don't all need touching for the same request.
+  void _say(String message) {}
 
   /// Monsters an out-of-battle item can actually be spent on: hurt ones for a
   /// heal, K.O.'d ones for a revive. Listing the rest would only offer taps
@@ -338,6 +348,11 @@ class _BagScreenState extends State<BagScreen> {
 
     final picking = _using == id;
     final targets = _targetsFor(def);
+    // How many of THIS item arrived since the bag was last opened (user
+    // 2026-08-29: "die entsprechenden Items markieren, welche neu sind und
+    // wieviele") — off the frozen snapshot, not NewItems' live map, which
+    // [initState] already cleared for the QuickPad badge.
+    final newCount = _newSnapshot[id] ?? 0;
 
     return _card([
       Row(
@@ -363,6 +378,25 @@ class _BagScreenState extends State<BagScreen> {
               ],
             ),
           ),
+          if (newCount > 0) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: ShapeDecoration(
+                color: FoE.gold.withValues(alpha: 0.18),
+                shape: FoE.facet(
+                  radius: 6,
+                  side: const BorderSide(color: FoE.gold, width: 1),
+                ),
+              ),
+              child: Text(
+                '+$newCount new',
+                style: FoE.dim(
+                  size: 9,
+                ).copyWith(color: FoE.gold, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
           const SizedBox(width: 8),
           Text(
             '×$count',

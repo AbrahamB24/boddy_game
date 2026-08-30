@@ -115,12 +115,11 @@ class _LaunchSheetState extends State<_LaunchSheet> {
     });
   }
 
-  void _say(String message) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(message, style: FoE.label(size: 12)),
-      backgroundColor: kInk,
-    ),
-  );
+  // No pop-up any more (user 2026-08-29: "wirklich alle pop up
+  // nachrichten... löschen") — kept as a real no-op method rather than
+  // removed so its five call sites don't all need touching for the same
+  // request.
+  void _say(String message) {}
 
   Future<void> _send() async {
     setState(() => _sending = true);
@@ -425,8 +424,9 @@ class _LaunchSheetState extends State<_LaunchSheet> {
   // parents, so an empty place lines up with the tile that will fill it.
   //
   // Shared by hunt and gather: both ask "who goes", only the cap and the
-  // caption differ.
-  static const double _kTileAspect = 0.70;
+  // caption differ. 0.60, not 0.70 (user 2026-08-28: taller, more room for
+  // the art) — matches every other monster-tile grid in the app.
+  static const double _kTileAspect = 0.60;
 
   List<Widget> _groupSection({
     required String hint,
@@ -620,7 +620,9 @@ class _LaunchSheetState extends State<_LaunchSheet> {
               crossAxisCount: 3,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
-              mainAxisExtent: 152,
+              // Grown with the rest of the tile (user 2026-08-28), same
+              // ~17% _kTileAspect went from 0.70 to 0.60 by.
+              mainAxisExtent: 178,
             ),
             itemCount: _available.length,
             itemBuilder: (_, i) => _pickerTile(

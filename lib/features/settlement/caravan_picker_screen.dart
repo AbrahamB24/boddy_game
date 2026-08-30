@@ -42,8 +42,9 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
   static const Color _accent = FoE.gold;
 
   /// The Monsters-grid cell shape — the Hatchery slot and the egg picker use
-  /// the same constant.
-  static const double _kTileAspect = 0.70;
+  /// the same constant. 0.60, not 0.70 (user 2026-08-28: taller, more room
+  /// for the art).
+  static const double _kTileAspect = 0.60;
 
   /// Room UNDER a tile for its carry/speed line, on top of the tile's own
   /// height. See the grid's comment: a caption must not cost tile.

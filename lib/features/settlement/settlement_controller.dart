@@ -28,6 +28,7 @@ import 'services/daily_tasks.dart';
 import 'services/game_defs_controller.dart';
 import 'services/game_engine.dart';
 import 'services/gold_economy.dart';
+import 'services/new_items.dart';
 import 'services/settlement_service.dart';
 import 'services/trade_center.dart';
 
@@ -1600,6 +1601,7 @@ class SettlementController extends ChangeNotifier {
     var items = s.items;
     for (final def in finished) {
       items = addItem(items, def.id);
+      NewItems().add(def.id, 1);
       GameEventLog().add(
         GameEventKind.craft,
         '${def.emoji} ${def.name} crafted',
@@ -1659,8 +1661,9 @@ class SettlementController extends ChangeNotifier {
     if (s == null || res == null) return 'Not loaded';
     final def = kItemDefs[itemId];
     if (def == null) return 'Unknown item';
-    if (def.kind != ItemKind.resourcePack)
+    if (def.kind != ItemKind.resourcePack) {
       return '${def.name} is not a package.';
+    }
     final resourceId = def.resourceId;
     if (resourceId == null || def.magnitude <= 0) {
       return '${def.name} is empty — check its Dev-Mode definition.';
@@ -2699,6 +2702,7 @@ class SettlementController extends ChangeNotifier {
     for (final e in loot.entries) {
       if (e.value <= 0) continue;
       bag = addItem(bag, e.key, e.value);
+      NewItems().add(e.key, e.value);
       final def = kItemDefs[e.key];
       GameEventLog().add(
         GameEventKind.craft,
