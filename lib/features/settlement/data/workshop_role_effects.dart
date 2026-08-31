@@ -283,6 +283,13 @@ List<EffectCardRow> buildingEffectCardRows(
   int era,
   int level, {
   bool includeStorage = false,
+  // Off for the Effects card (user 2026-08-27: "Icons bei den Effekts nur
+  // für die Ressourcen behalten") — none of [kEffectRowTypes] IS a resource
+  // (that row is production's own, with the real wood/stone/fish glyphs),
+  // so every glyph in here was decorating a slot count or a percentage. Kept
+  // defaulted on so callers reading these rows as data (tests, the upgrade
+  // preview) see the same strings as before.
+  bool withEmoji = true,
 }) {
   final rows = <EffectCardRow>[];
   for (final type in kEffectRowTypes) {
@@ -293,14 +300,14 @@ List<EffectCardRow> buildingEffectCardRows(
       if (def.effectEntry(type, key, era) == null) continue;
       final v = buildingEffectValueAt(def, type, key, era, level);
       final at = v == 0 ? firstLevelWithEffect(def, type, key, era) : null;
+      final emoji = withEmoji ? ' ${buildingEffectEmoji(type)}' : '';
       rows.add(EffectCardRow(
         label: key.isEmpty
             ? buildingEffectLabel(type)
             : '${buildingEffectLabel(type)} · $key',
         value: at != null
-            ? 'from Lv $at ${buildingEffectEmoji(type)}'
-            : '${formatBuildingEffect(type, key, v)} '
-                '${buildingEffectEmoji(type)}',
+            ? 'from Lv $at$emoji'
+            : '${formatBuildingEffect(type, key, v)}$emoji',
         pending: v == 0,
       ));
     }

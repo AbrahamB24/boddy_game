@@ -38,6 +38,7 @@ import '../../creatures/models/species_def.dart';
 import '../../creatures/services/creatures_controller.dart';
 import '../../onboarding/intro_flow.dart';
 import 'assign_workers_sheet.dart';
+import 'parchment_sheet.dart';
 import '../data/building_art.dart';
 import '../data/building_definitions.dart';
 import '../data/iso_grid.dart';
@@ -907,6 +908,20 @@ class SettlementMapState extends State<SettlementMap>
           final functional = liveB.isComplete && connected;
           return Dialog(
             backgroundColor: Colors.transparent,
+            // The app's default DialogTheme (parchment_theme.dart) draws a
+            // faint light border around every Material Dialog's own laid-out
+            // bounds. Harmless when a dialog's content stays inside those
+            // bounds — invisible, exactly covered by the content's own
+            // matching edge — but THIS dialog deliberately lets the art rise
+            // past them (Clip.none below), so that inherited border stayed
+            // put at the "official" top edge and showed through every gap in
+            // the roofline above it (user 2026-08-27: "die Kante der Box
+            // schimmert durch das Gebäude hindurch"). The visible card is the
+            // inner Container's own gradient, which needs no second, redundant
+            // border drawn behind it.
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(16)),
+            ),
             insetPadding: const EdgeInsets.symmetric(
               horizontal: 14,
               vertical: 24,
@@ -1082,6 +1097,19 @@ class SettlementMapState extends State<SettlementMap>
                                       def.workshops.isNotEmpty) ...[
                                     _workshopExtras(liveB, def, functional),
                                     const SizedBox(height: 8),
+                                  ],
+                                  // ── Manage: the one door into staffing
+                                  // every post this building has (user
+                                  // 2026-08-27) — between Effects and
+                                  // Upgrade, replacing the per-post "+".
+                                  if (liveB.isComplete &&
+                                      functional &&
+                                      def.workshops.isNotEmpty) ...[
+                                    _primaryActionButton(
+                                      'Manage',
+                                      () => _manageWorkers(context, liveB, def),
+                                    ),
+                                    const SizedBox(height: 10),
                                   ],
                                   // ── Upgrade: what it buys, cost inside the button ──
                                   if (liveB.isComplete &&
@@ -1278,7 +1306,6 @@ class SettlementMapState extends State<SettlementMap>
   /// reads BETWEEN the art and that column (user 2026-07-26) rather than as a
   /// full-width line beneath both.
   Widget _heroRow(PlacedBuilding b, BuildingDef def, bool functional) {
-    final lines = _effectLines(def).join(' · ');
     // XP/h a worker earns here: the training rate, else the settlement-wide
     // work rate — EVERY building that stations monsters pays it (user
     // 2026-07-30), so this pill is now on every staffed building instead of the
@@ -1311,23 +1338,14 @@ class SettlementMapState extends State<SettlementMap>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // No description caption below the name any more
+                        // (user 2026-08-27: "Beschreibung des Gebäudes
+                        // überall entfernen") — the Effects card right
+                        // below already says what the building does, in
+                        // more exact terms than this summary line ever did.
                         Text(
                           def.name,
                           style: FoE.title(size: 16).copyWith(color: _dlgInk),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        // WHAT IT DOES sits here — between the art and the
-                        // size column (user 2026-07-26) — rather than as a
-                        // full-width line under the whole masthead. Two lines
-                        // at most: it is a caption for the picture, and a
-                        // third line pushed the size/level block out of view.
-                        Text(
-                          lines.isEmpty
-                              ? 'A building of your settlement.'
-                              : lines,
-                          style: FoE.dim(size: 10).copyWith(color: _dlgInkSoft),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1500,8 +1518,12 @@ class SettlementMapState extends State<SettlementMap>
       // können"). It was a live widget right here, because "heal everybody for
       // one price" fits on a button — a list of the wounded with a price each
       // does not.
+      // "Healing", not "Healing Hut" (user 2026-08-27) — every other
+      // button here names the ACTION, not the building ("Breeding",
+      // "Market", "Crafting"); this was the one still repeating its own
+      // building name.
       kHealingHutBuildingId => (
-        'Healing Hut',
+        'Healing',
         () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const HealingHutScreen()),
@@ -1813,25 +1835,21 @@ class SettlementMapState extends State<SettlementMap>
     final baseLabel = base.length == 1
         ? _resLabel(base.keys.first)
         : 'Resource';
-    // A STORE makes nothing, so "Resource —" was a row saying so, directly
-    // above the four rows that are the building's entire point (user
-    // 2026-07-30). Suppressed for exactly that case: nothing produced, and a
-    // ceiling to show instead.
+    // A building with no production effect at all (a store, a house) never
+    // gets a row here, and neither does one that HAS the effect but makes
+    // nothing at this level (user 2026-08-27: "Ressource ist null, daher
+    // soll es nicht angezeigt werden") — an empty "Resource —" line is not
+    // an effect, it is the absence of one. "offline" still shows: that is
+    // real information about a production effect the building DOES have,
+    // just currently blocked.
     final storageKeys = def.effectKeys('storage').toList();
-    if (!(base.isEmpty && functional && storageKeys.isNotEmpty)) {
+    final hasProduction = def.effectKeys('production').isNotEmpty;
+    if (hasProduction && (base.isNotEmpty || !functional)) {
       rows.add(
         headline(
           baseLabel,
-          !functional
-              ? const ['offline']
-              : base.isEmpty
-              ? const ['—']
-              : amounts(base),
-          color: !functional
-              ? FoE.danger
-              : base.isEmpty
-              ? _dlgInkFaint
-              : _dlgInk,
+          !functional ? const ['offline'] : amounts(base),
+          color: !functional ? FoE.danger : _dlgInk,
         ),
       );
     }
@@ -1872,35 +1890,20 @@ class SettlementMapState extends State<SettlementMap>
         );
       }
     }
-    // A production key authored but worth NOTHING at this level is missing from
-    // the base row above (it lists amounts, and there is no amount). It is still
-    // one of the building's effects, so it gets the same "from Lv N" row every
-    // other pending effect gets (user 2026-07-30).
-    for (final res in def.effectKeys('production')) {
-      if (def.effectEntry('production', res, era) == null) continue;
-      if (def.effectAt('production', res, era, level: b.level) != 0) continue;
-      final at = firstLevelWithEffect(def, 'production', res, era);
-      rows.add(
-        headline(_resLabel(res), [
-          at != null ? 'from Lv $at ${_resEmoji(res)}' : '—',
-        ], color: _dlgInkFaint),
-      );
-    }
-    // Housing capacity (a count, not a /h rate — its own row; icon after the
-    // value, user 2026-07-24). A housing effect that starts at 0 and arrives at
-    // a level says so, rather than being dropped.
+    // A production key worth nothing at this level is not one of the
+    // building's CURRENT effects, so — unlike the 2026-07-30 version of this
+    // card — it gets no row here at all (user 2026-08-27: "Leere und
+    // künftige Effekte nicht unter Effects auflisten"). It still shows up on
+    // the Upgrade card, which is exactly where "not yet" belongs.
+    //
+    // Housing capacity (a count, not a /h rate — its own row). No glyph
+    // (user 2026-08-27: "Icons bei den Effekts nur für die Ressourcen
+    // behalten") — housing is a seat count, not a resource.
     final housing = def.hasEffect('housing', era)
         ? def.effectAt('housing', '', era, level: b.level)
         : def.housingCapacity * f;
     if (housing > 0) {
-      rows.add(headline('Housing', ['${housing.round()} 🏠']));
-    } else if (def.hasEffect('housing', era)) {
-      final at = firstLevelWithEffect(def, 'housing', '', era);
-      rows.add(
-        headline('Housing', [
-          at != null ? 'from Lv $at 🏠' : '0 🏠',
-        ], color: _dlgInkFaint),
-      );
+      rows.add(headline('Housing', ['${housing.round()}']));
     }
 
     // ── EVERY OTHER AUTHORED EFFECT, IN ITS OWN UNIT ──
@@ -1912,14 +1915,18 @@ class SettlementMapState extends State<SettlementMap>
     //
     // Read through buildingEffectValueAt so a row cannot promise a curve the
     // runtime does not apply, and named/formatted from the shared vocabulary,
-    // so a slot count reads "1 🧭" and a travel cut reads "−10 % travel".
-    // Storage has its own grouped block above, so it is left out here.
-    for (final row in buildingEffectCardRows(def, era, b.level)) {
-      rows.add(
-        headline(row.label, [
-          row.value,
-        ], color: !functional || row.pending ? _dlgInkFaint : _dlgInk),
-      );
+    // so a slot count reads "1" and a travel cut reads "−10 % travel". No
+    // glyph (user 2026-08-27: "Icons bei den Effekts nur für die Ressourcen
+    // behalten") — none of these rows is a resource; that glyph is the
+    // production row's alone. Storage has its own grouped block above, so
+    // it is left out here.
+    //
+    // pending rows (worth nothing until a later level) are skipped (user
+    // 2026-08-27) — Effects lists what the building does UP TO AND
+    // INCLUDING this level, not what it will do.
+    for (final row in buildingEffectCardRows(def, era, b.level, withEmoji: false)) {
+      if (row.pending) continue;
+      rows.add(headline(row.label, [row.value], color: !functional ? _dlgInkFaint : _dlgInk));
     }
 
     // ── Workers: who is posted here and what each one adds ──
@@ -1999,11 +2006,7 @@ class SettlementMapState extends State<SettlementMap>
           //
           // Training and the legendary slot keep their arrow: neither is a
           // stat→resource pair, and their left side alone would name nothing.
-          label: training
-              ? 'Training → XP'
-              : boost
-              ? '⭐ Legendary → ×${(1 + role.mult).toStringAsFixed(1)}'
-              : role.stat.label,
+          label: _workRoleLabel(role),
           count: '${assigned.length}/$slotCap',
           enabled: functional,
         ),
@@ -2032,32 +2035,10 @@ class SettlementMapState extends State<SettlementMap>
           );
         }
       }
-      // WHAT A MONSTER GETS OUT OF STANDING HERE (user 2026-07-26: "bei den
-      // Production gebäude werden die xp für die Monster noch nicht
-      // angezeigt"). The building-wide XP pill in the masthead only appears
-      // when SOMETHING pays, so a production post said nothing at all — and
-      // "nothing shown" and "nothing paid" looked identical.
-      //
-      // Same rule the runtime uses (CreaturesController.xpRatePerHour): the
-      // training rate in a training post, else the settlement-wide work rate.
-      // It shows on the LEGENDARY-BOOST post too (user 2026-07-30: "jedes
-      // Gebäude, welches Monster anstellt soll EP geben") — a legendary parked
-      // in a special building is stationed like anyone else and earns like
-      // anyone else, and this row was the one that used to deny it.
-      final postXp = training ? kTrainingXpPerHour : workXpPerHourAt(b.level);
-      rows.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 2),
-          child: Text(
-            postXp > 0
-                ? '✨ ${postXp.toStringAsFixed(0)} XP/h each'
-                : '✨ No XP — this post does not level anyone',
-            style: FoE.dim(
-              size: 10,
-            ).copyWith(color: postXp > 0 ? _dlgInkSoft : _dlgInkFaint),
-          ),
-        ),
-      );
+      // No per-post "XP/h each" line (user 2026-08-27: "xp Anzeige löschen,
+      // da diese oben bereits angezeigt wird") — the masthead's own XP pill
+      // already says it, and it does so once per building instead of once
+      // per post.
       if (!functional) {
         rows.add(
           Text(
@@ -2723,61 +2704,41 @@ class SettlementMapState extends State<SettlementMap>
   ///
   /// [enabled] is false for an unconnected building: there is nothing to edit
   /// until it has a road, so the row says the count and stays inert.
+  // No per-role "+" any more, and the row itself no longer opens the
+  // picker (user 2026-08-27: "anstelle des '+' Buttons zwischen der
+  // effects und upgrade box einen 'Manage' Button") — ONE button between
+  // the Effects and Upgrade cards now owns staffing for every role, so
+  // this row is purely a readout: what the post is, how full it is.
   Widget _workerHeaderRow({
     required PlacedBuilding b,
     required WorkshopRole role,
     required String label,
     required String count,
     required bool enabled,
-  }) {
-    final row = Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: FoE.label(
-                size: 11,
-              ).copyWith(color: enabled ? _dlgAccent : _dlgInkFaint),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: FoE.label(
+              size: 11,
+            ).copyWith(color: enabled ? _dlgAccent : _dlgInkFaint),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(width: 8),
-          Text(
-            count,
-            style: FoE.value(
-              size: 12,
-            ).copyWith(color: enabled ? _dlgInk : _dlgInkFaint),
-          ),
-          if (enabled) ...[
-            const SizedBox(width: 8),
-            // A PLUS in a green circle (user 2026-07-26), not a pencil: the
-            // thing you come here to do is add somebody, and green is already
-            // this settlement's "do it" colour (the buttons, the land).
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: kActionGreen,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.add, size: 14, color: Colors.white),
-            ),
-          ],
-        ],
-      ),
-    );
-    if (!enabled) return row;
-    return GestureDetector(
-      // Opaque: the row is mostly whitespace between the label and the count,
-      // and deferToChild would drop every tap that lands in the gap.
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _openAssignPicker(b, role),
-      child: row,
-    );
-  }
+        ),
+        const SizedBox(width: 8),
+        Text(
+          count,
+          style: FoE.value(
+            size: 12,
+          ).copyWith(color: enabled ? _dlgInk : _dlgInkFaint),
+        ),
+      ],
+    ),
+  );
 
   void _openAssignPicker(PlacedBuilding b, WorkshopRole role) =>
       showModalBottomSheet<void>(
@@ -2788,37 +2749,87 @@ class SettlementMapState extends State<SettlementMap>
             AssignWorkersSheet(ctrl: widget.ctrl, building: b, role: role),
       );
 
-  /// What this Workshop is making. Settlement-wide rather than per-building:
-  /// there is one recipe at a time (SettlementModel.activeCraftId), so showing
-  /// a per-building choice would promise independence that doesn't exist.
-  List<String> _effectLines(BuildingDef def) {
-    if (def.isRoad) return ['Connects buildings to the Main Hall'];
-    if (def.isBuildPlot) {
-      return ['Expanded your buildable territory by ${def.gridW}×${def.gridH}'];
+  /// Training and the legendary slot keep their arrow: neither is a
+  /// stat→resource pair, and their left side alone would name nothing.
+  /// Shared between the Effects card's read-only post rows and the
+  /// Manage picker, so the two cannot drift apart on what a post is called.
+  String _workRoleLabel(WorkshopRole role) => switch (role.resource) {
+    WorkshopRole.kTraining => 'Training → XP',
+    WorkshopRole.kLegendaryBoost =>
+      '⭐ Legendary → ×${(1 + role.mult).toStringAsFixed(1)}',
+    _ => role.stat.label,
+  };
+
+  /// ONE door into staffing, for every post a building has (user 2026-08-27:
+  /// "anstelle des '+' Buttons zwischen der effects und upgrade box einen
+  /// 'Manage' Button"). A single-post building (almost all of them) goes
+  /// straight to that post's picker; a combined one (the Scout Post, the
+  /// Storehouse) offers the roles to choose from first.
+  void _manageWorkers(BuildContext context, PlacedBuilding b, BuildingDef def) {
+    if (def.workshops.length == 1) {
+      _openAssignPicker(b, def.workshops.first);
+      return;
     }
-    final lines = <String>[];
-    if (def.housingCapacity > 0) {
-      lines.add('🌿 Shelters ${def.housingCapacity} monsters');
-    }
-    if (def.buildSpeedBonus > 0) {
-      lines.add('+${(def.buildSpeedBonus * 100).toInt()}% Build speed');
-    }
-    if (def.populationBonus > 0) {
-      lines.add('+${(def.populationBonus * 100).toInt()}% Housing capacity');
-    }
-    if (def.queueSlotsBonus > 0) {
-      lines.add('+${def.queueSlotsBonus} build queue slot');
-    }
-    final queueSlots = def.effectAt('queueSlots', '', 99);
-    if (queueSlots > 0) lines.add('+${queueSlots.round()} build queue slot');
-    final buildSlots = def.effectAt('buildSlots', '', 99);
-    if (buildSlots > 0) lines.add('+${buildSlots.round()} build site');
-    // Heal capacity dropped from this line (user request) — it repeated the
-    // hut's own "Heals N at once" workshop note for no new information.
-    if (lines.isEmpty && def.workshops.isEmpty) {
-      lines.add('Decorative building');
-    }
-    return lines;
+    final ctrl = CreaturesController();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => ParchmentSheet(
+        title: 'Manage',
+        initialSize: 0.4,
+        minSize: 0.3,
+        maxSize: 0.7,
+        builder: (_, scrollCtrl) => ListView(
+          controller: scrollCtrl,
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          children: [
+            for (final role in def.workshops)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _openAssignPicker(b, role);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: ParchmentSheet.card,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _workRoleLabel(role),
+                            style: FoE.label(
+                              size: 13,
+                            ).copyWith(color: ParchmentSheet.ink),
+                          ),
+                        ),
+                        Text(
+                          '${ctrl.creatures.where((c) => c.assignedBuildingId == b.id && c.assignedStat == role.stat).length}/${effectiveSlots(role, b.level)}',
+                          style: FoE.value(
+                            size: 13,
+                          ).copyWith(color: ParchmentSheet.inkSoft),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 18,
+                          color: ParchmentSheet.inkFaint,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// The buildings to paint, in order. [roads] picks the ground layer or the

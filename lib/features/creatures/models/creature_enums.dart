@@ -168,7 +168,10 @@ enum CreatureStat {
   construction('Construction'),
   crafting('Crafting'),
   breeding('Breeding'),
-  medicine('Medicine'),
+  // Healing Time, not Medicine (user 2026-08-27) — the stat governs how
+  // fast a stationed monster cuts the Healing Hut's heal timer, and that is
+  // what the name should say, everywhere this label is read from.
+  medicine('Healing Time'),
   trade('Trade'),
   logistics('Logistics'),
   // Non-combat utility (not a work role, but a building may still post it)

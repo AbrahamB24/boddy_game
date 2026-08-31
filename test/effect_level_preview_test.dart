@@ -147,7 +147,7 @@ void main() {
         'mult': 0.005,
         'slots': 2,
       }, maxLevel: 1);
-      expect(find.textContaining('at Medicine'), findsOneWidget);
+      expect(find.textContaining('at Healing Time'), findsOneWidget);
     });
 
     testWidgets('the reference stat is editable and recomputes the line',
