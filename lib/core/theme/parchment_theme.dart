@@ -94,28 +94,46 @@ ThemeData buildParchmentTheme() {
       color: kParchmentLight,
       elevation: 2,
       shadowColor: ink.withValues(alpha: 0.35),
-      shape: FoE.facet(radius: 12, side: BorderSide(color: ink.withValues(alpha: 0.18))),
+      shape: FoE.facet(
+        radius: 12,
+        side: BorderSide(color: ink.withValues(alpha: 0.18)),
+      ),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: kParchmentLight,
       surfaceTintColor: Colors.transparent,
       titleTextStyle: FoE.title(size: 15).copyWith(color: ink),
       contentTextStyle: FoE.label(size: 13).copyWith(color: inkSoft),
-      shape: FoE.facet(radius: 14, side: BorderSide(color: ink.withValues(alpha: 0.22))),
+      // 16 / 0.25, not 14 / 0.22 (2026-08-31 audit) — matching
+      // [ParchmentInfoButton] and [parchmentConfirm] in parchment_kit.dart,
+      // which hand-build the same "modal slab of parchment" shape at those
+      // numbers. Every plain AlertDialog() in the app inherits this theme
+      // default, so the two hand-built dialogs and every ambient one now
+      // read as the same object instead of two close-but-different radii.
+      shape: FoE.facet(
+        radius: 16,
+        side: BorderSide(color: ink.withValues(alpha: 0.25)),
+      ),
     ),
     popupMenuTheme: PopupMenuThemeData(
       color: kParchmentLight,
       surfaceTintColor: Colors.transparent,
       elevation: 8,
       textStyle: FoE.label(size: 12).copyWith(color: ink),
-      shape: FoE.facet(radius: 12, side: BorderSide(color: ink.withValues(alpha: 0.22))),
+      shape: FoE.facet(
+        radius: 12,
+        side: BorderSide(color: ink.withValues(alpha: 0.22)),
+      ),
     ),
     menuTheme: MenuThemeData(
       style: MenuStyle(
         backgroundColor: const WidgetStatePropertyAll(kParchmentLight),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         shape: WidgetStatePropertyAll(
-          FoE.facet(radius: 12, side: BorderSide(color: ink.withValues(alpha: 0.22))),
+          FoE.facet(
+            radius: 12,
+            side: BorderSide(color: ink.withValues(alpha: 0.22)),
+          ),
         ),
       ),
     ),
@@ -135,7 +153,10 @@ ThemeData buildParchmentTheme() {
       backgroundColor: kParchmentDeep,
       contentTextStyle: FoE.label(size: 13).copyWith(color: ink),
       behavior: SnackBarBehavior.floating,
-      shape: FoE.facet(radius: 12, side: BorderSide(color: ink.withValues(alpha: 0.25))),
+      shape: FoE.facet(
+        radius: 12,
+        side: BorderSide(color: ink.withValues(alpha: 0.25)),
+      ),
     ),
 
     // ── Bars ───────────────────────────────────────────────────────────────
@@ -164,7 +185,15 @@ ThemeData buildParchmentTheme() {
       labelStyle: FoE.label(size: 12).copyWith(color: accent),
       unselectedLabelStyle: FoE.label(size: 12),
       indicatorColor: accent,
-      dividerColor: ink.withValues(alpha: 0.15),
+      // NO automatic full-width divider (user 2026-08-31: "alle weissen
+      // Trennstriche sollen nicht über die ganze Breite gehen, da sie sonst
+      // mit dem Mäanderband kollidieren") — a TabBar sitting directly in a
+      // ParchmentPage body (e.g. Management) has no margin of its own, so
+      // this ran edge to edge, straight through the bands on both sides.
+      // Screens that want a divider under their TabBar draw their own,
+      // inset to [ParchmentPage.kParchmentPagePad] like the rest of the
+      // page's content.
+      dividerColor: Colors.transparent,
     ),
 
     // ── Controls ───────────────────────────────────────────────────────────
@@ -211,9 +240,7 @@ ThemeData buildParchmentTheme() {
     ),
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected)
-            ? accent
-            : Colors.transparent,
+        (s) => s.contains(WidgetState.selected) ? accent : Colors.transparent,
       ),
       checkColor: const WidgetStatePropertyAll(kParchmentLight),
       side: BorderSide(color: ink.withValues(alpha: 0.45)),

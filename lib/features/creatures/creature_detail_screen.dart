@@ -317,10 +317,15 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                             top: Radius.circular(30),
                           ),
                         ),
-                        padding: EdgeInsets.only(top: contentTop),
                         // The bordure, on the sheet only — it is the page's
                         // printed border, and the page here starts where the
-                        // element backdrop ends.
+                        // element backdrop ends. It runs the sheet's FULL
+                        // height, right up to its rounded top edge (user
+                        // 2026-08-31: "soll auch hier bis ganz oben von dem
+                        // dunklen Balken gehen und quasi durch die Rundung
+                        // abgeschnitten werden") — the Container's own
+                        // Clip.antiAlias does the cutting; only the CONTENT
+                        // keeps the top padding that clears the art/seam.
                         child: Stack(
                           children: [
                             Positioned(
@@ -337,7 +342,10 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                               width: 14,
                               child: MeanderStrip(color: _ornament, flip: true),
                             ),
-                            _sheet(creature, species, element),
+                            Padding(
+                              padding: EdgeInsets.only(top: contentTop),
+                              child: _sheet(creature, species, element),
+                            ),
                           ],
                         ),
                       ),
@@ -968,6 +976,26 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     int totalOf(List<CreatureStat> group) =>
         group.fold(0, (sum, s) => sum + values[s]!);
 
+    // WHICH COLUMN READS AS THE HEADLINE follows the same switch the bars do
+    // (user 2026-08-31: "je nachdem was ich anwähle, ist das eine oder
+    // andere Fett und gross geschrieben") — value is bold/big by default,
+    // but with the toggle on GROWTH the row is read for its per-level gene,
+    // so growth takes the big/bold style and the current value steps back
+    // to the small/dim one instead of the two staying fixed regardless of
+    // which the bars themselves are plotting.
+    const bigStyle = TextStyle(
+      color: _ink,
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+    );
+    const smallStyle = TextStyle(
+      color: _inkDim,
+      fontSize: 10.5,
+      fontWeight: FontWeight.w600,
+    );
+    final valueStyle = _barsShowGrowth ? smallStyle : bigStyle;
+    final growthStyle = _barsShowGrowth ? bigStyle : smallStyle;
+
     // The group's summed value rides in its card's heading, over the value
     // column, so it lines up with the rows beneath it.
     Widget header(String label, int total) => _panelTitle(
@@ -1023,11 +1051,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               child: Text(
                 '${values[stat]}',
                 textAlign: TextAlign.right,
-                style: const TextStyle(
-                  color: _ink,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: valueStyle,
               ),
             ),
             // Growth per level (the sampled slope gene).
@@ -1036,11 +1060,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               child: Text(
                 '+${growth.toStringAsFixed(1)}',
                 textAlign: TextAlign.right,
-                style: const TextStyle(
-                  color: _inkDim,
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: growthStyle,
               ),
             ),
           ],

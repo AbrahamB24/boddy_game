@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
 import '../common/widgets/filter_pills.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/parchment_page.dart';
 import '../settlement/settlement_controller.dart';
 import 'bestiary_screen.dart';
@@ -322,7 +323,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
     return GestureDetector(
       onTap: () => _previewStarter(species),
       child: Container(
-        decoration: FoE.panel(radius: 10, overrideBorder: species.rarity.color),
+        // radius 12, not 10 (2026-08-31 audit) — the standard list-card
+        // radius used everywhere else.
+        decoration: FoE.panel(radius: 12, overrideBorder: species.rarity.color),
         padding: const EdgeInsets.all(10),
         child: Column(
           children: [
@@ -705,20 +708,30 @@ class _CollectionScreenState extends State<CollectionScreen> {
     }
     return GridView.builder(
       // Side padding clears the meander bands (2026-07-27); the bottom keeps
-      // the last row off the screen edge.
-      padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
+      // the last row off the screen edge. THIS is the 24px margin
+      // [monsterTileWidth] assumes everywhere else in the app (user
+      // 2026-08-31: "genau gleich gross sein wie die Kacheln beim
+      // Monstersscreen") — this grid IS the definition, so it draws its
+      // numbers from the shared constants rather than the other way round,
+      // the one place a future retune can't make the two drift apart again.
+      padding: const EdgeInsets.fromLTRB(
+        kMonsterTilePageMargin,
+        4,
+        kMonsterTilePageMargin,
+        20,
+      ),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         // Exactly 3 tiles per row (user 2026-07-17).
-        crossAxisCount: 3,
+        crossAxisCount: kMonsterTileCols,
         // Row gap = column gap (user 2026-07-18): the art box is confined to its
         // own cell, so this is the GUARANTEED minimum clearance between a card
         // and the next row's popped-out monster — they can never overlap.
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
+        mainAxisSpacing: kMonsterTileSpacing,
+        crossAxisSpacing: kMonsterTileSpacing,
         // Taller again (user 2026-08-28: "diese Boxen etwas länger machen,
         // besonders der obere Teil mit dem Monster") — reverses the
         // 2026-07-18 call the comment above used to describe.
-        childAspectRatio: 0.60,
+        childAspectRatio: kMonsterTileAspect,
       ),
       itemCount: list.length,
       itemBuilder: (_, i) => CreatureCard(

@@ -264,10 +264,4 @@ class FoE {
     fontWeight: FontWeight.w400,
     height: 1.35,
   );
-
-  // ── Divider ───────────────────────────────────────────────
-  static Widget divider({double vPad = 4}) => Padding(
-    padding: EdgeInsets.symmetric(vertical: vPad + 2, horizontal: 8),
-    child: Container(height: 1, color: border),
-  );
 }

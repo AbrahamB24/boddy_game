@@ -235,13 +235,13 @@ const double kJumpstartEnemyStatMult = 0.2;
 /// should be reachable immediately.
 const int kIntroMaxTripSeconds = 12;
 
-/// Fish/fur handed to a brand-new player. Buildings make these deliberately
+/// Fish/meat handed to a brand-new player. Buildings make these deliberately
 /// slowly (workshop mult 0.12) because they are the region-dungeon entry cost
 /// — this is a starter float, not an income, and it is dwarfed by the ~850
 /// wood/day target so it cannot dent the Era-I pace. It also covers the
 /// tutorial's Healing Hut bill (a K.O.'d starter costs ~6–12 goods).
 const double kJumpstartGiftFish = 20.0;
-const double kJumpstartGiftFur = 20.0;
+const double kJumpstartGiftMeat = 20.0;
 
 // The jumpstart's free "second monster" (kJumpstartFreeTechId = 'team_size_2')
 // was REMOVED (user 2026-07-24): party size is now set by position on the

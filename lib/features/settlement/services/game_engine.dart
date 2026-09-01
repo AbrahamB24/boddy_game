@@ -15,6 +15,10 @@ import '../models/resource_model.dart';
 class ProductionSource {
   final String emoji;
   final String? imageUrl;
+  // The BuildingDef's id, so a row can show the bundled asset [BuildingIcon]
+  // ships for it instead of falling back to imageUrl/emoji — null for the
+  // handful of non-building synthetic rows (population upkeep, eras).
+  final String? defId;
   final String label;
   final int count;
   final double amount;
@@ -22,6 +26,7 @@ class ProductionSource {
   const ProductionSource({
     this.emoji = '',
     this.imageUrl,
+    this.defId,
     required this.label,
     required this.count,
     required this.amount,
@@ -363,7 +368,8 @@ class GameEngine {
     // with nobody on it advances at 3600 s/h, i.e. finishes in exactly the time
     // its def says. Builders only ever make that shorter.
     final buildPoints = workshopPower[WorkshopRole.kConstruction] ?? 0;
-    final buildSecondsGained = 3600 *
+    final buildSecondsGained =
+        3600 *
         buildSpeedFromPoints(buildPoints) *
         (1.0 + techBuildSpeed + buildingsBuildSpeedBonus) *
         buildSpeedScale *
@@ -394,10 +400,7 @@ class GameEngine {
           Duration(microseconds: (frac * effectiveHours * 3.6e9).round()),
         );
       }
-      return b.copyWith(
-        constructionSecondsBuilt: newBuilt,
-        isComplete: done,
-      );
+      return b.copyWith(constructionSecondsBuilt: newBuilt, isComplete: done);
     }).toList();
 
     // Refineries buy their input out of THIS tick's yard (raw already banked
@@ -500,7 +503,10 @@ class GameEngine {
   // How many creatures the settlement can shelter — the sum of every
   // functional housing building's capacity, scaled by the settlement-wide
   // populationBonus of every functional building.
-  static int housingCapacity(List<PlacedBuilding> buildings, {int eraOrder = 1}) {
+  static int housingCapacity(
+    List<PlacedBuilding> buildings, {
+    int eraOrder = 1,
+  }) {
     final connected = connectedBuildingIds(buildings);
     double cap = 0;
     double bonusTotal = 0;
@@ -528,8 +534,9 @@ class GameEngine {
     int eraOrder = 1,
   }) {
     final connected = connectedBuildingIds(buildings);
-    final functionalBuildings =
-        buildings.where((b) => functional(b, connected));
+    final functionalBuildings = buildings.where(
+      (b) => functional(b, connected),
+    );
     double bonusTotal = 0;
     for (final b in functionalBuildings) {
       final def = kBuildingDefs[b.buildingTypeId];
@@ -556,6 +563,7 @@ class GameEngine {
       final def = kBuildingDefs[e.key]!;
       return ProductionSource(
         imageUrl: def.imageUrl,
+        defId: def.id,
         label: def.name,
         count: counts[e.key]!,
         amount: e.value,
@@ -593,8 +601,7 @@ class GameEngine {
       'gold': (workshopPower['gold'] ?? 0) * active,
     };
     for (final gDef in kGoodsDefs.values) {
-      rates[gDef.id] =
-          (workshopPower[gDef.id] ?? 0) * (1 + techGoods) * active;
+      rates[gDef.id] = (workshopPower[gDef.id] ?? 0) * (1 + techGoods) * active;
     }
     // A refinery's INPUT is a real drain on the rate the player reads: a
     // sawmill running at 5 planks/h is quietly eating 10 wood/h, and a top bar

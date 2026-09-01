@@ -40,6 +40,7 @@ const Set<String> kBundledBuildingArt = {
   'thinker_circle',
   'castle',
   'breeding_hut',
+  'building_plot',
   'small_house',
   'large_house',
   'small_wood_camp',
@@ -55,7 +56,7 @@ const Set<String> kBundledBuildingArt = {
   'caravanserai',
   'hatchery',
   'lux_fish',
-  'lux_fur',
+  'lux_meat',
   'church',
   'marketplace',
 };

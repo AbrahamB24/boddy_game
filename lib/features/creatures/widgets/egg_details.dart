@@ -12,6 +12,7 @@ import '../models/species_def.dart';
 import '../services/creature_power.dart';
 import '../services/creatures_controller.dart';
 import 'gene_bar_toggle.dart';
+import '../../common/widgets/parchment_kit.dart';
 import '../../common/widgets/recess_bar.dart';
 
 /// WHAT IS INSIDE AN EGG — the two blocks that answer it, shared by the
@@ -28,7 +29,6 @@ import '../../common/widgets/recess_bar.dart';
 const Color _kAccent = FoE.gold;
 final Color _kInkSoft = kParchmentInk.withValues(alpha: 0.78);
 final Color _kInkFaint = kParchmentInk.withValues(alpha: 0.55);
-final Color _kCardFill = kParchmentInk.withValues(alpha: 0.06);
 
 /// WHO MADE IT AND WHEN (user 2026-07-27). Two facts the genes cannot give you:
 /// which pair this came from, and how long it has been sitting.
@@ -132,14 +132,15 @@ class _ParentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final box = ShapeDecoration(color: _kCardFill, shape: FoE.facet(radius: 10, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.15))));
     final creature = c;
 
     if (creature == null) {
-      // Released, or from a save this account no longer holds.
-      return Container(
+      // Released, or from a save this account no longer holds. The shared
+      // card (2026-08-31 audit) — this used to hand-roll the exact same
+      // fill and radius as [ParchmentCard] with the border alpha retyped
+      // slightly off (0.15 vs the shared 0.18).
+      return ParchmentCard(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-        decoration: box,
         child: Row(
           children: [
             Text(
@@ -153,56 +154,52 @@ class _ParentCard extends StatelessWidget {
       );
     }
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return ParchmentCard(
+      padding: const EdgeInsets.fromLTRB(10, 7, 6, 7),
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => CreatureDetailScreen(creatureId: creature.id),
         ),
       ),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 7, 6, 7),
-        decoration: box,
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        gender.symbol,
-                        style: FoE.label(size: 13).copyWith(color: gender.color),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      gender.symbol,
+                      style: FoE.label(size: 13).copyWith(color: gender.color),
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        creature.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: FoE.label(
+                          size: 12,
+                        ).copyWith(color: kParchmentInk),
                       ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          creature.displayName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: FoE.label(
-                            size: 12,
-                          ).copyWith(color: kParchmentInk),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Lv ${creature.level}   ⚡ ${totalPower(creature)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: FoE.dim(size: 10).copyWith(color: _kInkSoft),
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Lv ${creature.level}   ⚡ ${totalPower(creature)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FoE.dim(size: 10).copyWith(color: _kInkSoft),
+                ),
+              ],
             ),
-            const Icon(Icons.chevron_right, size: 16, color: _kAccent),
-          ],
-        ),
+          ),
+          const Icon(Icons.chevron_right, size: 16, color: _kAccent),
+        ],
       ),
     );
   }
@@ -236,14 +233,17 @@ class _EggGeneTableState extends State<EggGeneTable> {
   Widget build(BuildContext context) {
     final job = widget.job;
     if (!job.hasChildGenes) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: ShapeDecoration(color: _kAccent.withValues(alpha: 0.12), shape: FoE.facet(radius: 8)),
+      // The shared "highlighted note" card (2026-08-31 audit) — this used
+      // to hand-roll its own accent fill/radius at 8 with no border, where
+      // [ParchmentCard]'s highlight variant already covers exactly this
+      // "worth noticing" card at radius 10 with an accent hairline.
+      return const ParchmentCard(
+        highlight: true,
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Text(
           'This egg was laid before its child was frozen onto it — its stats '
           'are rolled when it hatches.',
-          style: FoE.dim(size: 11).copyWith(color: kParchmentInk),
+          style: TextStyle(fontSize: 12, color: kParchmentInk),
         ),
       );
     }

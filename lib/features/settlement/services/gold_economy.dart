@@ -27,7 +27,7 @@ import '../data/goods_definitions.dart';
 /// game's timers.
 const double kBasicSellRate = 0.1;
 
-/// Gold per unit of a special resource (fish, fur, and whatever later eras
+/// Gold per unit of a special resource (fish, meat, and whatever later eras
 /// add). Worth ~3.5× a log because goods are scarce AND have a real sink —
 /// healing. Selling them is meant to be a genuine trade-off, not free money.
 const double kGoodsSellRate = 0.35;

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:boddygame/features/creatures/models/path_node.dart';
 import 'package:boddygame/features/settlement/data/building_definitions.dart';
 import 'package:boddygame/features/settlement/data/era_definitions.dart';
 import 'package:boddygame/features/settlement/models/energy_model.dart';
@@ -259,43 +260,84 @@ void main() {
           'era_1': const EraDef(id: 'era_1', name: 'I', emoji: '🏺', order: 1),
           'era_2': const EraDef(id: 'era_2', name: 'II', emoji: '🥉', order: 2),
         });
+      // Every building now ALSO needs a real node grant (2026-08-31: "nur
+      // die Gebäude bauen lassen, welche durch die Kampagne freigespielt
+      // wurden") — reusing node_1 for both; its own order doesn't matter
+      // here since battlesCleared 999 clears any gate. This test is about
+      // ERA gating on top of that, not the grant itself.
+      final saved = kPathNodes['node_1']!;
+      kPathNodes['node_1'] = PathNode(
+        id: saved.id,
+        order: saved.order,
+        name: saved.name,
+        areaId: saved.areaId,
+        isBoss: saved.isBoss,
+        rewards: PathRewards(
+          buildings: [
+            ...saved.rewards.buildings,
+            'small_wood_camp',
+            'clay_camp_e2',
+          ],
+        ),
+      );
       // High battlesCleared so map-progress gating doesn't hide era-1 content —
       // this test is about ERA gating only.
       final inEra2 =
           availableBuildings('era_2', 999).map((d) => d.id).toSet();
       expect(inEra2, contains('small_wood_camp'),
-          reason: 'era-1 buildings remain buildable (user answer 8)');
+          reason: 'era-1 buildings remain buildable once granted '
+              '(user answer 8)');
       expect(inEra2, contains('clay_camp_e2'));
-      // ...and era-2 buildings are NOT offered while still in era 1.
+      // ...and era-2 buildings are NOT offered while still in era 1, even
+      // though the SAME node already granted them — the era gate is a
+      // second, independent condition.
       final inEra1 =
           availableBuildings('era_1', 999).map((d) => d.id).toSet();
       expect(inEra1, isNot(contains('clay_camp_e2')));
+      kPathNodes['node_1'] = saved;
       kEraDefs.clear();
     });
 
-    test('map-progress unlocks: minimal start roster, healing hut after '
-        'battle 1', () {
+    test('a building not yet granted by any node is not buildable, even in '
+        'its own era', () {
       kEraDefs
         ..clear()
         ..addAll({
           'era_1': const EraDef(id: 'era_1', name: 'I', emoji: '🏺', order: 1),
         });
-      // Battle 0 — a fresh settlement: the gathering camps and the basic house
-      // are there, but the campaign rewards are not.
+      // Battle 0, the stock fallback path — the earliest anything is
+      // granted is node_1 (the Healing Hut) and node_7 (the Build Plot, its
+      // own expansionsUnlocked reward system rather than a node grant, but
+      // still gated by ITS OWN battle number), so nothing is buildable at
+      // all yet (user 2026-08-31: "diejenigen, welche ich noch gar keinem
+      // Knoten zugeordnet habe, sollen noch nicht baubar sein").
       final start =
           availableBuildings('era_1', 0).map((d) => d.id).toSet();
-      expect(start, contains('small_wood_camp'));
-      expect(start, contains('small_quarry'));
-      expect(start, contains('small_house'));
-      expect(start, isNot(contains('healing_hut')));
-      expect(start, isNot(contains('breeding_hut')));
-      expect(start, isNot(contains('marketplace')));
+      expect(start, isEmpty);
 
-      // Winning the first battle unlocks the Healing Hut, and nothing earlier.
+      // Granting it a node makes it buildable at that node's battle, same
+      // as any other campaign reward — node_1 already grants the Healing
+      // Hut in the seed table, so adding the Wood Camp to it proves the
+      // grant (not the era) is what changed.
+      final saved = kPathNodes['node_1']!;
+      kPathNodes['node_1'] = PathNode(
+        id: saved.id,
+        order: saved.order,
+        name: saved.name,
+        areaId: saved.areaId,
+        isBoss: saved.isBoss,
+        rewards: PathRewards(
+          buildings: [...saved.rewards.buildings, 'small_wood_camp'],
+        ),
+      );
+
+      // Winning the first battle unlocks the Healing Hut and the Wood Camp,
+      // and nothing else earlier.
       final afterFirst =
           availableBuildings('era_1', 1).map((d) => d.id).toSet();
-      expect(afterFirst, contains('healing_hut'));
+      expect(afterFirst, containsAll(['healing_hut', 'small_wood_camp']));
       expect(afterFirst, isNot(contains('breeding_hut')));
+      kPathNodes['node_1'] = saved;
       kEraDefs.clear();
     });
   });

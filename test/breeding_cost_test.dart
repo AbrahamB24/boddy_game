@@ -49,8 +49,8 @@ void main() {
   group('what a mating costs', () {
     test('an era-I pair is billed in era-I supplies', () {
       final (m, f) = _pair(_species('starter'));
-      final cost = breedCost(m, f, {'fish': 100, 'fur': 100});
-      expect(cost.keys, everyElement(isIn(['fish', 'fur'])));
+      final cost = breedCost(m, f, {'fish': 100, 'meat': 100});
+      expect(cost.keys, everyElement(isIn(['fish', 'meat'])));
       expect(cost.values.fold<double>(0, (a, b) => a + b),
           kSpeciesBalance.of(CreatureRarity.common).breedGoods);
     });
@@ -78,7 +78,7 @@ void main() {
       final (rm, rf) = _pair(_species('r-are', rarity: CreatureRarity.rare));
       double total(Map<String, double> m) =>
           m.values.fold<double>(0, (a, b) => a + b);
-      const rich = {'fish': 999.0, 'fur': 999.0};
+      const rich = {'fish': 999.0, 'meat': 999.0};
       expect(total(breedCost(rm, rf, rich)),
           greaterThan(total(breedCost(cm, cf, rich))));
     });
@@ -104,8 +104,8 @@ void main() {
   group('paying it', () {
     test('spends the good you have MOST of', () {
       final (m, f) = _pair(_species('starter'));
-      final cost = breedCost(m, f, {'fish': 4, 'fur': 999});
-      expect(cost['fur'], isNotNull);
+      final cost = breedCost(m, f, {'fish': 4, 'meat': 999});
+      expect(cost['meat'], isNotNull);
       expect(cost['fish'], isNull);
     });
 
@@ -113,7 +113,7 @@ void main() {
       // goodsCost demands the remainder rather than silently shrinking the
       // bill, so the refusal can quote a real number.
       final (m, f) = _pair(_species('starter'));
-      final stock = {'fish': 1.0, 'fur': 1.0};
+      final stock = {'fish': 1.0, 'meat': 1.0};
       final cost = breedCost(m, f, stock);
       expect(canAffordBreed(cost, stock), isFalse);
       expect(cost.values.fold<double>(0, (a, b) => a + b),
@@ -122,12 +122,12 @@ void main() {
 
     test('an affordable bill reads as affordable', () {
       final (m, f) = _pair(_species('starter'));
-      const stock = {'fish': 999.0, 'fur': 999.0};
+      const stock = {'fish': 999.0, 'meat': 999.0};
       expect(canAffordBreed(breedCost(m, f, stock), stock), isTrue);
     });
 
     test('the label names the goods, so a refusal says what to gather', () {
-      expect(breedCostLabel({'fish': 6, 'fur': 4}), '🐟 6 · 🦫 4');
+      expect(breedCostLabel({'fish': 6, 'meat': 4}), '🐟 6 · 🥩 4');
     });
   });
 

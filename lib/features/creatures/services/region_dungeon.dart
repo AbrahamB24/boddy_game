@@ -13,7 +13,7 @@ import 'overworld_path.dart';
 //
 // The old region-dungeon ladder and the tech mini-dungeon trials that lived
 // here were deleted with the research system: battles are individual path nodes
-// now, not a fixed ladder behind a fish/fur gate, and there are no trials to
+// now, not a fixed ladder behind a fish/meat gate, and there are no trials to
 // win (features unlock by map progress — featureUnlocksForBattles).
 
 /// Enemies for a single battle on the overworld line: [enemyCountForBattle]

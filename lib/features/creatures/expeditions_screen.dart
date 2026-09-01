@@ -5,12 +5,15 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/snack.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/parchment_kit.dart';
 import '../common/widgets/parchment_page.dart';
 import '../common/widgets/recess_bar.dart';
 import '../onboarding/intro_flow.dart';
 import '../settlement/data/gather_defs.dart';
 import '../settlement/settlement_controller.dart';
+import '../settlement/widgets/scroll_paper.dart'
+    show parchmentButton, parchmentButtonInk;
 import 'capture_encounter_screen.dart';
 import 'expedition_launch_sheet.dart';
 import 'models/area.dart';
@@ -106,6 +109,35 @@ class _ExpeditionSlotChipState extends State<ExpeditionSlotChip> {
   );
 }
 
+/// The three kinds of thing a group can be sent after — how [_categoryTabs]
+/// splits the Targets list (user 2026-08-30: "Ev. würde es sich lohnen,
+/// mehrere Reiter zu machen für Ressourcen, Luxusressourcen" — every unlocked
+/// region used to print ALL of its spots plus its hunt in one long run, so
+/// finding "is there a nearby fish spot" meant reading past every region's
+/// wood and stone on the way).
+enum _TargetCategory {
+  resources('Resources', '🪵'),
+  luxury('Luxury', '🐟'),
+  hunt('Hunt', '🪤');
+
+  final String label;
+  final String emoji;
+  const _TargetCategory(this.label, this.emoji);
+}
+
+/// Wood, stone and gold are the settlement's own fields, never a [GoodsDef] —
+/// everything else gatherable is a supply good (fish, meat, …), and a hunt is
+/// neither. [ExpeditionTarget.spot] is only null for a hunt, so the base-set
+/// check never runs against it.
+const _kBaseResources = {'wood', 'stone', 'gold'};
+
+_TargetCategory _categoryOf(ExpeditionTarget t) {
+  if (t.isHunt) return _TargetCategory.hunt;
+  return _kBaseResources.contains(t.spot!.resource)
+      ? _TargetCategory.resources
+      : _TargetCategory.luxury;
+}
+
 /// What is out, and everywhere you could send a group. Hosted by
 /// [ExpeditionsScreen] as a page and by the Management hub as its Trips tab.
 class ExpeditionsBody extends StatefulWidget {
@@ -125,11 +157,26 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   // "Trips erklären, Ressourcen sammeln, dass diese regenerieren").
   bool _showTripsIntro = false;
 
+  /// Which of the three target drawers is open. Resources leads — it is the
+  /// everyday trip, same reasoning [targetsIn] already gives the hunt for
+  /// sorting last within one area.
+  _TargetCategory _category = _TargetCategory.resources;
+
   @override
   void initState() {
     super.initState();
     _ctrl.addListener(_onChange);
-    _ctrl.collectFinished(); // pull any already-due rewards forward
+    // Deferred a frame (user 2026-08-31, "Unexpected null value" storm +
+    // "setState() or markNeedsBuild() called during build"): this body is now
+    // also one of the Management screen's TabBarView children, built inside
+    // ITS OWN ListenableBuilder — so when a trip happens to already be due
+    // the moment this mounts, collectFinished()'s notifyListeners() fires
+    // while that ancestor is still mid-build, which is illegal. A post-frame
+    // callback still pulls the reward forward, just one frame later, after
+    // the build that mounted this widget has actually finished.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _ctrl.collectFinished();
+    });
     _showTripsIntro = _settlement.introStep == IntroStep.firstCapture;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_ctrl.expeditions.any((e) => e.isReadyToCollect(DateTime.now()))) {
@@ -186,6 +233,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   }
 
   Widget _list(List<Expedition> running, List<AreaDef> areas) {
+    final visible = _visibleAreas(areas);
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         ParchmentPage.kParchmentPagePad,
@@ -220,9 +268,68 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
             'No region is open yet — win your first battles.',
             style: FoE.dim(size: 12).copyWith(color: kInkFaint),
           )
-        else
-          for (final a in areas) _areaBlock(a),
+        else ...[
+          _categoryTabs(areas),
+          if (visible.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Text(
+                'Nothing in ${_category.label.toLowerCase()} yet.',
+                style: FoE.dim(size: 12).copyWith(color: kInkFaint),
+              ),
+            )
+          else
+            for (final (a, targets) in visible) _areaBlock(a, targets),
+        ],
       ],
+    );
+  }
+
+  /// Each unlocked area, paired with only the targets [_category] shows —
+  /// areas with none in this drawer (a region with no fish spot, say) are
+  /// left out entirely rather than printing an empty header.
+  List<(AreaDef, List<ExpeditionTarget>)> _visibleAreas(List<AreaDef> areas) =>
+      [
+        for (final a in areas)
+          (a, targetsIn(a).where((t) => _categoryOf(t) == _category).toList()),
+      ]..removeWhere((e) => e.$2.isEmpty);
+
+  /// The Resources / Luxury / Hunt drawers, in the bag's own tab style (user
+  /// 2026-08-30) — a row of pills, each naming what it holds and how much of
+  /// it, so switching drawers is a tap instead of a long scroll past whatever
+  /// this region's OTHER spots happen to be.
+  Widget _categoryTabs(List<AreaDef> areas) {
+    final all = [for (final a in areas) ...targetsIn(a)];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final cat in _TargetCategory.values)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () => setState(() => _category = cat),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: parchmentButton(active: _category == cat),
+                    child: Text(
+                      '${cat.emoji} ${cat.label} '
+                      '${all.where((t) => _categoryOf(t) == cat).length}',
+                      style: FoE.label(size: 12).copyWith(
+                        color: parchmentButtonInk(active: _category == cat),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -428,58 +535,40 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   }
 
   // ── Targets ───────────────────────────────────────────────
-  Widget _areaBlock(AreaDef area) {
-    final busy = _busySpotIds;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 6),
-            child: Row(
-              children: [
-                Text(area.emoji, style: const TextStyle(fontSize: 15)),
-                const SizedBox(width: 6),
-                Text(
-                  area.name,
-                  style: FoE.title(size: 13).copyWith(color: kInk),
-                ),
-                const SizedBox(width: 8),
-                // Danger keeps its own colour — it is the one thing on the
-                // page that is a warning rather than a fact.
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
-                  decoration: ShapeDecoration(
-                    color: dangerColor(
-                      area.dangerLevel,
-                    ).withValues(alpha: 0.18),
-                    shape: FoE.facet(radius: 5),
-                  ),
-                  child: Text(
-                    'Danger ${area.dangerLevel}',
-                    style: FoE.label(
-                      size: 9,
-                    ).copyWith(color: dangerColor(area.dangerLevel)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          for (final t in targetsIn(area))
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _targetTile(t, busy: busy.contains(t.spot?.id)),
-            ),
-        ],
-      ),
-    );
-  }
+  // The area name + danger badge header used to run above each region's
+  // targets — removed (user 2026-08-31: "Dies löschen bei Management"). The
+  // category tabs already narrow the list to one kind of target; a name and
+  // a danger number for each region on top of that was a second heading for
+  // information the cards below don't need to repeat.
+  Widget _areaBlock(AreaDef area, List<ExpeditionTarget> targets) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: _targetsGrid(targets, _busySpotIds),
+  );
 
-  Widget _targetTile(ExpeditionTarget t, {required bool busy}) {
+  /// The tile shape every monster card in the game shares (user 2026-08-30,
+  /// pasting a [CreatureCard]: "mache bei diesem Screen bitte auch boxen wie
+  /// diese... aber anstelle des Monsters, soll die Ressource sein") — the
+  /// shared [monsterTileGrid] size (user 2026-08-31: "sollen immer genau
+  /// gleich hoch sein, überall in der gesamten App").
+  Widget _targetsGrid(List<ExpeditionTarget> targets, Set<String> busy) =>
+      monsterTileGrid([
+        for (final t in targets)
+          _targetCard(t, busy: busy.contains(t.spot?.id)),
+      ]);
+
+  /// The bottom strip's ink — white, with a soft dark shadow to hold on the
+  /// palest resource colour (gold), the same pairing [CreatureCard] uses for
+  /// exactly the same reason.
+  static const List<Shadow> _cardShadow = [
+    Shadow(color: Color(0x66000000), blurRadius: 0, offset: Offset(0, 1)),
+  ];
+
+  /// A hunt is not a resource, so it wears no resource colour — a deep
+  /// mystery purple instead, distinct from every wood/stone/gold/fish/meat
+  /// tile it sits beside.
+  static const Color _huntColor = Color(0xFF6B5B95);
+
+  Widget _targetCard(ExpeditionTarget t, {required bool busy}) {
     final spot = t.spot;
     final stock = spot == null ? 0.0 : _ctrl.availableStock(spot);
     final dials = spot == null ? null : gatherDefFor(spot.resource);
@@ -488,7 +577,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
     // is empty is what makes the regen rate meaningful.
     final empty = spot != null && stock < 1;
     final blocked = full || busy || empty;
-    // WHY it is blocked, on the tile. It used to take a tap to find out, which
+    // WHY it is blocked, on the card. It used to take a tap to find out, which
     // meant tapping every dead tile in turn to learn the same thing.
     final reason = busy
         ? 'A group is working this spot'
@@ -498,60 +587,131 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         ? (_ctrl.noSlots ? 'Needs a Scout Post' : 'Every slot is busy')
         : null;
 
-    return ParchmentCard(
-      padding: const EdgeInsets.all(11),
-      muted: blocked,
+    final color = t.isHunt ? _huntColor : resourceColor(spot!.resource);
+    final title = t.isHunt ? 'Hunt' : resourceName(spot!.resource);
+    final top = Color.lerp(color, Colors.white, 0.22)!;
+    final bottom = Color.lerp(color, Colors.black, 0.30)!;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => _openTarget(t, busy: busy, empty: empty, full: full),
-      child: Row(
-        children: [
-          Text(t.emoji, style: const TextStyle(fontSize: 20)),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  t.isHunt ? 'Hunt for monsters' : 'Gather ${t.label}',
-                  style: FoE.value(size: 13).copyWith(color: kInk),
-                ),
-                const SizedBox(height: 3),
-                if (reason != null)
-                  Text(
-                    reason,
-                    style: FoE.dim(size: 10).copyWith(
-                      color: empty ? const Color(0xFF9B3B22) : kInkFaint,
+      child: Opacity(
+        opacity: blocked ? 0.6 : 1,
+        // The SAME top reserve [CreatureCard] leaves for its sprite to pop
+        // into (user 2026-08-31: "diese Kacheln wirken aber viel länger") —
+        // without it this card's colour ran edge to edge in a box shaped for
+        // one that doesn't, and a flat-topped card in the Monster tile's own
+        // tall/narrow proportions reads as far more elongated than the
+        // Monster tile itself ever does, even at the identical footprint.
+        child: LayoutBuilder(
+          builder: (context, c) => Padding(
+            padding: EdgeInsets.only(top: c.maxHeight * 0.17),
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              // radius 22, not 18 (2026-08-31 audit) — this card's own
+              // comment above says it deliberately matches CreatureCard's
+              // shape/footprint; CreatureCard's outer radius is 22, so the
+              // corner itself hadn't actually matched what the comment
+              // claims.
+              decoration: ShapeDecoration(shape: FoE.facet(radius: 22)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // The "art" — no sprite to show, so the resource's own emoji
+                  // stands in for it, big, on the resource's own colour.
+                  Expanded(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [top, bottom],
+                        ),
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Text(t.emoji, style: const TextStyle(fontSize: 40)),
+                          // The stock — the one number worth reading at a glance,
+                          // in [CreatureCard]'s own top-right power-badge spot.
+                          if (spot != null)
+                            Positioned(
+                              top: 6,
+                              right: 8,
+                              child: Text(
+                                stock.toStringAsFixed(0),
+                                style: FoE.value(size: 14).copyWith(
+                                  color: Colors.white,
+                                  shadows: _cardShadow,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  )
-                else if (spot != null) ...[
-                  Text(
-                    '${stock.toStringAsFixed(0)} / '
-                    '${dials!.spotCapacity.toStringAsFixed(0)} left · '
-                    '+${dials.regenPerHour.toStringAsFixed(0)}/h',
-                    style: FoE.dim(size: 10).copyWith(color: kInkFaint),
                   ),
-                  const SizedBox(height: 5),
-                  RecessBar(
-                    value: dials.spotCapacity <= 0
-                        ? 0
-                        : (stock / dials.spotCapacity).clamp(0.0, 1.0),
-                    color: kParchmentGo,
-                    height: 5,
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(9, 6, 9, 7),
+                    color: bottom,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: FoE.label(size: 12).copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            shadows: _cardShadow,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        if (reason != null)
+                          Text(
+                            reason,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: FoE.dim(size: 9).copyWith(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              shadows: _cardShadow,
+                            ),
+                          )
+                        else if (dials != null) ...[
+                          RecessBar(
+                            value: dials.spotCapacity <= 0
+                                ? 0
+                                : (stock / dials.spotCapacity).clamp(0.0, 1.0),
+                            color: kParchmentGo,
+                            height: 5,
+                            onDark: true,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '+${dials.regenPerHour.toStringAsFixed(0)}/h',
+                            style: FoE.dim(size: 9).copyWith(
+                              color: Colors.white.withValues(alpha: 0.75),
+                              shadows: _cardShadow,
+                            ),
+                          ),
+                        ] else
+                          Text(
+                            'Caught by hand on return',
+                            maxLines: 2,
+                            style: FoE.dim(size: 9).copyWith(
+                              color: Colors.white.withValues(alpha: 0.75),
+                              shadows: _cardShadow,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ] else
-                  Text(
-                    'Finds are caught by hand when the group returns',
-                    style: FoE.dim(size: 10).copyWith(color: kInkFaint),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          Icon(
-            Icons.chevron_right,
-            size: 20,
-            color: blocked ? kInkFaint : kAccent,
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -6693,6 +6693,61 @@ def _fachwerk_lattice(prefix, x, y, sx, sy, h):
             else:
                 ob.location = (x + face, y + span / 2 - bw / 2, h / 2)
 
+def building_plot(w, h):
+    """Building Plot — surveyed ground, not a building (user 2026-08-31).
+
+    It has no walls and no roof: it is a REWARD, territory you have earned
+    but not yet built on. So the whole picture has to be the ONE thing that
+    is actually there — a surveyor's grid, staked and roped out tile by tile,
+    the way real ground gets marked before anything is built on it. Every
+    tile edge gets its own stake, not just the four corners, so this reads as
+    "measured ground" from across the map instead of a bare rectangle.
+    No plinth (a plot IS ground, not a building standing on it), no smoke, no
+    critters — none of those fit a lot nobody has moved into yet.
+    """
+    cols, rows = int(round(w)), int(round(h))
+
+    # Everything below reads TWICE the surveyor's actual scale (user
+    # 2026-08-31: "fast nicht erkennbar" — stakes and rope this thin vanish
+    # once the map shrinks the picture down to map scale). The grid itself
+    # still lands exactly on the tile lines; only the stuff marking it out
+    # got fatter.
+    def stake(name, i, j, tall):
+        x, y = -w / 2 + i, -h / 2 + j
+        cyl(f'{name}_p', x, y, 0, 0.09 if tall else 0.065,
+            0.5 if tall else 0.32, sides=8, key='oak', taper=0.3)
+        if tall:
+            ring(f'{name}_col', x, y, 0.38, 0.09, 0.032, key='oak_light',
+                 sides=8, tube_sides=6)
+        return x, y
+
+    rope_h = 0.16
+    for i in range(cols + 1):
+        for j in range(rows + 1):
+            corner = i in (0, cols) and j in (0, rows)
+            stake(f'bpst{i}_{j}', i, j, corner)
+    for i in range(cols + 1):
+        x = -w / 2 + i
+        for j in range(rows):
+            y0, y1 = -h / 2 + j, -h / 2 + j + 1
+            catenary(f'bpropev{i}_{j}', (x, y0, rope_h), (x, y1, rope_h),
+                     sag=0.06, r=0.035, key='root')
+    for j in range(rows + 1):
+        y = -h / 2 + j
+        for i in range(cols):
+            x0, x1 = -w / 2 + i, -w / 2 + i + 1
+            catenary(f'bpropeh{j}_{i}', (x0, y, rope_h), (x1, y, rope_h),
+                     sag=0.06, r=0.035, key='root')
+    # One pennant per corner stake — the only accent colour on an otherwise
+    # bare lot, and the thing a player's eye finds first.
+    keys = ('cloth_gold', 'cloth_teal', 'cloth_gold', 'cloth_teal')
+    for k, (sx_, sy_) in enumerate(((-1, -1), (-1, 1), (1, -1), (1, 1))):
+        x, y = sx_ * w / 2, sy_ * h / 2
+        pen = box(f'bpflag{k}', x, y, 0.62, 0.045, 0.36, 0.26, mat(keys[k]))
+        pen.rotation_euler = (0, 0, sx_ * sy_ * 0.5)
+    tufts('bptuft', 0, 0, w - 0.3, h - 0.3)
+
+
 def scout_post(w, h):
     """Scout Post — a watchtower, and the only building whose job is HEIGHT.
 
@@ -8040,6 +8095,9 @@ PRESETS = {
     'refinery_e2': (clay_refinery, 4, 4),
     'training_grounds': (training_grounds, 3, 3),
     'thinker_circle': (workshop, 3, 3),
+    # Not a building — surveyed ground (5 x 5, matching building_definitions
+    # .dart's gridW/gridH for building_plot). See building_plot() for why.
+    'building_plot': (building_plot, 5, 5),
     # The crossroads stands for the set in the line-up and in --preset. All
     # sixteen are rendered by tool/blender/roads.py, which is the only thing
     # that needs them one at a time.

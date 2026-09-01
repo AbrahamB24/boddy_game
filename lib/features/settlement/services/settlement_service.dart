@@ -36,11 +36,15 @@ class SettlementService {
         // stone) with slack — the script must never stall on "can't afford".
         'wood': 750.0,
         'stone': 300.0,
-        // Jumpstart float, not income: fish/fur are the region-dungeon entry
+        // Jumpstart float, not income: fish/meat are the region-dungeon entry
         // cost and buildings make them deliberately slowly (workshop mult
         // 0.12), so a new player would otherwise stall at the first gate.
+        //
+        // fish alone still writes the LEGACY column (migration 0006 kept it
+        // rather than drop it) — meat never had one, so it goes straight into
+        // `goods`, the column every resource but the original two now uses.
         'fish': kJumpstartGiftFish,
-        'fur': kJumpstartGiftFur,
+        'goods': {'meat': kJumpstartGiftMeat},
       }),
       supabase.from('energy_state').insert({
         'settlement_id': model.id,
@@ -128,12 +132,15 @@ class SettlementService {
     } catch (_) {
       try {
         // Fallback: omit the gold column if it doesn't exist yet (pre-migration).
+        // Only fish has a legacy column to fall back to — meat (renamed from
+        // fur, user 2026-08-31) never had one, so on a DB this old it is one
+        // of the goods this tier simply can't save; the outermost try above
+        // is the one that writes it correctly on any DB that has `goods`.
         await supabase.from('resources').upsert({
           'settlement_id': r.settlementId,
           'wood': r.wood,
           'stone': r.stone,
           'fish': r.goods['fish'] ?? 0.0,
-          'fur': r.goods['fur'] ?? 0.0,
           'last_updated_at': r.lastUpdatedAt.toIso8601String(),
         });
       } catch (_) {
@@ -295,7 +302,7 @@ class SettlementService {
           gold: floor(0),
           goods: const {
             'fish': kJumpstartGiftFish,
-            'fur': kJumpstartGiftFur,
+            'meat': kJumpstartGiftMeat,
           },
           lastUpdatedAt: now,
         ),

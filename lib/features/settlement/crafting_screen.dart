@@ -294,7 +294,10 @@ class _CraftingScreenState extends State<CraftingScreen> {
     final items = kItemDefs.values.toList();
     return Container(
       clipBehavior: Clip.antiAlias,
-      decoration: ShapeDecoration(color: kParchmentLight.withValues(alpha: 0.45), shape: FoE.facet(radius: 14, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.16)))),
+      // radius 12, not 14 (2026-08-31 audit) — the Healing Hut's shape,
+      // same as market_screen.dart's _tradeList/_shopList use for this
+      // exact "framed list with hairlines between its rows" pattern.
+      decoration: ShapeDecoration(color: kParchmentLight.withValues(alpha: 0.45), shape: FoE.facet(radius: 12, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.16)))),
       child: Column(
         children: [
           for (var i = 0; i < items.length; i++) ...[
@@ -397,7 +400,10 @@ class _CraftingScreenState extends State<CraftingScreen> {
             ),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+              // horizontal 14, not 11 (2026-08-31 audit) — matching the
+              // same "compact action button in a row" pattern in
+              // bag_screen.dart.
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: parchmentButton(active: room),
               child: Text(
                 // The COUNT already in, so "how many did I order" is answered

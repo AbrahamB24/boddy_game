@@ -12,6 +12,7 @@ import '../data/workshop_role_effects.dart';
 import '../widgets/meander_strip.dart';
 import '../widgets/scroll_paper.dart'
     show
+        kParchmentDeep,
         kParchmentInk,
         kParchmentMid,
         parchmentButton,
@@ -43,9 +44,15 @@ String _resName(String res) => switch (res) {
   WorkshopRole.kCrafting => 'Crafting',
   WorkshopRole.kTraining => 'Training',
   WorkshopRole.kLegendaryBoost => 'Legendary',
-  _ => kGoodsDefs[res]?.name ??
-      (res.isEmpty ? 'Resource' : res[0].toUpperCase() + res.substring(1)),
+  _ =>
+    kGoodsDefs[res]?.name ??
+        (res.isEmpty ? 'Resource' : res[0].toUpperCase() + res.substring(1)),
 };
+
+/// "2", not "2.0" — a whole per-point rate reads oddly with a trailing
+/// decimal; a fractional one (0.1/Stat Point) keeps its one place.
+String _trimRate(double v) =>
+    v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
 
 class _BuildingUpgradeSheet extends StatelessWidget {
   final BuildingDef def;
@@ -58,12 +65,13 @@ class _BuildingUpgradeSheet extends StatelessWidget {
   // the very building they show — a dark panel in between read as another app.
   static const Color _ink = kParchmentInk;
   static final Color _inkSoft = kParchmentInk.withValues(alpha: 0.78);
+  static final Color _inkFaint = kParchmentInk.withValues(alpha: 0.55);
   static const Color _accent = FoE.gold;
   static final Color _ornament = kParchmentInk.withValues(alpha: 0.22);
-
-  // A reference worker stat, so a per-worker output reads as a concrete number
-  // rather than a per-stat multiplier.
-  static const int _refStat = 40;
+  // The Effects card's own inset (user 2026-09-01: "schreibe es genau so
+  // wie im Gebäudedetailscreen mit der Effects box") — the exact same
+  // background building_detail_dialog.dart's _sectionCard uses.
+  static final Color _inset = kParchmentDeep.withValues(alpha: 0.55);
 
   @override
   Widget build(BuildContext context) {
@@ -85,143 +93,250 @@ class _BuildingUpgradeSheet extends StatelessWidget {
     }
     // `construction` is kept: it is the building's PASSIVE build power (user
     // 2026-07-26), authored in the same points a builder's stat is measured in.
-    prod.removeWhere((k, v) =>
-        v <= 0 ||
-        k == WorkshopRole.kCrafting ||
-        k == WorkshopRole.kTraining ||
-        k == WorkshopRole.kLegendaryBoost);
+    prod.removeWhere(
+      (k, v) =>
+          v <= 0 ||
+          k == WorkshopRole.kCrafting ||
+          k == WorkshopRole.kTraining ||
+          k == WorkshopRole.kLegendaryBoost,
+    );
 
     final housing = def.hasEffect('housing', era)
         ? def.effectAt('housing', '', era, level: maxLevel)
         : def.housingCapacity * f;
 
     final rows = <Widget>[];
-    // [values] holds one line per figure — a combined post has three, and they
-    // stack instead of running together on one line (user 2026-07-29).
-    void rowLines(String emoji, String label, List<String> values) => rows.add(
+    // The Effects card's own row shape, EXACTLY (user 2026-09-01: "schreibe
+    // es genau so wie im Gebäudedetailscreen mit der Effects box") — lifted
+    // straight from building_detail_dialog.dart's own `headline()`: the
+    // label on the left in the accent colour, the value(s) right-aligned
+    // with the glyph in its own reserved slot AFTER the number rather than
+    // leading the row. [values] holds one line per figure — a combined post
+    // has three, and they stack instead of running together on one line
+    // (user 2026-07-29).
+    // [labelColor]/[indent]: a SUB-category row nested under its own
+    // "Production" heading rather than reading as one itself (user 2026-
+    // 09-01, carried here from building_detail_dialog.dart's own
+    // headline(): "Wood, stone gold, housing etc. etwas nach innen versetzt
+    // und in weiss"). Null/0 keeps the accent-gold, flush label every other
+    // row here still uses.
+    // [subtitle]: a small caption under the LABEL, not the value (user
+    // 2026-09-01: "bei Produktion als Untertitel schreiben Bsp: Wood
+    // 1/Stat Point") — the REAL per-point rate (role.mult × its level
+    // scale), a formula constant rather than the hypothetical "at stat 40"
+    // output this sheet dropped earlier.
+    void rowLines(
+      String? emoji,
+      String label,
+      List<String> values, {
+      Color? labelColor,
+      double indent = 0,
+      String? subtitle,
+    }) => rows.add(
       Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: EdgeInsets.only(left: indent, top: 4, bottom: 4),
         child: Row(
-          crossAxisAlignment: values.length > 1
+          crossAxisAlignment: values.length > 1 || subtitle != null
               ? CrossAxisAlignment.start
               : CrossAxisAlignment.center,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 15)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(label,
-                  style: FoE.label(size: 13).copyWith(color: FoE.parchment)),
-            ),
             Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                for (final v in values)
-                  Text(v,
-                      textAlign: TextAlign.end,
-                      style:
-                          FoE.value(size: 13).copyWith(color: FoE.goldBright)),
+                Text(
+                  label,
+                  style: FoE.label(
+                    size: 12,
+                  ).copyWith(color: labelColor ?? _accent),
+                ),
+                if (subtitle != null)
+                  Text(
+                    subtitle,
+                    style: FoE.dim(size: 9).copyWith(
+                      color: (labelColor ?? _accent).withValues(alpha: 0.65),
+                    ),
+                  ),
               ],
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (final v in values)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Flexible, not bare (2026-09-01 crash: "A RenderFlex
+                        // overflowed") — this sheet's own Effects card is
+                        // narrower than the building detail dialog's, so a
+                        // value string that fit fine over there could run
+                        // past the space left for it here. Shrinks to an
+                        // ellipsis rather than overflow.
+                        Flexible(
+                          child: Text(
+                            v,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: FoE.value(size: 12).copyWith(color: _ink),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 18,
+                          // Icons only for the resource-carrying rows (2026-
+                          // 08-27 rule the real Effects card follows) — a
+                          // generic effect (slots, %, bonuses) reserves the
+                          // same slot empty rather than inventing a glyph
+                          // building_detail_dialog.dart doesn't show either.
+                          child: emoji == null
+                              ? null
+                              : Center(
+                                  child: Text(
+                                    emoji,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
-    void row(String emoji, String label, String value) =>
-        rowLines(emoji, label, [value]);
+    void row(
+      String emoji,
+      String label,
+      String value, {
+      Color? labelColor,
+      double indent = 0,
+      String? subtitle,
+    }) => rowLines(
+      emoji,
+      label,
+      [value],
+      labelColor: labelColor,
+      indent: indent,
+      subtitle: subtitle,
+    );
+    // A GROUP heading (user 2026-09-01: "Production und Storage etc. wie
+    // eine Art Überschrift sind und Wood, Stone, Gold etc. nicht gleich
+    // geschrieben werden") — the same faint, small-caps treatment this
+    // sheet's own "EFFECTS" title wears, deliberately NOT the accent gold
+    // a row's own label reads in: "Production" over "Wood"/"Stone"/"Gold"
+    // has to look like a heading over its rows, not another row.
+    void heading(String text) => rows.add(
+      Padding(
+        padding: EdgeInsets.only(top: rows.isEmpty ? 0 : 10, bottom: 4),
+        child: Text(
+          text.toUpperCase(),
+          style: FoE.dim(size: 9).copyWith(
+            color: _inkFaint,
+            letterSpacing: 1.0,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
 
-    // Production.
-    for (final e in prod.entries) {
+    // Production — "Production", not the generic "Resource" the building
+    // detail dialog falls back to for a multi-resource row (user 2026-09-
+    // 01: "Resource durch Production ersetzen"). Here every resource gets
+    // its OWN row rather than being merged into one multi-value line, so
+    // the heading is what ties them together instead.
+    if (prod.isNotEmpty) heading('Production');
+    // Highest producer first (user 2026-09-01: "nach Produktion ordnen,
+    // höchste Produktion immer oben").
+    final prodEntries = prod.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    for (final e in prodEntries) {
       row(
         _resEmoji(e.key),
         _resName(e.key),
         e.key == WorkshopRole.kConstruction
             ? '+${e.value.toStringAsFixed(0)} points'
             : '+${e.value.toStringAsFixed(1)}/h',
+        labelColor: Colors.white,
+        indent: 12,
       );
     }
-    // Housing.
-    if (housing > 0) row('🏠', 'Housing', housing.round().toString());
+    // Housing — same sub-row treatment (user 2026-09-01: "jetzt auf alle
+    // Gebäude so umsetzen").
+    if (housing > 0) {
+      row(
+        '🏠',
+        'Housing',
+        housing.round().toString(),
+        labelColor: Colors.white,
+        indent: 12,
+      );
+    }
     // Worker posts + per-worker output.
     for (final role in def.workshops) {
       final slots = effectiveSlots(role, maxLevel);
       if (role.resource == WorkshopRole.kLegendaryBoost) {
-        row('⭐', 'Legendary boost · $slots slot${slots == 1 ? '' : 's'}',
-            '×${(1 + role.mult).toStringAsFixed(1)}');
-        continue;
-      }
-      if (role.resource == WorkshopRole.kTraining) {
-        row('🏋️', 'Training · $slots slot${slots == 1 ? '' : 's'}',
-            '+${kTrainingXpPerHour.toStringAsFixed(0)} XP/h');
-        continue;
-      }
-      final perWorker = _refStat * role.mult * role.levelScale(maxLevel);
-      // Same formula as every post — only the unit is points (2026-07-26).
-      if (role.resource == WorkshopRole.kConstruction) {
         row(
-          '🔨',
-          'Construction · $slots slot${slots == 1 ? '' : 's'} '
-              '(${role.stat.label})',
-          '+${perWorker.toStringAsFixed(0)} points each',
+          '⭐',
+          'Legendary boost · $slots slot${slots == 1 ? '' : 's'}',
+          '×${(1 + role.mult).toStringAsFixed(1)}',
         );
         continue;
       }
-      // A system post's worth is a cut or a bonus, not units per hour — and
-      // "each" would be a lie there, since the cut is soft-capped over the
-      // SUMMED power of everyone posted (user 2026-07-26).
-      // A STORE post is one figure PER RESOURCE (user 2026-07-30) — its dials
-      // are per resource, so `contribution` (which knows only the flat fallback
-      // mult) would have printed the same number for every good this store
-      // holds, contradicting both the ceiling and the building card.
+      if (role.resource == WorkshopRole.kTraining) {
+        row(
+          '🏋️',
+          'Training · $slots slot${slots == 1 ? '' : 's'}',
+          '+${kTrainingXpPerHour.toStringAsFixed(0)} XP/h',
+        );
+        continue;
+      }
+      // Every remaining post: the REAL fact (slots), not a hypothetical
+      // figure computed off a made-up reference worker (user 2026-09-01:
+      // "genau so auf andere Gebäude übertragen" — the same fix as the
+      // plain production row above, carried to Construction, the Store and
+      // every combined post). None of these has a real posted creature to
+      // read a stat from in this preview, so the honest answer is how many
+      // seats the level buys, not an invented output.
+      if (role.resource == WorkshopRole.kConstruction) {
+        row('🔨', 'Construction', '$slots slot${slots == 1 ? '' : 's'}');
+        continue;
+      }
       if (role.resource == WorkshopRole.kStorageRoom) {
-        final stored = def.effectKeys('storage');
-        rowLines(
+        row(
           workshopRoleEmoji(role.resource),
-          '${workshopRoleName(role.resource)} · $slots slot'
-              '${slots == 1 ? '' : 's'} (${role.stat.label})',
-          stored.isEmpty
-              ? const ['—']
-              : [
-                  for (final res in stored)
-                    '+${(role.storageRoomFor(res, _refStat.toDouble(), maxLevel) * slots).round()} '
-                        '${kGoodsDefs[res]?.name ?? res}',
-                ],
+          '${workshopRoleName(role.resource)} ${role.stat.label}',
+          '$slots slot${slots == 1 ? '' : 's'}',
         );
         continue;
       }
       if (workshopRoleFeedsSystem(role.resource)) {
-        // A COMBINED post is three figures, not one (user 2026-07-29) — read
-        // through the role's own formula so each part uses its own dial, and
-        // stated part by part on the value line.
-        final full = {
-          for (final e in role
-              .contribution((_) => _refStat.toDouble(), maxLevel)
-              .entries)
-            e.key: e.value * slots,
-        };
-        final parts = workshopPowerParts(full, withGlyph: role.isCombined);
-        rowLines(
+        row(
           workshopRoleEmoji(role.resource),
-          '${workshopRoleName(role.resource)} · $slots slot'
-              '${slots == 1 ? '' : 's'} (${role.stat.label})',
-          parts.isEmpty
-              ? const ['—']
-              // "voll besetzt" belongs to the whole block, so it sits on the
-              // last line rather than being repeated on each.
-              : [
-                  for (var i = 0; i < parts.length; i++)
-                    i == parts.length - 1
-                        ? '${parts[i]} voll besetzt'
-                        : parts[i],
-                ],
+          '${workshopRoleName(role.resource)} ${role.stat.label}',
+          '$slots slot${slots == 1 ? '' : 's'}',
         );
         continue;
       }
+      // The REAL fact, not a hypothetical per-worker rate (user 2026-09-01:
+      // "ich will keine hypothetischen Werte, sondern das was real
+      // vorhanden ist und das sind 10 slots") — "+X/h each" was computed
+      // off [_refStat], a made-up reference worker nobody has actually
+      // posted. The slot count is the one thing this preview (no real
+      // building, no real workers) can state as fact. The RATE itself is
+      // fine to show though (user 2026-09-01: "als Untertitel schreiben
+      // Bsp: Wood 1/Stat Point") — role.mult × its level scale is a
+      // formula constant, true for every worker regardless of their own
+      // stat, not an assumption about one that doesn't exist.
       row(
         _resEmoji(role.resource),
-        '${_resName(role.resource)} · $slots slot${slots == 1 ? '' : 's'} '
-            '(${role.stat.label})',
-        '+${perWorker.toStringAsFixed(1)}/h each',
+        '${_resName(role.resource)} ${role.stat.label}',
+        '$slots slot${slots == 1 ? '' : 's'}',
+        subtitle:
+            '${_trimRate(role.mult * role.levelScale(maxLevel))}'
+            '/Stat Point',
       );
     }
     // Flat, settlement-wide bonuses.
@@ -229,27 +344,14 @@ class _BuildingUpgradeSheet extends StatelessWidget {
       row('🔨', 'Build speed', '+${(def.buildSpeedBonus * f * 100).round()}%');
     }
     if (def.populationBonus > 0) {
-      row('🏠', 'Housing bonus', '+${(def.populationBonus * f * 100).round()}%');
+      row(
+        '🏠',
+        'Housing bonus',
+        '+${(def.populationBonus * f * 100).round()}%',
+      );
     }
     if (def.queueSlotsBonus > 0) {
       row('📋', 'Build queue', '+${def.queueSlotsBonus}');
-    }
-    // Per-era palette effects.
-    for (final k in def.effectKeys('resource')) {
-      final v = def.effectAt('resource', k, era, level: maxLevel);
-      if (v != 0) row('📈', '${_resName(k)} production', '+${(v * 100).round()}%');
-    }
-    for (final k in def.effectKeys('expedition')) {
-      final v = def.effectAt('expedition', k, era, level: maxLevel);
-      if (v != 0) row('🧭', 'Expedition $k', '+${(v * 100).round()}%');
-    }
-    final expSlots = def.effectAt('expeditionSlots', '', era, level: maxLevel);
-    if (expSlots != 0) {
-      row('🎒', 'Expedition slots', '+${expSlots.round()}');
-    }
-    for (final k in def.effectKeys('heal')) {
-      final v = def.effectAt('heal', k, era, level: maxLevel);
-      if (v != 0) row('🩹', 'Heal $k', '−${(v * 100).round()}%');
     }
     // XP a post pays at the top level — the settlement-wide work rate, on every
     // building that stations monsters (user 2026-07-30). It used to read a
@@ -263,24 +365,26 @@ class _BuildingUpgradeSheet extends StatelessWidget {
         '+${workXpPerHourAt(maxLevel).toStringAsFixed(0)}/h',
       );
     }
-    // Matings and incubations are separate caps in separate buildings (user
-    // 2026-07-26), so each gets its own line rather than one "jobs" total.
-    final matings = def.effectAt('breeding', '', era, level: maxLevel);
-    if (matings != 0) {
-      row('💞', 'Concurrent matings', matings.round().toString());
+    // EVERY OTHER effect, read through the SAME function the building
+    // detail screen's own Effects card uses (user 2026-09-01: "Zeige die
+    // Effekte genau so an, wie sie bei der Gebäudevorschau angezeigt
+    // werden" — "Healing slots 20", not this sheet's own former "Concurrent
+    // heals"). This used to hand-roll a label per effect type
+    // (resource/expedition/heal/breeding/hatching/healSlots/queueSlots/
+    // buildSlots), drifting from [buildingEffectLabel]'s names one by one;
+    // now it reads the shared vocabulary directly, so the two can never
+    // disagree again. No icon, matching the real card's own rule (2026-08-
+    // 27: icons stay reserved for resources) — [rowLines] leaves the slot
+    // empty when passed null.
+    for (final r in buildingEffectCardRows(
+      def,
+      era,
+      maxLevel,
+      withEmoji: false,
+    )) {
+      if (r.pending) continue;
+      rowLines(null, r.label, [r.value]);
     }
-    final hatchings = def.effectAt('hatching', '', era, level: maxLevel);
-    if (hatchings != 0) {
-      row('🐣', 'Concurrent hatchings', hatchings.round().toString());
-    }
-    final healSlots = def.effectAt('healSlots', '', era, level: maxLevel);
-    if (healSlots != 0) {
-      row('🩺', 'Concurrent heals', healSlots.round().toString());
-    }
-    final queueSlots = def.effectAt('queueSlots', '', era, level: maxLevel);
-    if (queueSlots != 0) row('📋', 'Build queue', '+${queueSlots.round()}');
-    final buildSlots = def.effectAt('buildSlots', '', era, level: maxLevel);
-    if (buildSlots != 0) row('🏗️', 'Build sites', '+${buildSlots.round()}');
 
     return SafeArea(
       top: false,
@@ -314,35 +418,75 @@ class _BuildingUpgradeSheet extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // "— fully upgraded" and its own caption line both gone
+                  // (user 2026-09-01) — the level number now says that on
+                  // its own, big enough to read as the headline fact this
+                  // card states rather than a footnote beside the title.
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
-                        child: Text('${def.name} — fully upgraded',
-                            style: FoE.title(size: 15).copyWith(color: _ink)),
-                      ),
-                      const SizedBox(width: 8),
-                      // Bare, like every other readout on this paper: a boxed number
-                      // reads as a button (user 2026-07-26).
-                      Text('Lv $maxLevel',
-                          style: FoE.value(size: 13).copyWith(color: _accent)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text('Effects when built up to its maximum level.',
-                      style: FoE.dim(size: 11).copyWith(color: _inkSoft)),
-                  const SizedBox(height: 10),
-                  if (rows.isEmpty)
-                    Text('No scaling effects — a purely decorative building.',
-                        style: FoE.dim(size: 12).copyWith(color: _inkSoft))
-                  else
-                    Flexible(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: rows,
+                        child: Text(
+                          def.name,
+                          style: FoE.title(size: 15).copyWith(color: _ink),
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Lv $maxLevel',
+                        style: FoE.title(
+                          size: 22,
+                        ).copyWith(color: _accent, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // The same "Effects" card the building detail screen
+                  // wraps _productionSection in — title band + inset
+                  // background at radius 14 (user 2026-09-01), not this
+                  // sheet's own bare list of rows.
+                  Flexible(
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(12, 9, 12, 12),
+                      decoration: ShapeDecoration(
+                        color: _inset,
+                        shape: FoE.facet(radius: 14),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'EFFECTS',
+                            style: FoE.dim(size: 9).copyWith(
+                              color: _inkFaint,
+                              letterSpacing: 1.0,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          if (rows.isEmpty)
+                            Text(
+                              'No scaling effects — a purely decorative '
+                              'building.',
+                              style: FoE.dim(
+                                size: 12,
+                              ).copyWith(color: _inkSoft),
+                            )
+                          else
+                            Flexible(
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: rows,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
+                  ),
                   const SizedBox(height: 14),
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
@@ -351,9 +495,12 @@ class _BuildingUpgradeSheet extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       alignment: Alignment.center,
                       decoration: parchmentButton(),
-                      child: Text('Close',
-                          style: FoE.label(size: 14)
-                              .copyWith(color: parchmentButtonInk())),
+                      child: Text(
+                        'Close',
+                        style: FoE.label(
+                          size: 14,
+                        ).copyWith(color: parchmentButtonInk()),
+                      ),
                     ),
                   ),
                 ],

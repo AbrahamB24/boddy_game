@@ -26,10 +26,9 @@ Future<void> _pump(WidgetTester tester, PathNode node) async {
 }
 
 /// Buildings the picker offers, in the order it sorts them.
-List<BuildingDef> _pickable() => kBuildingDefs.values
-    .where((d) => !d.isRoad && !d.isMainBuilding)
-    .toList()
-  ..sort((a, b) => a.name.compareTo(b.name));
+List<BuildingDef> _pickable() =>
+    kBuildingDefs.values.where((d) => !d.isRoad && !d.isMainBuilding).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
 /// The buildings some OTHER node already unlocks — since 2026-07-31 the picker
 /// stops offering them (user: "wenn ich ein Gebäude als Unlock buildings bei
@@ -40,6 +39,10 @@ Map<String, int> _elsewhere(String nodeId) {
   for (final n in kPathNodes.values) {
     if (n.id == nodeId) continue;
     for (final b in n.rewards.buildings) {
+      // Building Plot is territory, not a type you unlock once (user
+      // 2026-08-31), so the form lets every node grant it — mirrors the
+      // exemption in _grantedElsewhere.
+      if (b == 'building_plot') continue;
       final at = out[b];
       if (at == null || n.order < at) out[b] = n.order;
     }
@@ -71,26 +74,39 @@ Future<void> _selectAllEras(WidgetTester tester) async {
 void main() {
   testWidgets('a reward far down the roster is still shown', (tester) async {
     final node = kPathNodes['node_11']!;
-    expect(node.rewards.buildings, contains('trading_post'),
-        reason: 'the seed this test is about');
+    expect(
+      node.rewards.buildings,
+      contains('trading_post'),
+      reason: 'the seed this test is about',
+    );
     await _pump(tester, node);
     expect(find.text(kBuildingDefs['trading_post']!.name), findsOneWidget);
   });
 
-  testWidgets('on «All eras» every FREE building is offered, none dropped',
-      (tester) async {
+  testWidgets('on «All eras» every FREE building is offered, none dropped', (
+    tester,
+  ) async {
     await _pump(tester, kPathNodes['node_11']!);
     await _selectAllEras(tester);
     final free = _offerable('node_11');
     // The one that used to fall off the end, and the very last by name.
-    expect(free.length, greaterThan(60), reason: 'otherwise nothing was hidden');
+    expect(
+      free.length,
+      greaterThan(60),
+      reason: 'otherwise nothing was hidden',
+    );
     for (final d in [free[60], free.last, free.first]) {
-      expect(find.text(d.name), findsWidgets, reason: '${d.id} must be pickable');
+      expect(
+        find.text(d.name),
+        findsWidgets,
+        reason: '${d.id} must be pickable',
+      );
     }
   });
 
-  testWidgets('the search box counts what is offered vs the whole roster',
-      (tester) async {
+  testWidgets('the search box counts what is offered vs the whole roster', (
+    tester,
+  ) async {
     await _pump(tester, kPathNodes['node_11']!);
     final all = _pickable();
     final free = _offerable('node_11');
@@ -111,7 +127,9 @@ void main() {
   });
 
   group('the era filter (user 2026-07-26)', () {
-    testWidgets('it opens on the NODE\'s own era, not on "all"', (tester) async {
+    testWidgets('it opens on the NODE\'s own era, not on "all"', (
+      tester,
+    ) async {
       await _pump(tester, kPathNodes['node_11']!);
       // Era I is what battle 11 is, and the dropdown says so up front.
       expect(find.textContaining('Era 1'), findsWidgets);
@@ -147,8 +165,9 @@ void main() {
     });
   });
 
-  testWidgets('a reward whose def is gone is shown so it can be removed',
-      (tester) async {
+  testWidgets('a reward whose def is gone is shown so it can be removed', (
+    tester,
+  ) async {
     // Otherwise it is invisible AND unremovable: the node keeps granting an id
     // nothing can build.
     const node = PathNode(
@@ -174,8 +193,11 @@ void main() {
   group('a building already granted elsewhere', () {
     testWidgets('is not offered on another node', (tester) async {
       final taken = _elsewhere('node_12');
-      expect(taken, contains('trading_post'),
-          reason: 'node 11 grants it — the seed this test is about');
+      expect(
+        taken,
+        contains('trading_post'),
+        reason: 'node 11 grants it — the seed this test is about',
+      );
       await _pump(tester, kPathNodes['node_12']!);
       await _selectAllEras(tester);
       expect(find.text(kBuildingDefs['trading_post']!.name), findsNothing);
@@ -193,8 +215,11 @@ void main() {
         'Trade',
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('Knoten 11'), findsWidgets,
-          reason: '"not here" is a worse answer than "node 11 has it"');
+      expect(
+        find.textContaining('Knoten 11'),
+        findsWidgets,
+        reason: '"not here" is a worse answer than "node 11 has it"',
+      );
     });
 
     testWidgets('is still shown on the node that GRANTS it', (tester) async {
@@ -230,13 +255,15 @@ void main() {
 
     /// The Lv fields, in row order.
     List<TextEditingController> levelFields(WidgetTester tester) => [
-      for (final f in tester.widgetList<TextField>(find.descendant(
-        of: find.ancestor(
-          of: find.text('Lv'),
-          matching: find.byType(TextFormField),
+      for (final f in tester.widgetList<TextField>(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Lv'),
+            matching: find.byType(TextFormField),
+          ),
+          matching: find.byType(TextField),
         ),
-        matching: find.byType(TextField),
-      )))
+      ))
         f.controller!,
     ];
 
@@ -253,9 +280,7 @@ void main() {
       await _pump(tester, threeFoes());
       await tester.enterText(totalField(), '90');
       await tester.pumpAndSettle();
-      final levels = [
-        for (final c in levelFields(tester)) int.parse(c.text),
-      ];
+      final levels = [for (final c in levelFields(tester)) int.parse(c.text)];
       expect(levels.length, 3);
       expect(levels.reduce((a, b) => a + b), 90, reason: 'the sum is exact');
       for (final l in levels) {
@@ -269,10 +294,7 @@ void main() {
       expect(fields, hasLength(3), reason: 'the levels are editable again');
       await tester.enterText(
         find
-            .ancestor(
-              of: find.text('Lv'),
-              matching: find.byType(TextFormField),
-            )
+            .ancestor(of: find.text('Lv'), matching: find.byType(TextFormField))
             .first,
         '20',
       );

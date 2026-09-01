@@ -15,6 +15,7 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   // castle and small_quarry (renamed from small_stone_camp); the other six
   // kept their grid but were re-measured anyway since the geometry moved.
   'breeding_hut': (0.98483, 0.49241, 0.00000),
+  'building_plot': (0.92696, 0.50000, 0.02225),
   'builder_camp': (1.00000, 0.50000, 0.16458),
   'caravanserai': (0.96933, 0.48466, 0.00000),
   'castle': (1.00000, 0.50000, 0.00000),
@@ -26,7 +27,7 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'large_stone_camp': (1.00000, 0.50000, 0.00000),
   'large_wood_camp': (1.00000, 0.50000, 0.00000),
   'lux_fish': (0.96906, 0.51547, 0.04224),
-  'lux_fur': (0.95855, 0.47928, 0.00000),
+  'lux_meat': (0.95855, 0.47928, 0.00000),
   'marketplace': (1.00000, 0.50000, 0.00250),
   'refinery_e2': (1.00000, 0.50000, 0.00000),
   'scout_post': (1.00000, 0.50000, 0.00000),

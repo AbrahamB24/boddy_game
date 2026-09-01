@@ -4,6 +4,7 @@ import '../../../core/theme/foe_theme.dart';
 import '../../settlement/widgets/meander_strip.dart';
 import '../../settlement/widgets/scroll_paper.dart'
     show kPageShadow, kParchmentDeep, kParchmentInk, kParchmentMid;
+import 'app_back_button.dart';
 
 /// THE PAGE EVERY SCREEN IS PRINTED ON (user 2026-07-27: "der Hintergrund soll
 /// bei allen Screens so sein wie bei monsters" + "bitte den Header noch schöner
@@ -79,41 +80,50 @@ class ParchmentPage extends StatelessWidget {
       // page is [kParchmentMid], everything laid on it is [kParchmentLight].
       decoration: const BoxDecoration(color: kParchmentMid),
       child: SafeArea(
-        child: Column(
-          children: [
-            ParchmentHeader(
-              title: title,
-              trailing: trailing,
-              showBack: showBack,
-              onBack: onBack ?? () => Navigator.of(context).pop(),
-            ),
-            Expanded(
-              child: bands
-                  ? Stack(
-                      children: [
-                        Positioned(
-                          left: 4,
-                          top: 0,
-                          bottom: 0,
-                          width: 14,
-                          child: MeanderStrip(color: ornament),
-                        ),
-                        Positioned(
-                          right: 4,
-                          top: 0,
-                          bottom: 0,
-                          width: 14,
-                          child: MeanderStrip(color: ornament, flip: true),
-                        ),
-                        child,
-                      ],
-                    )
-                  : child,
-            ),
-          ],
-        ),
+        // The bands run the FULL page height now, behind the header (user
+        // 2026-08-31: "das Mäanderband soll oben weitergehen und 'unter'
+        // den Header auf allen Screens") — they used to sit only in the
+        // Expanded body's own Stack, starting exactly where the header
+        // ends, so the border was a strip down the CONTENT, not down the
+        // PAGE. The header (opaque, full width) still covers its own row
+        // of it exactly as before; what changes is that the border is one
+        // continuous strip top-to-bottom rather than one that started
+        // below the bar.
+        child: bands
+            ? Stack(
+                children: [
+                  Positioned(
+                    left: 4,
+                    top: 0,
+                    bottom: 0,
+                    width: 14,
+                    child: MeanderStrip(color: ornament),
+                  ),
+                  Positioned(
+                    right: 4,
+                    top: 0,
+                    bottom: 0,
+                    width: 14,
+                    child: MeanderStrip(color: ornament, flip: true),
+                  ),
+                  _headerAndBody(context, child),
+                ],
+              )
+            : _headerAndBody(context, child),
       ),
     ),
+  );
+
+  Widget _headerAndBody(BuildContext context, Widget body) => Column(
+    children: [
+      ParchmentHeader(
+        title: title,
+        trailing: trailing,
+        showBack: showBack,
+        onBack: onBack ?? () => Navigator.of(context).pop(),
+      ),
+      Expanded(child: body),
+    ],
   );
 }
 
@@ -209,25 +219,19 @@ class ParchmentHeader extends StatelessWidget {
     ),
   ];
 
-  /// The band's own edge tone. The band itself no longer draws a rule — it
-  /// casts instead (see [bandShadow]) — but a control CUT from the band still
-  /// needs an outline, and the corner keys take theirs from here.
+  /// The band's own edge tone. A control CUT from the band still needs an
+  /// outline, and the corner keys take theirs from here.
   static final Color bandRule = kParchmentInk.withValues(alpha: 0.28);
 
-  /// What ENDS the band (user 2026-07-29: "der Strich im Header löschen, dafür
-  /// den Schatten einfügen").
+  /// What ENDS the band — NOTHING now (user 2026-08-31: "überall diesen
+  /// kleinen Schatten unter dem Header entfernen").
   ///
-  /// It used to end in a printed double rule — a dark hairline with a light one
-  /// under it, the way a page separates a running head from its text. That is a
-  /// flat, typographic device, and it was the last thing on the band still
-  /// pretending the header is ink on paper while everything on it had become a
-  /// surface with a light on it. A raised strip does not need a line drawn under
-  /// it; it needs to CAST. Two shadows, as on the corner keys: a tight one for
-  /// contact, a wide one for height.
-  /// FACETED (user 2026-07-31): one hard-edged offset instead of two blurs. A
-  /// flat-shaded object does not cast fog — it casts its own silhouette, one
-  /// step down and to the side.
-  static List<BoxShadow> get bandShadow => FoE.drop(dy: 4, alpha: 0.5);
+  /// It used to end in a printed double rule, then (2026-07-29) a cast
+  /// shadow instead ("der Strich im Header löschen, dafür den Schatten
+  /// einfügen") — the band's own [top]/[bottom] BorderSides already say
+  /// "raised strip" on their own; the shadow under it turned out to be one
+  /// more thing than the header needed.
+  static const List<BoxShadow> bandShadow = [];
 
   /// The band on dark stock: the same three-stop shape, cut from FoE's panels.
   static Widget band({required Widget child, double? height}) => Container(
@@ -289,31 +293,21 @@ class ParchmentHeader extends StatelessWidget {
   );
 }
 
-/// The bar's back arrow: the app's own [AppBackButton] shape, in the ink the
-/// band is printed with. Kept private so a page cannot accidentally give its
-/// bar a differently-sized one.
+/// The bar's back arrow: THE APP'S OWN [AppBackButton], not a shape that
+/// merely claimed to match it (2026-08-31 audit) — this used to draw its own
+/// chevron at its own size (26px `Icons.chevron_left` in a 40×40 tap target),
+/// which drifted from [AppBackButton]'s 22px `arrow_back_ios_new` despite
+/// this class's own doc comment insisting the two were the same shape. Cut
+/// into the band like everything else on it, via [AppBackButton.shadows].
 class _BackArrow extends StatelessWidget {
   final VoidCallback onTap;
 
   const _BackArrow({required this.onTap});
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: SizedBox(
-        width: 40,
-        height: 40,
-        // Cut into the band like everything else on it.
-        child: Icon(
-          Icons.chevron_left,
-          size: 26,
-          color: ParchmentHeader.engravedInk,
-          shadows: ParchmentHeader.engraved(depth: 1.2),
-        ),
-      ),
-    ),
+  Widget build(BuildContext context) => AppBackButton(
+    onTap: onTap,
+    color: ParchmentHeader.engravedInk,
+    shadows: ParchmentHeader.engraved(depth: 1.2),
   );
 }

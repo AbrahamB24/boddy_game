@@ -190,7 +190,7 @@ BuildingCategory categoryOfBuilding(BuildingDef def) {
 // declares WHICH stat it reads and WHAT it produces.
 //
 // [resource] is either a settlement resource key ('wood', 'stone', 'gold',
-// 'fish', 'fur') that gets added to the stockpile, or a pseudo-output
+// 'fish', 'meat') that gets added to the stockpile, or a pseudo-output
 // (WorkshopRole.kConstruction / kCrafting) that feeds a system instead of the
 // stockpile — construction advances the active build; crafting will make items
 // once that system lands.
@@ -227,7 +227,7 @@ class WorkshopRole {
   ///  • a STORE post ([kStorageRoom]) — keyed by RESOURCE ID (user 2026-07-30:
   ///    "Ich muss den output pro worker für jede Ressource einzeln einstellen
   ///    können"). One store holds several goods and they are not worth the same
-  ///    room per point: bulk timber and a fur pelt do not fill a shelf alike.
+  ///    room per point: bulk timber and a cut of meat do not fill a shelf alike.
   ///    Here [mult] is the FALLBACK for a resource with no dial of its own — see
   ///    [storageMultFor] — so a store authored with one flat number keeps
   ///    working and only the resources you actually tune leave the pack.
@@ -1529,12 +1529,22 @@ List<WorkshopRole> get _legendarySlot => const [
 ];
 
 String _luxWord(String id) => const {
-  'fish': 'Hut', 'fur': 'Lodge', 'honey': 'Apiary', 'herbs': 'Garden',
+  // 'Fish Hut' -> 'Fish Shop' (user 2026-08-31), the same shop-front word
+  // 'meat' already gets via [_luxNameOverride]'s "Butcher Shop" — fish just
+  // happens to fit the generic "{good} {word}" template, so no override
+  // needed for it.
+  'fish': 'Shop', 'honey': 'Apiary', 'herbs': 'Garden',
   'wine': 'Vineyard', 'cheese': 'Dairy', 'spices': 'Garden', 'cloth': 'Weavery',
   'salt': 'Works', 'silk': 'Farm', 'coffee': 'Roastery',
   'chocolate': 'Chocolatier', 'tea': 'House', 'porcelain': 'Kiln',
   'perfume': 'Perfumery', 'jewelry': 'Jeweler',
 }[id] ?? 'Works';
+
+/// A full name that doesn't fit the "{good} {word}" template at all — meat
+/// isn't a "Meat Lodge" or a "Meat Works", it's butchered, not gathered raw
+/// (user 2026-08-31: "Ab jetzt ist es nicht mehr fur sondern meat... dafür
+/// butcher shop"). Checked before [_luxWord] builds the generic name.
+String? _luxNameOverride(String id) => const {'meat': 'Butcher Shop'}[id];
 
 List<BuildingDef> _buildRoster() {
   final defs = <BuildingDef>[];
@@ -1701,7 +1711,8 @@ List<BuildingDef> _buildRoster() {
     for (final lux in luxuries) {
       defs.add(BuildingDef(
         id: 'lux_${lux.id}',
-        name: '${lux.emoji} ${lux.name} ${_luxWord(lux.id)}',
+        name: '${lux.emoji} '
+            '${_luxNameOverride(lux.id) ?? '${lux.name} ${_luxWord(lux.id)}'}',
         color: const Color(0xFF8D6E4A),
         // A luxury has to SHOW what it trades, and the showing is what needs
         // the ground: a dock with a boat in it, a tanning vat and a drying
@@ -2109,19 +2120,46 @@ const Map<String, (double, double)> kChimneyAnchor = {
   // before (hhchim-1_pot, the left of the two stacks).
   'healing_hut': (0.627, 0.5),
   'lux_fish': (0.517, 0.377),
-  'lux_fur': (0.863, 0.536),
+  'lux_meat': (0.863, 0.536),
   'large_stone_camp': (0.454, 0.342),
   'builder_camp': (0.456, 0.374),
   // 'large_wood_camp' had an entry here, but that building's chimney is
   // gone — the 2026-08-16 redesign replaced it with an open thatched shed
   // with no fireplace. A stale anchor would have put smoke over open air.
+
+  // ── Round two (user 2026-08-31): "was kannst du alles sinnvoll
+  // animieren" — every OTHER chimney or open-fire prop already sitting in
+  // the roster's geometry gets the same treatment, no new art needed.
+  // 'small_house'/'large_house' were projected against the user's own
+  // hand-edited .blend in Houses/ (shchim_pot / lhchim_pot) — everything
+  // below against the stock render_building.py recipe, since neither has a
+  // hand-edited file of its own yet. An open brazier ('_fire0', not a
+  // chimney pot) reads exactly as well with ChimneySmoke as a real stack —
+  // it is still a fire putting smoke into the air.
+  //
+  // anchorY is a fraction of the OVERLAY box (art width * 1.25 — see
+  // _LifeOverlay), not of the real render height, because that overlay box
+  // is all the widget actually sizes the painter's canvas to. For a squat
+  // building the two are almost the same; scout_post's watchtower is a lot
+  // taller than 1.25x its own width, so its beacon projects to a NEGATIVE
+  // anchorY — correct, not a bug: Clip.none all the way up this Stack lets
+  // the smoke paint above the box exactly where the beacon really is.
+  'small_house': (0.769, 0.380),
+  'large_house': (0.302, 0.559),
+  'small_wood_camp': (0.575, 0.376),
+  'thinker_circle': (0.498, 0.334),
+  'scout_post': (0.655, -0.184),
+  'caravanserai': (0.116, 0.653),
+  'hatchery': (0.162, 0.638),
+  'church': (0.127, 0.726),
+  'refinery_e2': (0.231, 0.732),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {
   'healing_hut': 1, // "Nach dem 1. Kampf" — heal up right after the first win.
   'large_house': 3, // more housing than the starting Small House
   'lux_fish': 4,
-  'lux_fur': 6,
+  'lux_meat': 6,
   'building_plot': 7, // expansion ground (still capped by expansionsUnlocked)
   'large_wood_camp': 9, // the bigger production buildings come mid-era
   'large_stone_camp': 10,
@@ -2179,6 +2217,21 @@ int? producerUnlockBattle(String goodId) {
 int buildingUnlockBattle(String buildingId) =>
     pathBuildingUnlockBattle(buildingId);
 
+/// Whether ANY node on the path hands out [buildingId] as a reward — the
+/// stricter gate [availableBuildings]/[placeBuilding] apply on top of the
+/// battle number (user 2026-08-31: "nur die Gebäude bauen lassen, welche
+/// durch die Kampagne freigespielt wurden ... diejenigen, welche ich noch
+/// gar keinem Knoten zugeordnet habe, sollen noch nicht baubar sein").
+///
+/// A building's own unlock battle is 0 for two different reasons that used
+/// to be indistinguishable: "no node gates it, so it's free the moment its
+/// era arrives" (era 2026-07-26's own stated behaviour) and "nobody has
+/// authored a reward for it yet." Reaching 0 no longer means the same thing
+/// [buildingUnlockBattle] alone still reports for it — see there for why
+/// that number itself stays unchanged.
+bool buildingHasPathReward(String buildingId) =>
+    buildingUnlockBattle(buildingId) > 0;
+
 List<BuildingDef> availableBuildings(
   String currentEraId,
   int battlesCleared,
@@ -2202,6 +2255,10 @@ List<BuildingDef> availableBuildings(
             !b.isMainBuilding &&
             !b.isRoad &&
             eraReached(b) &&
+            // A Building Plot is governed by expansionsUnlocked/
+            // buildPlotLimit, not by a path reward — it stays exempt from
+            // this gate the way it already is from the battle number.
+            (b.isBuildPlot || buildingHasPathReward(b.id)) &&
             battlesCleared >= buildingUnlockBattle(b.id),
       )
       .toList();

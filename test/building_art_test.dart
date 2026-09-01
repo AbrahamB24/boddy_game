@@ -95,7 +95,8 @@ void main() {
         expect(
           kBundledArtBox.containsKey(id),
           isTrue,
-          reason: '$id has a picture but no box — it would be placed by the '
+          reason:
+              '$id has a picture but no box — it would be placed by the '
               "def's defaults, which assume the picture IS the footprint",
         );
         final (baseWidth, anchorX, lift) = kBundledArtBox[id]!;
@@ -111,7 +112,7 @@ void main() {
     test('buildingAsset says no to everything else', () {
       expect(buildingAsset(null), isNull);
       expect(buildingAsset('road'), isNull);
-      expect(buildingAsset('building_plot'), isNull);
+      expect(buildingAsset('smokehouse'), isNull);
       expect(buildingAsset('not_a_building'), isNull);
     });
   });

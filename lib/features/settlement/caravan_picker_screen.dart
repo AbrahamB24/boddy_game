@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
 import '../common/widgets/filter_pills.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/parchment_page.dart';
 import '../creatures/models/creature_enums.dart';
 import '../creatures/models/creature_instance.dart';
@@ -40,11 +41,6 @@ class CaravanPickerScreen extends StatefulWidget {
 class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
   static final Color _inkSoft = kParchmentInk.withValues(alpha: 0.78);
   static const Color _accent = FoE.gold;
-
-  /// The Monsters-grid cell shape — the Hatchery slot and the egg picker use
-  /// the same constant. 0.60, not 0.70 (user 2026-08-28: taller, more room
-  /// for the art).
-  static const double _kTileAspect = 0.60;
 
   /// Room UNDER a tile for its carry/speed line, on top of the tile's own
   /// height. See the grid's comment: a caption must not cost tile.
@@ -121,30 +117,30 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
                             : 'No monster matches.',
                         style: FoE.dim(size: 12).copyWith(color: _inkSoft),
                       )
-                    : LayoutBuilder(
+                    : Builder(
                         // THE CAPTION IS EXTRA (user 2026-07-27): the
                         // carry/speed line used to live INSIDE the 0.70 cell,
                         // so it ate its height off the tile and every monster
                         // here stood squashed next to the same monster on the
                         // Monsters screen. mainAxisExtent is the only way to
-                        // say "the tile's height, and then some".
-                        builder: (context, box) {
-                          const gap = 12.0;
-                          final cell = (box.maxWidth - gap * 2) / 3;
-                          return GridView.builder(
-                            padding: const EdgeInsets.only(top: 4, bottom: 16),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              mainAxisSpacing: gap,
-                              crossAxisSpacing: gap,
-                              mainAxisExtent:
-                                  cell / _kTileAspect + _kCaptionHeight,
-                            ),
-                            itemCount: options.length,
-                            itemBuilder: (_, i) => _tile(options[i]),
-                          );
-                        },
+                        // say "the tile's height, and then some" — and the
+                        // CARD portion of that height now comes from the
+                        // shared [monsterTileHeight] (user 2026-08-31: "genau
+                        // gleich gross sein wie die Kacheln beim
+                        // Monstersscreen"), not this screen's own local width
+                        // computation.
+                        builder: (context) => GridView.builder(
+                          padding: const EdgeInsets.only(top: 4, bottom: 16),
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: kMonsterTileCols,
+                            mainAxisSpacing: kMonsterTileSpacing,
+                            crossAxisSpacing: kMonsterTileSpacing,
+                            mainAxisExtent:
+                                monsterTileHeight(context) + _kCaptionHeight,
+                          ),
+                          itemCount: options.length,
+                          itemBuilder: (_, i) => _tile(options[i]),
+                        ),
                       ),
               ),
             ],
@@ -168,7 +164,7 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
           // The tile at its OWN height; the caption below is what made the cell
           // taller, so nothing here has to give any of it back.
           AspectRatio(
-            aspectRatio: _kTileAspect,
+            aspectRatio: kMonsterTileAspect,
             child: Stack(
               children: [
                 Positioned.fill(

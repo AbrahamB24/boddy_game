@@ -98,10 +98,16 @@ Future<void> _pump(WidgetTester tester) async {
       SettlementController().buildings.firstWhere((b) => b.id == 'b_camp');
   await tester.pumpWidget(
     MaterialApp(
-      home: AssignWorkersSheet(
-        ctrl: SettlementController(),
-        building: camp,
-        role: _role,
+      // A Scaffold, not the sheet bare (2026-08-31): the real app only ever
+      // opens this via showModalBottomSheet, whose route wraps the builder
+      // in a Material — which the sort pill's PopupMenuButton needs and a
+      // bare `home:` does not provide.
+      home: Scaffold(
+        body: AssignWorkersSheet(
+          ctrl: SettlementController(),
+          building: camp,
+          role: _role,
+        ),
       ),
     ),
   );
@@ -215,7 +221,9 @@ void main() {
     testWidgets('back returns to the crew view', (tester) async {
       await _pump(tester);
       await _tapAdd(tester);
-      await tester.tap(find.byIcon(Icons.arrow_back));
+      // The app's own back icon now (2026-08-31 audit), not the bespoke
+      // Icons.arrow_back this sheet used to draw by hand.
+      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
       await tester.pumpAndSettle();
       expect(find.text('1 / 3'), findsOneWidget);
     });

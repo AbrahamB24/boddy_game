@@ -93,7 +93,7 @@ class ResourceGatherDef {
 /// First-pass values, to be tuned in Dev Mode. The shape is the point:
 ///
 ///   BULK (wood/stone)   many per carry point, quick per unit, deep spots
-///   LUXURY (fish/fur/…) a handful per point, slower, shallower spots
+///   LUXURY (fish/meat/…) a handful per point, slower, shallower spots
 ///   GOLD                one per point, slowest — a trickle, never an income
 ///
 /// Read together with a mid-game group (≈190 summed gather, 15 summed carry):
@@ -128,8 +128,8 @@ const Map<String, ResourceGatherDef> kFallbackGatherDefs = {
     spotCapacity: 300,
     regenPerHour: 30,
   ),
-  'fur': ResourceGatherDef(
-    resource: 'fur',
+  'meat': ResourceGatherDef(
+    resource: 'meat',
     unitsPerCarry: 4,
     secondsPerUnitPerStat: 9000,
     spotCapacity: 240,

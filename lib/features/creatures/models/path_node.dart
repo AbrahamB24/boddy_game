@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import '../../settlement/data/goods_definitions.dart';
-import '../../settlement/data/item_definitions.dart'
-    show packId, packSizesFor;
+import '../../settlement/data/item_definitions.dart' show packId, packSizesFor;
 import '../../settlement/data/building_definitions.dart'
     show kBuildingUnlockBattle;
 import '../services/overworld_path.dart';
@@ -71,10 +70,7 @@ class PathRewards {
     this.expansions = 0,
   });
 
-  bool get isEmpty =>
-      items.isEmpty &&
-      buildings.isEmpty &&
-      expansions == 0;
+  bool get isEmpty => items.isEmpty && buildings.isEmpty && expansions == 0;
 
   factory PathRewards.fromJson(Map<String, dynamic> j) => PathRewards(
     // `resources` is deliberately NOT read (see above) — an old row keeps it,
@@ -305,7 +301,9 @@ Map<String, int> nodePackRewards(int battle) {
     add(_asPackage('gold', 60.0 * math.pow(1.8, era - 1).toDouble()));
     final element = elementForEra(era);
     if (element != null) {
-      add(_asPackage(element.id, _kWoodPerWeight * 0.12 * _kBossWeight * scale));
+      add(
+        _asPackage(element.id, _kWoodPerWeight * 0.12 * _kBossWeight * scale),
+      );
     }
   }
   return out;
@@ -342,25 +340,27 @@ List<PathNode> _buildFallbackPath() {
     for (var battle = first; battle <= last; battle++) {
       if (battle > kLastPathBattle) break;
       final boss = isBossBattle(battle);
-      nodes.add(PathNode(
-        id: 'node_$battle',
-        order: battle,
-        name: boss ? '${area.name} Boss' : 'Battle $battle',
-        areaId: area.id,
-        isBoss: boss,
-        rewards: PathRewards(
-          items: {
-            // The consumables (potions, lures) and the RESOURCE PACKAGES that
-            // replaced raw loot — both are items, so they travel together.
-            ...?kNodeItemRewards[battle],
-            ...nodePackRewards(battle),
-          },
-          buildings: [
-            for (final e in kBuildingUnlockBattle.entries)
-              if (e.value == battle) e.key,
-          ],
+      nodes.add(
+        PathNode(
+          id: 'node_$battle',
+          order: battle,
+          name: boss ? '${area.name} Boss' : 'Battle $battle',
+          areaId: area.id,
+          isBoss: boss,
+          rewards: PathRewards(
+            items: {
+              // The consumables (potions, lures) and the RESOURCE PACKAGES that
+              // replaced raw loot — both are items, so they travel together.
+              ...?kNodeItemRewards[battle],
+              ...nodePackRewards(battle),
+            },
+            buildings: [
+              for (final e in kBuildingUnlockBattle.entries)
+                if (e.value == battle) e.key,
+            ],
+          ),
         ),
-      ));
+      );
     }
   }
   return nodes;
@@ -436,10 +436,21 @@ Map<String, int> pathItemLoot(int fromCleared, int toCleared) {
 }
 
 /// Total territory-expansion points granted by all cleared path nodes.
+///
+/// A Building Plot reward counts too, at one point each (user 2026-08-31:
+/// "der building Plot ist nicht ein Gebäude im eigentlichen Sinn... Immer
+/// wenn einer freigeschalten wird, dann kann ich wieder eine Erweiterung
+/// mehr bauen"). Unlike every other building reward — which unlocks a TYPE
+/// once, at whichever node grants it first — a plot isn't a type you unlock,
+/// it's territory you gain, so the editor lets it sit on any number of
+/// nodes and each one that clears pays out here exactly like an authored
+/// `expansions` point does.
 int pathExpansionsGranted(int battlesCleared) {
   var total = 0;
   for (final n in kPathNodes.values) {
-    if (n.order <= battlesCleared) total += n.rewards.expansions;
+    if (n.order > battlesCleared) continue;
+    total += n.rewards.expansions;
+    if (n.rewards.buildings.contains('building_plot')) total++;
   }
   return total;
 }
@@ -508,9 +519,7 @@ List<int> spreadLevels({
   final hi = math.max(lo, (base * (1 + jitter)).ceil());
   final out = [
     for (var i = 0; i < count; i++)
-      (base * (1 + (rng.nextDouble() * 2 - 1) * jitter))
-          .round()
-          .clamp(lo, hi),
+      (base * (1 + (rng.nextDouble() * 2 - 1) * jitter)).round().clamp(lo, hi),
   ];
 
   // Hand the remainder out (or take it back) one level at a time, skipping
@@ -575,10 +584,12 @@ List<PathEnemy> rollPathEnemies({
     // Walking the sorted bag gives distinct species until it runs out; past
     // that it wraps, which only happens when count exceeds the pool.
     final id = bag[i % bag.length];
-    out.add(PathEnemy(
-      speciesId: id,
-      level: i < keepLevels.length ? keepLevels[i] : fallback,
-    ));
+    out.add(
+      PathEnemy(
+        speciesId: id,
+        level: i < keepLevels.length ? keepLevels[i] : fallback,
+      ),
+    );
   }
   return out;
 }

@@ -39,14 +39,16 @@ class CreatureCard extends StatelessWidget {
   /// current one.
   final bool showLevelOnePower;
 
-  /// Replaces the top-right ⚡power readout with a different number — for a
-  /// screen where overall power isn't what the reader is judging this
-  /// monster by (user 2026-08-30, the work-post picker: "wobei der
-  /// entsprechende Wert prominent gezeigt werden soll" — the STAT this post
-  /// reads, not power). [statOverrideLabel] takes the rarity word's place
-  /// underneath, so the reader still knows what the big number means.
-  final String? statOverrideLabel;
-  final int? statOverrideValue;
+  /// Replaces the VITALS row (the HP bar + gender glyph) with a different
+  /// reading — for the work-post picker, where the number that decides who
+  /// belongs in a seat is the STAT this post reads, not health (user
+  /// 2026-08-31: "anstelle des Lebensbalkens und dem Geschlecht den
+  /// entsprechenden Wert anzeigen. Dafür oben rechts weiterhin die Power
+  /// Anzeige und die Rarität"). Power and rarity stay in the top-right
+  /// corner either way — that corner answers "how strong", which does not
+  /// change just because the bottom row is asking a different question.
+  final String? vitalsLabel;
+  final int? vitalsValue;
 
   const CreatureCard({
     super.key,
@@ -55,8 +57,8 @@ class CreatureCard extends StatelessWidget {
     this.showXp = false,
     this.showHp = true,
     this.showLevelOnePower = false,
-    this.statOverrideLabel,
-    this.statOverrideValue,
+    this.vitalsLabel,
+    this.vitalsValue,
   }) : shrouded = false,
        shroudImageUrl = null;
 
@@ -67,8 +69,8 @@ class CreatureCard extends StatelessWidget {
       showXp = false,
       showHp = false,
       showLevelOnePower = false,
-      statOverrideLabel = null,
-      statOverrideValue = null;
+      vitalsLabel = null,
+      vitalsValue = null;
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +182,10 @@ class CreatureCard extends StatelessWidget {
                 ),
               ),
               // Power (top-right) over the element area — drawn BEFORE the art
-              // so the monster overlaps it (user 2026-07-18).
+              // so the monster overlaps it (user 2026-07-18). Always power +
+              // rarity, whatever the vitals row below is showing (user
+              // 2026-08-31) — this corner answers "how strong", a question
+              // that does not change with the bottom row's.
               if (!shrouded)
                 Positioned(
                   top: topReserve + 6,
@@ -189,9 +194,7 @@ class CreatureCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        statOverrideValue != null
-                            ? '$statOverrideValue'
-                            : '⚡${totalPower(inst!)}',
+                        '⚡${totalPower(inst!)}',
                         style: FoE.value(size: showLevelOnePower ? 14 : 11)
                             .copyWith(
                           color: Colors.white,
@@ -201,18 +204,17 @@ class CreatureCard extends StatelessWidget {
                       // The genes, small, under the current power (user
                       // 2026-07-27): the big number stays the one every other
                       // screen shows. Only meaningful next to POWER.
-                      if (showLevelOnePower && statOverrideValue == null)
+                      if (showLevelOnePower)
                         Text(
                           // "lv", not "lvl" (user 2026-07-29).
-                          'lv 1  ${levelOnePower(inst!)}',
+                          'lv 1  ${levelOnePower(inst)}',
                           style: FoE.dim(size: 10).copyWith(
                             color: Colors.white.withValues(alpha: 0.85),
                             shadows: _stripShadow,
                           ),
                         ),
-                      // Either the override's own label, or — THE RARITY,
-                      // UNDER THE ENERGY (user 2026-07-27: "schreibe die
-                      // Seltenheit unter die Energie").
+                      // THE RARITY, UNDER THE ENERGY (user 2026-07-27:
+                      // "schreibe die Seltenheit unter die Energie").
                       //
                       // It left the tile when the strip became one type colour,
                       // and a monster's rarity is worth knowing at a glance —
@@ -220,17 +222,7 @@ class CreatureCard extends StatelessWidget {
                       // own colour, lightened so it holds against any element
                       // backdrop, and small: it is a label on the power block,
                       // not a second headline.
-                      if (statOverrideLabel != null)
-                        Text(
-                          statOverrideLabel!,
-                          style: FoE.dim(size: 9).copyWith(
-                            color: Colors.white.withValues(alpha: 0.75),
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.3,
-                            shadows: _stripShadow,
-                          ),
-                        )
-                      else if (inst!.species case final sp?)
+                      if (inst.species case final sp?)
                         Text(
                           sp.rarity.label,
                           style: FoE.dim(size: 9).copyWith(
@@ -437,14 +429,20 @@ class CreatureCard extends StatelessWidget {
         const SizedBox(height: 4),
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (showHp)
-              Expanded(child: _hpBar(creature))
-            else
-              const Spacer(),
-            const SizedBox(width: 6),
-            _genderTag(creature.gender),
-          ],
+          // [vitalsValue] replaces BOTH the HP bar and the gender glyph
+          // (user 2026-08-31) — a work post cares about the stat it reads,
+          // not the monster's health or sex, so the row states that instead
+          // of squeezing a third thing in beside them.
+          children: vitalsValue != null
+              ? [Expanded(child: _vitalsOverride())]
+              : [
+                  if (showHp)
+                    Expanded(child: _hpBar(creature))
+                  else
+                    const Spacer(),
+                  const SizedBox(width: 6),
+                  _genderTag(creature.gender),
+                ],
         ),
       ],
     ),
@@ -516,6 +514,31 @@ class CreatureCard extends StatelessWidget {
     // the groove is shallow here, but it is the same groove.
     return RecessBar(value: fraction, color: color, height: 6, onDark: true);
   }
+
+  /// [vitalsValue]/[vitalsLabel], filling the row the HP bar + gender used
+  /// to share. LABEL LEFT, VALUE RIGHT (user 2026-08-31) — the same order
+  /// every other stat readout in the app uses (the building card, the work-
+  /// post picker's own header line), so a value here doesn't read backwards
+  /// next to them.
+  Widget _vitalsOverride() => Row(
+    crossAxisAlignment: CrossAxisAlignment.baseline,
+    textBaseline: TextBaseline.alphabetic,
+    children: [
+      Expanded(
+        child: Text(
+          vitalsLabel ?? '',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: FoE.dim(size: 10).copyWith(color: _stripInkSoft, shadows: _stripShadow),
+        ),
+      ),
+      const SizedBox(width: 5),
+      Text(
+        '$vitalsValue',
+        style: FoE.value(size: 13).copyWith(color: _stripInk, shadows: _stripShadow),
+      ),
+    ],
+  );
 
   /// Wraps a card's image area in the rarity backdrop; a creature with no
   /// species def (should not happen) just skips it.

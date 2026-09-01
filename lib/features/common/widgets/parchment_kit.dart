@@ -34,6 +34,31 @@ Color get kInkFaint => ParchmentSheet.inkFaint;
 /// The warm accent that marks a value worth looking at.
 const Color kAccent = ParchmentSheet.accent;
 
+/// The rule that separates two sections of a [ParchmentPage] — the Work tab's
+/// TabBar from its list, a "Produced by" block from the Total line below it.
+///
+/// INSET, NOT EDGE TO EDGE, AND THICKER (user 2026-08-31, first on
+/// Management's own tab divider: "sollen nicht über die ganze Breite
+/// gehen... dafür ein bisschen dicker machen", then app-wide: "diese
+/// Trennstriche überall in der App so umsetzen"). It used to run the full
+/// page width, straight through the meander bands on both sides — a
+/// decorative border with a working line drawn across it. Stopping at the
+/// same [ParchmentPage.kParchmentPagePad] inset the content already keeps
+/// off the bands leaves the bands looking like a frame again, and the extra
+/// weight (2 px, not 1) is what a shorter line needs to still read as a
+/// rule instead of a scratch.
+class ParchmentDivider extends StatelessWidget {
+  const ParchmentDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(
+      horizontal: ParchmentPage.kParchmentPagePad,
+    ),
+    child: Container(height: 2, color: FoE.border),
+  );
+}
+
 /// A heading with its one-line status, and a rule running to the edge.
 ///
 /// The rule is what makes a long scroll readable: without it the sections run

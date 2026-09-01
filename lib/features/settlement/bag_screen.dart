@@ -12,6 +12,7 @@ import '../creatures/services/creatures_controller.dart';
 import 'data/item_definitions.dart';
 import 'services/new_items.dart';
 import 'settlement_controller.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/parchment_page.dart';
 import 'widgets/parchment_sheet.dart';
 import 'widgets/scroll_paper.dart' show parchmentButton, parchmentButtonInk;
@@ -236,38 +237,35 @@ class _BagScreenState extends State<BagScreen> {
   ///
   /// [EggCard] is the tile the Hatchery's slot and its picker already use: the
   /// shell in its type's colour with the hatchling's silhouette showing
-  /// through, the child's gene sum as its power, and the species name. Three to
-  /// a row, the Monsters grid's own cell shape.
-  Widget _eggGrid(List<BreedingJob> eggs) => GridView.builder(
+  /// through, the child's gene sum as its power, and the species name. The
+  /// shared [monsterTileGrid] size now (user 2026-08-31: "genau gleich gross
+  /// sein wie die Kacheln beim Monstersscreen") — this grid's own delegate had
+  /// drifted to aspect 0.70 and 12px gaps despite its own doc comment
+  /// claiming "the Monsters grid's own cell shape."
+  Widget _eggGrid(List<BreedingJob> eggs) => Padding(
     padding: const EdgeInsets.only(top: 4, bottom: 8),
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: 3,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 0.70,
-    ),
-    itemCount: eggs.length,
-    itemBuilder: (_, i) => EggCard(
-      job: eggs[i],
-      // A TAP OPENS THE EGG (user 2026-07-27); it no longer jumps straight to
-      // the Hatchery. The stats are what you came to look at, and the trip to
-      // the Hatchery is one button further on - where the slot count and the
-      // incubation time are already on screen.
-      //
-      // The bag closes first. It is a sheet over the settlement, and leaving it
-      // open behind a route means backing out of the egg lands on a stale list
-      // - this one changes the moment an egg is placed.
-      onTap: () {
-        final id = eggs[i].id;
-        Navigator.pop(context);
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => EggDetailScreen(eggId: id)),
-        );
-      },
-    ),
+    child: monsterTileGrid([
+      for (final job in eggs)
+        EggCard(
+          job: job,
+          // A TAP OPENS THE EGG (user 2026-07-27); it no longer jumps straight
+          // to the Hatchery. The stats are what you came to look at, and the
+          // trip to the Hatchery is one button further on - where the slot
+          // count and the incubation time are already on screen.
+          //
+          // The bag closes first. It is a sheet over the settlement, and
+          // leaving it open behind a route means backing out of the egg lands
+          // on a stale list - this one changes the moment an egg is placed.
+          onTap: () {
+            final id = job.id;
+            Navigator.pop(context);
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => EggDetailScreen(eggId: id)),
+            );
+          },
+        ),
+    ]),
   );
 
   /// The drawers, with what each one holds. A count on the tab means you never
@@ -330,7 +328,11 @@ class _BagScreenState extends State<BagScreen> {
             Expanded(
               child: Text(
                 id,
-                style: FoE.title(size: 13).copyWith(color: ParchmentSheet.ink),
+                // FoE.label, not .title (2026-08-31 audit) — every other
+                // screen's compact-row item name is a label, not a bold
+                // heading; this one row read heavier than the rest of the
+                // bag for no reason.
+                style: FoE.label(size: 13).copyWith(color: ParchmentSheet.ink),
               ),
             ),
             Text(
@@ -365,7 +367,9 @@ class _BagScreenState extends State<BagScreen> {
               children: [
                 Text(
                   def.name,
-                  style: FoE.title(
+                  // FoE.label, not .title (2026-08-31 audit) — see the
+                  // matching note above on the missing-item fallback row.
+                  style: FoE.label(
                     size: 13,
                   ).copyWith(color: ParchmentSheet.ink),
                 ),

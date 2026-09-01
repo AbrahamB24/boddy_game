@@ -50,50 +50,55 @@ class _StarterPreviewScreenState extends State<StarterPreviewScreen> {
     final art = species.stageAt(0).imageUrl;
     return ParchmentPage(
       title: species.name,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 220,
-            child: CreatureBackdrop(
-              element: species.element,
-              radius: 12,
-              child: Center(
-                child: art == null
-                    ? const Icon(Icons.pets, color: FoE.gold, size: 64)
-                    : CreatureSprite(
-                        url: art,
-                        fallback: const Icon(
-                          Icons.pets,
-                          color: FoE.gold,
-                          size: 64,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: ParchmentPage.kParchmentPagePad,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 220,
+              child: CreatureBackdrop(
+                element: species.element,
+                radius: 12,
+                child: Center(
+                  child: art == null
+                      ? const Icon(Icons.pets, color: FoE.gold, size: 64)
+                      : CreatureSprite(
+                          url: art,
+                          fallback: const Icon(
+                            Icons.pets,
+                            color: FoE.gold,
+                            size: 64,
+                          ),
                         ),
-                      ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Text(species.name, style: FoE.title(size: 20)),
-          const SizedBox(height: 4),
-          Text(
-            '${species.element.emoji} ${species.element.label} · ${species.rarity.label}',
-            style: FoE.label(size: 13).copyWith(color: species.rarity.color),
-          ),
-          if (species.description.trim().isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(species.name, style: FoE.title(size: 20)),
+            const SizedBox(height: 4),
+            Text(
+              '${species.element.emoji} ${species.element.label} · ${species.rarity.label}',
+              style: FoE.label(size: 13).copyWith(color: species.rarity.color),
+            ),
+            if (species.description.trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(species.description, style: FoE.dim(size: 12)),
+            ],
             const SizedBox(height: 12),
-            Text(species.description, style: FoE.dim(size: 12)),
+            Text(
+              'Your starter accompanies you from the very beginning. This '
+              'choice is final!',
+              style: FoE.dim(size: 11),
+            ),
+            const Spacer(),
+            _confirmButton(species),
+            const SizedBox(height: 12),
           ],
-          const SizedBox(height: 12),
-          Text(
-            'Your starter accompanies you from the very beginning. This '
-            'choice is final!',
-            style: FoE.dim(size: 11),
-          ),
-          const Spacer(),
-          _confirmButton(species),
-          const SizedBox(height: 12),
-        ],
+        ),
       ),
     );
   }

@@ -168,7 +168,7 @@ class ItemDef {
 
 // Bundled fallback content — the base the DB overrides per id (like
 // kFallbackBuildingDefs). Recipes name era-appropriate luxury ingredients:
-// era-1 items use fish/fur (the only era-1 luxuries), later ones the later
+// era-1 items use fish/meat (the only era-1 luxuries), later ones the later
 // goods. craftSeconds are aimed at the Workshop's ~1200 power/h (one crafting-30
 // monster) so an item is a steady trickle, not a spam.
 /// The hand-written items. Kept apart from [kFallbackItemDefs] only because the
@@ -198,7 +198,7 @@ const _kHandWrittenItems = <String, ItemDef>{
     // Deliberately worse per ingredient than the Minor Potion (100 HP for 6
     // goods = 16.7 HP/good vs the small one's 40/2 = 20): you pay a premium for
     // CONCENTRATION — one item, one action. Otherwise the small one is retired.
-    ingredients: {'fish': 4, 'fur': 2},
+    ingredients: {'fish': 4, 'meat': 2},
     craftSeconds: 2400,
     buyPrice: 45,
     sellPrice: 14,
@@ -212,7 +212,7 @@ const _kHandWrittenItems = <String, ItemDef>{
     kind: ItemKind.revive,
     magnitude: 0.5,
     battleUsable: true,
-    ingredients: {'fur': 4},
+    ingredients: {'meat': 4},
     craftSeconds: 3000,
     buyPrice: 70,
     sellPrice: 20,
@@ -224,7 +224,7 @@ const _kHandWrittenItems = <String, ItemDef>{
     description: 'Widens the catch window on your next encounter (+25%).',
     kind: ItemKind.catchBoost,
     magnitude: 0.25,
-    ingredients: {'fish': 2, 'fur': 1},
+    ingredients: {'fish': 2, 'meat': 1},
     craftSeconds: 1800,
     buyPrice: 40,
     sellPrice: 12,
@@ -280,14 +280,14 @@ PackClass packClassOf(String resourceId) {
   final good = kGoodsDefs[resourceId];
   if (good == null) return PackClass.luxury;
   // A raw an era unlocks and the element assembled from it are both building
-  // materials; `supply` is the luxury half (fish, fur, honey …).
+  // materials; `supply` is the luxury half (fish, meat, honey …).
   return good.isSupply ? PackClass.luxury : PackClass.build;
 }
 
 /// The amounts [resourceId] is packaged in, smallest first.
 List<int> packSizesFor(String resourceId) => kPackSizes[packClassOf(resourceId)]!;
 
-/// The id a package carries — `pack_wood_500`, `pack_fur_50`.
+/// The id a package carries — `pack_wood_500`, `pack_meat_50`.
 ///
 /// The AMOUNT is the identity (it used to be a size name): the ladders differ in
 /// length per class, so "the medium one" is not a thing that exists across them,

@@ -30,14 +30,14 @@ import 'gold_economy.dart';
 
 /// What buying a resource back costs, as a multiple of what selling it paid.
 /// 2.5 → sell 100 fish for 35 gold, buy them back for 88. The round trip is a
-/// real loss, so gold-for-goods is an emergency valve (a recipe wants fur and
+/// real loss, so gold-for-goods is an emergency valve (a recipe wants meat and
 /// you have only fish), never an income strategy.
 /// All three are DIALS since 2026-07-29 (Settlement → Handel) — the spread is
 /// the Trade Center's whole balance, and it is the first thing that gets
 /// retuned when gold feels too tight or too loose.
 double get kGoodsBuyMarkup => GameTuning.i.raw(Dials.goodsBuyMarkup);
 
-/// Cut taken out of a goods↔goods barter. 25% → 100 fish becomes 75 fur.
+/// Cut taken out of a goods↔goods barter. 25% → 100 fish becomes 75 meat.
 double get kBarterFee => GameTuning.i.raw(Dials.barterFee);
 
 /// Ceiling on the level discount. Kept well below 1.0 on purpose: at par

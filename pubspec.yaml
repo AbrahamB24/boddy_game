@@ -44,5 +44,6 @@ flutter:
     # road tiles would simply not ship.
     - assets/images/roads/
     - assets/images/buildings/
+    - assets/images/resources/
     - assets/sfx/
     - assets/music/

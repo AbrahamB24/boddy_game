@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
+import '../common/widgets/empty_monster_slot.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/parchment_kit.dart';
 import '../common/widgets/parchment_page.dart';
 import '../onboarding/intro_flow.dart';
@@ -389,8 +391,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Row(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.baseline,
+                                crossAxisAlignment: CrossAxisAlignment.baseline,
                                 textBaseline: TextBaseline.alphabetic,
                                 children: [
                                   Expanded(
@@ -558,9 +559,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
           if (hasMore)
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => setState(
-                () => _rewardsExpanded = !_rewardsExpanded,
-              ),
+              onTap: () => setState(() => _rewardsExpanded = !_rewardsExpanded),
               child: Padding(
                 // Tighter now (user 2026-08-29: "Die Rewards näher
                 // aneinanderrücken (weniger Zeilenabstand)").
@@ -576,9 +575,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
                     ),
                     const SizedBox(width: 4),
                     Icon(
-                      _rewardsExpanded
-                          ? Icons.expand_less
-                          : Icons.expand_more,
+                      _rewardsExpanded ? Icons.expand_less : Icons.expand_more,
                       size: 16,
                       color: FoE.gold,
                     ),
@@ -721,35 +718,18 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
   // A GridView filled fewer than [widget.partySize] of 3 columns pins its
   // tiles to the LEFT (user 2026-08-28: "Monsterkacheln bitte zentrieren") —
   // one slot in a 3-wide grid sat in the corner with two empty columns beside
-  // it. A [Wrap] with its own fixed-size tiles centres each row instead, and
-  // still lines up 3-per-row exactly like the grid did at this width.
+  // it. [monsterTileGrid]'s own centred alignment fixes that, at the ONE tile
+  // size every such grid in the game now shares (user 2026-08-31: "sollen
+  // immer genau gleich hoch sein, überall in der gesamten App").
   Widget _slotsGrid(List<CreatureInstance> ready) {
     if (ready.isEmpty) return const SizedBox.shrink();
     final team = _team;
-    // 0.60, not 0.70 (user 2026-08-28: "diese Boxen etwas länger machen,
-    // besonders der obere Teil mit dem Monster") — matches every other
-    // monster-tile grid in the app.
-    const cols = 3, spacing = 12.0, aspect = 0.60;
-    return LayoutBuilder(
-      builder: (context, box) {
-        final tileW = (box.maxWidth - spacing * (cols - 1)) / cols;
-        return Wrap(
-          alignment: WrapAlignment.center,
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            for (var i = 0; i < widget.partySize; i++)
-              SizedBox(
-                width: tileW,
-                height: tileW / aspect,
-                child: i < team.length
-                    ? _filledSlot(team[i], ready, i)
-                    : _emptySlot(ready, isNext: i == team.length),
-              ),
-          ],
-        );
-      },
-    );
+    return monsterTileGrid([
+      for (var i = 0; i < widget.partySize; i++)
+        i < team.length
+            ? _filledSlot(team[i], ready, i)
+            : _emptySlot(ready, isNext: i == team.length),
+    ], alignment: WrapAlignment.center);
   }
 
   /// A tap on the tile itself opens the roster to SWAP this monster for
@@ -770,42 +750,9 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
   /// A place waiting to be filled. Only the next one to fill says "Add" —
   /// six copies of the word is noise, one is a caption for the whole rank.
   Widget _emptySlot(List<CreatureInstance> ready, {required bool isNext}) =>
-      GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      EmptyMonsterSlot(
+        label: isNext ? 'Add' : null,
         onTap: () => _openPicker(ready),
-        child: LayoutBuilder(
-          // The tile reserves its top 17% for the art that pops out of it;
-          // the empty card leaves the same gap so the row lines up.
-          builder: (context, box) => Padding(
-            padding: EdgeInsets.only(top: box.maxHeight * 0.17),
-            child: Container(
-              decoration: ShapeDecoration(
-                color: kInk.withValues(alpha: 0.10),
-                shadows: [
-                  BoxShadow(
-                    color: kInk.withValues(alpha: 0.24),
-                    blurRadius: 0,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-                shape: FoE.facet(radius: 22),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add_circle_outline, size: 24, color: kInkFaint),
-                  if (isNext) ...[
-                    const SizedBox(height: 5),
-                    Text(
-                      'Add',
-                      style: FoE.label(size: 11).copyWith(color: kInkFaint),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
       );
 
   /// The roster, as a sheet over this one — opened only while a slot is
@@ -814,7 +761,10 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
   /// [slotIndex] is set when the tap that opened this was on a FILLED slot
   /// (a swap): the pick that follows replaces that one slot instead of
   /// filling the next empty one.
-  Future<void> _openPicker(List<CreatureInstance> ready, {int? slotIndex}) async {
+  Future<void> _openPicker(
+    List<CreatureInstance> ready, {
+    int? slotIndex,
+  }) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -825,20 +775,32 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
         builder: (sheetCtx, scrollCtrl) => StatefulBuilder(
           // Its own builder so a pick repaints the picker; the slots behind
           // it catch up when it closes.
-          builder: (sheetCtx, setSheetState) => GridView.builder(
+          //
+          // A [Wrap] through [monsterTileGrid] now, not a `GridView` sizing
+          // its own columns off this sheet's local width — that auto-sized
+          // width had drifted from the Monsters screen's (this sheet pads
+          // 26px, the Monsters screen 24px), and a `GridView` has no way to
+          // force an exact width the way it can force an exact height. The
+          // roster is a player's own creatures, never remotely large enough
+          // to need lazy building (user 2026-08-31: "genau gleich gross sein
+          // wie die Kacheln beim Monstersscreen").
+          //
+          // The 26px itself is now actually 24 too (2026-08-31 audit,
+          // ParchmentPage.kParchmentPagePad) — the comment above already
+          // flagged the mismatch, but only the tile-width math got fixed
+          // at the time; the padding constant here never did.
+          builder: (sheetCtx, setSheetState) => SingleChildScrollView(
             controller: scrollCtrl,
-            padding: const EdgeInsets.fromLTRB(26, 4, 26, 20),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              // Grown with the rest of the tile (user 2026-08-28), same
-              // ~17% the slot grid's own aspect went from 0.70 to 0.60 by.
-              mainAxisExtent: 178,
+            padding: const EdgeInsets.fromLTRB(
+              ParchmentPage.kParchmentPagePad,
+              4,
+              ParchmentPage.kParchmentPagePad,
+              20,
             ),
-            itemCount: ready.length,
-            itemBuilder: (_, i) =>
-                _pickerTile(ready[i], sheetCtx, setSheetState, slotIndex),
+            child: monsterTileGrid([
+              for (final c in ready)
+                _pickerTile(c, sheetCtx, setSheetState, slotIndex),
+            ]),
           ),
         ),
       ),
@@ -862,7 +824,8 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
             onTap: () {
               setState(() {
                 if (slotIndex != null) {
-                  final already = slotIndex < _selected.length &&
+                  final already =
+                      slotIndex < _selected.length &&
                       _selected[slotIndex] == c.id;
                   if (!already) {
                     // A SWAP: this id takes over slotIndex, dropped from
@@ -907,7 +870,12 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
     final canFight = _selected.isNotEmpty;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+      padding: const EdgeInsets.fromLTRB(
+        ParchmentPage.kParchmentPagePad,
+        10,
+        ParchmentPage.kParchmentPagePad,
+        14,
+      ),
       decoration: BoxDecoration(
         color: FoE.panelDark,
         border: Border(top: BorderSide(color: FoE.border)),

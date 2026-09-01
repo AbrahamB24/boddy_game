@@ -14,12 +14,14 @@ import 'models/species_def.dart';
 import 'services/capture_math.dart';
 import 'services/creatures_controller.dart';
 import 'services/expedition_controller.dart';
-import 'services/expedition_risk.dart';
 import '../settlement/data/gather_defs.dart';
 import 'services/expedition_targets.dart';
 import 'services/gather_math.dart';
 import 'widgets/creature_card.dart';
+import '../common/widgets/empty_monster_slot.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/parchment_kit.dart';
+import '../common/widgets/parchment_page.dart' show ParchmentPage;
 import '../common/widgets/recess_bar.dart';
 
 /// Picks the group for [target] and sends the trip. Returns true when one was
@@ -57,6 +59,14 @@ class _LaunchSheetState extends State<_LaunchSheet> {
 
   final Set<String> _selected = {};
   bool _sending = false;
+
+  /// Set while the roster is open FOR A SWAP — which member tapping a
+  /// candidate replaces (user 2026-08-31: "da ich mit anklicken das Monster
+  /// austauschen kann" — a filled place now opens the roster instead of
+  /// removing itself). Null means the roster was opened from an empty
+  /// place instead, and a pick just fills the next open one, same as
+  /// before.
+  String? _swapTargetId;
 
   /// Hunt only: which variant (index into kCaptureHuntOptions). Each has a
   /// fixed duration and an EXACT hunter count.
@@ -161,7 +171,14 @@ class _LaunchSheetState extends State<_LaunchSheet> {
         // of what lives there and how likely a casualty is, so they belong with
         // the heading rather than buried in the body.
         Padding(
-          padding: const EdgeInsets.fromLTRB(26, 0, 26, 6),
+          // 24, not 26 (2026-08-31 audit) — ParchmentPage.kParchmentPagePad,
+          // matching the Monsters screen and every ParchmentPage.
+          padding: const EdgeInsets.fromLTRB(
+            ParchmentPage.kParchmentPagePad,
+            0,
+            ParchmentPage.kParchmentPagePad,
+            6,
+          ),
           child: Row(
             children: [
               Text(widget.target.emoji, style: const TextStyle(fontSize: 18)),
@@ -179,7 +196,12 @@ class _LaunchSheetState extends State<_LaunchSheet> {
         Expanded(
           child: ListView(
             controller: scrollCtrl,
-            padding: const EdgeInsets.fromLTRB(26, 4, 26, 14),
+            padding: const EdgeInsets.fromLTRB(
+              ParchmentPage.kParchmentPagePad,
+              4,
+              ParchmentPage.kParchmentPagePad,
+              14,
+            ),
             children: _isHunt ? _huntBody() : _gatherBody(),
           ),
         ),
@@ -219,7 +241,6 @@ class _LaunchSheetState extends State<_LaunchSheet> {
         _kv('Mining rate', '${plan?.ratePerHour.toStringAsFixed(1) ?? '0'}/h'),
         _kv('Duration',
             plan != null && plan.isViable ? fmtTripDuration(plan.duration) : '—'),
-        _kv('Risk', perilLabel(perilRatio(_area.dangerLevel, _members))),
       ]),
       const SizedBox(height: 14),
       ..._groupSection(
@@ -339,8 +360,6 @@ class _LaunchSheetState extends State<_LaunchSheet> {
               ],
             ),
           ),
-      const Divider(height: 16),
-      _kv('Risk', perilLabel(perilRatio(_area.dangerLevel, _members))),
     ];
   }
 
@@ -424,10 +443,7 @@ class _LaunchSheetState extends State<_LaunchSheet> {
   // parents, so an empty place lines up with the tile that will fill it.
   //
   // Shared by hunt and gather: both ask "who goes", only the cap and the
-  // caption differ. 0.60, not 0.70 (user 2026-08-28: taller, more room for
-  // the art) — matches every other monster-tile grid in the app.
-  static const double _kTileAspect = 0.60;
-
+  // caption differ.
   List<Widget> _groupSection({
     required String hint,
     required String Function(CreatureInstance) caption,
@@ -446,90 +462,34 @@ class _LaunchSheetState extends State<_LaunchSheet> {
       _sameAgainButton(),
     ],
     const SizedBox(height: 10),
-    GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: _kTileAspect,
-      ),
-      itemCount: _groupCap,
-      itemBuilder: (_, i) {
-        final chosen = _members;
-        return i < chosen.length
-            ? _filledPlace(chosen[i])
-            : _emptyPlace(isNext: i == chosen.length);
-      },
-    ),
+    // The shared tile size (user 2026-08-31: "genau gleich gross sein wie
+    // die Kacheln beim Monstersscreen"), not this sheet's own delegate.
+    monsterTileGrid([
+      for (var i = 0; i < _groupCap; i++)
+        i < _members.length
+            ? _filledPlace(_members[i])
+            : _emptyPlace(isNext: i == _members.length),
+    ]),
   ];
 
   /// A place waiting to be filled. A tap opens the roster.
   ///
   /// Only the NEXT one to be filled says "Add" — six copies of the word is
   /// noise, and one is a caption for the whole rank.
-  Widget _emptyPlace({required bool isNext}) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
+  Widget _emptyPlace({required bool isNext}) => EmptyMonsterSlot(
+    label: isNext ? 'Add' : null,
     onTap: _openPicker,
-    child: LayoutBuilder(
-      // The tile reserves its top 17 % for the art that pops out of it; the
-      // empty card leaves the same gap so the row lines up.
-      builder: (context, box) => Padding(
-        padding: EdgeInsets.only(top: box.maxHeight * 0.17),
-        child: Container(
-          decoration: ShapeDecoration(color: kInk.withValues(alpha: 0.10),
-            
-            shadows: [
-              BoxShadow(
-                color: kInk.withValues(alpha: 0.24),
-                blurRadius: 0,
-                offset: const Offset(0, 3),
-              ),
-            ], shape: FoE.facet(radius: 22)),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_circle_outline, size: 24, color: kInkFaint),
-              if (isNext) ...[
-                const SizedBox(height: 5),
-                Text('Add',
-                    style: FoE.label(size: 11).copyWith(color: kInkFaint)),
-              ],
-            ],
-          ),
-        ),
-      ),
-    ),
   );
 
   /// A filled place: THE monster tile, unchanged from every other screen.
   ///
-  /// A TAP TAKES IT BACK OUT. Emptying a place is the exact inverse of filling
-  /// it, so it is the same single tap on the same place — no picker, and no
-  /// rebuilding the group to drop one member.
-  Widget _filledPlace(CreatureInstance c) => Stack(
-    children: [
-      Positioned.fill(
-        child: CreatureCard(creature: c, onTap: () => _toggle(c)),
-      ),
-      Positioned(
-        top: 2,
-        right: 2,
-        child: IgnorePointer(
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: kInk.withValues(alpha: 0.55),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.close, size: 12, color: Colors.white),
-          ),
-        ),
-      ),
-    ],
-  );
+  /// A TAP OPENS THE ROSTER TO SWAP IT (user 2026-08-31: "das x im Kreis
+  /// löschen, da ich mit anklicken das Monster austauschen kann") — no more
+  /// ✗ badge; the tile itself is the only entry point now, same as the
+  /// work-post picker's own filled seats. The roster offers a dedicated
+  /// EMPTY tile for the case that used to be this tap's whole job.
+  Widget _filledPlace(CreatureInstance c) =>
+      CreatureCard(creature: c, onTap: () => _openPicker(swapTargetId: c.id));
 
   /// The roster, as a sheet over this one — opened only while a place is being
   /// filled, which is what keeps it off the page the rest of the time.
@@ -598,42 +558,84 @@ class _LaunchSheetState extends State<_LaunchSheet> {
     );
   }
 
-  Future<void> _openPicker() async {
+  /// Candidates the roster actually offers. Opened plain (from an empty
+  /// place), it is every free monster, exactly as before — the multi-pick
+  /// flow taps several in a row. Opened to SWAP one member, the outgoing
+  /// monster is left off the list (the dedicated empty tile is how you
+  /// clear it instead) and so is anyone ELSE already in the group — picking
+  /// one of those would silently shrink the party rather than swap it.
+  List<CreatureInstance> get _pickerCandidates {
+    final swapping = _swapTargetId;
+    if (swapping == null) return _available;
+    return _available
+        .where((c) => c.id != swapping && !_selected.contains(c.id))
+        .toList();
+  }
+
+  Future<void> _openPicker({String? swapTargetId}) async {
     if (_available.isEmpty) {
       _say('Nobody is free — everyone is K.O., stationed, breeding or out.');
       return;
     }
+    _swapTargetId = swapTargetId;
+    final swapping = swapTargetId != null;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => ParchmentSheet(
-        title: 'Who goes?',
+        // Named for what it picks, not the question that opens it (user
+        // 2026-08-31: "dieser Screen heisst Group") — the same word the
+        // section above it already carries.
+        title: 'Group',
         initialSize: 0.7,
         builder: (sheetCtx, scrollCtrl) => StatefulBuilder(
           // Its own builder so a pick repaints the picker; the places behind it
           // catch up when it closes.
           builder: (sheetCtx, setSheetState) => GridView.builder(
             controller: scrollCtrl,
-            padding: const EdgeInsets.fromLTRB(26, 4, 26, 20),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              // Grown with the rest of the tile (user 2026-08-28), same
-              // ~17% _kTileAspect went from 0.70 to 0.60 by.
-              mainAxisExtent: 178,
+            // 24, not 26 (user 2026-08-31: "genau gleich gross sein wie die
+            // Kacheln beim Monstersscreen") — the 2px difference from
+            // [kMonsterTilePageMargin] was enough to hand every tile in this
+            // sheet a slightly narrower cell than the Monsters grid's own.
+            padding: const EdgeInsets.fromLTRB(
+              kMonsterTilePageMargin,
+              4,
+              kMonsterTilePageMargin,
+              20,
             ),
-            itemCount: _available.length,
-            itemBuilder: (_, i) => _pickerTile(
-              _available[i],
-              sheetCtx,
-              setSheetState,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: kMonsterTileCols,
+              mainAxisSpacing: kMonsterTileSpacing,
+              crossAxisSpacing: kMonsterTileSpacing,
+              // The grid's own height, not a hand-tuned pixel figure that
+              // stops tracking [kMonsterTileAspect] the next time it moves.
+              mainAxisExtent: monsterTileHeight(sheetCtx),
             ),
+            itemCount: _pickerCandidates.length + (swapping ? 1 : 0),
+            itemBuilder: (_, i) {
+              // A dedicated EMPTY tile (user 2026-08-31: "beim Auswahlscreen
+              // eine 'leere' Kachel anbieten, wenn ich diese anwähle, dann
+              // ist dieser Slot leer") — swapping in nothing, the same
+              // clearing job the ✗ badge used to do, but as a real choice in
+              // the roster instead of a shortcut on the tile behind it.
+              if (swapping && i == 0) {
+                return EmptyMonsterSlot(
+                  label: 'Empty',
+                  onTap: () {
+                    setState(() => _selected.remove(_swapTargetId));
+                    Navigator.pop(sheetCtx);
+                  },
+                );
+              }
+              final c = _pickerCandidates[i - (swapping ? 1 : 0)];
+              return _pickerTile(c, sheetCtx, setSheetState);
+            },
           ),
         ),
       ),
     );
+    _swapTargetId = null;
     if (mounted) setState(() {});
   }
 
@@ -643,54 +645,48 @@ class _LaunchSheetState extends State<_LaunchSheet> {
     void Function(VoidCallback) setSheetState,
   ) {
     final picked = _selected.contains(c.id);
-    final caption = _isHunt
-        ? '🪤 ${c.statValue(CreatureStat.catchRate)}'
-        : '⛏️ ${gatherPowerOf(c)}   🎒 ${c.statValue(CreatureStat.carry)}';
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+    return Stack(
       children: [
-        Expanded(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Opacity(
-                  opacity: picked ? 0.45 : 1,
-                  child: CreatureCard(
-                    creature: c,
-                    onTap: () {
-                      _toggle(c);
-                      setSheetState(() {});
-                      // A full group means the question is answered; holding
-                      // the picker open would leave a list that refuses every
-                      // further tap.
-                      if (_members.length >= _groupCap) {
-                        Navigator.pop(sheetCtx);
-                      }
-                    },
-                  ),
-                ),
-              ),
-              if (picked)
-                const Positioned(
-                  top: 2,
-                  left: 2,
-                  child:
-                      Icon(Icons.check_circle, size: 18, color: kAccent),
-                ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 17,
-          child: Center(
-            child: Text(
-              caption,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: FoE.dim(size: 10).copyWith(color: kInkSoft),
+        Positioned.fill(
+          child: Opacity(
+            opacity: picked ? 0.45 : 1,
+            child: CreatureCard(
+              creature: c,
+              // The stat this trip is actually judged on, in the tile
+              // itself (user 2026-08-31: "den gleichen Stil übernehmen" —
+              // the work-post picker's label-left/value-right vitals row)
+              // instead of a caption line below it.
+              vitalsLabel: _isHunt ? 'Catch' : 'Mining',
+              vitalsValue: _isHunt
+                  ? c.statValue(CreatureStat.catchRate)
+                  : gatherPowerOf(c),
+              onTap: () {
+                if (_swapTargetId != null) {
+                  setState(() {
+                    _selected.remove(_swapTargetId);
+                    _selected.add(c.id);
+                  });
+                  Navigator.pop(sheetCtx);
+                  return;
+                }
+                _toggle(c);
+                setSheetState(() {});
+                // A full group means the question is answered; holding
+                // the picker open would leave a list that refuses every
+                // further tap.
+                if (_members.length >= _groupCap) {
+                  Navigator.pop(sheetCtx);
+                }
+              },
             ),
           ),
         ),
+        if (picked)
+          const Positioned(
+            top: 2,
+            left: 2,
+            child: Icon(Icons.check_circle, size: 18, color: kAccent),
+          ),
       ],
     );
   }

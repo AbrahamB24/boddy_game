@@ -6,12 +6,13 @@ import 'package:flutter/material.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/snack.dart';
 import '../common/widgets/parchment_page.dart';
+import '../common/widgets/empty_monster_slot.dart';
 import '../common/widgets/filter_pills.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../settlement/data/item_definitions.dart';
 import '../settlement/widgets/meander_strip.dart';
 import '../settlement/widgets/scroll_paper.dart'
     show
-        kPageShadow,
         kParchmentInk,
         kParchmentLight,
         kParchmentMid,
@@ -203,31 +204,37 @@ class _BreedingScreenState extends State<BreedingScreen> {
           ),
         ),
         child: SafeArea(
-          child: ListenableBuilder(
-            listenable: Listenable.merge([_breeding, _creatures]),
-            builder: (context, _) => Column(
-              children: [
-                _topBar(),
-                Expanded(
-                  child: Stack(
-                    children: [
-                      // The meander bands, as on every other parchment surface.
-                      // Wallpaper first, so they never land over a card.
-                      Positioned(
-                        left: 4,
-                        top: 0,
-                        bottom: 0,
-                        width: 14,
-                        child: MeanderStrip(color: _ornament),
-                      ),
-                      Positioned(
-                        right: 4,
-                        top: 0,
-                        bottom: 0,
-                        width: 14,
-                        child: MeanderStrip(color: _ornament, flip: true),
-                      ),
-                      ListView(
+          // The bands run the FULL page height now, behind [_topBar] too
+          // (user 2026-08-31: "das Mäanderband soll oben weitergehen und
+          // 'unter' den Header auf allen Screens") — they used to sit only
+          // in the body's own Stack, starting exactly where the bar ends,
+          // so the border was a strip down the CONTENT, not down the page.
+          // The bar (opaque, full width) still covers its own row of it
+          // exactly as before.
+          child: Stack(
+            children: [
+              // Wallpaper first, so they never land over a card.
+              Positioned(
+                left: 4,
+                top: 0,
+                bottom: 0,
+                width: 14,
+                child: MeanderStrip(color: _ornament),
+              ),
+              Positioned(
+                right: 4,
+                top: 0,
+                bottom: 0,
+                width: 14,
+                child: MeanderStrip(color: _ornament, flip: true),
+              ),
+              ListenableBuilder(
+                listenable: Listenable.merge([_breeding, _creatures]),
+                builder: (context, _) => Column(
+                  children: [
+                    _topBar(),
+                    Expanded(
+                      child: ListView(
                         // Wide sides: the bands live in that margin.
                         padding: const EdgeInsets.fromLTRB(28, 14, 28, 14),
                         children: [
@@ -251,11 +258,11 @@ class _BreedingScreenState extends State<BreedingScreen> {
                           const SizedBox(height: 20),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -312,7 +319,17 @@ class _BreedingScreenState extends State<BreedingScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
-      decoration: ShapeDecoration(color: _cardFill, shape: FoE.facet(radius: 10, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.18)))),
+      decoration: ShapeDecoration(
+        color: _cardFill,
+        // radius 12, not 10 (2026-08-31 audit) — the standard "running job
+        // card" radius the very next step of this pipeline uses
+        // (hatchery_screen.dart's own job card), and the one every other
+        // list card in the app converges on.
+        shape: FoE.facet(
+          radius: 12,
+          side: BorderSide(color: kParchmentInk.withValues(alpha: 0.18)),
+        ),
+      ),
       child: Row(
         children: [
           SizedBox(
@@ -450,9 +467,9 @@ class _BreedingScreenState extends State<BreedingScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: _parentSlot(first: true, c: a)),
-            const SizedBox(width: 10),
-            Expanded(child: _parentSlot(first: false, c: b)),
+            _parentSlot(first: true, c: a),
+            const SizedBox(width: kMonsterTileSpacing),
+            _parentSlot(first: false, c: b),
           ],
         ),
         if (a != null && b != null) ...[
@@ -532,28 +549,30 @@ class _BreedingScreenState extends State<BreedingScreen> {
   /// the slots are not genders any more — whichever you fill first decides what
   /// the other one may be.
   Widget _parentSlot({required bool first, required CreatureInstance? c}) =>
-      AspectRatio(
-        // The Monsters grid's own cell shape, so the tile is the exact tile.
-        aspectRatio: _kTileAspect,
-        child: c == null
-            ? _emptySlot(first)
-            : CreatureCard(
-                creature: c,
-                onTap: () => _pickParent(first),
-                // No XP arc and no HP bar here (user 2026-07-27): a parent is
-                // picked on its genes, not on its level progress or wounds.
-                showXp: false,
-                showHp: false,
-                // The current power big, the level-1 one (its genes) small
-                // under it.
-                showLevelOnePower: true,
-              ),
+      Builder(
+        builder: (context) => SizedBox(
+          // The Monsters grid's own tile, in its own PIXELS (user
+          // 2026-08-31: "genau gleich gross sein wie die Kacheln beim
+          // Monstersscreen") — an AspectRatio here only fixed the shape;
+          // the actual size still came from however wide this Row's own
+          // Expanded happened to split, which is not the grid's width.
+          width: monsterTileWidth(context),
+          height: monsterTileHeight(context),
+          child: c == null
+              ? _emptySlot(first)
+              : CreatureCard(
+                  creature: c,
+                  onTap: () => _pickParent(first),
+                  // No XP arc and no HP bar here (user 2026-07-27): a parent is
+                  // picked on its genes, not on its level progress or wounds.
+                  showXp: false,
+                  showHp: false,
+                  // The current power big, the level-1 one (its genes) small
+                  // under it.
+                  showLevelOnePower: true,
+                ),
+        ),
       );
-
-  /// The Monsters-grid cell shape (crossAxisCount 3, childAspectRatio 0.60 —
-  /// user 2026-08-28: "diese Boxen etwas länger machen, besonders der obere
-  /// Teil mit dem Monster").
-  static const double _kTileAspect = 0.60;
 
   /// An unfilled parent slot, in the BUILD MENU'S dead-card style (user
   /// 2026-07-27: "Nimm für die Kacheln die Kacheln der Gebäude, welche nicht
@@ -561,40 +580,8 @@ class _BreedingScreenState extends State<BreedingScreen> {
   /// shadow that makes it lie ON the paper, and no outline. An empty slot and
   /// an unaffordable building are the same thing: a card with nothing in it
   /// yet.
-  Widget _emptySlot(bool first) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTap: () => _pickParent(first),
-    child: LayoutBuilder(
-      // The tile reserves its top 17 % for the art that pops out of it; the
-      // empty card leaves the same gap so both halves of the row line up.
-      builder: (context, box) => Padding(
-        padding: EdgeInsets.only(top: box.maxHeight * 0.17),
-        child: Container(
-          decoration: ShapeDecoration(// The build menu's own _cardInactive / shadow, to the value.
-            color: kParchmentInk.withValues(alpha: 0.10),
-            
-            shadows: [
-              BoxShadow(
-                color: kPageShadow.withValues(alpha: 0.24),
-                blurRadius: 0,
-                offset: const Offset(0, 3),
-              ),
-            ], shape: FoE.facet(radius: 22)),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_circle_outline, size: 26, color: _inkFaint),
-              const SizedBox(height: 6),
-              Text(
-                'Choose',
-                style: FoE.label(size: 12).copyWith(color: _inkFaint),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
+  Widget _emptySlot(bool first) =>
+      EmptyMonsterSlot(label: 'Choose', onTap: () => _pickParent(first));
 
   /// The gene table's column captions, over BOTH parents' columns: "lvl 1" over
   /// the stat and [Icons.upgrade] — the same glyph the monster detail screen
@@ -785,7 +772,10 @@ class _BreedingScreenState extends State<BreedingScreen> {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: ShapeDecoration(color: _accent.withValues(alpha: 0.12), shape: FoE.facet(radius: 8)),
+          decoration: ShapeDecoration(
+            color: _accent.withValues(alpha: 0.12),
+            shape: FoE.facet(radius: 8),
+          ),
           child: Text(
             'Every single stat has a ${(favored * 100).round()} % chance to '
             'inherit the better stat of its parents.',
@@ -908,29 +898,26 @@ class _BreedingScreenState extends State<BreedingScreen> {
                             // The SAME tiles as the Monsters screen (user
                             // 2026-07-27), three to a row — so choosing a parent
                             // looks like browsing the collection, not filling a
-                            // form field.
-                            : GridView.builder(
-                                shrinkWrap: true,
+                            // form field. Through [monsterTileGrid] now (user
+                            // 2026-08-31: "genau gleich gross sein wie die
+                            // Kacheln beim Monstersscreen"), not this sheet's
+                            // own copy of the sizing maths — a `GridView`
+                            // sizing columns off this dialog's own width had
+                            // drifted from the Monsters screen's.
+                            : SingleChildScrollView(
                                 padding: const EdgeInsets.only(
                                   top: 6,
                                   bottom: 6,
                                 ),
-                                gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: 3,
-                                      mainAxisSpacing: 10,
-                                      crossAxisSpacing: 10,
-                                      // Taller than the Monsters grid's 0.70 by the
-                                      // caption underneath each tile.
-                                      childAspectRatio: 0.60,
+                                child: monsterTileGrid([
+                                  for (final c in options)
+                                    _candidateTile(
+                                      c,
+                                      c.id == chosenId,
+                                      sortStat,
+                                      ctx,
                                     ),
-                                itemCount: options.length,
-                                itemBuilder: (_, i) => _candidateTile(
-                                  options[i],
-                                  options[i].id == chosenId,
-                                  sortStat,
-                                  ctx,
-                                ),
+                                ]),
                               ),
                       ),
                     ],
@@ -1057,8 +1044,7 @@ class _BreedingScreenState extends State<BreedingScreen> {
       color: _accent,
     ),
     selectedTrailing: descending ? '↓' : '↑',
-    onSelected: (v) =>
-        onPick(v.isEmpty ? null : CreatureStat.values.byName(v)),
+    onSelected: (v) => onPick(v.isEmpty ? null : CreatureStat.values.byName(v)),
   );
 
   /// One candidate: the Monsters-screen tile, plus the figure the list is

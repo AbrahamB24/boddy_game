@@ -24,8 +24,8 @@ void main() {
     test('an era deals in everything introduced up to it, cumulatively', () {
       // Cumulative on purpose: a new era ADDS to the economy, it doesn't
       // replace it — fish still matter in era III.
-      expect(goodsForEra(1).map((g) => g.id), ['fish', 'fur']);
-      expect(goodsForEra(5).map((g) => g.id), containsAll(['fish', 'fur']));
+      expect(goodsForEra(1).map((g) => g.id), ['fish', 'meat']);
+      expect(goodsForEra(5).map((g) => g.id), containsAll(['fish', 'meat']));
     });
 
     test('a settlement earlier than any good still has currency', () {
@@ -35,37 +35,37 @@ void main() {
 
     test('a bill is paid from the goods you HAVE, richest first', () {
       // Spends the surplus, protects the scarce good — what a player would do.
-      expect(goodsCost(10, 1, {'fish': 50, 'fur': 3}), {'fish': 10.0});
+      expect(goodsCost(10, 1, {'fish': 50, 'meat': 3}), {'fish': 10.0});
       expect(goodsCost(0, 1, {'fish': 50}), isEmpty);
     });
 
     test('THE deadlock: one missing good must never block a cost', () {
       // The bug this replaced: costs were split evenly and ceiled per good, so
       // EVERY bill demanded at least 1 of EVERY era good. Era I's goods are
-      // fish AND fur, region 1 has no fur spot, and fur first appears behind
-      // the region-1 boss — so running out of fur stopped healing entirely,
+      // fish AND meat, region 1 has no meat spot, and meat first appears behind
+      // the region-1 boss — so running out of meat stopped healing entirely,
       // with no way to get more. Exactly the trap the Healing Hut was ungated
       // to avoid (docs/balancing.md §4b).
-      final cost = goodsCost(10, 1, {'fish': 50, 'fur': 0});
-      expect(cost['fur'], isNull, reason: 'must not demand a good you lack');
+      final cost = goodsCost(10, 1, {'fish': 50, 'meat': 0});
+      expect(cost['meat'], isNull, reason: 'must not demand a good you lack');
       expect(cost['fish'], 10.0);
     });
 
     test('it spills onto the next good when the richest runs out', () {
-      expect(goodsCost(10, 1, {'fish': 4, 'fur': 30}), {'fur': 10.0});
-      expect(goodsCost(10, 1, {'fish': 6, 'fur': 4}), {'fish': 6.0, 'fur': 4.0});
+      expect(goodsCost(10, 1, {'fish': 4, 'meat': 30}), {'meat': 10.0});
+      expect(goodsCost(10, 1, {'fish': 6, 'meat': 4}), {'fish': 6.0, 'meat': 4.0});
     });
 
     test('an unaffordable bill still names the shortfall', () {
       // It must NOT silently shrink to what you can afford — the caller's
       // affordability check has to fail.
-      final cost = goodsCost(10, 1, {'fish': 2, 'fur': 1});
+      final cost = goodsCost(10, 1, {'fish': 2, 'meat': 1});
       expect(cost.values.fold<double>(0, (a, b) => a + b), 10.0);
-      expect(canAfford(cost, {'fish': 2, 'fur': 1}), isFalse);
+      expect(canAfford(cost, {'fish': 2, 'meat': 1}), isFalse);
     });
 
     test('whole units only, and never rounds down to free', () {
-      final cost = goodsCost(0.2, 1, {'fish': 50, 'fur': 50});
+      final cost = goodsCost(0.2, 1, {'fish': 50, 'meat': 50});
       expect(cost.values.every((v) => v == v.roundToDouble()), isTrue);
       expect(cost.values.fold<double>(0, (a, b) => a + b), 1.0);
     });
@@ -79,7 +79,7 @@ void main() {
   group('healing costs goods', () {
     test('a creature at full health is free', () {
       expect(healGoodsFor(_mob()), 0);
-      expect(healCost([_mob()], {'fish': 99, 'fur': 99}), isEmpty);
+      expect(healCost([_mob()], {'fish': 99, 'meat': 99}), isEmpty);
     });
 
     test('a full-HP creature is not billed for the -1 sentinel', () {
@@ -108,27 +108,27 @@ void main() {
       // 1 HP × 0.1 = 0.1 total.
       final cost = healCost(
         [_mob(hp: 60, currentHp: 59)],
-        {'fish': 99, 'fur': 99},
+        {'fish': 99, 'meat': 99},
       );
       expect(cost.values.fold<double>(0, (a, b) => a + b), 1.0);
     });
 
-    test('a hurt team heals on fish alone when the fur has run out', () {
-      // THE deadlock, at the healing level: region 1 has no fur spot, so this
+    test('a hurt team heals on fish alone when the meat has run out', () {
+      // THE deadlock, at the healing level: region 1 has no meat spot, so this
       // is the state every early player ends up in.
       final cost = healCost([_mob(hp: 60, currentHp: 20)], {
         'fish': 99,
-        'fur': 0,
+        'meat': 0,
       });
-      expect(canAfford(cost, {'fish': 99, 'fur': 0}), isTrue);
+      expect(canAfford(cost, {'fish': 99, 'meat': 0}), isTrue);
     });
 
     test('and is still refused when there are no supplies at all', () {
       final cost = healCost([_mob(hp: 60, currentHp: 20)], {
         'fish': 0,
-        'fur': 0,
+        'meat': 0,
       });
-      expect(canAfford(cost, {'fish': 0, 'fur': 0}), isFalse);
+      expect(canAfford(cost, {'fish': 0, 'meat': 0}), isFalse);
     });
   });
 
@@ -210,15 +210,17 @@ void main() {
     test('reads the jsonb blob', () {
       final r = ResourceModel.fromMap(
         row({
-          'goods': {'fish': 4, 'fur': 5},
+          'goods': {'fish': 4, 'meat': 5},
         }),
       );
-      expect(r.goods, {'fish': 4.0, 'fur': 5.0});
+      expect(r.goods, {'fish': 4.0, 'meat': 5.0});
     });
 
     test('falls back to the legacy columns on a pre-migration row', () {
       // Migration 0006 may not have run yet — an existing player's fish must
-      // not silently read as zero.
+      // not silently read as zero. Still 'fur', not 'meat' (user 2026-08-31's
+      // rename): the legacy column is a pre-migration artifact and 'meat'
+      // never had one — see ResourceModel._goodsFromMap.
       final r = ResourceModel.fromMap(row({'fish': 7, 'fur': 8}));
       expect(r.goods, {'fish': 7.0, 'fur': 8.0});
     });

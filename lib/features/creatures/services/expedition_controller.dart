@@ -722,7 +722,7 @@ class ExpeditionController extends ChangeNotifier {
     final resource = e.payload['resource'] as String?;
     final amount = (e.payload['amount'] as num?)?.toDouble() ?? 0;
     if (resource != null && amount > 0) {
-      // Smokehouses boost GOODS hauls (fish/fur — the dungeon-entry currency),
+      // Smokehouses boost GOODS hauls (fish/meat — the dungeon-entry currency),
       // applied at homecoming: the spot still only loses what was mined.
       final goodsMult = kGoodsDefs.containsKey(resource)
           ? SettlementController().expeditionBonuses.goodsMult

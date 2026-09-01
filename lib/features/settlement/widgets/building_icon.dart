@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../data/building_art.dart';
 
 // Shared icon renderer for BuildingDef (and the handful of non-building
-// "source" rows that still use a literal emoji, e.g. resource_breakdown_sheet
+// "source" rows that still use a literal emoji, e.g. resource_detail_screen
 // .dart's synthetic population-upkeep row, and EraDef rows in
 // dev_mode_screen.dart which never got PNGs). Buildings themselves have no
 // emoji anymore — see BuildingDef.imageUrl — so `imageUrl` is the primary

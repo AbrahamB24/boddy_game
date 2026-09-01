@@ -173,19 +173,29 @@ class _TeamsScreenState extends State<TeamsScreen> {
   );
 
   Future<void> _confirmDelete(SavedTeam team) async {
+    // Same shape/backdrop/text roles as the app's other two "are you sure"
+    // dialogs (2026-08-31 audit — battle_screen.dart's Flee?,
+    // creature_detail_screen.dart's Release?), which this one had drifted
+    // from: no shape at all (default rounding, not the gold-bordered
+    // radius-12 facet), FoE.panelMid instead of panelDark, and the
+    // body/cancel text roles swapped (dim vs label).
     final ok = await showDialog<bool>(
       context: context,
       builder: (dctx) => AlertDialog(
-        backgroundColor: FoE.panelMid,
+        backgroundColor: FoE.panelDark,
+        shape: FoE.facet(
+          radius: 12,
+          side: const BorderSide(color: FoE.borderGold),
+        ),
         title: Text('Delete "${team.name}"?', style: FoE.title(size: 15)),
         content: Text(
           'The monsters are untouched — only the roster goes.',
-          style: FoE.dim(size: 12),
+          style: FoE.label(size: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dctx, false),
-            child: Text('Keep', style: FoE.label(size: 13)),
+            child: Text('Keep', style: FoE.dim(size: 13)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(dctx, true),

@@ -6,7 +6,7 @@
 /// A good is introduced by an era and stays available from then on. That is
 /// what makes their SINKS scale (user requirement 2026-07-16: "es müsste etwas
 /// sein, was skalierbar ist, da in einer neuen Ära auch neue Ressourcen
-/// dazukommen"): nothing that spends supplies names `fish` or `fur` literally —
+/// dazukommen"): nothing that spends supplies names `fish` or `meat` literally —
 /// it asks for [goodsForEra] and spends whatever that era has. Add a GoodsDef
 /// with a later `eraOrder` and every sink picks it up with no further code.
 ///
@@ -22,7 +22,7 @@ import 'dart:math' as math;
 /// never be confused: a healing bill that could eat your clay would silently
 /// stall construction.
 enum GoodsKind {
-  /// Gathered luxury (fish, fur) — what ACTIONS bill: healing, dungeon entry,
+  /// Gathered luxury (fish, meat) — what ACTIONS bill: healing, dungeon entry,
   /// crafting supplies, the ascension toll.
   supply,
 
@@ -110,7 +110,10 @@ const kGoodsDefs = <String, GoodsDef>{
   // goods to the economy rather than replacing the old ones — fish still counts
   // in era VIII. Names/emojis are free to retune in Dev Mode.
   'fish': GoodsDef(id: 'fish', name: 'Fish', emoji: '🐟', eraOrder: 1),
-  'fur': GoodsDef(id: 'fur', name: 'Fur', emoji: '🦫', eraOrder: 1),
+  // Renamed from 'fur' (user 2026-08-31: "Ab jetzt ist es nicht mehr fur
+  // sondern meat") — id changed, not just the label, so existing saves need
+  // supabase/rename_fur_to_meat.sql.
+  'meat': GoodsDef(id: 'meat', name: 'Meat', emoji: '🥩', eraOrder: 1),
   'honey': GoodsDef(id: 'honey', name: 'Honey', emoji: '🍯', eraOrder: 2),
   'herbs': GoodsDef(id: 'herbs', name: 'Herbs', emoji: '🌿', eraOrder: 2),
   'wine': GoodsDef(id: 'wine', name: 'Wine', emoji: '🍷', eraOrder: 3),
@@ -349,7 +352,7 @@ Map<String, Map<String, double>> refiningRecipes(Iterable<String> goodIds) {
 
 /// What producing [ratesPerHour] (units/h, keyed by good) burns per hour, keyed
 /// by input. Rates for goods that are gathered rather than refined contribute
-/// nothing — a Fur Lodge consumes no inputs.
+/// nothing — a Butcher Shop consumes no inputs.
 Map<String, double> refiningInputsPerHour(Map<String, double> ratesPerHour) {
   final out = <String, double>{};
   ratesPerHour.forEach((good, rate) {
@@ -392,9 +395,9 @@ List<GoodsDef> goodsForEra(int eraOrder) {
 /// ── Why not an even split ──
 /// It used to divide the total evenly across the era's goods and round each up,
 /// so **every** cost demanded at least one of EVERY good. That deadlocked the
-/// game: era I's goods are fish AND fur, region 1 has no fur spot, and fur
+/// game: era I's goods are fish AND meat, region 1 has no meat spot, and meat
 /// first appears in region 2 — behind a boss you need to heal to beat. Run out
-/// of fur and healing stops entirely, which is exactly the trap the Healing
+/// of meat and healing stops entirely, which is exactly the trap the Healing
 /// Hut was ungated to avoid (docs/balancing.md §4b). The old rule made *any*
 /// era good that lacks an early source a soft-lock waiting to happen.
 ///

@@ -7,19 +7,22 @@ import 'package:boddygame/features/settlement/widgets/meander_strip.dart';
 // from looking broken: only WHOLE motifs are drawn — a shape cut in half at the
 // bottom edge reads as a rendering bug.
 //
-// The motif itself changed twice — a Greek-key spiral became a facet triangle
-// with the 2026-07-31 low-poly pass, then back to a (redrawn) Greek-key square
-// spiral on 2026-08-30 ("das dreieck mäander durch das ursprüngliche viereckige
-// spiralenmäander ersetzen"); this rule survived both, which is exactly why it
-// is tested as a rule and not as a picture.
+// The motif itself changed four times — a Greek-key spiral became a facet
+// triangle with the 2026-07-31 low-poly pass, then a plain zigzag on
+// 2026-08-30, then (same day, against a reference photo: "sehr subtil und
+// schlicht") a guessed single-coil spiral, then (2026-08-31, "ist noch nicht
+// identisch mit dem Bild") a version measured pixel-for-pixel off that same
+// reference — this rule survived all four, which is exactly why it is tested
+// as a rule and not as a picture.
 void main() {
   group('MeanderStrip.repeatCount', () {
-    // Width 10 → one motif is 1.4 × 10 = 14pt tall.
+    // Width 45 → one motif is (57/45) × 45 = 57pt tall exactly — the
+    // reference photo's own 45px repeat over its 57px cross-section.
     test('only whole motifs count; the remainder becomes margin', () {
-      expect(MeanderStrip.repeatCount(10, 13), 0);
-      expect(MeanderStrip.repeatCount(10, 14), 1);
-      expect(MeanderStrip.repeatCount(10, 27), 1);
-      expect(MeanderStrip.repeatCount(10, 28), 2);
+      expect(MeanderStrip.repeatCount(45, 56), 0);
+      expect(MeanderStrip.repeatCount(45, 57), 1);
+      expect(MeanderStrip.repeatCount(45, 113), 1);
+      expect(MeanderStrip.repeatCount(45, 114), 2);
     });
 
     test('a taller dialog simply fits more of them', () {

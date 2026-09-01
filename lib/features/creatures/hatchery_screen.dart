@@ -10,11 +10,11 @@ import '../settlement/data/item_definitions.dart';
 import '../settlement/settlement_controller.dart';
 import '../settlement/widgets/scroll_paper.dart'
     show
-        kPageShadow,
         kParchmentInk,
         kParchmentLight,
         parchmentButton,
         parchmentButtonInk;
+import '../common/widgets/empty_monster_slot.dart';
 import 'creature_detail_screen.dart';
 import 'egg_picker_screen.dart';
 import 'models/breeding_job.dart';
@@ -26,6 +26,7 @@ import 'services/creatures_controller.dart';
 import 'widgets/egg_card.dart';
 import 'widgets/egg_details.dart';
 import '../common/widgets/recess_bar.dart';
+import '../common/widgets/monster_tile_grid.dart';
 
 // ── The Hatchery (user 2026-07-26) ─────────────────────────────────────────
 // "Eggs müssen nicht angezeigt werden, da diese ins Inventar (Bag) gehen und
@@ -66,11 +67,6 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
   static final Color _inkFaint = kParchmentInk.withValues(alpha: 0.55);
   static const Color _accent = FoE.gold;
   static final Color _cardFill = kParchmentInk.withValues(alpha: 0.06);
-
-  /// The Monsters-grid cell shape (crossAxisCount 3, childAspectRatio 0.60,
-  /// user 2026-08-28: taller, more room for the art) — the breeding
-  /// screen's parent slots use the same constant.
-  static const double _kTileAspect = 0.60;
 
   final _breeding = BreedingController();
   final _creatures = CreaturesController();
@@ -373,7 +369,11 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      // EdgeInsets.all(12), not fromLTRB(12, 10, 12, 10) (2026-08-31 audit)
+      // — the standard "running job card" padding breeding_screen.dart's
+      // own card (the previous step of this same pipeline) and every other
+      // list card in the app use.
+      padding: const EdgeInsets.all(12),
       decoration: ShapeDecoration(color: ready ? _accent.withValues(alpha: 0.12) : _cardFill, shape: FoE.facet(radius: 12, side: BorderSide(color: ready ? _accent : kParchmentInk.withValues(alpha: 0.18),
           width: ready ? 1.5 : 1))),
       child: Row(
@@ -546,12 +546,7 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
         //
         // Half width, not full: a lone tile stretched across the page would
         // read as a banner, not as a card you picked out of a grid.
-        Center(
-          child: FractionallySizedBox(
-            widthFactor: 0.46,
-            child: _eggSlot(job),
-          ),
-        ),
+        Center(child: _eggSlot(job)),
         if (job != null) ...[
           const SizedBox(height: 12),
           // WHERE IT CAME FROM AND WHEN (user 2026-07-27: "Parents anzeigen und
@@ -593,45 +588,22 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
 
   /// The filled slot (the egg tile) or an empty frame inviting the picker —
   /// tapping either always reopens the grid, so swapping is one tap.
-  Widget _eggSlot(BreedingJob? job) => AspectRatio(
-    aspectRatio: _kTileAspect,
-    child: job == null
-        ? _emptySlot()
-        : EggCard(job: job, onTap: _pickEgg),
-  );
-
-  /// An unfilled slot, in the BUILD MENU'S dead-card style — the same frame the
-  /// breeding screen's empty parent slot uses.
-  Widget _emptySlot() => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTap: _pickEgg,
-    child: LayoutBuilder(
-      // The tile reserves its top 17 % for the art that pops out of it; the
-      // empty card leaves the same gap so the row lines up.
-      builder: (context, box) => Padding(
-        padding: EdgeInsets.only(top: box.maxHeight * 0.17),
-        child: Container(
-          decoration: ShapeDecoration(color: kParchmentInk.withValues(alpha: 0.10),
-            
-            shadows: [
-              BoxShadow(
-                color: kPageShadow.withValues(alpha: 0.24),
-                blurRadius: 0,
-                offset: const Offset(0, 3),
-              ),
-            ], shape: FoE.facet(radius: 22)),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_circle_outline, size: 26, color: _inkFaint),
-              const SizedBox(height: 6),
-              Text('Choose', style: FoE.label(size: 12).copyWith(color: _inkFaint)),
-            ],
-          ),
-        ),
-      ),
+  Widget _eggSlot(BreedingJob? job) => Builder(
+    builder: (context) => SizedBox(
+      // The Monsters grid's own tile, in its own pixels (user 2026-08-31:
+      // "genau gleich gross sein wie die Kacheln beim Monstersscreen") — a
+      // fraction of this panel's own width only matched the SHAPE, not the
+      // grid's actual size.
+      width: monsterTileWidth(context),
+      height: monsterTileHeight(context),
+      child: job == null
+          ? _emptySlot()
+          : EggCard(job: job, onTap: _pickEgg),
     ),
   );
+
+  /// An unfilled slot, in the shared empty-monster-slot style.
+  Widget _emptySlot() => EmptyMonsterSlot(label: 'Choose', onTap: _pickEgg);
 
   /// THE COMMIT: the flat [parchmentButton] green every other page wears, with
   /// the wait INSIDE it — exactly as the mating's cost and duration sit on the

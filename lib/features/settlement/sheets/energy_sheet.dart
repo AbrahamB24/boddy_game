@@ -143,17 +143,22 @@ class _EnergySheetState extends State<EnergySheet> {
                   ),
                 ),
                 const SizedBox(height: 18),
+                // 15 / 4 / 11, not 14 / 2 / 10 (2026-08-31 audit) — the
+                // same "heading with one caption line under it" shape as
+                // settlement_screen.dart's "Today's goals" and the upgrade
+                // sheet's "fully upgraded" heading; all three numbers had
+                // drifted together here.
                 Text(
                   'Step sync',
                   style: FoE.title(
-                    size: 14,
+                    size: 15,
                   ).copyWith(color: ParchmentSheet.ink),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
                   '100 steps = 1 energy · max ${kMaxEnergy.toStringAsFixed(0)}',
                   style: FoE.dim(
-                    size: 10,
+                    size: 11,
                   ).copyWith(color: ParchmentSheet.inkFaint),
                 ),
                 const SizedBox(height: 10),

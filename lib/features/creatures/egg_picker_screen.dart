@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
 import '../common/widgets/filter_pills.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/parchment_page.dart';
 import '../settlement/widgets/scroll_paper.dart'
     show kParchmentInk;
@@ -37,10 +38,6 @@ class EggPickerScreen extends StatefulWidget {
 class _EggPickerScreenState extends State<EggPickerScreen> {
   static final Color _inkSoft = kParchmentInk.withValues(alpha: 0.78);
   static const Color _accent = FoE.gold;
-
-  /// The Monsters-grid cell shape — the Hatchery slot uses the same. 0.60,
-  /// not 0.70 (user 2026-08-28: taller tiles, more room for the art).
-  static const double _kTileAspect = 0.60;
 
   /// This page is parchment, so its pills are.
   static final PillPalette _pills = PillPalette.parchment;
@@ -98,10 +95,10 @@ class _EggPickerScreenState extends State<EggPickerScreen> {
                         padding: const EdgeInsets.only(top: 4, bottom: 16),
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: _kTileAspect,
+                          crossAxisCount: kMonsterTileCols,
+                          mainAxisSpacing: kMonsterTileSpacing,
+                          crossAxisSpacing: kMonsterTileSpacing,
+                          childAspectRatio: kMonsterTileAspect,
                         ),
                         itemCount: options.length,
                         itemBuilder: (_, i) => EggCard(

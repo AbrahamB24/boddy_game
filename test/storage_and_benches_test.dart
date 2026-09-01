@@ -44,8 +44,11 @@ void main() {
 
   group('storage ceilings', () {
     test('a ceiling clamps, and everything under it is untouched', () {
-      final capped = res(wood: 900, stone: 100, goods: {'fish': 40})
-          .capped({'wood': 500, 'stone': 500, 'fish': 500});
+      final capped = res(
+        wood: 900,
+        stone: 100,
+        goods: {'fish': 40},
+      ).capped({'wood': 500, 'stone': 500, 'fish': 500});
       expect(capped.wood, 500);
       expect(capped.stone, 100);
       expect(capped.goods['fish'], 40);
@@ -72,11 +75,14 @@ void main() {
           if (e.type == 'storage') e.key,
       };
       // "alle Produktion und Luxusressourcen" — the era-I raws and goods.
-      expect(stored, containsAll(['wood', 'stone', 'fish', 'fur']));
+      expect(stored, containsAll(['wood', 'stone', 'fish', 'meat']));
       // Coin is the vault's job, and only the vault's.
       expect(stored, isNot(contains('gold')));
       expect(
-        {for (final e in vault.effects) if (e.type == 'storage') e.key},
+        {
+          for (final e in vault.effects)
+            if (e.type == 'storage') e.key,
+        },
         {'gold'},
       );
     });
@@ -90,8 +96,11 @@ void main() {
       for (final id in ['storehouse', 'gold_vault']) {
         for (final e in kBuildingEffects[id]!.effects) {
           if (e.type != 'storage') continue;
-          expect(e.levelSteps, isEmpty,
-              reason: '$id/${e.key}: a step would override the percentage');
+          expect(
+            e.levelSteps,
+            isEmpty,
+            reason: '$id/${e.key}: a step would override the percentage',
+          );
           expect(e.levelFactor, isNotNull, reason: '$id/${e.key}');
           // Compounding, not linear: the gap between rungs widens.
           final l1 = e.valueAtLevel(1);
@@ -151,32 +160,59 @@ void main() {
       expect(def.effectAt('storage', 'wood', 1, level: 3), 2000);
     });
 
-    test('the ceiling names where its room came from', () {
+    test('with nothing built, the ceiling is the flat dial', () {
       // What the header cell opens (user 2026-07-30: "wenn ich oben auf die
-      // Ressourcen drücke, will ich auch das Cap sehen"). A full store is the
-      // same kind of question as a slow one — which building fixes this — so
-      // it gets the same kind of answer: a list of contributors.
-      //
-      // The settlement's own room is always the first entry, because with no
-      // store built it is the ONLY entry and an empty list would read as
-      // "nothing holds this".
+      // Ressourcen drücke, will ich auch das Cap sehen"). The dial is a
+      // FALLBACK now (user 2026-08-31: "alle Anfangslagerplätze sollen vom
+      // Castle kommen") — it still applies when literally nothing, Castle
+      // included, has a `storage` effect for this resource, which an empty
+      // settlement is the simplest case of.
       final ctrl = SettlementController();
-      final sources = ctrl.storageSources('wood');
-      expect(sources, isNotEmpty);
-      expect(sources.first.label, 'The settlement itself');
-      expect(sources.first.amount, GameTuning.i.raw(Dials.baseStorage));
-      // Everything listed adds up to the ceiling the game clamps against.
-      final summed = sources.fold<double>(0, (a, s) => a + s.amount);
-      expect(summed, closeTo(ctrl.storageCapacity('wood'), 1e-9));
+      expect(ctrl.storageSourcesByBuilding('wood'), isEmpty);
+      expect(ctrl.storageCapacity('wood'), GameTuning.i.raw(Dials.baseStorage));
+    });
+
+    test('the Castle supplies the starting room, not the flat dial', () {
+      // The dial moved ONTO the Castle as an ordinary `storage` effect (user
+      // 2026-08-31) — same starting number, but now attributed to a building
+      // (see building_effects.dart) instead of an unexplained constant, and
+      // no longer added on top of it once the Castle covers the resource.
+      final ctrl = SettlementController()
+        ..buildings = [
+          PlacedBuilding(
+            id: 'b_castle',
+            settlementId: 's',
+            buildingTypeId: 'castle',
+            gridX: 0,
+            gridY: 0,
+            level: 1,
+            constructionSecondsRequired: 0,
+            constructionSecondsBuilt: 0,
+            isComplete: true,
+            placedAt: DateTime.utc(2026),
+          ),
+        ]
+        ..introStep = IntroStep.firstNode;
+      addTearDown(() {
+        ctrl.buildings = [];
+        ctrl.introStep = IntroStep.done;
+      });
+      final sources = ctrl.storageSourcesByBuilding('wood');
+      expect(sources, hasLength(1));
+      expect(sources.single.$2.id, 'castle');
+      expect(sources.single.$3, GameTuning.i.raw(Dials.baseStorage));
+      // Not double-counted: the ceiling is exactly the Castle's own room.
+      expect(ctrl.storageCapacity('wood'), sources.single.$3);
     });
 
     test('gold has its own ceiling, and it is not the goods one', () {
       final ctrl = SettlementController();
-      expect(ctrl.storageCapacity('gold'),
-          GameTuning.i.raw(Dials.baseGoldStorage));
+      expect(
+        ctrl.storageCapacity('gold'),
+        GameTuning.i.raw(Dials.baseGoldStorage),
+      );
       expect(ctrl.storageCapacity('wood'), GameTuning.i.raw(Dials.baseStorage));
-      expect(ctrl.storageCapacity('gold'),
-          isNot(ctrl.storageCapacity('wood')));
+      expect(ctrl.storageCapacity('gold'), isNot(ctrl.storageCapacity('wood')));
     });
 
     // ── The stores are STAFFED (user 2026-07-30) ──
@@ -245,12 +281,12 @@ void main() {
 
       test('a posted logistician raises exactly the ceilings of ITS store', () {
         final before = {
-          for (final r in ['wood', 'stone', 'fish', 'fur', 'gold'])
+          for (final r in ['wood', 'stone', 'fish', 'meat', 'gold'])
             r: ctrl.storageCapacity(r),
         };
         CreaturesController().creatures.add(worker('w', 20, 'b_store'));
         // Each resource gains 20 points of logistics × ITS OWN dial.
-        for (final res in ['wood', 'stone', 'fish', 'fur']) {
+        for (final res in ['wood', 'stone', 'fish', 'meat']) {
           expect(
             ctrl.storageCapacity(res) - before[res]!,
             closeTo(20 * roomPerPoint('storehouse', res), 1e-9),
@@ -279,7 +315,7 @@ void main() {
       test('each resource reads its OWN dial, not one shared number', () {
         final role = kFallbackBuildingDefs['storehouse']!.workshops.single;
         // Every resource this store holds has a dial of its own…
-        for (final res in ['wood', 'stone', 'fish', 'fur']) {
+        for (final res in ['wood', 'stone', 'fish', 'meat']) {
           expect(role.mults, contains(res), reason: res);
         }
         // …and the runtime really reads that one. Tuning ONE resource must move
@@ -291,9 +327,9 @@ void main() {
           slots: role.slots,
           levelFactor: role.levelFactor,
           slotSteps: role.slotSteps,
-          mults: {...role.mults, 'fur': 1},
+          mults: {...role.mults, 'meat': 1},
         );
-        expect(tuned.storageRoomFor('fur', 20, 1), closeTo(20, 1e-9));
+        expect(tuned.storageRoomFor('meat', 20, 1), closeTo(20, 1e-9));
         expect(
           tuned.storageRoomFor('wood', 20, 1),
           closeTo(20 * role.mults['wood']!, 1e-9),
@@ -323,14 +359,18 @@ void main() {
         expect(ctrl.storageCapacity('wood'), lessThan(withWorker));
       });
 
-      test('the breakdown names the staff, and still adds up', () {
+      test('the per-building breakdown folds a posted logistician into ITS '
+          'row, and still adds up', () {
+        // Per instance now (user 2026-08-31), not a settlement-wide
+        // "Logisticians on duty" line — the staff belongs to the building
+        // they are posted in, the same building a tap on the row opens.
+        final before = ctrl.storageSourcesByBuilding('wood');
+        final beforeStore = before.firstWhere((s) => s.$1.id == 'b_store').$3;
         CreaturesController().creatures.add(worker('w', 20, 'b_store'));
-        final sources = ctrl.storageSources('wood');
-        expect(
-          sources.map((s) => s.label),
-          contains('Logisticians on duty'),
-        );
-        final summed = sources.fold<double>(0, (a, s) => a + s.amount);
+        final after = ctrl.storageSourcesByBuilding('wood');
+        final afterStore = after.firstWhere((s) => s.$1.id == 'b_store').$3;
+        expect(afterStore, greaterThan(beforeStore));
+        final summed = after.fold<double>(0, (a, s) => a + s.$3);
         expect(summed, closeTo(ctrl.storageCapacity('wood'), 1e-9));
       });
 
@@ -339,8 +379,10 @@ void main() {
         // vocabulary has to know it is neither goods per hour nor a fraction.
         expect(workshopRoleFeedsSystem(WorkshopRole.kStorageRoom), isTrue);
         expect(workshopRoleName(WorkshopRole.kStorageRoom), 'Storage room');
-        expect(workshopRoleEffect(WorkshopRole.kStorageRoom, 190.4),
-            '+190 room');
+        expect(
+          workshopRoleEffect(WorkshopRole.kStorageRoom, 190.4),
+          '+190 room',
+        );
         expect(
           kFallbackBuildingDefs['storehouse']!
               .workshops
@@ -387,9 +429,12 @@ void main() {
           for (final e in kBuildingEffects[id]!.effects)
             if (e.type == 'storage') e.key,
         ];
-        final lines = buildingEffectUpgradeLines(def, 1, 2, 1)
-            .where((l) => l.group == 'Storage')
-            .toList();
+        final lines = buildingEffectUpgradeLines(
+          def,
+          1,
+          2,
+          1,
+        ).where((l) => l.group == 'Storage').toList();
         expect(lines.map((l) => l.label), authored, reason: id);
         for (final l in lines) {
           expect(l.onlyNext, isTrue, reason: '$id/${l.label}');
@@ -403,8 +448,11 @@ void main() {
 
     test('both stores are buildable in era I', () {
       for (final id in ['storehouse', 'gold_vault']) {
-        expect(kFallbackBuildingDefs[id]!.eraIds, contains('era_1'),
-            reason: id);
+        expect(
+          kFallbackBuildingDefs[id]!.eraIds,
+          contains('era_1'),
+          reason: id,
+        );
       }
     });
   });
@@ -439,11 +487,7 @@ void main() {
         name: 'n',
         eraIndex: 1,
         mainBuildingLevel: 1,
-        craftJobs: const [
-          CraftJob('a'),
-          CraftJob('b'),
-          CraftJob('c'),
-        ],
+        craftJobs: const [CraftJob('a'), CraftJob('b'), CraftJob('c')],
         createdAt: DateTime(2026),
       );
       final back = SettlementModel.fromMap({

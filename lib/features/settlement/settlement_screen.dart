@@ -18,7 +18,7 @@ import 'settlement_controller.dart';
 import 'build_menu_screen.dart';
 import 'sheets/energy_sheet.dart';
 import 'bag_screen.dart';
-import 'sheets/resource_breakdown_sheet.dart';
+import 'resource_detail_screen.dart';
 import 'widgets/meander_strip.dart';
 import 'widgets/quick_pad.dart';
 import 'widgets/scroll_paper.dart';
@@ -198,28 +198,23 @@ class _SettlementScreenState extends State<SettlementScreen>
     builder: (_) => EnergySheet(ctrl: _ctrl),
   );
 
+  // Its OWN screen now (user 2026-08-31: "die Ressourcendetail screens einen
+  // eigenen Screen werden") — [ResourceDetailScreen] reads everything it
+  // shows live off [SettlementController] itself, so this only has to name
+  // WHICH resource; total/sources/stored/capacity are no longer snapshotted
+  // at tap time the way the sheet needed them handed in.
   void _showResourceBreakdown({
+    required String resourceId,
     required String emoji,
     required String title,
-    required double total,
-    required String unit,
-    required List<ProductionSource> sources,
-    double? stored,
-    double? capacity,
-    List<ProductionSource> capacitySources = const [],
-  }) => showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => ResourceBreakdownSheet(
-      emoji: emoji,
-      title: title,
-      total: total,
-      unit: unit,
-      sources: sources,
-      stored: stored,
-      capacity: capacity,
-      capacitySources: capacitySources,
+  }) => Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => ResourceDetailScreen(
+        resourceId: resourceId,
+        emoji: emoji,
+        title: title,
+      ),
     ),
   );
 
@@ -326,20 +321,28 @@ class _SettlementScreenState extends State<SettlementScreen>
                 ),
                 child: Stack(
                   children: [
-                    // The build menu's own bands, as wallpaper.
+                    // The build menu's own bands, as wallpaper. Flush to
+                    // the box's own top/bottom edge (user 2026-09-01), the
+                    // same fillHeight fix the era panel got — a hard-edged
+                    // card, not a free page margin, so the usual centred-
+                    // with-margin run left a visible gap at both ends.
                     Positioned(
                       left: 4,
                       top: 0,
                       bottom: 0,
                       width: 14,
-                      child: MeanderStrip(color: ornament),
+                      child: MeanderStrip(color: ornament, fillHeight: true),
                     ),
                     Positioned(
                       right: 4,
                       top: 0,
                       bottom: 0,
                       width: 14,
-                      child: MeanderStrip(color: ornament, flip: true),
+                      child: MeanderStrip(
+                        color: ornament,
+                        flip: true,
+                        fillHeight: true,
+                      ),
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(30, 18, 30, 16),
@@ -524,6 +527,22 @@ class _SettlementScreenState extends State<SettlementScreen>
           onOpenBuildMenu: _showBuildMenu,
         ),
       ),
+      // Tapping the map closes the open eras panel (user 2026-09-01: "wenn
+      // das era panel geöffnet ist, soll es sich schliessen, wenn ich
+      // irgendwo auf die map klicke"). Sits ABOVE the map but BELOW the top
+      // bar in this Stack, so it swallows a dismiss tap anywhere on the map
+      // without also passing it through to the map underneath, while the
+      // header/panel's own taps (chips, the fold tab) still land on the
+      // header above this layer untouched. Absent entirely while closed —
+      // no invisible barrier stealing taps the map needs the rest of the
+      // time.
+      if (_erasOpen)
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _erasOpen = false),
+          ),
+        ),
       // Stacked rather than each Positioned at a guessed offset: the top bar's
       // height now depends on the device's safe area, so a hardcoded `top: 50`
       // for the debug row would sit under it on a notched phone.
@@ -580,8 +599,7 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// Placement counts too now (2026-08-09): the map's own banner explains the
   /// ✓/✗ that are sitting over the building, and a second banner underneath it
   /// saying roughly the same thing is one too many.
-  bool get _mapModeActive =>
-      _roadMode || _editMode || _pendingTypeId != null;
+  bool get _mapModeActive => _roadMode || _editMode || _pendingTypeId != null;
 
   Widget _bottomStack() {
     // The Build menu no longer needs a mention here (2026-07-31): it is a page
@@ -620,8 +638,9 @@ class _SettlementScreenState extends State<SettlementScreen>
     IntroDestination.map => _showOverworld(),
     IntroDestination.trips => _showExpeditions(),
     IntroDestination.build => _showBuildMenu(),
-    IntroDestination.healingHut =>
-      _mapKey.currentState?.openBuildingByType(kHealingHutBuildingId),
+    IntroDestination.healingHut => _mapKey.currentState?.openBuildingByType(
+      kHealingHutBuildingId,
+    ),
   };
 
   // ── Top bar ───────────────────────────────────────────────
@@ -655,43 +674,84 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// cells above them — just the ones this era does not spend — so the bar
   /// simply gets taller and shows them.
   ///
-  /// The TAB is drawn before the band and tucked under it, so the band's own
-  /// edge and shadow fall across its top: no seam, no second surface, one piece
-  /// of material with a pull on it.
+  /// The TAB sits directly below the band as a normal sibling now, not a
+  /// Positioned child tucked (via a negative offset) under it (user
+  /// 2026-08-31: "dieser Button zum aufklappen ist nicht anwählbar").
+  ///
+  /// A Stack's own size is set by its NON-positioned children only — a
+  /// Positioned child overflowing the Stack (the tab, hanging below the
+  /// band) never counts toward it, so ancestor hit-testing (which stops at
+  /// the Stack's own bounds before ever asking its children) rejected any
+  /// tap landing in that overflow — exactly where the tab's tappable icon
+  /// sits. Doubly so once the band's own height started changing under
+  /// [_erasPanel]'s AnimatedSize, which no fixed-size workaround could have
+  /// tracked. A real Column sibling has no such blind spot, at the cost of
+  /// the few pixels the tab used to tuck up under the band's own edge.
   Widget _topBar() => SafeArea(
     bottom: false,
-    child: Stack(
-      clipBehavior: Clip.none,
+    child: Column(
       children: [
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: -(_kErasTabH - _kErasTabTuck),
-          child: Center(child: _erasTab()),
-        ),
         ParchmentHeader.band(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [_resourceRow(), _erasPanel()],
+          // The same Greek-key bordure every ParchmentPage carries down its
+          // sides (user 2026-08-31: "bei der Ressourcenübersicht bitte auch
+          // das Mäanderband an den Seiten einfügen"), on the band's own dark
+          // fill rather than a page's parchment — [ParchmentPage.ornament]
+          // is the ink for BOTH, since the app went dark-mode-first and that
+          // ink already reads on graphite.
+          child: Stack(
+            children: [
+              // Bands BEHIND the content, same paint order ParchmentPage
+              // uses — drawn first so the resource cells sit on top of them
+              // rather than the other way round.
+              Positioned(
+                left: 4,
+                top: 0,
+                bottom: 0,
+                width: 14,
+                // Flush to the box's own top/bottom edge (user 2026-08-31:
+                // "das Band soll oben und unten bis wirklich zur Kante der
+                // Box gehen") — this panel IS a hard-edged box, not a free
+                // page margin, so the usual centred-with-margin run left a
+                // visible gap at both ends.
+                child: MeanderStrip(
+                  color: ParchmentPage.ornament,
+                  fillHeight: true,
+                ),
+              ),
+              Positioned(
+                right: 4,
+                top: 0,
+                bottom: 0,
+                width: 14,
+                child: MeanderStrip(
+                  color: ParchmentPage.ornament,
+                  flip: true,
+                  fillHeight: true,
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [_resourceRow(), _erasPanel()],
+              ),
+            ],
           ),
         ),
+        Center(child: _erasTab()),
       ],
     ),
   );
 
-  /// How far the tab hangs below the band, and how much of it hides behind it.
+  /// How far the tab hangs below the band.
   static const double _kErasTabH = 26;
-  static const double _kErasTabTuck = 8;
 
   /// The pull that unfolds the bar. Cut from the band's own gradient with only
-  /// its bottom corners rounded — the top edge is meant to disappear into the
-  /// band above it.
+  /// its bottom corners rounded.
   Widget _erasTab() => GestureDetector(
     onTap: () => setState(() => _erasOpen = !_erasOpen),
     behavior: HitTestBehavior.opaque,
     child: Container(
       width: 64,
-      height: _kErasTabH + _kErasTabTuck,
+      height: _kErasTabH,
       alignment: Alignment.bottomCenter,
       padding: const EdgeInsets.only(bottom: 2),
       decoration: BoxDecoration(
@@ -736,13 +796,32 @@ class _SettlementScreenState extends State<SettlementScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (final era in eras)
-                    _eraMenuRow(era, era.order == currentEra),
+                  for (var i = 0; i < eras.length; i++) ...[
+                    if (i > 0) _eraDivider(),
+                    _eraMenuRow(eras[i], eras[i].order == currentEra),
+                  ],
                 ],
               ),
             ),
     );
   }
+
+  /// The rule between two era rows — inset and thicker, not edge to edge
+  /// (user 2026-09-01: "die Trennstriche im era panel so machen wie bei
+  /// Management"), same shape as [ParchmentDivider] but at THIS panel's own
+  /// inset (18/16, clearing the band) rather than [ParchmentPage
+  /// .kParchmentPagePad] — a page's own margin, which this narrower dropdown
+  /// does not share — and in the ink every other line on this dark band
+  /// already uses, rather than [ParchmentDivider]'s parchment-page [FoE
+  /// .border].
+  Widget _eraDivider() => Padding(
+    // 26/24, not 18/16 (user 2026-09-01: "die Trennstriche sollen nicht
+    // ganz bis zum Mäanderband gehen") — the row content's own inset
+    // stops exactly where the band ends, which put the rule flush against
+    // it with no breathing room; a few px more leaves a visible gap.
+    padding: const EdgeInsets.fromLTRB(26, 0, 24, 0),
+    child: Container(height: 2, color: kParchmentInk.withValues(alpha: 0.13)),
+  );
 
   static const _kRomans = [
     'I',
@@ -764,7 +843,8 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// progress is kept and retried every tick, so this is a heads-up, not an
   /// error — it clears itself the moment a write lands again.
   Widget _syncWarning() => Tooltip(
-    message: 'Not saved — it will retry automatically.\n'
+    message:
+        'Not saved — it will retry automatically.\n'
         'Your progress is kept locally.',
     triggerMode: TooltipTriggerMode.tap,
     showDuration: const Duration(seconds: 4),
@@ -772,8 +852,11 @@ class _SettlementScreenState extends State<SettlementScreen>
       constraints: const BoxConstraints(minHeight: FoE.tapTarget),
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: const Icon(Icons.cloud_off_rounded,
-          color: Colors.orangeAccent, size: 20),
+      child: const Icon(
+        Icons.cloud_off_rounded,
+        color: Colors.orangeAccent,
+        size: 20,
+      ),
     ),
   );
 
@@ -863,9 +946,9 @@ class _SettlementScreenState extends State<SettlementScreen>
                   : null,
               child: Text(
                 'Claim',
-                style: FoE.label(size: 12).copyWith(
-                  color: t.claimable ? FoE.gold : FoE.textMuted,
-                ),
+                style: FoE.label(
+                  size: 12,
+                ).copyWith(color: t.claimable ? FoE.gold : FoE.textMuted),
               ),
             ),
         ],
@@ -886,7 +969,10 @@ class _SettlementScreenState extends State<SettlementScreen>
     // see [_eraResources]. Every cell is an Expanded, so the row still fits.
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 2, 5),
+      // 18/16, not 4/2 (user 2026-08-31: the band now carries a meander
+      // strip down each side) — clears the strip's own 4 + 14 px reach so
+      // the first and last cell's icons don't sit half under it.
+      padding: const EdgeInsets.fromLTRB(18, 0, 16, 5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -1025,16 +1111,9 @@ class _SettlementScreenState extends State<SettlementScreen>
     double rate,
   ) => _headerCell(
     onTap: () => _showResourceBreakdown(
+      resourceId: resourceId,
       emoji: emoji,
       title: title,
-      total: rate,
-      unit: '/h',
-      sources: _ctrl.productionSources(resourceId),
-      // The CEILING, next to the rate (user 2026-07-30). Production stops at
-      // it, so a rate on its own can describe something that is not happening.
-      stored: amount,
-      capacity: _ctrl.storageCapacity(resourceId),
-      capacitySources: _ctrl.storageSources(resourceId),
     ),
     child: Builder(
       builder: (_) {
@@ -1058,6 +1137,7 @@ class _SettlementScreenState extends State<SettlementScreen>
         final digits = rate.abs() >= 10 ? 0 : 1;
         return _cellBody(
           emoji: emoji,
+          iconColor: resourceColor(resourceId),
           value: _short(amount),
           sub: over
               ? 'over ${_short(cap)}'
@@ -1067,8 +1147,8 @@ class _SettlementScreenState extends State<SettlementScreen>
           subColor: losing
               ? FoE.danger
               : full
-                  ? const Color(0xFF9B3B22)
-                  : null,
+              ? const Color(0xFF9B3B22)
+              : null,
         );
       },
     ),
@@ -1086,12 +1166,43 @@ class _SettlementScreenState extends State<SettlementScreen>
     required String emoji,
     required String value,
     required String sub,
+    Color? iconColor,
     Color? valueColor,
     Color? subColor,
   }) => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Text(emoji, style: const TextStyle(fontSize: _kHeaderIconSize)),
+      // Fixed box, not a bare Text: color emoji render through a fallback
+      // system font whose glyph bitmap sits taller than the line height
+      // Flutter computes from Outfit's own metrics at this size, so an
+      // unconstrained emoji bled down and overwrote the value below it
+      // (user 2026-08-31: "Die Icons werden überschrieben").
+      //
+      // The badge behind it is the resource's own colour at low strength
+      // (user 2026-08-31: "die Icons passend einfärben") — the glyph itself
+      // is a baked-colour emoji font, immune to TextStyle.color, so the tint
+      // has to live on something behind it instead.
+      SizedBox(
+        height: _kHeaderIconSize + 4,
+        child: Center(
+          child: Container(
+            width: _kHeaderIconSize + 8,
+            height: _kHeaderIconSize + 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: (iconColor ?? const Color(0xFF8B95A5)).withValues(
+                alpha: 0.16,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                emoji,
+                style: const TextStyle(fontSize: _kHeaderIconSize),
+              ),
+            ),
+          ),
+        ),
+      ),
       // STAMPED, in the band's own hand (user 2026-07-29: "jetzt den Header im
       // gleichen stil"). The corner keys' full letterpress — the glyph in the
       // material's own colour, carried entirely by two hairlines — is not
@@ -1133,6 +1244,7 @@ class _SettlementScreenState extends State<SettlementScreen>
       onTap: () => _showManagement(initialTab: 2),
       child: _cellBody(
         emoji: '🛏',
+        iconColor: resourceColor('housing'),
         value: '$used/$cap',
         sub: full ? 'full' : '${cap - used} free',
         valueColor: full ? FoE.danger : null,
@@ -1154,49 +1266,68 @@ class _SettlementScreenState extends State<SettlementScreen>
     ];
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      decoration: BoxDecoration(
-        color: current ? FoE.positive.withValues(alpha: 0.10) : null,
-        border: Border(
-          top: BorderSide(color: kParchmentInk.withValues(alpha: 0.13)),
-          // The era you are in is called out by a bar down its left edge, so
-          // it is findable in a list of eight without reading any of them.
-          left: BorderSide(
-            color: current ? FoE.positive : Colors.transparent,
-            width: 3,
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Text(era.displayEmoji, style: const TextStyle(fontSize: 13)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  '${_roman(era.order)} · ${era.displayName}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: FoE.label(size: 11).copyWith(
-                    color: current ? FoE.positive : FoE.parchment,
-                    fontWeight: current ? FontWeight.w700 : FontWeight.w400,
+      padding: const EdgeInsets.fromLTRB(0, 8, 16, 8),
+      // NO fill, and no border of its own any more (user 2026-08-31: "lass
+      // den grünen halbtransparenten Schatten/Box [weg]"; 2026-09-01: "die
+      // Trennstriche im era panel so machen wie bei Management") — the
+      // left accent bar alone says which era this is, and the rule
+      // between rows is [_eraDivider], drawn once by [_erasPanel] between
+      // rows rather than as each row's own full-bleed top border.
+      // The accent bar moved OFF the container's own edge (user 2026-08-31:
+      // "damit der vertikale grüne Strich rechts von dem Band Platz hat")
+      // — it used to sit at x 0-3, AHEAD of where the band itself starts
+      // (x 4-18); now it sits just past the band, with the text pushed
+      // further right again to clear it in turn. IntrinsicHeight so the
+      // accent bar (a fixed-width, unconstrained-height Container) can
+      // stretch to match the text/chip column's own height.
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(width: 18), // clears the band
+            Container(
+              width: 3,
+              color: current ? FoE.positive : Colors.transparent,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      // No icon, no dot (user 2026-08-31: "überall die
+                      // Icons streichen und den Punkt zwischen Zahl und
+                      // Text") — the roman numeral and the era's name,
+                      // plainly.
+                      Expanded(
+                        child: Text(
+                          '${_roman(era.order)}  ${era.displayName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: FoE.label(size: 11).copyWith(
+                            color: current ? FoE.positive : FoE.parchment,
+                            fontWeight:
+                                current ? FontWeight.w700 : FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 5),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 5,
+                    children: [
+                      for (final r in items) _eraChip(r.id, r.emoji, r.name),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 5),
-          Wrap(
-            spacing: 6,
-            runSpacing: 5,
-            children: [
-              for (final r in items) _eraChip(r.id, r.emoji, r.name),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1206,21 +1337,33 @@ class _SettlementScreenState extends State<SettlementScreen>
     final has = amount > 0;
     return InkWell(
       onTap: () {
-        Navigator.of(context).pop();
-        _showResourceBreakdown(
-          emoji: emoji,
-          title: name,
-          total: _ctrl.hourlyRates[id] ?? 0,
-          unit: '/h',
-          sources: _ctrl.productionSources(id),
-        );
+        // Close the DROPDOWN, not the route (2026-09-01 fix: "wenn ich eine
+        // Ressource beim era panel anklicke und ... auf den zurückbutton
+        // drücke, kommt ein blackscreen"). The eras panel is inline now
+        // (AnimatedSize + _erasOpen), not the popup its own history once
+        // was — this Navigator.pop() was a leftover from back when it WAS
+        // one, and since SettlementScreen is the app's root route, popping
+        // it here quietly emptied the Navigator's history. Pushing
+        // ResourceDetailScreen straight after papered over it (there was
+        // still a route to push onto), until backing OUT of that screen had
+        // nothing valid left underneath it.
+        setState(() => _erasOpen = false);
+        _showResourceBreakdown(resourceId: id, emoji: emoji, title: name);
       },
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: ShapeDecoration(// An era you have not reached holds nothing, and its chips say so by
+        decoration: ShapeDecoration(
+          // An era you have not reached holds nothing, and its chips say so by
           // fading rather than by disappearing — the ladder stays readable.
-          color: kParchmentInk.withValues(alpha: has ? 0.07 : 0.03), shape: FoE.facet(radius: 8, side: BorderSide(color: kParchmentInk.withValues(alpha: has ? 0.20 : 0.10)))),
+          color: kParchmentInk.withValues(alpha: has ? 0.07 : 0.03),
+          shape: FoE.facet(
+            radius: 8,
+            side: BorderSide(
+              color: kParchmentInk.withValues(alpha: has ? 0.20 : 0.10),
+            ),
+          ),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1228,9 +1371,9 @@ class _SettlementScreenState extends State<SettlementScreen>
             const SizedBox(width: 4),
             Text(
               _short(amount),
-              style: FoE.value(size: 10).copyWith(
-                color: has ? FoE.parchment : FoE.textMuted,
-              ),
+              style: FoE.value(
+                size: 10,
+              ).copyWith(color: has ? FoE.parchment : FoE.textMuted),
             ),
           ],
         ),
@@ -1246,7 +1389,12 @@ class _SettlementScreenState extends State<SettlementScreen>
     if (energy == null) {
       return _headerCell(
         onTap: _showEnergyOverview,
-        child: _cellBody(emoji: '⚡', value: '—', sub: ''),
+        child: _cellBody(
+          emoji: '⚡',
+          iconColor: resourceColor('energy'),
+          value: '—',
+          sub: '',
+        ),
       );
     }
     final pct = energy.currentEnergy;
@@ -1263,6 +1411,7 @@ class _SettlementScreenState extends State<SettlementScreen>
       // cream is a number you cannot read.
       child: _cellBody(
         emoji: '⚡',
+        iconColor: resourceColor('energy'),
         value: pct.toStringAsFixed(0),
         sub: isEmpty ? 'empty' : fmtDuration(hoursLeft * 3600),
         valueColor: isEmpty ? FoE.danger : null,
@@ -1280,26 +1429,33 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// The ⚡ energy and 🗺 expansion buttons are gone (user 2026-07-26). One
   /// resource button that fills the yard is what testing a build actually
   /// needs; the other two handed out things you can also reach by playing.
+  ///
+  /// ICON-ONLY, and deliberately unshowy (user 2026-08-31: "nur als icon
+  /// jeweils, dafür deutlich kleiner, dass alle nebeneinander Platz haben.
+  /// Diese sollen nicht auffallen, da sie später so oder so gelöscht
+  /// werden") — three small glyphs side by side rather than a labelled,
+  /// gold-on-dark row that reads as a real feature of the screen.
   Widget _debugRow() {
     if (!_ctrl.isDev) return const SizedBox.shrink();
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Gold gates nothing (it only ever removes waiting) and wood/stone are
-        // what every build costs, so a thousand of each costs no balance — it
-        // just means a building under test doesn't wait on a gather trip.
+        // Gold gates nothing (it only ever removes waiting) and wood/stone
+        // are what every build costs, so a thousand of each costs no
+        // balance — it just means a building under test doesn't wait on a
+        // gather trip.
         _debugBtn(
-          '🪙 +${kDevResetFloat.toInt()}',
+          '🪙',
           () => _ctrl.grantResources({
             'gold': kDevResetFloat,
             'wood': kDevResetFloat,
             'stone': kDevResetFloat,
           }),
         ),
-        const SizedBox(width: 6),
-        _debugBtn('🔄 Reset', _confirmReset),
-        const SizedBox(width: 6),
-        _debugBtn('🛠 Dev Mode', _showDevMode),
+        const SizedBox(width: 4),
+        _debugBtn('🔄', _confirmReset),
+        const SizedBox(width: 4),
+        _debugBtn('🛠', _showDevMode),
       ],
     );
   }
@@ -1353,7 +1509,13 @@ class _SettlementScreenState extends State<SettlementScreen>
                         horizontal: 20,
                         vertical: 8,
                       ),
-                      decoration: ShapeDecoration(color: Colors.red.shade900.withValues(alpha: 0.4), shape: FoE.facet(radius: 6, side: BorderSide(color: Colors.red.shade700))),
+                      decoration: ShapeDecoration(
+                        color: Colors.red.shade900.withValues(alpha: 0.4),
+                        shape: FoE.facet(
+                          radius: 6,
+                          side: BorderSide(color: Colors.red.shade700),
+                        ),
+                      ),
                       child: Text(
                         'Reset',
                         style: FoE.label().copyWith(color: Colors.red.shade300),
@@ -1370,14 +1532,20 @@ class _SettlementScreenState extends State<SettlementScreen>
     if (ok == true) await _ctrl.resetSettlement();
   }
 
-  Widget _debugBtn(String label, VoidCallback onTap) => GestureDetector(
+  Widget _debugBtn(String emoji, VoidCallback onTap) => GestureDetector(
     onTap: onTap,
     child: Container(
-      height: 26,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      width: 20,
+      height: 20,
       alignment: Alignment.center,
-      decoration: ShapeDecoration(color: const Color(0xFF1A1206), shape: FoE.facet(radius: 4, side: BorderSide(color: FoE.border))),
-      child: Text(label, style: FoE.dim(size: 9).copyWith(color: FoE.gold)),
+      decoration: ShapeDecoration(
+        color: const Color(0xFF1A1206).withValues(alpha: 0.6),
+        shape: FoE.facet(
+          radius: 4,
+          side: BorderSide(color: FoE.border.withValues(alpha: 0.5)),
+        ),
+      ),
+      child: Text(emoji, style: const TextStyle(fontSize: 10)),
     ),
   );
 

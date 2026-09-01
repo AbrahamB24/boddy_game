@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../common/widgets/parchment_page.dart';
 import 'meander_strip.dart';
-import 'scroll_paper.dart'
-    show kParchmentInk, kParchmentMid;
+import 'scroll_paper.dart' show kParchmentInk, kParchmentMid;
 
 /// The bottom sheet every settlement menu wears (user 2026-07-27: "Bag und
 /// Energy sollen im gleichen Stil gestaltet werden wie die anderen neueren
@@ -76,69 +75,77 @@ class ParchmentSheet extends StatelessWidget {
               top: BorderSide(color: FoE.lit(kParchmentMid), width: 2),
             ),
           ),
-          child: Column(
-            // STRETCH (user 2026-08-30: "die Deko an den Rand nehmen") — was
-            // the Column default (centre), which gives a loose-width child
-            // its own preferred width and then centres the RESULT. The
-            // header's Row survives that by accident (an Expanded inside it
-            // forces a finite width), but the Stack below it has no such
-            // child: it shrank to fit the tile grid's content and got
-            // centred, carrying the meander strips in from the true edge
-            // with it — not a fixed inset, but drifting with however wide
-            // the content happened to be.
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          // The bands run the FULL sheet height now, behind the title band
+          // too (user 2026-08-31: "das Mäanderband soll oben weitergehen
+          // und 'unter' den Header auf allen Screens") — they used to sit
+          // only in the body's own Stack, starting exactly where the title
+          // band ends, so the border was a strip down the CONTENT, not down
+          // the sheet. The title band (opaque, full width) still covers its
+          // own row of it exactly as before.
+          child: Stack(
             children: [
-              // ── The BAND stays, the handle goes (user 2026-08-01: "lösche
-              //    den oberen Balken und den hellen grauen", then "Das Header
-              //    Band wollte ich behalten") ──
+              // Wallpaper first, so a band can never land over a card.
               //
-              // There were two bars stacked over the title: a light grey grab
-              // handle and, under it, the app's header band. The handle was the
-              // one to lose — it hints at a gesture that works anywhere on the
-              // sheet, so it spends a row saying what the whole surface already
-              // does. The band is how every titled thing in the app names
-              // itself, and a sheet is no exception.
-              ParchmentHeader.band(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 16, 10),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(title, style: ParchmentHeader.titleStyle()),
-                      ),
-                      if (trailing != null) trailing!,
-                    ],
-                  ),
-                ),
+              // Flush at the sheet's own edge now (user 2026-08-30: "die
+              // Deko an den Rand nehmen, wie bei anderen Screens auch") —
+              // the strip already keeps its own air on both sides
+              // ([_FacetPainter._inset]), so the outer 4px this Positioned
+              // added on top of that was pure dead margin, not part of the
+              // motif.
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 14,
+                child: MeanderStrip(color: ornament),
               ),
-              Expanded(
-                child: Stack(
-                  children: [
-                    // Wallpaper first, so a band can never land over a card.
-                    //
-                    // Flush at the sheet's own edge now (user 2026-08-30:
-                    // "die Deko an den Rand nehmen, wie bei anderen Screens
-                    // auch") — the strip already keeps its own air on both
-                    // sides ([_FacetPainter._inset]), so the outer 4px this
-                    // Positioned added on top of that was pure dead margin,
-                    // not part of the motif.
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: 14,
-                      child: MeanderStrip(color: ornament),
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: 14,
+                child: MeanderStrip(color: ornament, flip: true),
+              ),
+              Column(
+                // STRETCH (user 2026-08-30: "die Deko an den Rand nehmen") —
+                // was the Column default (centre), which gives a loose-width
+                // child its own preferred width and then centres the
+                // RESULT. The header's Row survives that by accident (an
+                // Expanded inside it forces a finite width), but a shrunk
+                // child here would get centred, carrying the meander
+                // strips in from the true edge with it — not a fixed inset,
+                // but drifting with however wide the content happened to be.
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── The BAND stays, the handle goes (user 2026-08-01:
+                  //    "lösche den oberen Balken und den hellen grauen",
+                  //    then "Das Header Band wollte ich behalten") ──
+                  //
+                  // There were two bars stacked over the title: a light
+                  // grey grab handle and, under it, the app's header band.
+                  // The handle was the one to lose — it hints at a gesture
+                  // that works anywhere on the sheet, so it spends a row
+                  // saying what the whole surface already does. The band is
+                  // how every titled thing in the app names itself, and a
+                  // sheet is no exception.
+                  ParchmentHeader.band(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 16, 10),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: ParchmentHeader.titleStyle(),
+                            ),
+                          ),
+                          if (trailing != null) trailing!,
+                        ],
+                      ),
                     ),
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: 14,
-                      child: MeanderStrip(color: ornament, flip: true),
-                    ),
-                    builder(context, scrollCtrl),
-                  ],
-                ),
+                  ),
+                  Expanded(child: builder(context, scrollCtrl)),
+                ],
               ),
             ],
           ),

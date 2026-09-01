@@ -21,7 +21,7 @@ export '../models/heal_balance.dart' show HealConfig, kHealBalance;
 //
 // ── Why it scales ──
 // The cost is paid in the CURRENT ERA's goods (goodsForEra), never in a
-// hardcoded 'fish'/'fur'. A later era that introduces a resource gets it spent
+// hardcoded 'fish'/'meat'. A later era that introduces a resource gets it spent
 // here automatically, with no change to this file.
 
 /// Real seconds of treatment per point of missing HP (user 2026-07-16:

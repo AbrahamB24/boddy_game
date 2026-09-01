@@ -14,7 +14,7 @@ void main() {
   group('gold → goods costs more than selling paid', () {
     test('round trip loses gold at every discount, including the ceiling', () {
       for (final d in [0.0, 0.25, kMaxTradeDiscount, 1.0 /* clamped */]) {
-        for (final r in ['wood', 'stone', 'fish', 'fur']) {
+        for (final r in ['wood', 'stone', 'fish', 'meat']) {
           const amount = 100.0;
           final earned = sellValue(r, amount);
           final cost = goodsBuyCost(r, amount, discount: d);
@@ -52,7 +52,7 @@ void main() {
   group('barter keeps value minus the fee', () {
     test('two goods swap 1:1 minus the fee', () {
       // Every good shares one sell rate, so the ratio is the fee alone.
-      expect(barterYield('fish', 'fur', 100), 100 * (1 - kBarterFee));
+      expect(barterYield('fish', 'meat', 100), 100 * (1 - kBarterFee));
     });
 
     test('across the bulk/goods divide it follows the sell rates', () {
@@ -65,9 +65,9 @@ void main() {
 
     test('a round trip loses value at every discount', () {
       for (final d in [0.0, 0.3, kMaxTradeDiscount]) {
-        final there = barterYield('fish', 'fur', 100, discount: d);
-        final back = barterYield('fur', 'fish', there, discount: d);
-        expect(back, lessThan(100), reason: 'fish→fur→fish at discount $d');
+        final there = barterYield('fish', 'meat', 100, discount: d);
+        final back = barterYield('meat', 'fish', there, discount: d);
+        expect(back, lessThan(100), reason: 'fish→meat→fish at discount $d');
       }
     });
 
@@ -75,13 +75,13 @@ void main() {
       expect(barterYield('fish', 'fish', 100), 0);
       expect(barterYield('gold', 'fish', 100), 0);
       expect(barterYield('fish', 'gold', 100), 0);
-      expect(barterYield('fish', 'fur', 1), 0); // 0.75 fur floors to none
+      expect(barterYield('fish', 'meat', 1), 0); // 0.75 meat floors to none
     });
 
     test('minBarterAmount is the smallest offer that pays out', () {
-      final min = minBarterAmount('fish', 'fur');
-      expect(barterYield('fish', 'fur', min), greaterThanOrEqualTo(1));
-      expect(barterYield('fish', 'fur', min - 1), 0);
+      final min = minBarterAmount('fish', 'meat');
+      expect(barterYield('fish', 'meat', min), greaterThanOrEqualTo(1));
+      expect(barterYield('fish', 'meat', min - 1), 0);
     });
   });
 
@@ -135,7 +135,7 @@ void main() {
   group('what is tradeable', () {
     test('era I trades wood, stone and its two luxuries — nothing later', () {
       final e1 = tradeableResources(1);
-      expect(e1, containsAll(['wood', 'stone', 'fish', 'fur']));
+      expect(e1, containsAll(['wood', 'stone', 'fish', 'meat']));
       expect(e1, isNot(contains('honey'))); // era II
       expect(e1, isNot(contains('gold'))); // gold is the price, not the ware
     });

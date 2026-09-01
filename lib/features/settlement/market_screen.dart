@@ -20,7 +20,9 @@ import 'services/gold_economy.dart';
 import 'services/trade_caravan.dart';
 import 'services/trade_center.dart';
 import 'settlement_controller.dart';
-import 'widgets/scroll_paper.dart' show kPageShadow, kParchmentInk, kParchmentLight;
+import 'widgets/scroll_paper.dart' show kParchmentInk, kParchmentLight;
+import '../common/widgets/empty_monster_slot.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/recess_bar.dart';
 
 /// The Market — A SCREEN OF ITS OWN, ON THE HATCHERY'S PLAN (user 2026-07-27:
@@ -427,71 +429,27 @@ class _MarketScreenState extends State<MarketScreen> {
   /// places. Same tile, same size, everywhere.
   Widget _caravanRank() {
     final cap = _creatures.teamSizeCap;
-    // THE MONSTERS GRID'S OWN DELEGATE (user 2026-07-27: "mache diese genau
-    // gleich gross/hoch wie beim Monsterscreen"). Same count, same spacing,
-    // same aspect, and the page now carries the same side padding — so the
-    // cells work out to the same pixels rather than merely the same shape.
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: _kTileAspect,
-      ),
-      itemCount: cap,
-      itemBuilder: (_, i) =>
-          i < _caravan.length ? _memberCard(_caravan[i], i) : _emptySlot(i),
-    );
+    // [monsterTileGrid] now (user 2026-08-31: "genau gleich gross sein wie
+    // die Kacheln beim Monstersscreen"), not this page's own copy of the
+    // Monsters grid's delegate — matching every PARAMETER (2026-07-27) still
+    // left the actual pixels to whatever width THIS page's own padding
+    // happened to hand the delegate, which is exactly the gap that kept
+    // reopening.
+    return monsterTileGrid([
+      for (var i = 0; i < cap; i++)
+        i < _caravan.length ? _memberCard(_caravan[i], i) : _emptySlot(i),
+    ]);
   }
-
-  /// The Monsters-grid cell shape, which every monster tile in the game is
-  /// drawn in — the Hatchery's egg slot and the breeding parents included.
-  /// 0.60, not 0.70 (user 2026-08-28: taller, more room for the art).
-  static const double _kTileAspect = 0.60;
 
   /// An unfilled place, in the BUILD MENU'S dead-card style — the same frame the
   /// Hatchery's egg slot and the breeding screen's parent slots wear, so an
   /// empty place lines up with the tile that will fill it. A tap fills THIS
   /// place, and only this one.
-  Widget _emptySlot(int index) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
+  Widget _emptySlot(int index) => EmptyMonsterSlot(
+    // Only the NEXT place to be filled says what a tap does — six copies of
+    // "Add" is noise, and one is a caption for the rank.
+    label: index == _caravan.length ? 'Add' : null,
     onTap: _addHauler,
-    child: LayoutBuilder(
-      // The tile reserves its top 17 % for the art that pops out of it; the
-      // empty card leaves the same gap so the row lines up.
-      builder: (context, box) => Padding(
-        padding: EdgeInsets.only(top: box.maxHeight * 0.17),
-        child: Container(
-          decoration: ShapeDecoration(color: kParchmentInk.withValues(alpha: 0.10),
-            
-            shadows: [
-              BoxShadow(
-                color: kPageShadow.withValues(alpha: 0.24),
-                blurRadius: 0,
-                offset: const Offset(0, 3),
-              ),
-            ], shape: FoE.facet(radius: 22)),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_circle_outline, size: 24, color: _inkFaint),
-              // Only the NEXT place to be filled says what a tap does — six
-              // copies of "Add" is noise, and one is a caption for the rank.
-              if (index == _caravan.length) ...[
-                const SizedBox(height: 5),
-                Text(
-                  'Add',
-                  style: FoE.label(size: 11).copyWith(color: _inkFaint),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    ),
   );
 
   /// One filled place: THE monster tile, unchanged from every other screen.

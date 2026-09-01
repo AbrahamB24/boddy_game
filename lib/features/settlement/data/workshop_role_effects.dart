@@ -356,8 +356,8 @@ List<UpgradeLine> buildingEffectUpgradeLines(
   }
   // NO alphabetical sort (user 2026-07-30: "unten die gleiche Reihenfolge wie
   // oben"). It used to sort by label, which put a store's ceilings in
-  // fish/fur/stone/wood order under a card that listed them wood/stone/fish/
-  // fur — the same four rows, shuffled, one panel apart. Authoring order is
+  // fish/meat/stone/wood order under a card that listed them wood/stone/fish/
+  // meat — the same four rows, shuffled, one panel apart. Authoring order is
   // what the card above already uses, and what the author sees in the editor.
   return lines;
 }

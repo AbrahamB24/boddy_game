@@ -17,6 +17,7 @@ import 'models/species_def.dart';
 import 'services/breeding_controller.dart';
 import 'widgets/egg_card.dart';
 import 'widgets/egg_details.dart';
+import '../common/widgets/monster_tile_grid.dart';
 
 /// ONE EGG, OPENED FROM THE BAG (user 2026-07-27: "sobald ich auf ein Ei
 /// drücke. Komme ich in ein neues Menü, welches das Ei zusammen mit den Stats
@@ -137,15 +138,16 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
     final free = _breeding.freeHatcherySlots > 0;
     final noHatchery = _breeding.hatcherySlots <= 0;
     return [
-      // THE EGG IN THE MIDDLE, at the Hatchery slot's own size — half width,
-      // not full: a lone tile stretched across the page reads as a banner
-      // rather than as the object you are holding.
+      // THE EGG IN THE MIDDLE, at the Monsters-grid tile's own size (user
+      // 2026-08-31: "genau gleich gross sein wie die Kacheln beim
+      // Monstersscreen") — a fraction of this page's own width, at a stale
+      // aspect ratio (0.70) nobody had revisited since [kMonsterTileAspect]
+      // last moved to 0.60, is exactly how a tile drifts off the grid's own.
       Center(
-        child: FractionallySizedBox(
-          widthFactor: 0.46,
-          child: AspectRatio(
-            // The Monsters-grid cell shape, as everywhere an egg is shown.
-            aspectRatio: 0.70,
+        child: Builder(
+          builder: (context) => SizedBox(
+            width: monsterTileWidth(context),
+            height: monsterTileHeight(context),
             child: EggCard(job: job),
           ),
         ),

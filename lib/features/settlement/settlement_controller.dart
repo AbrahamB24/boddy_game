@@ -461,7 +461,7 @@ class SettlementController extends ChangeNotifier {
   // Sums, per output, the relevant civilian stat of every creature currently
   // stationed in a functional workshop and actually able to work (not K.O.,
   // has energy, not breeding). Keys are settlement resource ids ('wood',
-  // 'stone', 'gold', 'fish', 'fur') plus the pseudo-outputs
+  // 'stone', 'gold', 'fish', 'meat') plus the pseudo-outputs
   // WorkshopRole.kConstruction / kResearch. This is THE bridge between the
   // creature collection and the settlement economy — tick(), hourlyRates and
   // the countdown estimates all read it.
@@ -558,22 +558,33 @@ class SettlementController extends ChangeNotifier {
   // road-connected to count, and every number in it is dev-tunable. What the
   // settlement holds WITHOUT one is a dial, not a hidden grant.
 
-  /// The ceiling on [resource] — the settlement's own, plus every functional
-  /// building's authored `storage` effect for it AND the room its posted
-  /// logisticians make (user 2026-07-30).
+  /// The ceiling on [resource] — every functional building's authored
+  /// `storage` effect for it, plus the room its posted logisticians make
+  /// (user 2026-07-30).
   ///
   /// The staff's room only counts for a resource the building actually stores:
   /// a store's post amplifies what that store holds, the way every post reads
   /// what it amplifies. So a logistician in the Gold Vault raises the gold
   /// ceiling and nothing else, and one in the Storehouse raises all four of its
   /// goods by the same amount.
+  ///
+  /// ── The flat dial is a FALLBACK now, not a given (user 2026-08-31: "alle
+  /// Anfangslagerplätze sollen vom Castle kommen") ──
+  /// Wood/stone/gold used to start from [Dials.baseStorage]/
+  /// [Dials.baseGoldStorage] unconditionally, on top of whatever a building
+  /// added — an invisible number no building's own card could explain, and
+  /// one that never grew no matter how the settlement did. The Castle now
+  /// authors that same starting room as its own `storage` effects (see
+  /// building_effects.dart), so it reads on the Castle's own card and grows
+  /// with its level like everything else it does. The dial still applies,
+  /// but only to a resource NO building — Castle included — has anything to
+  /// say about yet: a later era's good with no store built for it still
+  /// gets somewhere to sit, exactly as it always has.
   double storageCapacity(String resource) {
-    final base = resource == 'gold'
-        ? GameTuning.i.raw(Dials.baseGoldStorage)
-        : GameTuning.i.raw(Dials.baseStorage);
     final connected = connectedBuildingIds;
     final era = settlement?.eraIndex ?? 1;
-    var total = base;
+    var total = 0.0;
+    var anyBuildingStoresIt = false;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
       final def = kBuildingDefs[b.buildingTypeId];
@@ -581,8 +592,14 @@ class SettlementController extends ChangeNotifier {
       // No `storage` effect for this resource → this building does not hold it,
       // so neither its ceiling nor its staff has anything to say about it.
       if (def.effectEntry('storage', resource, era) == null) continue;
+      anyBuildingStoresIt = true;
       total += def.effectAt('storage', resource, era, level: b.level);
       total += storageRoomPosted(b, resource);
+    }
+    if (!anyBuildingStoresIt) {
+      total += resource == 'gold'
+          ? GameTuning.i.raw(Dials.baseGoldStorage)
+          : GameTuning.i.raw(Dials.baseStorage);
     }
     return total;
   }
@@ -607,73 +624,29 @@ class SettlementController extends ChangeNotifier {
   List<String> get fullStores =>
       resources?.atCapacity(storageCaps).toList() ?? const [];
 
-  /// WHERE the room for [resource] comes from — the settlement's own, then one
-  /// entry per building type that stores it (user 2026-07-30: "wenn ich oben
-  /// auf die Ressourcen drücke, will ich auch das Cap sehen").
-  ///
-  /// Same shape as [productionSources] so the breakdown sheet lists a ceiling
-  /// exactly the way it lists a rate: a full store and a slow one are the same
-  /// kind of question — which building fixes this — and they deserve the same
-  /// kind of answer.
-  List<ProductionSource> storageSources(String resource) {
-    final base = resource == 'gold'
-        ? GameTuning.i.raw(Dials.baseGoldStorage)
-        : GameTuning.i.raw(Dials.baseStorage);
-    final out = <ProductionSource>[
-      if (base > 0)
-        ProductionSource(
-          emoji: '🏛',
-          label: 'The settlement itself',
-          count: 1,
-          amount: base,
-        ),
-    ];
+  /// WHERE the room for [resource] comes from, PER BUILDING (user
+  /// 2026-08-31) — the new Storage screen's own list, one row per instance
+  /// rather than [storageSources]' by-type grouping, same reasoning as
+  /// [productionSourcesByBuilding]. A building's own posted logisticians are
+  /// folded into ITS row rather than a separate settlement-wide "on duty"
+  /// line — per instance, the staff belongs to the building they are posted
+  /// in, the same building the row's own tap opens.
+  List<(PlacedBuilding, BuildingDef, double)> storageSourcesByBuilding(
+    String resource,
+  ) {
     final connected = connectedBuildingIds;
     final era = settlement?.eraIndex ?? 1;
-    final totals = <String, double>{};
-    final counts = <String, int>{};
-    // The STAFF's room, tallied apart from the buildings' own (user 2026-07-30).
-    // Its own line because it is the one part of a ceiling you can change today,
-    // without building or levelling anything: post another logistician.
-    var staffRoom = 0.0;
-    var staffed = 0;
+    final out = <(PlacedBuilding, BuildingDef, double)>[];
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
       final def = kBuildingDefs[b.buildingTypeId];
       if (def == null) continue;
       if (def.effectEntry('storage', resource, era) == null) continue;
-      final room = def.effectAt('storage', resource, era, level: b.level);
-      if (room > 0) {
-        totals[b.buildingTypeId] = (totals[b.buildingTypeId] ?? 0) + room;
-        counts[b.buildingTypeId] = (counts[b.buildingTypeId] ?? 0) + 1;
-      }
-      final posted = storageRoomPosted(b, resource);
-      if (posted > 0) {
-        staffRoom += posted;
-        staffed++;
-      }
-    }
-    for (final e in totals.entries) {
-      final def = kBuildingDefs[e.key];
-      out.add(
-        ProductionSource(
-          emoji: '🏚',
-          imageUrl: def?.imageUrl,
-          label: def?.name ?? e.key,
-          count: counts[e.key] ?? 1,
-          amount: e.value,
-        ),
-      );
-    }
-    if (staffRoom > 0) {
-      out.add(
-        ProductionSource(
-          emoji: '👷',
-          label: 'Logisticians on duty',
-          count: staffed,
-          amount: staffRoom,
-        ),
-      );
+      final room =
+          def.effectAt('storage', resource, era, level: b.level) +
+          storageRoomPosted(b, resource);
+      if (room <= 0) continue;
+      out.add((b, def, room));
     }
     return out;
   }
@@ -1967,6 +1940,15 @@ class SettlementController extends ChangeNotifier {
     // Map-progress gate (user 2026-07-24): buildings unlock as battles are won
     // on the linear path, not by research. The menu already hides locked ones;
     // this guards the write path too.
+    //
+    // A Building Plot is exempt (governed by expansionsUnlocked/
+    // buildPlotLimit instead — see the check below); every other building
+    // additionally needs a REAL node reward now, not just an era it happens
+    // to belong to (user 2026-08-31: "diejenigen, welche ich noch gar
+    // keinem Knoten zugeordnet habe, sollen noch nicht baubar sein").
+    if (!def.isBuildPlot && !buildingHasPathReward(typeId)) {
+      return 'Not yet unlocked by the campaign';
+    }
     final unlockBattle = buildingUnlockBattle(typeId);
     if (battlesCleared < unlockBattle) {
       return 'Unlocks after battle $unlockBattle on the map';
@@ -2401,10 +2383,71 @@ class SettlementController extends ChangeNotifier {
     );
   }
 
+  // ── Resource-tap breakdown, PER BUILDING (user 2026-08-31) ──
+  // [productionSources] groups by building TYPE; the Resource screen's own
+  // "Produced by" list wants one row per INSTANCE instead, the same reason
+  // Housing/Work list buildings individually rather than by type — two
+  // Lumber Camps with different crews or levels do not make the same wood.
+  // Same math as [productionSources]' own per-building loop, just kept apart
+  // rather than summed into `totals`.
+  List<(PlacedBuilding, BuildingDef, double)> productionSourcesByBuilding(
+    String resourceId,
+  ) {
+    final connected = connectedBuildingIds;
+    final eb = eraBonusTotals(settlement?.eraIndex ?? 1);
+    double bonusMult;
+    if (resourceId == 'wood' || resourceId == 'stone' || resourceId == 'gold') {
+      final pct = resourceId == 'wood'
+          ? eb.wood + eb.all
+          : resourceId == 'stone'
+          ? eb.stone + eb.all
+          : 0.0;
+      bonusMult = 1 + pct;
+    } else {
+      bonusMult = 1 + eb.food;
+    }
+    final creatures = CreaturesController();
+    final era = settlement?.eraIndex ?? 1;
+    final out = <(PlacedBuilding, BuildingDef, double)>[];
+    for (final b in buildings) {
+      if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
+      final def = kBuildingDefs[b.buildingTypeId];
+      if (def == null) continue;
+      double amount = 0;
+      for (final role in def.workshops) {
+        if (role.resource != resourceId) continue;
+        for (final c in creatures.creatures) {
+          if (c.assignedBuildingId != b.id || c.assignedStat != role.stat) {
+            continue;
+          }
+          if (c.isKo ||
+              creatures.isBreeding(c.id) ||
+              creatures.isOnExpedition(c.id)) {
+            continue;
+          }
+          amount += c.statValue(role.stat) * role.mult;
+        }
+      }
+      amount *= buildingYieldFactor(b.level);
+      final effVal = def.effectAt(
+        'production',
+        resourceId,
+        era,
+        level: b.level,
+      );
+      if (effVal != 0) {
+        amount += effVal * _legendaryBoostFactor(b, def, creatures);
+      }
+      if (amount == 0) continue;
+      out.add((b, def, amount * bonusMult));
+    }
+    return out;
+  }
+
   // ── Resource-tap breakdown ("where does this come from") ──
   // Groups the creature-driven output for [resourceId] by workshop building
   // type, applying the same tech bonuses as hourlyRates so the rows add
-  // up to the header rate. For goods (fish/fur) it appends a consumption row.
+  // up to the header rate. For goods (fish/meat) it appends a consumption row.
   List<ProductionSource> productionSources(String resourceId) {
     final connected = connectedBuildingIds;
     final eb = eraBonusTotals(settlement?.eraIndex ?? 1);
@@ -2473,6 +2516,7 @@ class SettlementController extends ChangeNotifier {
       final def = kBuildingDefs[e.key]!;
       return ProductionSource(
         imageUrl: def.imageUrl,
+        defId: def.id,
         label: def.name,
         count: counts[e.key]!,
         amount: e.value,

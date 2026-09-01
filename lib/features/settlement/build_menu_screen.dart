@@ -116,7 +116,7 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
   SettlementController get ctrl => widget.ctrl;
 
   /// Horizontal breathing room between the page's margin and its content.
-  static const double _contentInset = 8;
+  static const double _contentInset = 12;
 
   // ── Ink on the parchment ──
   // The panel is a light parchment surface, so everything written on it uses
@@ -726,7 +726,10 @@ class _BuildCard extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: FoE.dim(size: 8).copyWith(
+        // size 9, not 8 (2026-08-31 audit) — the same corner-badge shape
+        // (padding, radius 6) reads at 9 everywhere else it appears
+        // (bag_screen.dart, assign_workers_sheet.dart).
+        style: FoE.dim(size: 9).copyWith(
           color: Colors.white,
           fontWeight: FontWeight.w800,
           letterSpacing: 0.4,
@@ -855,7 +858,9 @@ class _BuildCard extends StatelessWidget {
     final era = ctrl.settlement?.eraIndex ?? 1;
     for (final res in def.effectKeys('production')) {
       final rate = def.effectAt('production', res, era, level: 1);
-      if (rate > 0) parts.add('${resourceEmoji(res)} +${rate.toStringAsFixed(1)}/h');
+      if (rate > 0) {
+        parts.add('${resourceEmoji(res)} +${rate.toStringAsFixed(1)}/h');
+      }
     }
     for (final w in def.workshops) {
       // Training roles read no stat — sell what the building actually does.

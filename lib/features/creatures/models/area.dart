@@ -180,16 +180,16 @@ const List<AreaDef> kFallbackAreaDefs = [
         id: 'vh_stream',
         resource: 'fish',
       ),
-      // Fur in region ONE (user decision 2026-07-17): era I bills its costs
-      // in fish AND fur (goodsForEra), and the Hunter Lodge is era-I content
-      // — so the era's own region must offer a fur source, or fur only
+      // Meat in region ONE (user decision 2026-07-17): era I bills its costs
+      // in fish AND meat (goodsForEra), and the Butcher Shop is era-I content
+      // — so the era's own region must offer a meat source, or meat only
       // arrives after the region-1 boss. Deliberately under Stone Reach's
       // 10/h thicket, mirroring the vh_outcrop/sr_quarry split: the Reach
-      // stays THE fur region; these are snare lines on the valley edge, not
+      // stays THE meat region; these are snare lines on the valley edge, not
       // a hunting ground.
       ResourceSpotDef(
         id: 'vh_snares',
-        resource: 'fur',
+        resource: 'meat',
       ),
       // Stone in region ONE, though Stone Ridge (region 2) is THE stone
       // region. Without this, Era I has no stone at all outside the quarry
@@ -229,7 +229,7 @@ const List<AreaDef> kFallbackAreaDefs = [
       ),
       ResourceSpotDef(
         id: 'sr_thicket',
-        resource: 'fur',
+        resource: 'meat',
       ),
       // Replaces sr_shrine, the ⭐/BP spot that left with the currency. Without
       // a third spot this region would offer FEWER places to work than the
@@ -261,14 +261,14 @@ const List<AreaDef> kFallbackAreaDefs = [
         id: 'ew_ridge',
         resource: 'stone',
       ),
-      // Replaces ew_obelisk (the other ⭐/BP spot). Fur, and the best of it:
-      // what survives on volcanic flats is worth skinning, and this region's
-      // whole pitch is "dangerous, but you come back full" (dangerLevel 3 —
-      // expedition_risk taxes the haul here). It has to out-yield Stone
-      // Reach's thicket or the risk buys the player nothing.
+      // Replaces ew_obelisk (the other ⭐/BP spot). Meat, and the best of it:
+      // what survives on volcanic flats is worth butchering, and this
+      // region's whole pitch is "dangerous, but you come back full"
+      // (dangerLevel 3 — expedition_risk taxes the haul here). It has to
+      // out-yield Stone Reach's thicket or the risk buys the player nothing.
       ResourceSpotDef(
         id: 'ew_ashlands',
-        resource: 'fur',
+        resource: 'meat',
       ),
     ],
   ),

@@ -172,11 +172,15 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
                 ),
               ),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+        // all(12), not fromLTRB(10, 8, 10, 10) — and radius 12, not 14
+        // (2026-08-31 audit) — the standard list-card shape/padding used
+        // everywhere else (teams_screen.dart, breeding_screen.dart,
+        // battle_screen.dart, healing_hut_screen.dart, hatchery_screen.dart).
+        padding: const EdgeInsets.all(12),
         decoration: ShapeDecoration(
           color: kParchmentInk.withValues(alpha: discovered ? 0.10 : 0.05),
           shape: FoE.facet(
-            radius: 14,
+            radius: 12,
             side: BorderSide(
               color: discovered
                   ? species.rarity.color.withValues(alpha: 0.6)

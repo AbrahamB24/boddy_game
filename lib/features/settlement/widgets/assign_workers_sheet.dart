@@ -5,6 +5,10 @@ import '../../../core/theme/foe_theme.dart';
 import '../../creatures/models/creature_instance.dart';
 import '../../creatures/services/creatures_controller.dart';
 import '../../creatures/widgets/creature_card.dart';
+import '../../common/widgets/app_back_button.dart';
+import '../../common/widgets/empty_monster_slot.dart';
+import '../../common/widgets/filter_pills.dart';
+import '../../common/widgets/monster_tile_grid.dart';
 import '../../common/widgets/parchment_page.dart' show ParchmentHeader;
 import '../data/building_definitions.dart';
 import '../models/placed_building.dart';
@@ -73,6 +77,13 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
   /// pick just fills the next open seat as before.
   String? _swapTargetId;
 
+  /// The sort control's own state (user 2026-08-31: "brauche ich in diesem
+  /// Menü eine Sortierfunktion"). Null key = the post's own default order
+  /// (best stat first, or lowest level first for Training) — same field-
+  /// picks-then-flips shape as the Management screen's own sort pills.
+  String? _sortKey;
+  late bool _sortDescending = !_training;
+
   CreatureInstance? get _swapTarget {
     final id = _swapTargetId;
     if (id == null) return null;
@@ -93,7 +104,7 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
           c.assignedBuildingId == widget.building.id &&
           c.assignedStat == _role.stat)
       .toList()
-    ..sort((x, y) => _rank(x).compareTo(_rank(y)));
+    ..sort(_cmp);
 
   /// Everyone else, best first — PLUS the seat's own current occupant when
   /// this roster was opened to swap it (user 2026-08-30: "sollen mir alle
@@ -111,12 +122,23 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
         .creatures
         .where((c) => !hereIds.contains(c.id))
         .toList()
-      ..sort((x, y) => _rank(x).compareTo(_rank(y)));
+      ..sort(_cmp);
   }
 
-  /// Sort key — smaller is better, so one comparator serves both orders.
-  int _rank(CreatureInstance c) =>
-      _training ? c.level : -c.statValue(_role.stat);
+  /// The sort pill's own comparator. A null [_sortKey] is the post's default
+  /// order (best stat first, or lowest level first for Training); picking a
+  /// field explicitly always starts descending, the same convention the
+  /// Management screen's sort pills use, then flips on a second tap.
+  int _cmp(CreatureInstance x, CreatureInstance y) {
+    final cmp = switch (_sortKey) {
+      'level' => x.level.compareTo(y.level),
+      'name' => x.displayName.compareTo(y.displayName),
+      _ => _training
+          ? x.level.compareTo(y.level)
+          : x.statValue(_role.stat).compareTo(y.statValue(_role.stat)),
+    };
+    return _sortDescending ? -cmp : cmp;
+  }
 
   /// The building a monster is posted to, when it is NOT this one — the mark
   /// the user asked for. Naming the building beats a bare "elsewhere": taking
@@ -209,25 +231,42 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
 
   /// The sheet's own header band names the view — no more duplicate title
   /// printed again inside the content below it.
+  ///
+  /// WHICH BUILDING, not which stat (user 2026-08-31: "der Titel soll nicht
+  /// der entsprechende Stat sein, sondern der Name des Gebäudes") — a sheet
+  /// full of monster tiles already says "assignment"; what it did not say
+  /// was which of your buildings you were staffing. The stat/role itself
+  /// moved to [_sheetTrailing], beside the seat count, so it is not lost.
   String get _sheetTitle {
     if (_adding) {
       final swapping = _swapTarget;
       if (swapping != null) return 'Swap ${swapping.displayName}';
       return _training ? 'Add · lowest level first' : 'Add';
     }
-    return _training ? 'Training' : _role.stat.label;
+    return kBuildingDefs[widget.building.buildingTypeId]?.name ??
+        widget.building.buildingTypeId;
   }
 
-  /// The seat count, bare, on the header band — only in the crew view; the
-  /// roster reads its own ranking line instead.
+  /// The role this seat reads, plus the seat count — only in the crew view;
+  /// the roster reads its own sort pill instead.
   Widget? get _sheetTrailing {
     if (_adding) return null;
     final free = _slots - _posted.length;
-    return Text(
-      '${_posted.length} / $_slots',
-      style: ParchmentHeader.titleStyle(size: 13).copyWith(
-        color: free <= 0 ? _accent : ParchmentHeader.engravedInk,
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _training ? 'Training' : _role.stat.label,
+          style: FoE.dim(size: 11).copyWith(color: _inkSoft),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '${_posted.length} / $_slots',
+          style: ParchmentHeader.titleStyle(size: 13).copyWith(
+            color: free <= 0 ? _accent : ParchmentHeader.engravedInk,
+          ),
+        ),
+      ],
     );
   }
 
@@ -254,35 +293,15 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
     ];
   }
 
-  // The one tile size for every grid this sheet draws — the crew's seats AND
-  // the roster's candidates (user 2026-08-30: "beim Swap screen die genau
-  // gleichen Kacheln verwenden"), same as [battle_prep_screen.dart]'s own
-  // slot grid.
-  static const int _gridCols = 3;
-  static const double _gridSpacing = 10.0;
-  static const double _gridAspect = 0.60;
-
   /// One tile per seat this post HAS — not per free seat, so the whole crew
   /// is visible at a glance instead of counted against a headline number.
-  Widget _slotsGrid(List<CreatureInstance> posted) => _tileGrid([
+  /// The shared [monsterTileGrid] size (user 2026-08-31: "sollen immer genau
+  /// gleich hoch sein, überall in der gesamten App") — not this sheet's own
+  /// copy of the sizing maths any more.
+  Widget _slotsGrid(List<CreatureInstance> posted) => monsterTileGrid([
         for (var i = 0; i < _slots; i++)
           i < posted.length ? _filledSlotTile(posted[i]) : _emptySlotTile(),
       ]);
-
-  Widget _tileGrid(List<Widget> tiles) => LayoutBuilder(
-        builder: (context, box) {
-          final tileW =
-              (box.maxWidth - _gridSpacing * (_gridCols - 1)) / _gridCols;
-          return Wrap(
-            spacing: _gridSpacing,
-            runSpacing: _gridSpacing,
-            children: [
-              for (final t in tiles)
-                SizedBox(width: tileW, height: tileW / _gridAspect, child: t),
-            ],
-          );
-        },
-      );
 
   /// A tap opens the roster in SWAP mode for this exact monster — the tile
   /// itself is now the only entry point, filling the role the ✕ and the
@@ -299,8 +318,8 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
       children: [
         CreatureCard(
           creature: c,
-          statOverrideLabel: _training ? 'Level' : _role.stat.label,
-          statOverrideValue: _training ? c.level : c.statValue(_role.stat),
+          vitalsLabel: _training ? 'Level' : _role.stat.label,
+          vitalsValue: _training ? c.level : c.statValue(_role.stat),
           onTap: () => setState(() {
             _adding = true;
             _swapTargetId = c.id;
@@ -333,46 +352,54 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
     );
   }
 
+  /// The roster's sort control — same field-picks-then-flips pill the
+  /// Management screen's Work tab uses, on the parchment palette this sheet
+  /// stands on.
+  Widget _sortPill() {
+    final defaultLabel = _training ? 'Level' : _role.stat.label;
+    return MenuPill<String>(
+      palette: PillPalette.parchment,
+      icon: Icons.swap_vert,
+      label: switch (_sortKey) {
+        'level' => 'Level',
+        'name' => 'Name',
+        _ => defaultLabel,
+      },
+      engaged: _sortKey != null || _sortDescending != !_training,
+      value: _sortKey ?? '',
+      entries: [
+        MapEntry('', defaultLabel),
+        // Training's default IS level, so a separate 'level' entry would
+        // just repeat the first one under a different key.
+        if (!_training) const MapEntry('level', 'Level'),
+        const MapEntry('name', 'Name'),
+      ],
+      trailing: Icon(
+        _sortDescending ? Icons.arrow_downward : Icons.arrow_upward,
+        size: 14,
+        color: _accent,
+      ),
+      selectedTrailing: _sortDescending ? '↓' : '↑',
+      onSelected: (v) => setState(() {
+        final picked = v.isEmpty ? null : v;
+        if (picked == _sortKey) {
+          _sortDescending = !_sortDescending;
+        } else {
+          _sortKey = picked;
+          _sortDescending = true;
+        }
+      }),
+    );
+  }
+
   /// A place waiting to be filled — a tap opens the roster the same way the
-  /// old "Add a monster" button did. The exact tile [battle_prep_screen.dart]
-  /// uses for an open party slot, not a parchment-tinted version of it — this
-  /// sheet's surface is parchment, but the tile pairs with a dark
-  /// [CreatureCard] beside it and has to read as the SAME kind of empty seat.
-  Widget _emptySlotTile() => GestureDetector(
-        behavior: HitTestBehavior.opaque,
+  /// old "Add a monster" button did.
+  Widget _emptySlotTile() => EmptyMonsterSlot(
+        label: 'Add',
         onTap: () => setState(() {
           _adding = true;
           _swapTargetId = null;
         }),
-        child: LayoutBuilder(
-          // The tile reserves its top 17% for the art that pops out of a
-          // filled tile's card, so the empty one leaves the same gap to stay
-          // lined up with it.
-          builder: (context, box) => Padding(
-            padding: EdgeInsets.only(top: box.maxHeight * 0.17),
-            child: Container(
-              decoration: ShapeDecoration(
-                color: FoE.panelDark,
-                shadows: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.24),
-                    blurRadius: 0,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-                shape: FoE.facet(radius: 22),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add_circle_outline, size: 24, color: FoE.textMuted),
-                  const SizedBox(height: 5),
-                  Text('Add', style: FoE.label(size: 11).copyWith(color: FoE.textMuted)),
-                ],
-              ),
-            ),
-          ),
-        ),
       );
 
   // ── View 2: hire, ranked by the stat this post reads ───────
@@ -380,15 +407,27 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
     final candidates = _candidates;
     final swapping = _swapTarget;
     return [
-      GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() {
-          _adding = false;
-          _swapTargetId = null;
-        }),
-        child: const Padding(
-          padding: EdgeInsets.only(bottom: 6),
-          child: Icon(Icons.arrow_back, size: 20, color: _accent),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          children: [
+            // The app's own back control (2026-08-31 audit) — this used to
+            // draw a bespoke Icons.arrow_back at 20px, a third size/glyph
+            // alongside AppBackButton's 22px arrow_back_ios_new and the
+            // header band's own back arrow.
+            AppBackButton(
+              onTap: () => setState(() {
+                _adding = false;
+                _swapTargetId = null;
+              }),
+              color: _accent,
+            ),
+            // The sort function (user 2026-08-31: "brauche ich in diesem
+            // Menü eine Sortierfunktion") — the roster is every monster you
+            // own, and the post's own default order is not always the one
+            // worth browsing by.
+            Expanded(child: _sortPill()),
+          ],
         ),
       ),
       // Only offered from a filled tile — an empty seat has nothing to
@@ -419,7 +458,7 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
               style: FoE.dim(size: 12).copyWith(color: _inkSoft)),
         )
       else
-        _tileGrid([for (final c in candidates) _candidateTile(c)]),
+        monsterTileGrid([for (final c in candidates) _candidateTile(c)]),
     ];
   }
 
@@ -446,8 +485,8 @@ class _AssignWorkersSheetState extends State<AssignWorkersSheet> {
       children: [
         CreatureCard(
           creature: c,
-          statOverrideLabel: _training ? 'Level' : _role.stat.label,
-          statOverrideValue: _training ? c.level : c.statValue(_role.stat),
+          vitalsLabel: _training ? 'Level' : _role.stat.label,
+          vitalsValue: _training ? c.level : c.statValue(_role.stat),
           onTap: () => _swapTargetId == null ? _set(c, true) : _swapWith(c),
         ),
         if (label != null)

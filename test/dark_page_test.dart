@@ -81,7 +81,9 @@ void main() {
     expect(scaffold.backgroundColor, kParchmentMid);
     expect(find.byType(ParchmentHeader), findsOneWidget);
     expect(find.text('Monsters'), findsOneWidget);
-    expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+    // The app's own back icon now (2026-08-31 audit), not the bespoke
+    // chevron_left this header used to draw by hand.
+    expect(find.byIcon(Icons.arrow_back_ios_new), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

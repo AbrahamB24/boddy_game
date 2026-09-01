@@ -29,6 +29,7 @@ import 'widgets/creature_card.dart';
 import 'widgets/creature_sprite.dart' show decodeWidthFor;
 import '../common/widgets/recess_bar.dart';
 import '../common/widgets/parchment_page.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../settlement/widgets/building_icon.dart';
 
 /// Result popped when the player WINS the inline catch mini-game (user
@@ -848,7 +849,10 @@ class _BattleScreenState extends State<BattleScreen>
                   onTap: () => Navigator.pop(context, c),
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(10),
+                    // all(12), not all(10) (2026-08-31 audit) — matching
+                    // this sheet's own sibling row below ("Use an item"),
+                    // the same selectable-row shape.
+                    padding: const EdgeInsets.all(12),
                     decoration: FoE.panel(radius: 8),
                     child: Row(
                       children: [
@@ -3474,8 +3478,8 @@ class _BattleScreenState extends State<BattleScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 88,
-            height: 88 / 0.60,
+            width: monsterTileWidth(context),
+            height: monsterTileHeight(context),
             child: inst != null
                 ? CreatureCard(creature: inst)
                 : Container(
@@ -3600,8 +3604,12 @@ class _BattleScreenState extends State<BattleScreen>
     ],
   );
 
+  // fontSize 16, not 15 (2026-08-31 audit) — this row's own comment below
+  // says it mirrors battle_prep_screen.dart's _buildingRewardRow/
+  // _plainRewardRow; the glyph size had drifted by 1px from what it claims
+  // to copy.
   Widget _victoryPlainRow(RewardLine r) =>
-      _unlockRow(Text(r.emoji, style: const TextStyle(fontSize: 15)), r.text);
+      _unlockRow(Text(r.emoji, style: const TextStyle(fontSize: 16)), r.text);
 
   /// A "new building" unlock, as the building's OWN preview picture and its
   /// name — mirrors battle_prep_screen.dart's own [_buildingRewardRow]. The

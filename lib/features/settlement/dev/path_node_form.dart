@@ -48,7 +48,7 @@ class _EnemyDraft {
   final TextEditingController levelCtrl;
 
   _EnemyDraft({required this.speciesId, required this.level})
-      : levelCtrl = TextEditingController(text: '$level');
+    : levelCtrl = TextEditingController(text: '$level');
 
   /// Set the level AND what the field shows. Used by the spread; typing goes the
   /// other way (the field is already right, only [level] needs to follow).
@@ -113,8 +113,8 @@ class _PathNodeFormState extends State<PathNodeForm> {
     return ((_order - 1) ~/ kBattlesPerEra) + 1;
   }
 
-  bool _inEra(int? era) => _eraFilter == null || era == null || era == _eraFilter;
-
+  bool _inEra(int? era) =>
+      _eraFilter == null || era == null || era == _eraFilter;
 
   /// A building's first buildable era. An empty eraIds means "every era", so it
   /// is never filtered out (null = always shown).
@@ -136,7 +136,6 @@ class _PathNodeFormState extends State<PathNodeForm> {
   List<ItemDef> get _itemsInEra =>
       kItemDefs.values.where((d) => _inEra(_eraOfItem(d))).toList()
         ..sort((a, b) => a.name.compareTo(b.name));
-
 
   @override
   void initState() {
@@ -232,9 +231,8 @@ class _PathNodeFormState extends State<PathNodeForm> {
     }
   }
 
-  void _snack(String m) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(m)));
-
+  void _snack(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   // ── Zufällige Gegner (user 2026-07-30) ─────────────────────
   // "für beim Pfad im dev menü die Option ein, dass ich die Monster zufällig
@@ -324,9 +322,9 @@ class _PathNodeFormState extends State<PathNodeForm> {
               decoration: FoE.btn(active: pool.isNotEmpty),
               child: Text(
                 '🎲 Zufällig aus ${pool.length} Arten',
-                style: FoE.label(size: 13).copyWith(
-                  color: pool.isEmpty ? FoE.textDim : Colors.white,
-                ),
+                style: FoE.label(
+                  size: 13,
+                ).copyWith(color: pool.isEmpty ? FoE.textDim : Colors.white),
               ),
             ),
           ),
@@ -339,15 +337,13 @@ class _PathNodeFormState extends State<PathNodeForm> {
           child: _numRow(
             'Anzahl',
             _randomCount,
-            onChanged: (v) => setState(
-              () => _randomCount = v.toInt().clamp(1, 12),
-            ),
+            onChanged: (v) =>
+                setState(() => _randomCount = v.toInt().clamp(1, 12)),
           ),
         ),
       ],
     ),
   );
-
 
   // ── Pakete statt Ressourcen (user 2026-07-30) ──────────────
   // "«normale» Ressourcen gibt es nicht mehr als Belohnungen. Diese können
@@ -381,8 +377,9 @@ class _PathNodeFormState extends State<PathNodeForm> {
     final wanted = amount ?? parts?.amount ?? sizes.first;
     final rung = sizes.contains(wanted)
         ? wanted
-        : sizes.reduce((a, b) =>
-            (a - wanted).abs() <= (b - wanted).abs() ? a : b);
+        : sizes.reduce(
+            (a, b) => (a - wanted).abs() <= (b - wanted).abs() ? a : b,
+          );
     setState(() => row.itemId = packId(res, rung));
   }
 
@@ -409,18 +406,21 @@ class _PathNodeFormState extends State<PathNodeForm> {
               isExpanded: true,
               dropdownColor: FoE.panelMid,
               style: FoE.label(size: 13).copyWith(color: FoE.parchment),
-              decoration:
-                  const InputDecoration(labelText: 'Resource', isDense: true),
+              decoration: const InputDecoration(
+                labelText: 'Resource',
+                isDense: true,
+              ),
               items: [
                 for (final id in options)
                   DropdownMenuItem(
                     value: id,
-                    child: Text('${resourceEmoji(id)} ${resourceName(id)}',
-                        overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      '${resourceEmoji(id)} ${resourceName(id)}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
               ],
-              onChanged: (v) =>
-                  v == null ? null : _setPack(row, resourceId: v),
+              onChanged: (v) => v == null ? null : _setPack(row, resourceId: v),
             ),
           ),
           const SizedBox(width: 8),
@@ -433,14 +433,18 @@ class _PathNodeFormState extends State<PathNodeForm> {
               isExpanded: true,
               dropdownColor: FoE.panelMid,
               style: FoE.label(size: 13).copyWith(color: FoE.parchment),
-              decoration:
-                  const InputDecoration(labelText: 'Package', isDense: true),
+              decoration: const InputDecoration(
+                labelText: 'Package',
+                isDense: true,
+              ),
               items: [
                 for (final a in sizes)
                   DropdownMenuItem(
                     value: a,
-                    child: Text('${packEmoji(a)} $a',
-                        overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      '${packEmoji(a)} $a',
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
               ],
               onChanged: (v) => v == null ? null : _setPack(row, amount: v),
@@ -453,15 +457,16 @@ class _PathNodeFormState extends State<PathNodeForm> {
               initialValue: '${row.count}',
               keyboardType: TextInputType.number,
               style: FoE.label(size: 14).copyWith(color: FoE.parchment),
-              decoration:
-                  const InputDecoration(labelText: '×', isDense: true),
+              decoration: const InputDecoration(labelText: '×', isDense: true),
               onChanged: (v) =>
                   setState(() => row.count = int.tryParse(v) ?? row.count),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.remove_circle_outline,
-                color: Colors.redAccent),
+            icon: const Icon(
+              Icons.remove_circle_outline,
+              color: Colors.redAccent,
+            ),
             onPressed: () => setState(() => _items.remove(row)),
           ),
         ],
@@ -482,8 +487,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
     }
     if (total <= 0) return '';
     return per.entries
-        .map((e) =>
-            '${e.value.toStringAsFixed(0)} ${resourceEmoji(e.key)}')
+        .map((e) => '${e.value.toStringAsFixed(0)} ${resourceEmoji(e.key)}')
         .join('   ');
   }
 
@@ -508,8 +512,10 @@ class _PathNodeFormState extends State<PathNodeForm> {
       data: buildDevModeTheme(),
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_isNew ? 'New Node' : 'Edit Node',
-              style: FoE.title(size: 16)),
+          title: Text(
+            _isNew ? 'New Node' : 'Edit Node',
+            style: FoE.title(size: 16),
+          ),
           actions: [
             if (!_isNew)
               IconButton(
@@ -525,26 +531,41 @@ class _PathNodeFormState extends State<PathNodeForm> {
               children: [
                 Expanded(
                   flex: 2,
-                  child: _textRow('Id', _id,
-                      enabled: _isNew, onChanged: (v) => _id = v),
+                  child: _textRow(
+                    'Id',
+                    _id,
+                    enabled: _isNew,
+                    onChanged: (v) => _id = v,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _numRow('Order', _order,
-                      onChanged: (v) => _order = v.toInt()),
+                  child: _numRow(
+                    'Order',
+                    _order,
+                    onChanged: (v) => _order = v.toInt(),
+                  ),
                 ),
               ],
             ),
-            _textRow('Name (leer = "Battle N")', _name,
-                onChanged: (v) => _name = v),
+            _textRow(
+              'Name (leer = "Battle N")',
+              _name,
+              onChanged: (v) => _name = v,
+            ),
             _areaDropdown(areas),
-            _checkboxRow('Boss (opens the next region/era)', _isBoss,
-                (v) => setState(() => _isBoss = v)),
+            _checkboxRow(
+              'Boss (opens the next region/era)',
+              _isBoss,
+              (v) => setState(() => _isBoss = v),
+            ),
             const SizedBox(height: 12),
             _eraFilterDropdown(areas),
             const SizedBox(height: 16),
 
-            _sectionLabel('Enemies (empty = formula: random species from the pool)'),
+            _sectionLabel(
+              'Enemies (empty = formula: random species from the pool)',
+            ),
             const SizedBox(height: 8),
             // ONE difficulty number for the whole fight, spread over the
             // monsters (user 2026-07-30). Everything below reads it: adding a
@@ -578,10 +599,9 @@ class _PathNodeFormState extends State<PathNodeForm> {
             else
               _addButton('+ Enemy', () {
                 setState(() {
-                  _enemies.add(_EnemyDraft(
-                    speciesId: species.first.id,
-                    level: 1,
-                  ));
+                  _enemies.add(
+                    _EnemyDraft(speciesId: species.first.id, level: 1),
+                  );
                   // A fourth monster does not make the node harder — it makes
                   // the same total thinner. Difficulty stays where the author
                   // put it.
@@ -603,8 +623,10 @@ class _PathNodeFormState extends State<PathNodeForm> {
                   child: Text('Resource packages', style: FoE.dim(size: 11)),
                 ),
                 if (_packSummary().isNotEmpty)
-                  Text(_packSummary(),
-                      style: FoE.label(size: 11).copyWith(color: FoE.gold)),
+                  Text(
+                    _packSummary(),
+                    style: FoE.label(size: 11).copyWith(color: FoE.gold),
+                  ),
               ],
             ),
             const SizedBox(height: 4),
@@ -615,10 +637,14 @@ class _PathNodeFormState extends State<PathNodeForm> {
                   : _packResourcesInEra.first;
               // Starts on the SMALLEST rung: a reward that is too big is worse
               // than one that is too small, and the ladder is one tap away.
-              setState(() => _items.add(_ItemDraft(
+              setState(
+                () => _items.add(
+                  _ItemDraft(
                     itemId: packId(first, packSizesFor(first).first),
                     count: 1,
-                  )));
+                  ),
+                ),
+              );
             }),
             const SizedBox(height: 12),
             Text('Items (dropped into the bag)', style: FoE.dim(size: 11)),
@@ -633,17 +659,31 @@ class _PathNodeFormState extends State<PathNodeForm> {
               )
             else
               _addButton('+ Item', () {
-                setState(() => _items.add(_ItemDraft(
-                      itemId: _itemsInEra.first.id,
-                      count: 1,
-                    )));
+                setState(
+                  () => _items.add(
+                    _ItemDraft(itemId: _itemsInEra.first.id, count: 1),
+                  ),
+                );
               }),
             const SizedBox(height: 12),
-            _numRow('Territory expansions (points)', _expansions,
-                onChanged: (v) =>
-                    setState(() => _expansions = v.toInt().clamp(0, 99))),
+            _numRow(
+              'Territory expansions (points)',
+              _expansions,
+              onChanged: (v) =>
+                  setState(() => _expansions = v.toInt().clamp(0, 99)),
+            ),
             const SizedBox(height: 12),
             Text('Unlock buildings', style: FoE.dim(size: 11)),
+            const SizedBox(height: 2),
+            // Building Plot isn't a type you unlock once — it's territory
+            // (user 2026-08-31), so unlike every other chip here it may sit
+            // on any number of nodes, each one worth +1 buildable plot.
+            Text(
+              'Building Plot: pick it on as many nodes as you like — each one '
+              'grants one more expansion, on top of the Territory expansions '
+              'field above.',
+              style: FoE.dim(size: 10).copyWith(color: FoE.textMuted),
+            ),
             const SizedBox(height: 6),
             _buildingPicker(),
             const SizedBox(height: 20),
@@ -685,8 +725,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
     final stages = <int>{
       for (final a in areas) a.battleStage as int,
       _nodeEra,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     String label(int stage) {
       for (final a in areas) {
         if (a.battleStage == stage) return '${a.emoji} Era $stage · ${a.name}';
@@ -732,7 +771,10 @@ class _PathNodeFormState extends State<PathNodeForm> {
             isExpanded: true,
             dropdownColor: FoE.panelMid,
             style: FoE.label(size: 13).copyWith(color: FoE.parchment),
-            decoration: const InputDecoration(labelText: 'Species', isDense: true),
+            decoration: const InputDecoration(
+              labelText: 'Species',
+              isDense: true,
+            ),
             items: [
               for (final s in species)
                 DropdownMenuItem(
@@ -743,8 +785,9 @@ class _PathNodeFormState extends State<PathNodeForm> {
                   child: Text(
                     '${s.element.emoji} ${s.name}',
                     overflow: TextOverflow.ellipsis,
-                    style: FoE.label(size: 13)
-                        .copyWith(color: speciesNameColor(s.id as String)),
+                    style: FoE.label(
+                      size: 13,
+                    ).copyWith(color: speciesNameColor(s.id as String)),
                   ),
                 ),
             ],
@@ -776,7 +819,10 @@ class _PathNodeFormState extends State<PathNodeForm> {
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
+          icon: const Icon(
+            Icons.remove_circle_outline,
+            color: Colors.redAccent,
+          ),
           onPressed: () => setState(() {
             _enemies.remove(e);
             e.dispose();
@@ -792,11 +838,15 @@ class _PathNodeFormState extends State<PathNodeForm> {
   Widget _itemRow(_ItemDraft i) {
     // Packages are excluded here: they have their own row above, and fifty of
     // them would bury the six real items.
-    final items = kItemDefs.values
-        .where((d) =>
-            !isPackId(d.id) && (d.id == i.itemId || _inEra(_eraOfItem(d))))
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+    final items =
+        kItemDefs.values
+            .where(
+              (d) =>
+                  !isPackId(d.id) &&
+                  (d.id == i.itemId || _inEra(_eraOfItem(d))),
+            )
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(8),
@@ -812,13 +862,18 @@ class _PathNodeFormState extends State<PathNodeForm> {
               isExpanded: true,
               dropdownColor: FoE.panelMid,
               style: FoE.label(size: 13).copyWith(color: FoE.parchment),
-              decoration: const InputDecoration(labelText: 'Item', isDense: true),
+              decoration: const InputDecoration(
+                labelText: 'Item',
+                isDense: true,
+              ),
               items: [
                 for (final d in items)
                   DropdownMenuItem(
                     value: d.id,
-                    child: Text('${d.emoji} ${d.name}',
-                        overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      '${d.emoji} ${d.name}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
               ],
               onChanged: (v) => setState(() => i.itemId = v ?? i.itemId),
@@ -830,12 +885,18 @@ class _PathNodeFormState extends State<PathNodeForm> {
               initialValue: i.count.toString(),
               keyboardType: TextInputType.number,
               style: FoE.label(size: 14).copyWith(color: FoE.parchment),
-              decoration: const InputDecoration(labelText: 'Count', isDense: true),
+              decoration: const InputDecoration(
+                labelText: 'Count',
+                isDense: true,
+              ),
               onChanged: (v) => i.count = int.tryParse(v) ?? i.count,
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
+            icon: const Icon(
+              Icons.remove_circle_outline,
+              color: Colors.redAccent,
+            ),
             onPressed: () => setState(() => _items.remove(i)),
           ),
         ],
@@ -872,6 +933,10 @@ class _PathNodeFormState extends State<PathNodeForm> {
     for (final n in kPathNodes.values) {
       if (n.id == _id) continue;
       for (final b in n.rewards.buildings) {
+        // Building Plot isn't a type you unlock once, it's territory (user
+        // 2026-08-31) — every node may grant it, each one worth one more
+        // plot, so it never counts as "taken" by another node.
+        if (b == 'building_plot') continue;
         final at = out[b];
         if (at == null || n.order < at) out[b] = n.order;
       }
@@ -887,30 +952,37 @@ class _PathNodeFormState extends State<PathNodeForm> {
         d.name.toLowerCase().contains(q) ||
         d.id.toLowerCase().contains(q);
 
-    final all = kBuildingDefs.values
-        .where((d) => !d.isRoad && !d.isMainBuilding)
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+    final all =
+        kBuildingDefs.values
+            .where((d) => !d.isRoad && !d.isMainBuilding)
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
     // Anything already granted stays visible whatever the era filter says —
     // same rule as the dropdowns, and for the stronger reason here: a hidden
     // chip is a reward you cannot untick.
     final selected = all.where((d) => _buildings.contains(d.id)).toList();
     final rest = all
-        .where((d) =>
-            !_buildings.contains(d.id) &&
-            !elsewhere.containsKey(d.id) &&
-            matches(d) &&
-            _inEra(_eraOfBuilding(d)))
+        .where(
+          (d) =>
+              !_buildings.contains(d.id) &&
+              !elsewhere.containsKey(d.id) &&
+              matches(d) &&
+              _inEra(_eraOfBuilding(d)),
+        )
         .toList();
     // Not offered, but findable: a SEARCH is a question, and "it is not here"
     // is a worse answer than "node 11 already gives it". Nothing shows until you
     // type — the point is a shorter list.
     final taken = q.isEmpty
         ? const <BuildingDef>[]
-        : (all.where((d) =>
-                !_buildings.contains(d.id) &&
-                elsewhere.containsKey(d.id) &&
-                matches(d)).toList());
+        : (all
+              .where(
+                (d) =>
+                    !_buildings.contains(d.id) &&
+                    elsewhere.containsKey(d.id) &&
+                    matches(d),
+              )
+              .toList());
     // Ids on the node whose def no longer exists: they still unlock nothing and
     // would otherwise be invisible AND unremovable. Show them so they can go.
     final orphans = _buildings.where((id) => !kBuildingDefs.containsKey(id));
@@ -918,9 +990,11 @@ class _PathNodeFormState extends State<PathNodeForm> {
     Widget chipFor(String id, String label) => _chip(
       label,
       _buildings.contains(id),
-      () => setState(() => _buildings.contains(id)
-          ? _buildings.remove(id)
-          : _buildings.add(id)),
+      () => setState(
+        () => _buildings.contains(id)
+            ? _buildings.remove(id)
+            : _buildings.add(id),
+      ),
     );
 
     return Column(
@@ -932,7 +1006,8 @@ class _PathNodeFormState extends State<PathNodeForm> {
             // The count of what is actually OFFERED, not of the whole roster —
             // with an era filter on, the two differ and the roster number
             // would just look like a broken list.
-            hintText: 'Search buildings… '
+            hintText:
+                'Search buildings… '
                 '(${selected.length + rest.length} of ${all.length})',
             prefixIcon: const Icon(Icons.search, color: FoE.gold, size: 18),
             isDense: true,
@@ -951,8 +1026,10 @@ class _PathNodeFormState extends State<PathNodeForm> {
             // because the earlier node already unlocked the building.
             for (final d in taken)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: FoE.panel(radius: 8),
                 child: Text(
                   '${d.name} · Knoten ${elsewhere[d.id]}',
@@ -965,8 +1042,8 @@ class _PathNodeFormState extends State<PathNodeForm> {
           const SizedBox(height: 6),
           Text(
             '${elsewhere.length} Gebäude sind schon an anderen Knoten '
-                'vergeben und darum hier nicht aufgeführt'
-                '${q.isEmpty ? ' (suchen zeigt, wo)' : ''}.',
+            'vergeben und darum hier nicht aufgeführt'
+            '${q.isEmpty ? ' (suchen zeigt, wo)' : ''}.',
             style: FoE.dim(size: 10),
           ),
         ],
@@ -984,9 +1061,12 @@ class _PathNodeFormState extends State<PathNodeForm> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: FoE.btn(active: selected),
-          child: Text(label,
-              style: FoE.label(size: 12)
-                  .copyWith(color: selected ? Colors.white : FoE.parchment)),
+          child: Text(
+            label,
+            style: FoE.label(
+              size: 12,
+            ).copyWith(color: selected ? Colors.white : FoE.parchment),
+          ),
         ),
       );
 
@@ -1007,12 +1087,16 @@ class _PathNodeFormState extends State<PathNodeForm> {
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(
             children: [
-              Icon(value ? Icons.check_box : Icons.check_box_outline_blank,
-                  color: value ? FoE.gold : FoE.textDim),
+              Icon(
+                value ? Icons.check_box : Icons.check_box_outline_blank,
+                color: value ? FoE.gold : FoE.textDim,
+              ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(label,
-                    style: FoE.label(size: 14).copyWith(color: FoE.parchment)),
+                child: Text(
+                  label,
+                  style: FoE.label(size: 14).copyWith(color: FoE.parchment),
+                ),
               ),
             ],
           ),
@@ -1032,9 +1116,14 @@ class _PathNodeFormState extends State<PathNodeForm> {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: FoE.goldBright),
+                  strokeWidth: 2,
+                  color: FoE.goldBright,
+                ),
               )
-            : Text('Save', style: FoE.label(size: 14).copyWith(color: Colors.white)),
+            : Text(
+                'Save',
+                style: FoE.label(size: 14).copyWith(color: Colors.white),
+              ),
       ),
     ),
   );
