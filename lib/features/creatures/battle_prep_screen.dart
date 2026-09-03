@@ -52,10 +52,21 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
   /// monster that leads the fight).
   final List<String> _selected = [];
 
-  // Tutorial's first fight: nothing to pick (there's only the one starter),
-  // so the whole screen is just "here's your team, hit Fight" — one
-  // spotlight rather than the battle screen's own 4-part sequence.
-  bool _showFightSpotlight = false;
+  // Tutorial's first fight (user 2026-09-02: "Lass den User das Monster
+  // selbst einfügen. Daher zum Start noch kein Monster aktiv") — no default
+  // roster is pre-picked, so the player has to add their one starter
+  // themselves and see the slot fill in, rather than arriving at an
+  // already-solved screen. The spotlight follows that: it lights up the
+  // empty "Add" slot first, then hands off to Fight once something is
+  // actually picked (see [_tutorialSpotlightAnchor]).
+  bool _isFirstBattleTutorial = false;
+
+  // One-time explanation shown BEFORE that Add spotlight (user 2026-09-02:
+  // "bevor ich ein Monster hinzufüge, kurz den Screen erklären
+  // (Gegner/Belohnung/eigenes Team)") — three different sections of this
+  // screen, none of which is a single tappable target, so a dismissible
+  // panel says all three at once rather than three separate highlights.
+  bool _showPrepIntro = false;
 
   // Rewards past [_kCollapsedRewardCount] start folded (user 2026-08-28) —
   // the top half of the screen is now a fixed height, not a scrolling list,
@@ -65,16 +76,32 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
   @override
   void initState() {
     super.initState();
-    // Pre-select the default roster so a player can just hit Fight — the saved
-    // active team if there is one (battleTeam honours it), else the first N
-    // ready. Still fully re-pickable.
+    _isFirstBattleTutorial =
+        SettlementController().introStep == IntroStep.firstNode;
+    _showPrepIntro = _isFirstBattleTutorial;
+    // The scripted fight ahead needs a heal item to actually exist in the
+    // bag (user 2026-09-03) — see SettlementController.grantTutorialPotion.
+    if (_isFirstBattleTutorial) SettlementController().grantTutorialPotion();
+    // Pre-select the default roster so a player can just hit Fight — the
+    // saved active team if there is one (battleTeam honours it), else the
+    // first N ready. Still fully re-pickable. SKIPPED for the tutorial's
+    // first fight: the empty slot is what teaches picking a team at all.
+    if (_isFirstBattleTutorial) return;
     final defaults = _ctrl.battleTeam(size: widget.partySize);
     final seed = defaults.isNotEmpty
         ? defaults
         : _ctrl.battleReadyCreatures.take(widget.partySize).toList();
     _selected.addAll(seed.map((c) => c.id));
-    _showFightSpotlight =
-        SettlementController().introStep == IntroStep.firstNode;
+  }
+
+  /// Which spotlight anchor is the tutorial's one lit target right now, or
+  /// null outside the tutorial's first fight. Starts on the empty "Add"
+  /// slot; once the player has actually picked a monster, hands off to
+  /// Fight — the same "point at whatever the player still has to do" rule
+  /// [SettlementScreen]'s own hand-offs follow.
+  String? get _tutorialSpotlightAnchor {
+    if (!_isFirstBattleTutorial || _showPrepIntro) return null;
+    return _selected.isEmpty ? 'battleprep-add' : 'battleprep-fight';
   }
 
   void _toggle(CreatureInstance c) {
@@ -94,21 +121,69 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
   @override
   Widget build(BuildContext context) {
     final ready = _ctrl.battleReadyCreatures;
-    return ParchmentPage(
-      title: widget.title,
-      child: Stack(
-        children: [
-          _body(ready),
-          if (_showFightSpotlight)
-            IntroSpotlightOverlay(
-              anchorName: 'battleprep-fight',
-              hint: 'Your team is already picked — hit Fight when ready.',
-              onScrimTap: () => setState(() => _showFightSpotlight = false),
-            ),
-        ],
+    final anchor = _tutorialSpotlightAnchor;
+    return PopScope(
+      // Back blocked for the whole tutorial visit (user 2026-09-02: "Battle
+      // 1: zurück sollte nicht anwählbar sein") — both the system
+      // gesture/hardware button here, and the header's own arrow via
+      // showBack below.
+      canPop: !_isFirstBattleTutorial,
+      child: ParchmentPage(
+        title: widget.title,
+        showBack: !_isFirstBattleTutorial,
+        child: Stack(
+          children: [
+            _body(ready),
+            if (anchor != null)
+              IntroSpotlightOverlay(
+                anchorName: anchor,
+                hint: anchor == 'battleprep-add'
+                    ? 'Add your monster to the team.'
+                    : 'Hit Fight when ready.',
+              ),
+            if (_showPrepIntro) _prepIntroOverlay(),
+          ],
+        ),
       ),
     );
   }
+
+  Widget _prepIntroOverlay() => Positioned.fill(
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _showPrepIntro = false),
+      child: Container(
+        color: const Color(0xB3000000),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: FoE.panel(overrideBorder: FoE.borderGold, glow: true),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Before you fight', style: FoE.title(size: 15)),
+              const SizedBox(height: 8),
+              Text(
+                'Up top: who you face, and what winning gets you. Below: '
+                'your own team — pick who fights.',
+                style: FoE.label(size: 12),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Tap anywhere to continue',
+                  style: FoE.dim(size: 11).copyWith(color: FoE.gold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 
   // Fixed split, not one long scroll (user 2026-08-28: "wie Punkt 1" —
   // picking the "no more scrolling" option). The team grid never holds more
@@ -749,11 +824,19 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
 
   /// A place waiting to be filled. Only the next one to fill says "Add" —
   /// six copies of the word is noise, one is a caption for the whole rank.
-  Widget _emptySlot(List<CreatureInstance> ready, {required bool isNext}) =>
-      EmptyMonsterSlot(
-        label: isNext ? 'Add' : null,
-        onTap: () => _openPicker(ready),
-      );
+  Widget _emptySlot(List<CreatureInstance> ready, {required bool isNext}) {
+    final slot = EmptyMonsterSlot(
+      label: isNext ? 'Add' : null,
+      onTap: () => _openPicker(ready),
+    );
+    // The tutorial's first target (see [_tutorialSpotlightAnchor]) — only
+    // the NEXT slot, same one that gets the "Add" label.
+    if (!isNext || _tutorialSpotlightAnchor != 'battleprep-add') return slot;
+    return KeyedSubtree(
+      key: IntroSpotlightAnchors.of('battleprep-add'),
+      child: slot,
+    );
+  }
 
   /// The roster, as a sheet over this one — opened only while a slot is
   /// being filled, which is what keeps it off the page the rest of the time.

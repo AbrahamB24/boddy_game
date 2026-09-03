@@ -26,12 +26,18 @@ class QuickPadItem {
   /// already looking at, or a state the player has to come back to.
   final bool active;
 
+  /// When set, wraps this tile in a [KeyedSubtree] carrying the key — lets
+  /// the guided tutorial's [IntroSpotlightOverlay] find and light up this
+  /// exact tile (see [IntroSpotlightAnchors]).
+  final Key? anchorKey;
+
   const QuickPadItem(
     this.icon,
     this.label,
     this.onTap, {
     this.badge = 0,
     this.active = false,
+    this.anchorKey,
   });
 }
 
@@ -87,7 +93,7 @@ class QuickPad extends StatelessWidget {
               children: [
                 for (var c = laid[r].length - 1; c >= 0; c--) ...[
                   if (c < laid[r].length - 1) const SizedBox(width: _gap),
-                  _QuickTile(item: laid[r][c]),
+                  _anchoredTile(laid[r][c]),
                 ],
               ],
             ),
@@ -95,6 +101,12 @@ class QuickPad extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static Widget _anchoredTile(QuickPadItem item) {
+    final tile = _QuickTile(item: item);
+    final anchorKey = item.anchorKey;
+    return anchorKey == null ? tile : KeyedSubtree(key: anchorKey, child: tile);
   }
 }
 

@@ -104,27 +104,29 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     title: 'Welcome to Boddy Builder',
     body:
         'Grow a settlement, raise monsters, and send them out to fight, '
-        'gather and explore. Buildings need staff, staff are monsters, and '
-        'monsters come from you. Let\'s get your first one.',
+        'gather and explore.',
     ctaLabel: 'Let\'s go',
     destination: IntroDestination.collection,
   ),
   IntroStep.pickStarter => const IntroCard(
     title: 'Choose your first monster',
-    body:
-        'Nothing in your settlement is producing yet — and that is not a bug. '
-        'Monsters are your workforce: they gather, build, research and fight. '
-        'Without one, every rate is zero. Pick your starter to begin.',
+    body: 'You get to pick your starter monster — choose the one you like.',
     ctaLabel: 'Choose starter',
     destination: IntroDestination.collection,
   ),
   IntroStep.firstNode => const IntroCard(
     title: 'Your first battle',
+    // Truncated after the first sentence (user 2026-09-02: "Ab 'a path of
+    // .....' alles löschen") — the map itself (and its own one-time intro
+    // overlay, see OverworldScreen._mapIntroOverlay) explains the path of
+    // battles; this card only needs to say monsters fight too.
     body:
-        'A path of numbered battles leads out from your settlement — win one '
-        'and the next unlocks. This first one is yours to learn on: the foe '
-        'is deliberately weak, so go meet it and see how fighting works.',
-    ctaLabel: '🗺 Open the map',
+        'Your monsters can fight, too — and battles are where the biggest '
+        'rewards come from.',
+    // No CTA of its own (user 2026-09-02: "kein Button open the map,
+    // sondern ich will, dass der User nun den Mapbutton sieht und diesen
+    // drücken muss") — the quick menu's own Map tile is the lit target
+    // instead (see SettlementScreen._soloQuickPadAnchor).
     destination: IntroDestination.map,
   ),
   IntroStep.buildHealingHut => const IntroCard(

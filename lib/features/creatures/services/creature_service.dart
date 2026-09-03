@@ -17,7 +17,11 @@ class CreatureService {
   /// tolerates pre-migration columns this way (SettlementService.saveResources,
   /// saveDungeonMaxStage, loadIsDev …); creatures didn't, and it cost a
   /// playtest.
-  static const _optionalColumns = ['healing_until', 'heal_queued_at'];
+  static const _optionalColumns = [
+    'healing_until',
+    'heal_queued_at',
+    'is_starter',
+  ];
 
   Future<List<CreatureInstance>> loadOwn(String userId) async {
     final rows = await supabase

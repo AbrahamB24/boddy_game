@@ -86,6 +86,14 @@ class CreatureInstance {
   final String? parentAId;
   final String? parentBId;
 
+  /// The player's very first creature, adopted via [CreaturesController.
+  /// adoptStarter] — a permanent companion, never releasable (user
+  /// 2026-09-02: "Das Startmonster kann aber niemals entlassen werden"; see
+  /// [CreatureDetailScreen]'s Release button, which checks this). Set once
+  /// at creation and never touched again — an evolved or renamed starter is
+  /// still this same row.
+  final bool isStarter;
+
   CreatureInstance({
     required this.id,
     required this.userId,
@@ -104,6 +112,7 @@ class CreatureInstance {
     this.assignedStat,
     this.parentAId,
     this.parentBId,
+    this.isStarter = false,
   }) : currentHp = currentHp ?? -1;
 
   bool get isAssigned => assignedBuildingId != null && assignedStat != null;
@@ -308,6 +317,7 @@ class CreatureInstance {
           : CreatureStat.fromName(row['assigned_stat'] as String?),
       parentAId: row['parent_a'] as String?,
       parentBId: row['parent_b'] as String?,
+      isStarter: row['is_starter'] as bool? ?? false,
     );
   }
 
@@ -329,6 +339,7 @@ class CreatureInstance {
     'heal_queued_at': healQueuedAt?.toUtc().toIso8601String(),
     'assigned_building_id': assignedBuildingId,
     'assigned_stat': assignedStat?.name,
+    'is_starter': isStarter,
     // NB: a creature's expedition lock is NOT stored here — it's derived at
     // load time from active rows in the `expeditions` table (member_ids) and
     // tracked in CreaturesController.expeditionIds, so `creatures` needs no

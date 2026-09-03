@@ -99,6 +99,19 @@ class CombatEngine extends ChangeNotifier {
   final List<Combatant> enemies; // 1..n
   final math.Random rng;
 
+  /// Turns off the miss roll AND the crit roll, for BOTH sides, for the
+  /// whole fight (user 2026-09-03: "während des Tutorials sollten Effekte
+  /// wie 'miss oder Crit' ausgeschaltet sein, damit es funktioniert").
+  ///
+  /// The tutorial's scripted first fight forces every HP change to an exact
+  /// named percentage regardless of what the real formula computes — the
+  /// NUMBER was never at risk from a bad roll. What a stray miss or crit
+  /// broke was the PRESENTATION around it: a "misses!" log line right
+  /// before the HP bar visibly drops anyway, or a "Critical!" flash on a
+  /// hit the script had already fixed at 33%. This makes the shown
+  /// roll match the guaranteed outcome instead of contradicting it.
+  final bool deterministicCombat;
+
   /// FFX-style CTB: a combatant's next turn lands `_turnCost / speed` time
   /// units after its current one — double speed = twice as many turns.
   static const double _turnCost = 1000.0;
@@ -112,7 +125,13 @@ class CombatEngine extends ChangeNotifier {
   /// generates anything any more. This figure is also the anchor of the whole
   /// cost scale: power 40 must price at kBasicAttackApCost, see
   /// AbilityDef._derivedApCost.
-  static const int basicAttackPower = 40;
+  ///
+  /// Just [kBasicAttackPower] — kept as its own name here since so much of
+  /// this file already says `basicAttackPower`, but the number itself lives
+  /// in creature_enums.dart now so combatant.dart's fallback AbilityDef can
+  /// share it without a circular import (user 2026-09-03: "attack soll eine
+  /// normale Fähigkeit sein").
+  static const int basicAttackPower = kBasicAttackPower;
 
   /// Global damage dial (docs/balancing.md §4) — calibrated via the combat
   /// Monte-Carlo so an equal-level 3v1 resolves in ~4–6 player actions.
@@ -195,8 +214,12 @@ class CombatEngine extends ChangeNotifier {
     }
   }
 
-  CombatEngine({required this.players, required this.enemies, math.Random? rng})
-    : rng = rng ?? math.Random() {
+  CombatEngine({
+    required this.players,
+    required this.enemies,
+    math.Random? rng,
+    this.deterministicCombat = false,
+  }) : rng = rng ?? math.Random() {
     // Initial schedule; the tiny index epsilon makes equal-speed ties
     // deterministic (list order) instead of map-iteration luck.
     var i = 0;
@@ -554,41 +577,30 @@ class CombatEngine extends ChangeNotifier {
   /// Combatant._resolveAbilities).
   static int abilityApCost(AbilityDef ability) => ability.resolvedApCost;
 
+  /// Convenience wrapper, not a separate mechanic — Attack is a genuine
+  /// AbilityDef now (user 2026-09-03: "attack soll eine normale Fähigkeit
+  /// sein. Falls es noch andere gibt, bitte auch diese als echte Fähigkeit
+  /// aufnehmen"), resolved onto every combatant by Combatant._resolveAbilities
+  /// alongside its species' own moves, and this just runs it through the
+  /// exact same [useAbility] every other move goes through (same accuracy
+  /// roll, same damage formula, same crit/miss handling, same log format).
+  /// Kept under its own name because every existing caller — the AI's own
+  /// fallback, the tutorial's scripted enemy beats — already asks for it
+  /// this way; nothing about THEM needed to change for Attack to stop being
+  /// a special case underneath.
   void basicAttack(Combatant actor, Combatant target) {
-    if (outcome != null || !actor.alive || !target.alive) return;
-    if (!identical(actor, currentActor) || actor.ap < kBasicAttackApCost) {
-      return;
-    }
-    actor.ap -= kBasicAttackApCost;
-    _countAction(actor);
-    lastEvents.clear();
-    actionSeq++;
-    String msg;
-    if (!_rollAccuracy(actor)) {
-      lastEvents.add(CombatEvent(target: target, actor: actor, miss: true));
-      msg = '${actor.name} attacks ${target.name} — miss!';
-    } else {
-      final roll = _rollDamage(
-        actor: actor,
-        target: target,
-        power: basicAttackPower,
-        // The normal Attack is NEUTRAL — it never lands bonus damage.
+    final attack = actor.abilities.firstWhere(
+      (a) => a.id == 'attack',
+      orElse: () => const AbilityDef(
+        id: 'attack',
+        name: 'Attack',
         element: CreatureElement.neutral,
-      );
-      target.hp = math.max(target.cannotBeKoed ? 1 : 0, target.hp - roll.dmg);
-      lastEvents.add(CombatEvent(
-        target: target,
-        actor: actor,
-        amount: roll.dmg,
-        crit: roll.crit,
-        typeMult: roll.typeMult,
-      ));
-      msg =
-          '${actor.name} attacks ${target.name}: ${roll.dmg} damage'
-          '${target.alive ? '' : ' — K.O.!'}';
-    }
-    lastAction = msg;
-    _afterAction(actor);
+        kind: AbilityKind.damage,
+        target: AbilityTarget.enemy,
+        power: basicAttackPower,
+      ),
+    );
+    useAbility(actor, attack, target);
   }
 
   /// Returns a user-facing error (not enough AP / invalid target) or null when
@@ -811,6 +823,17 @@ class CombatEngine extends ChangeNotifier {
   /// banks the leftover AP and advances the CTB queue.
   void endTurn() {
     if (outcome != null || needsPlayerSwitch || !isPlayerTurn) return;
+    _endTurn();
+  }
+
+  /// Same tail as [endTurn], but without its `!isPlayerTurn` refusal — for
+  /// scripted content that ends the ENEMY's own turn directly (user
+  /// 2026-09-03's authored debuff beat: it applies a status effect outside
+  /// the normal attack/ability pipeline, so nothing else advances the CTB
+  /// queue for it). [endTurn] stays player-only on purpose everywhere
+  /// else; this is the one legitimate reason to bypass that.
+  void forceEndTurn() {
+    if (outcome != null || needsPlayerSwitch) return;
     _endTurn();
   }
 
@@ -1087,6 +1110,7 @@ class CombatEngine extends ChangeNotifier {
   }
 
   bool _rollAccuracy(Combatant actor) =>
+      deterministicCombat ||
       rng.nextDouble() < (kBaseAccuracy * actor.effectiveAccuracy);
 
   // Basis = (Power/40) · ATK · ATK/(ATK+DEF) · damageScale + 2
@@ -1127,7 +1151,7 @@ class CombatEngine extends ChangeNotifier {
     final critChance = (GameTuning.i.raw(Dials.critBase) +
             actor.effectiveSpeed / GameTuning.i.raw(Dials.critSpeedDivisor))
         .clamp(0.0, GameTuning.i.raw(Dials.critMax));
-    final critMult = rng.nextDouble() < critChance
+    final critMult = !deterministicCombat && rng.nextDouble() < critChance
         ? GameTuning.i.raw(Dials.critMultiplier)
         : 1.0;
     final variance = 0.85 + rng.nextDouble() * 0.15;

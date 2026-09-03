@@ -2756,6 +2756,19 @@ class SettlementController extends ChangeNotifier {
     settlement = s.copyWith(items: bag);
   }
 
+  /// One-time gift for the tutorial's scripted first fight (user 2026-09-03:
+  /// "ich bekomme Schaden, welchen ich mit einem Heilitem während dem Kampf
+  /// heile") — a fresh account has no heal item at all yet, since potions
+  /// are crafted and crafting needs a Workshop the player hasn't built this
+  /// early. Idempotent (checks for an existing one first), so re-entering
+  /// the fight never stacks a second free potion.
+  Future<void> grantTutorialPotion() async {
+    final s = settlement;
+    if (s == null || (s.items['minor_potion'] ?? 0) > 0) return;
+    _grantItems({'minor_potion': 1});
+    await _persist();
+  }
+
   /// Gold to finish [b]'s construction now. 0 when it's already done.
   int buildSkipCost(PlacedBuilding b) {
     if (b.isComplete) return 0;

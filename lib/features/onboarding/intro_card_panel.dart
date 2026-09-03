@@ -22,10 +22,18 @@ class IntroCardPanel extends StatelessWidget {
   /// navigation of its own — the settlement screen already has these routes.
   final void Function(IntroDestination) onNavigate;
 
+  /// pickStarter's CTA doesn't navigate anywhere — the settlement screen is
+  /// already where the Monsters tile lives. Pressing it instead tells the
+  /// screen to swap the spotlight onto that tile (user 2026-09-02: "wenn ich
+  /// auf Choose starter drücke, dann bleibe ich auf der Karte, aber der
+  /// Monsterbutton wird gehighlighted").
+  final VoidCallback onPromptQuickMenu;
+
   const IntroCardPanel({
     super.key,
     required this.ctrl,
     required this.onNavigate,
+    required this.onPromptQuickMenu,
   });
 
   @override
@@ -96,9 +104,23 @@ class IntroCardPanel extends StatelessWidget {
     color: Colors.transparent,
     child: InkWell(
       onTap: () {
-        // welcome has no milestone of its own to advance from elsewhere —
-        // its CTA both advances the chain AND opens the starter picker.
-        if (step == IntroStep.welcome) unawaited(ctrl.advanceIntro(step));
+        // welcome has no milestone of its own to advance from elsewhere, so
+        // its CTA just advances the chain — the player stays on the
+        // settlement map and sees the pickStarter card next, whose own CTA
+        // is what opens the starter picker (user 2026-09-02: "Wenn ich auf
+        // lets go klicke, soll ich noch auf der Karte bleiben").
+        if (step == IntroStep.welcome) {
+          unawaited(ctrl.advanceIntro(step));
+          return;
+        }
+        // pickStarter doesn't navigate either (user 2026-09-02, same day):
+        // the player is still on the settlement map, and the ONE lit control
+        // is now the real Monsters tile in the quick menu rather than a
+        // second copy of it on this card.
+        if (step == IntroStep.pickStarter) {
+          onPromptQuickMenu();
+          return;
+        }
         onNavigate(destination);
       },
       borderRadius: BorderRadius.circular(FoE.radiusSmall),

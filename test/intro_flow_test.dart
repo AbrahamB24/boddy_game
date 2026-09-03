@@ -224,11 +224,19 @@ void main() {
       for (final s in IntroStep.values) {
         final card = introCardFor(s);
         if (card == null) continue;
-        expect(
-          card.ctaLabel == null,
-          card.destination == null,
-          reason: '${s.name}: label and destination must come as a pair',
-        );
+        // A narration-only card (no button) can still name a destination
+        // with no ctaLabel — firstNode does this on purpose (user
+        // 2026-09-02: "kein Button open the map"), pointing the settlement
+        // screen's own quick-pad hand-off at the same destination a CTA
+        // would have used. What must never happen is the other direction:
+        // a VISIBLE button with nowhere to send the player.
+        if (card.ctaLabel != null) {
+          expect(
+            card.destination,
+            isNotNull,
+            reason: '${s.name}: a CTA label needs a destination',
+          );
+        }
       }
     });
   });

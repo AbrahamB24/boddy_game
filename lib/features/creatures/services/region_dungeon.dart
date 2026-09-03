@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../models/area.dart';
 import '../models/combatant.dart';
+import '../models/creature_enums.dart';
 import '../models/path_node.dart';
 import '../models/species_def.dart';
 import 'capture_math.dart';
@@ -87,4 +88,33 @@ List<Combatant>? spawnPathBattle(
         statScale: statScale,
       ),
   ];
+}
+
+/// Battle 1's enemy, hand-picked to be SUPER EFFECTIVE against the player's
+/// own starter (user 2026-09-03: "Nimm immer das Monster, welches effektiv
+/// gegen unser gewähltes Monster ist. So kannst du die Effektivität auch
+/// erklären") — a scripted teaching moment for type advantage, not a random
+/// pool draw. Null when the area has no matching (or any) species yet.
+///
+/// Stats are left at their natural, UNSCALED roll (no statScale here) —
+/// this enemy's whole HP/danger profile is FULLY SCRIPTED by BattleScreen's
+/// own beat sequence now (every HP change forced to an exact percentage,
+/// see BattleScreen._scriptBeat and CombatEngine.deterministicCombat), not
+/// tuned through stats at all. A blanket stat cut (the old
+/// kJumpstartEnemyStatMult) is what used to let the fight resolve before
+/// the scripted beats had room to happen — this enemy doesn't need one.
+Combatant? scriptedFirstBattleEnemy(
+  AreaDef area,
+  CreatureElement starterElement,
+) {
+  final pool = eligibleSpecies(area, includeLegendary: false);
+  if (pool.isEmpty) return null;
+  final want = starterElement.counterElement;
+  final matches = pool.where((s) => s.element == want).toList();
+  final species = matches.isNotEmpty ? matches.first : pool.first;
+  return Combatant.fromSpecies(
+    species,
+    level: enemyLevelForBattle(1),
+    id: 'w1_0',
+  );
 }

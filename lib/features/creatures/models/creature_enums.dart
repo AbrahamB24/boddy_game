@@ -70,6 +70,18 @@ enum CreatureElement {
 
   static CreatureElement fromName(String? name) => CreatureElement.values
       .firstWhere((e) => e.name == name, orElse: () => CreatureElement.fire);
+
+  /// The element that's SUPER EFFECTIVE against [this] one — i.e. some X
+  /// with `X.multiplierVs(this) > 1.0`. Used to hand-pick the tutorial's
+  /// first-fight enemy (user 2026-09-03: "Nimm immer das Monster, welches
+  /// effektiv gegen unser gewähltes Monster ist. So kannst du die
+  /// Effektivität auch erklären") so that scripted fight also teaches type
+  /// advantage. Falls back to [this] itself (no bonus) if nothing beats it —
+  /// true only for neutral, never for a real starter element.
+  CreatureElement get counterElement => CreatureElement.values.firstWhere(
+    (attacker) => attacker.multiplierVs(this) > 1.0,
+    orElse: () => this,
+  );
 }
 
 /// 5 rarity tiers — a label and a colour, nothing else. Base stats come from
@@ -341,6 +353,15 @@ double get kSigmaClampFactor => GameTuning.i.raw(Dials.sigmaClampFactor);
 /// AP an attack costs. Against a 3–5 regen that's about one attack per turn
 /// unless you save up.
 int get kBasicAttackApCost => GameTuning.i.count(Dials.basicAttackApCost);
+
+/// The universal Attack move's own power — moved here (was a literal inside
+/// CombatEngine) so combatant.dart's fallback AbilityDef (used only if the
+/// real DB-authored 'attack' row hasn't loaded yet) can share the exact same
+/// number without combatant.dart importing combat_engine.dart, which would
+/// be circular. THE anchor of the whole ability cost scale (user 2026-09-03:
+/// "attack soll eine normale Fähigkeit sein" — AbilityDef._derivedApCost is
+/// calibrated so power 40 auto-prices at [kBasicAttackApCost] exactly).
+const int kBasicAttackPower = 40;
 
 /// AP a monster switch costs (spent from the OUTGOING monster's pool).
 int get kSwitchApCost => GameTuning.i.count(Dials.switchApCost);

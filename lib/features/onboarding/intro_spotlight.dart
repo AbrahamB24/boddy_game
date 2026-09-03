@@ -47,6 +47,13 @@ class IntroSpotlightOverlay extends StatefulWidget {
   /// Breathing room around the target's own bounds.
   final double padding;
 
+  /// Draws the glow frame as a circle instead of a rounded rectangle — for a
+  /// round target (the overworld's own disc nodes, user 2026-09-02: "der
+  /// Button ist nicht richtig markiert" over a square glow sitting on a
+  /// circular node) a facet border reads as a mismatched shape rather than a
+  /// highlight.
+  final bool circular;
+
   /// Tapping the DIMMED area (not the hole) runs this instead of doing
   /// nothing — used by a screen's own sequential callouts ("turn order →
   /// AP → actions → HP") to advance on any tap, since the highlighted
@@ -55,12 +62,24 @@ class IntroSpotlightOverlay extends StatefulWidget {
   /// original behaviour: the scrim only ever blocks.
   final VoidCallback? onScrimTap;
 
+  /// False makes the scrim fully TRANSPARENT instead of the usual ~70%
+  /// black — everywhere outside the hole is still dead (taps absorbed,
+  /// nothing pressable), just not visually darkened. For a screen where
+  /// there's something worth WATCHING outside the one lit control (user
+  /// 2026-09-03, the battle screen specifically: "ich möchte aber, dass der
+  /// gesamte screen erhellt ist, damit ich das Kampfgeschehen verfolgen
+  /// kann" — HP bars dropping, hit reactions, floating numbers) rather than
+  /// a screen that's genuinely just one button and a lot of nothing.
+  final bool dim;
+
   const IntroSpotlightOverlay({
     super.key,
     required this.anchorName,
     this.hint,
     this.padding = 6,
+    this.circular = false,
     this.onScrimTap,
+    this.dim = true,
   });
 
   @override
@@ -93,7 +112,11 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
   @override
   Widget build(BuildContext context) {
     final hole = _hole;
-    const scrim = Color(0xB3000000); // ~70% black — dim, not blind
+    // ~70% black — dim, not blind. Fully transparent when [dim] is false;
+    // the scrim rects still absorb every tap either way.
+    final scrim = widget.dim
+        ? const Color(0xB3000000)
+        : const Color(0x00000000);
 
     return Positioned.fill(
       child: hole == null
@@ -153,10 +176,20 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
                   child: IgnorePointer(
                     child: DecoratedBox(
                       decoration: ShapeDecoration(
-                        shape: FoE.facet(
-                          radius: 10,
-                          side: BorderSide(color: FoE.goldBright, width: 2),
-                        ),
+                        shape: widget.circular
+                            ? const CircleBorder(
+                                side: BorderSide(
+                                  color: FoE.goldBright,
+                                  width: 2,
+                                ),
+                              )
+                            : FoE.facet(
+                                radius: 10,
+                                side: BorderSide(
+                                  color: FoE.goldBright,
+                                  width: 2,
+                                ),
+                              ),
                       ),
                     ),
                   ),
@@ -179,8 +212,20 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
         box.hasSize &&
         overlayBox != null &&
         overlayBox.hasSize) {
+      // Map BOTH corners through localToGlobal rather than taking the
+      // target's own (unscaled) box.size — every other anchor in the game
+      // sits in a 1:1 layout, where those are the same rect, but the
+      // overworld's nodes live inside an InteractiveViewer's zoom (user
+      // 2026-09-03: "Die Markierung ist an der falschen Position"). Taking
+      // box.size there under-measured the node at whatever the viewer's
+      // scale was, leaving the hole sized for the UNZOOMED node and
+      // anchored only at its top-left corner.
       final topLeft = box.localToGlobal(Offset.zero, ancestor: overlayBox);
-      next = (topLeft & box.size).inflate(widget.padding);
+      final bottomRight = box.localToGlobal(
+        Offset(box.size.width, box.size.height),
+        ancestor: overlayBox,
+      );
+      next = Rect.fromPoints(topLeft, bottomRight).inflate(widget.padding);
     }
     if (next != _hole) setState(() => _hole = next);
   }

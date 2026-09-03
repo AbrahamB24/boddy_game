@@ -6,6 +6,7 @@ import '../../core/theme/foe_theme.dart';
 import '../../core/ui/snack.dart';
 import '../common/widgets/parchment_page.dart';
 import '../onboarding/intro_flow.dart';
+import '../onboarding/intro_spotlight.dart';
 import '../settlement/settlement_controller.dart';
 import 'models/area.dart';
 import 'models/combatant.dart';
@@ -18,7 +19,8 @@ import 'services/combat_engine.dart' show CombatOutcome;
 import 'services/creatures_controller.dart';
 import 'services/overworld_layout.dart';
 import 'services/overworld_path.dart';
-import 'services/region_dungeon.dart' show spawnPathBattle;
+import 'services/region_dungeon.dart'
+    show spawnPathBattle, scriptedFirstBattleEnemy;
 
 // ── The Overworld ───────────────────────────────────────────
 // ONE straight line you climb (linear rebuild 2026-07-24). Numbered BATTLES run
@@ -48,11 +50,16 @@ class _OverworldScreenState extends State<OverworldScreen>
     duration: const Duration(milliseconds: 1700),
   )..repeat(reverse: true);
 
-  // One-time explanation on the tutorial's first visit here — the node
-  // lock/current/done states already make "only the next battle is
-  // playable" true on their own, so this only needs to SAY so, not enforce
-  // it (user 2026-08-24: "Overworld map wird kurz erklärt").
-  bool _showMapIntro = false;
+  /// True for the whole tutorial visit to this screen — back is blocked the
+  /// entire time, and the spotlight below lights up battle 1 as the one
+  /// thing to press, from the very first frame rather than after a separate
+  /// one-time popup (user 2026-09-03: "click on the first node soll
+  /// gleichzeitig mit dem gehighlighteten Button 'tap the first battle to
+  /// begin' kommen" — the explanation and the highlight are now the SAME
+  /// moment, not two in sequence; the old dismissible full-screen intro this
+  /// replaced said the same thing a second time anyway).
+  bool get _tutorialLocksThisScreen =>
+      _settlement.introStep == IntroStep.firstNode;
 
   @override
   void initState() {
@@ -60,7 +67,6 @@ class _OverworldScreenState extends State<OverworldScreen>
     _settlement.addListener(_onChange);
     CreaturesController().load();
     WidgetsBinding.instance.addPostFrameCallback((_) => _centerOnCurrent());
-    _showMapIntro = _settlement.introStep == IntroStep.firstNode;
   }
 
   @override
@@ -150,145 +156,143 @@ class _OverworldScreenState extends State<OverworldScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) => _centerOnCurrent());
     }
     _appliedFill = fill;
-    return Scaffold(
-      backgroundColor: FoE.mapBase,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: InteractiveViewer(
-              transformationController: _transform,
-              // ── NO ZOOM AT ALL (user 2026-07-31: "zoom bei der map
-              // rausnehmen") ──
-              //
-              // The map is a single lane you walk up: there is nothing to see
-              // wider and nothing to read closer, so a pinch could only ever put
-              // it in a state you then had to undo — and every such state is one
-              // where the bare background shows. What is left is a scroll.
-              //
-              // The bounds are pinned to the fill anyway, so even a programmatic
-              // scale (or a future gesture) cannot go anywhere else.
-              scaleEnabled: false,
-              minScale: fill,
-              maxScale: fill,
-              // NO MARGIN AT ALL (user 2026-07-31: "oben und unten will ich die
-              // balken auch nicht sehen"). Every pixel of slack here is a pixel
-              // of bare background you can drag into view — 200 of them at the
-              // top and bottom is exactly what put the beige strips above the
-              // boss and below the first battle.
-              boundaryMargin: EdgeInsets.zero,
-              constrained: false,
-              child: SizedBox(
-                width: _canvas.width,
-                height: _canvas.height,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned.fill(
-                      child: RepaintBoundary(
-                        child: Image.asset(
-                          'assets/images/overworld_grass.png',
-                          fit: BoxFit.cover,
-                          filterQuality: FilterQuality.medium,
+    // Back is blocked for the whole tutorial visit (user 2026-09-02: "zurück
+    // sollte nicht anwählbar sein") — both the system gesture/hardware
+    // button (PopScope) and the header's own arrow, which _topBar hides
+    // under the same condition.
+    return PopScope(
+      canPop: !_tutorialLocksThisScreen,
+      child: Scaffold(
+        backgroundColor: FoE.mapBase,
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: InteractiveViewer(
+                transformationController: _transform,
+                // ── NO ZOOM AT ALL (user 2026-07-31: "zoom bei der map
+                // rausnehmen") ──
+                //
+                // The map is a single lane you walk up: there is nothing to see
+                // wider and nothing to read closer, so a pinch could only ever put
+                // it in a state you then had to undo — and every such state is one
+                // where the bare background shows. What is left is a scroll.
+                //
+                // The bounds are pinned to the fill anyway, so even a programmatic
+                // scale (or a future gesture) cannot go anywhere else.
+                scaleEnabled: false,
+                minScale: fill,
+                maxScale: fill,
+                // NO MARGIN AT ALL (user 2026-07-31: "oben und unten will ich die
+                // balken auch nicht sehen"). Every pixel of slack here is a pixel
+                // of bare background you can drag into view — 200 of them at the
+                // top and bottom is exactly what put the beige strips above the
+                // boss and below the first battle.
+                boundaryMargin: EdgeInsets.zero,
+                constrained: false,
+                child: SizedBox(
+                  width: _canvas.width,
+                  height: _canvas.height,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: RepaintBoundary(
+                          child: Image.asset(
+                            'assets/images/overworld_grass.png',
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.medium,
+                          ),
                         ),
                       ),
-                    ),
-                    // Atmosphere: a soft dark vignette gives the map depth and
-                    // keeps the top bar legible over bright grass.
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                FoE.bg.withValues(alpha: 0.45),
-                                FoE.bg.withValues(alpha: 0.0),
-                                FoE.bg.withValues(alpha: 0.0),
-                                FoE.bg.withValues(alpha: 0.35),
-                              ],
-                              stops: const [0.0, 0.18, 0.82, 1.0],
+                      // Atmosphere: a soft dark vignette gives the map depth and
+                      // keeps the top bar legible over bright grass.
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  FoE.bg.withValues(alpha: 0.45),
+                                  FoE.bg.withValues(alpha: 0.0),
+                                  FoE.bg.withValues(alpha: 0.0),
+                                  FoE.bg.withValues(alpha: 0.35),
+                                ],
+                                stops: const [0.0, 0.18, 0.82, 1.0],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    Positioned.fill(
-                      child: RepaintBoundary(
-                        child: CustomPaint(painter: _TrailPainter(_nodes)),
+                      Positioned.fill(
+                        child: RepaintBoundary(
+                          child: CustomPaint(painter: _TrailPainter(_nodes)),
+                        ),
                       ),
-                    ),
-                    for (final node in _nodes) _nodeWidget(node),
-                  ],
+                      for (final node in _nodes) _nodeWidget(node),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Positioned(top: 0, left: 0, right: 0, child: _topBar()),
-          if (_showMapIntro) _mapIntroOverlay(),
-        ],
+            Positioned(top: 0, left: 0, right: 0, child: _topBar()),
+            // Up from the very first frame of the tutorial visit, not after a
+            // separate dismissible popup — lights up battle 1 alone and
+            // dead-zones everything else (the header's back arrow included),
+            // the same "exactly one lit control" grammar the settlement
+            // screen's own tutorial overlay uses. Circular (user 2026-09-03:
+            // "der Button ist nicht richtig markiert") to match the node's
+            // own round disc rather than a mismatched rectangular glow.
+            if (_tutorialLocksThisScreen)
+              const IntroSpotlightOverlay(
+                anchorName: 'overworld-node-1',
+                hint: 'Click on the first battle to unlock the next one.',
+                circular: true,
+              ),
+          ],
+        ),
       ),
     );
   }
-
-  Widget _mapIntroOverlay() => Positioned.fill(
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _showMapIntro = false),
-      child: Container(
-        color: const Color(0xB3000000),
-        alignment: Alignment.center,
-        padding: const EdgeInsets.all(24),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: FoE.panel(overrideBorder: FoE.borderGold, glow: true),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('The Overworld', style: FoE.title(size: 15)),
-              const SizedBox(height: 8),
-              Text(
-                'One path, one battle at a time. The glowing node is the '
-                'only one you can fight — win it and the next one lights '
-                'up.',
-                style: FoE.label(size: 12),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  'Tap anywhere to continue',
-                  style: FoE.dim(size: 11).copyWith(color: FoE.gold),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
 
   /// THE bar (user 2026-07-31: "überall wo es einen header hat, soll dieser
   /// immer genau gleich aussehen"). This screen had its own: a flat box, its own
   /// padding, its own back button and its own title size — three values that had
   /// all drifted from the shared one.
-  Widget _topBar() =>
-      const SafeArea(bottom: false, child: ParchmentHeader(title: 'Overworld'));
+  Widget _topBar() => SafeArea(
+    bottom: false,
+    child: ParchmentHeader(
+      title: 'Overworld',
+      // No arrow at all while back is blocked — a visible one that just
+      // refuses to do anything reads as broken (user 2026-09-02: "zurück
+      // sollte nicht anwählbar sein").
+      showBack: !_tutorialLocksThisScreen,
+    ),
+  );
 
   // ── Nodes ──────────────────────────────────────────────────
   Widget _nodeWidget(OverworldNode node) {
     // Bosses read as the landmark capping each region — a touch larger.
     final size = node.isBoss ? 68.0 : 58.0;
+    // The tutorial's ONE lit target while it's locking this screen (user
+    // 2026-09-02: "highlighte den 1. Node") — see the IntroSpotlightOverlay
+    // in [build].
+    final anchorKey = node.battleNumber == 1
+        ? IntroSpotlightAnchors.of('overworld-node-1')
+        : null;
+    final map = _MapNode(
+      node: node,
+      size: size,
+      pulse: _pulse,
+      onTap: () => _launchBattle(node),
+    );
     return Positioned(
       left: node.pos.dx - size / 2,
       top: node.pos.dy - size / 2,
-      child: _MapNode(
-        node: node,
-        size: size,
-        pulse: _pulse,
-        onTap: () => _launchBattle(node),
-      ),
+      child: anchorKey == null
+          ? map
+          : KeyedSubtree(key: anchorKey, child: map),
     );
   }
 
@@ -311,15 +315,31 @@ class _OverworldScreenState extends State<OverworldScreen>
     };
     final guaranteedWin =
         introNodeStep != null && _settlement.introStep == introNodeStep;
-    final enemies = spawnPathBattle(
-      area,
-      node.battleNumber,
-      statScale: guaranteedWin ? kJumpstartEnemyStatMult : 1.0,
-    );
-    if (enemies == null) {
+    // Battle 1's fight is fully scripted (user 2026-09-03): a hand-picked,
+    // type-effective enemy at its natural stats rather than a random pick
+    // scaled uniformly down — see scriptedFirstBattleEnemy's own doc for why.
+    List<Combatant>? enemies;
+    if (node.battleNumber == 1 && guaranteedWin) {
+      final starterElement =
+          CreaturesController().creatures.firstOrNull?.species?.element;
+      final enemy = starterElement == null
+          ? null
+          : scriptedFirstBattleEnemy(area, starterElement);
+      if (enemy != null) enemies = [enemy];
+    } else {
+      enemies = spawnPathBattle(
+        area,
+        node.battleNumber,
+        statScale: guaranteedWin ? kJumpstartEnemyStatMult : 1.0,
+      );
+    }
+    if (enemies == null || enemies.isEmpty) {
       context.snack('No monsters live here yet (Dev Mode → Species).');
       return;
     }
+    // A stable non-null binding — `enemies` itself can't promote across the
+    // closures below (MaterialPageRoute's builder).
+    final resolvedEnemies = enemies;
     if (CreaturesController().battleReadyCreatures.isEmpty) {
       context.snack('No battle-ready monster — heal up first!');
       return;
@@ -341,7 +361,7 @@ class _OverworldScreenState extends State<OverworldScreen>
       MaterialPageRoute(
         builder: (_) => BattlePrepScreen(
           title: title,
-          enemies: enemies,
+          enemies: resolvedEnemies,
           partySize: node.partySize,
           rewards: rewards,
           isBoss: node.isBoss,
@@ -355,7 +375,7 @@ class _OverworldScreenState extends State<OverworldScreen>
       MaterialPageRoute(
         builder: (_) => BattleScreen(
           team: team,
-          enemies: enemies,
+          enemies: resolvedEnemies,
           title: title,
           victoryRewards: rewards,
           // WHERE the fight happens — the battlefield's art comes from here

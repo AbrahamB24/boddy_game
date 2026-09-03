@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 /// How wide to DECODE a creature sprite, in device pixels — the monster art
@@ -57,6 +58,28 @@ class CreatureSprite extends StatelessWidget {
     final knownWidth = width ?? height;
     final memWidth =
         knownWidth == null ? null : decodeWidthFor(context, knownWidth);
+    // FLUTTER WEB (user 2026-09-02): cached_network_image/flutter_cache_manager
+    // is built around a real on-disk cache, which the browser doesn't have —
+    // in practice this made creature art fail to load intermittently on
+    // Chrome (reproduced with the starter picker: untouched cards randomly
+    // came back as the error widget, only recovering on a retry), while a
+    // plain Image.network — which just goes through the browser's own
+    // fetch/img loading — didn't. That's the standard workaround for this
+    // package's well-documented web unreliability, so web skips
+    // CachedNetworkImage entirely rather than routing through a cache layer
+    // that doesn't actually have anywhere durable to write to there.
+    if (kIsWeb) {
+      return Image.network(
+        url,
+        fit: fit,
+        alignment: alignment,
+        width: width,
+        height: height,
+        cacheWidth: memWidth,
+        filterQuality: FilterQuality.none,
+        errorBuilder: (_, __, ___) => fallback,
+      );
+    }
     return CachedNetworkImage(
       imageUrl: url,
       fit: fit,

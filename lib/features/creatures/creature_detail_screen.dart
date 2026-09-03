@@ -18,7 +18,7 @@ import 'models/creature_instance.dart';
 import 'models/species_def.dart';
 import 'services/combat_engine.dart';
 import 'widgets/creature_backdrop.dart';
-import 'widgets/creature_sprite.dart' show decodeWidthFor;
+import 'widgets/creature_sprite.dart';
 import 'widgets/gene_bar_toggle.dart';
 import 'widgets/xp_arc.dart';
 import 'services/creature_power.dart';
@@ -31,8 +31,31 @@ import '../common/widgets/recess_bar.dart';
 // Abilities. Resolves the creature against the controller on every build so
 // rename/evolve/release updates always reflect.
 class CreatureDetailScreen extends StatefulWidget {
-  final String creatureId;
-  const CreatureDetailScreen({super.key, required this.creatureId});
+  /// Null when [previewCreature] is given instead.
+  final String? creatureId;
+
+  /// Renders this creature directly rather than looking [creatureId] up in
+  /// [CreaturesController] — the starter-preview screen's use case: a rolled
+  /// but not-yet-adopted [CreatureInstance] that has no id and isn't in the
+  /// controller's list at all (user 2026-09-02: "Dieser Screen bei choose
+  /// your starter soll 1:1 so aussehen wie der Monsterdetailscreen").
+  final CreatureInstance? previewCreature;
+
+  /// Replaces the Release button (and, in Dev Mode, its dev buttons) at the
+  /// foot of the General tab — the starter preview swaps that whole block
+  /// for its own "Choose" button, since none of Release/rename/evolve make
+  /// sense on a creature that isn't owned yet.
+  final Widget? footer;
+
+  const CreatureDetailScreen({
+    super.key,
+    this.creatureId,
+    this.previewCreature,
+    this.footer,
+  }) : assert(
+         (creatureId == null) != (previewCreature == null),
+         'pass exactly one of creatureId or previewCreature',
+       );
 
   @override
   State<CreatureDetailScreen> createState() => _CreatureDetailScreenState();
@@ -104,7 +127,14 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   /// Ornament ink for the meander bordure — the page's own shade.
   static const _ornament = Color(0x38EDE3CB); // ink @ 22 %
 
+  /// True for the starter-preview use ([widget.previewCreature]) — gates off
+  /// every action that assumes a real, owned, persisted creature (rename,
+  /// evolve, release) since none of them have anywhere valid to write to.
+  bool get _isPreview => widget.previewCreature != null;
+
   CreatureInstance? get _creature {
+    final preview = widget.previewCreature;
+    if (preview != null) return preview;
     for (final c in _ctrl.creatures) {
       if (c.id == widget.creatureId) return c;
     }
@@ -445,15 +475,20 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     // type icon is embossed with (user request).
     final shadowColor =
         (creature.species?.element ?? CreatureElement.fire).shadowColor;
-    Widget image({FilterQuality quality = FilterQuality.none}) => Image.network(
-      url,
-      filterQuality: quality,
+    // Routed through the SAME loader every other screen uses for creature
+    // art (user 2026-09-02) — this used to be a bare Image.network, which is
+    // exactly what CreatureSprite itself now falls back to on Flutter Web
+    // (see its own doc comment) after the starter preview's art turned out
+    // to load unreliably there via CachedNetworkImage. Fixing that inside
+    // CreatureSprite covers every screen at once rather than special-casing
+    // it here.
+    Widget image() => CreatureSprite(
+      url: url,
       fit: BoxFit.contain,
       // Decode at DISPLAY size, not native (user 2026-08-29: "die
       // Monsterassets werden sehr langsam geladen").
-      cacheWidth: decodeWidthFor(context, displayHeight),
-      errorBuilder: (_, _, _) =>
-          const Icon(Icons.pets, color: Colors.white70, size: 90),
+      height: displayHeight,
+      fallback: const Icon(Icons.pets, color: Colors.white70, size: 90),
     );
     // 20% bigger, CENTRED again (user 2026-08-28: "Nein das Monster wieder
     // auf die Position setzen wie vorher, aber den Schatten neu
@@ -607,15 +642,17 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                     ),
                   ),
                 ),
-                // Small edit (rename) button, right of the name/gender.
-                GestureDetector(
-                  onTap: () => _rename(creature),
-                  behavior: HitTestBehavior.opaque,
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 8),
-                    child: Icon(Icons.edit, size: 16, color: _inkDim),
+                // Small edit (rename) button, right of the name/gender. Not
+                // owned yet in preview — nothing valid to rename.
+                if (!_isPreview)
+                  GestureDetector(
+                    onTap: () => _rename(creature),
+                    behavior: HitTestBehavior.opaque,
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 8),
+                      child: Icon(Icons.edit, size: 16, color: _inkDim),
+                    ),
                   ),
-                ),
               ],
             ),
             if (desc.isNotEmpty) ...[
@@ -646,6 +683,14 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 },
               ),
             ),
+            // The caller's footer (the starter preview's "Choose" button) —
+            // OUTSIDE the tab switch so it stays put across all four tabs
+            // (user 2026-09-02: "sollte der Button auf allen 4 Reiter unten
+            // sein"), unlike Release/dev, which only ever lived on General.
+            if (widget.footer != null) ...[
+              const SizedBox(height: 12),
+              widget.footer!,
+            ],
           ],
         ),
       ),
@@ -880,34 +925,44 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               ],
             ),
           ),
-        const SizedBox(height: 8),
-        _pillBtn(
-          'Release',
-          Colors.redAccent,
-          filled: false,
-          onTap: () => _release(creature),
-        ),
-        if (_settlement.isDev) ...[
-          const SizedBox(height: 8),
-          _pillBtn(
-            '🛠 +500 XP (Dev)',
-            _inkDim,
-            filled: false,
-            onTap: () => _ctrl.devGainXp(creature, 500),
-          ),
-          // Straight to the next form: the level is raised to the threshold
-          // first, so the monster that comes out is a legitimate over-levelled
-          // one rather than a stage-2 body with stage-1 stats (user
-          // 2026-08-01). Hidden at the final stage — there is nothing to jump
-          // to, and a button that only ever refuses is worse than no button.
-          if (creature.hasNextStage) ...[
+        // Not shown in preview (user 2026-09-02) — the caller's own footer
+        // takes this spot instead (see [_sheet]), since Release and the dev
+        // tools all assume a creature that is actually owned.
+        if (!_isPreview) ...[
+          // The starter never gets a Release button at all (user 2026-09-02:
+          // "Das Startmonster kann aber niemals entlassen werden") — it's
+          // the player's one permanent companion, not just a first pick.
+          if (!creature.isStarter) ...[
             const SizedBox(height: 8),
             _pillBtn(
-              '🛠 Evolve to ${creature.species?.stageAt(creature.stage + 1).name ?? 'next stage'} (Dev)',
+              'Release',
+              Colors.redAccent,
+              filled: false,
+              onTap: () => _release(creature),
+            ),
+          ],
+          if (_settlement.isDev) ...[
+            const SizedBox(height: 8),
+            _pillBtn(
+              '🛠 +500 XP (Dev)',
               _inkDim,
               filled: false,
-              onTap: () => _devEvolve(creature),
+              onTap: () => _ctrl.devGainXp(creature, 500),
             ),
+            // Straight to the next form: the level is raised to the threshold
+            // first, so the monster that comes out is a legitimate over-levelled
+            // one rather than a stage-2 body with stage-1 stats (user
+            // 2026-08-01). Hidden at the final stage — there is nothing to jump
+            // to, and a button that only ever refuses is worse than no button.
+            if (creature.hasNextStage) ...[
+              const SizedBox(height: 8),
+              _pillBtn(
+                '🛠 Evolve to ${creature.species?.stageAt(creature.stage + 1).name ?? 'next stage'} (Dev)',
+                _inkDim,
+                filled: false,
+                onTap: () => _devEvolve(creature),
+              ),
+            ],
           ],
         ],
       ],
@@ -1115,7 +1170,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     // The level is the only requirement (user 2026-07-26). The second gate — a
     // path-earned evolution feature — is gone, and with it the "Locked" state
     // below that never said what it was locked on.
-    final ready = levelOk && !_evolving;
+    final ready = levelOk && !_evolving && !_isPreview;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1191,13 +1246,14 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     if (url == null) {
       art = Icon(Icons.pets, color: revealed ? _inkDim : FoE.bg, size: 40);
     } else {
-      final img = Image.network(
-        url,
-        filterQuality: FilterQuality.none,
+      // Same disk-cached loader as [_art] — see the comment there for why a
+      // bare Image.network on a brand-new URL is what produced the black
+      // starter-preview art.
+      final img = CreatureSprite(
+        url: url,
         fit: BoxFit.contain,
-        cacheWidth: decodeWidthFor(context, 40),
-        errorBuilder: (_, _, _) =>
-            Icon(Icons.pets, color: revealed ? _inkDim : FoE.bg, size: 40),
+        height: 40,
+        fallback: Icon(Icons.pets, color: revealed ? _inkDim : FoE.bg, size: 40),
       );
       // Locked stage → paint every opaque pixel near-black for a silhouette.
       art = revealed
@@ -1229,19 +1285,15 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
 
   Widget _abilitiesTab(CreatureInstance creature) {
     final species = creature.species;
-    final abilities = List.of(species?.abilities ?? const [])
-      ..sort((a, b) => a.unlockStage.compareTo(b.unlockStage));
-    if (abilities.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 20),
-        child: Center(
-          child: Text(
-            'No abilities defined.',
-            style: TextStyle(color: _inkDim, fontSize: 13),
-          ),
-        ),
-      );
-    }
+    final abilities = [
+      // Every monster's universal Attack (user 2026-09-03: "attack soll
+      // eine normale Fähigkeit sein") — real content now
+      // (Combatant._resolveAbilities puts it on every combatant the same
+      // way), so it belongs in this list too rather than being a battle-
+      // screen-only special case. Stage 0: known from the very start.
+      const SpeciesAbility(abilityId: 'attack'),
+      ...species?.abilities ?? const [],
+    ]..sort((a, b) => a.unlockStage.compareTo(b.unlockStage));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

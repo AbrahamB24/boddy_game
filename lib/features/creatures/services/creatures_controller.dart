@@ -437,23 +437,30 @@ class CreaturesController extends ChangeNotifier {
   }
 
   /// First creature for a fresh account: level 1 (user 2026-07-24 — the early
-  /// fights scale down to meet it), random gender, freshly Gaussian-sampled
-  /// genes. Only allowed while the collection is empty (the UI gates this too),
-  /// and only for a starter species — see [starterChoices].
-  Future<CreatureInstance?> adoptStarter(SpeciesDef species) async {
+  /// fights scale down to meet it). [draft] is rolled once by the starter
+  /// preview screen (gender + Gaussian genes) and shown there BEFORE the
+  /// player commits — this just persists that exact draft rather than
+  /// rolling a second time, so the creature that gets created always matches
+  /// what was previewed (user 2026-09-02: the preview now IS the real detail
+  /// screen, showing real rolled stats). Only allowed while the collection is
+  /// empty (the UI gates this too), and only for a starter species — see
+  /// [starterChoices].
+  Future<CreatureInstance?> adoptStarter(CreatureInstance draft) async {
     final userId = _userId;
     if (userId == null || creatures.isNotEmpty) return null;
+    final species = kSpeciesDefs[draft.speciesId];
     // Enforced here and not just in the picker: this is the write path, and the
     // starter must be one of the three fire/water/plant epics.
-    if (!isStarterSpecies(species)) return null;
+    if (species == null || !isStarterSpecies(species)) return null;
     final starter = CreatureInstance(
       id: '',
       userId: userId,
-      speciesId: species.id,
-      gender: _rng.nextBool() ? CreatureGender.male : CreatureGender.female,
-      level: 1,
-      statBase: CreatureInstance.rollBaseGenes(species, _rng),
-      statSlope: CreatureInstance.rollSlopeGenes(species, _rng),
+      speciesId: draft.speciesId,
+      gender: draft.gender,
+      level: draft.level,
+      statBase: draft.statBase,
+      statSlope: draft.statSlope,
+      isStarter: true,
     );
     try {
       final created = await _svc.insert(starter);

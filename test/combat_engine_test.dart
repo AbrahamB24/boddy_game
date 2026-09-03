@@ -671,14 +671,21 @@ void main() {
         abilities: [SpeciesAbility(abilityId: 'nuke', unlockStage: 0)],
       );
 
+      // Every combatant also carries the universal Attack ability now (user
+      // 2026-09-03: "attack soll eine normale Fähigkeit sein" —
+      // Combatant._resolveAbilities puts it on everyone ahead of the
+      // species' own moves), so it's `.abilities` as a whole, not `.single`.
+      AbilityDef nukeOf(Combatant c) =>
+          c.abilities.firstWhere((a) => a.id == 'nuke');
+
       // Base form (stage 0 → 4 AP): the power-200 starting move is capped to 4.
       final base = Combatant.fromSpecies(species, level: 1, id: 'c');
-      expect(base.abilities.single.resolvedApCost, 4);
+      expect(nukeOf(base).resolvedApCost, 4);
 
       // Even on the final evolution the SAME starting move stays capped at its
       // unlock stage's 4 AP.
       final evolved = Combatant.fromSpecies(species, level: 99, id: 'c');
-      expect(evolved.abilities.single.resolvedApCost, 4);
+      expect(nukeOf(evolved).resolvedApCost, 4);
     });
   });
 

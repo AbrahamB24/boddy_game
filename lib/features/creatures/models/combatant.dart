@@ -447,9 +447,27 @@ class Combatant {
     );
   }
 
+  /// Every monster's universal Attack (user 2026-09-03: "attack soll eine
+  /// normale Fähigkeit sein") — real DB-authored content (`kAbilityDefs
+  /// ['attack']`) when it has loaded, so it's editable in Dev Mode exactly
+  /// like any other move; this is only the FALLBACK for the gap before that
+  /// content exists (a cold start, or the migration not yet applied). "An
+  /// attack is always available" cannot depend on network state, so the
+  /// fallback matches the DB row's intended numbers exactly: [kBasicAttackPower]
+  /// power, neutral element, auto-priced (which the balance pass calibrated
+  /// to land on [kBasicAttackApCost] for power 40 — see AbilityDef._derivedApCost).
+  static AbilityDef get _fallbackAttack => const AbilityDef(
+    id: 'attack',
+    name: 'Attack',
+    element: CreatureElement.neutral,
+    kind: AbilityKind.damage,
+    target: AbilityTarget.enemy,
+    power: kBasicAttackPower,
+  );
+
   static List<AbilityDef> _resolveAbilities(SpeciesDef? species, int stage) {
-    if (species == null) return const [];
-    final out = <AbilityDef>[];
+    final out = <AbilityDef>[kAbilityDefs['attack'] ?? _fallbackAttack];
+    if (species == null) return out;
     for (final sa in species.abilitiesAt(stage)) {
       final def = kAbilityDefs[sa.abilityId];
       if (def == null) continue;

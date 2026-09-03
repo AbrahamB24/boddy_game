@@ -54,6 +54,12 @@ class _SettlementScreenState extends State<SettlementScreen>
 
   bool _roadMode = false;
 
+  // Set by the pickStarter card's CTA (see IntroCardPanel.onPromptQuickMenu):
+  // instead of navigating, it hands the spotlight to the real Monsters tile
+  // in the quick menu. Reset once the step moves on, so a later replay of
+  // the intro (skip/restart) starts the card fresh again.
+  bool _pickStarterPrompted = false;
+
   // PORTRAIT. This screen used to force landscape, which is flatly at odds
   // with everything else: the phone frame, the header, the sheets and the
   // quick menu are all built for a 430-wide portrait viewport, and a player
@@ -224,6 +230,12 @@ class _SettlementScreenState extends State<SettlementScreen>
   // ── Build ─────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    // A step past pickStarter (adopted, skipped, or the intro replayed from
+    // scratch) — drop the stale flag so a later pass through this step shows
+    // its card fresh instead of jumping straight to the spotlighted tile.
+    if (_ctrl.introStep != IntroStep.pickStarter && _pickStarterPrompted) {
+      _pickStarterPrompted = false;
+    }
     // Welcome-back digest: queued by load() when the player was away a while;
     // shown exactly once, after this frame so the sheet has a laid-out screen
     // under it.
@@ -583,13 +595,120 @@ class _SettlementScreenState extends State<SettlementScreen>
       // Full-bleed: the quick menu is a bar fixed to the bottom edge now, so
       // the stack owns the whole width and the cards indent themselves.
       Positioned(left: 0, right: 0, bottom: 0, child: _bottomStack()),
-      // Guided tutorial: dim and dead-zone everything except the intro card
-      // — its CTA is the one lit path forward, its ✕ still offers the exit.
-      // Off during placement (the map is the target then) and map modes.
+      // The intro card ITSELF is the lit control (every step still holding
+      // its own unpressed CTA) — centred on the screen rather than pinned
+      // above the quick menu (user 2026-09-02: "diese Textboxen in die
+      // Mitte des Screens nehmen"). Drawn BEFORE the scrim below so the
+      // spotlight punches its hole out around exactly this position.
+      if (_ctrl.introStep.isActive &&
+          !_mapModeActive &&
+          _pendingTypeId == null &&
+          _soloQuickPadAnchor == null)
+        Center(
+          // The spotlight's hole — the card (CTA + skip) is the only living
+          // UI while the tutorial overlay is up.
+          child: KeyedSubtree(
+            key: IntroSpotlightAnchors.of('intro-panel'),
+            child: _introCard(),
+          ),
+        ),
+      // Guided tutorial: dim and dead-zone everything except the ONE lit
+      // control — the intro card above, or (once a step hands off, see
+      // [_soloQuickPadAnchor]) the quick-menu tile it points at. Off during
+      // placement (the map is the target then) and map modes.
       if (_ctrl.introStep.isActive && !_mapModeActive && _pendingTypeId == null)
-        const IntroSpotlightOverlay(anchorName: 'intro-panel'),
+        IntroSpotlightOverlay(
+          anchorName: _introSpotlightAnchor,
+          hint: _introSpotlightHint,
+        ),
+      // A narration-only card (firstNode's "your monsters can fight too")
+      // stays up ON TOP of the scrim instead of being punched out of it —
+      // it has nothing of its own to press, so it never needs to BE the
+      // hole, only to stay readable while a quick-pad tile is. Centred too,
+      // for the same reason as above.
+      if (_ctrl.introStep.isActive &&
+          !_mapModeActive &&
+          _pendingTypeId == null &&
+          _introCardIsNarrationOnly &&
+          _soloQuickPadAnchor != null)
+        Center(child: _introCard()),
     ],
   );
+
+  /// The guided-tutorial card, padded and ready to drop anywhere in the
+  /// Stack — pulled out so both the "I'm the spotlight hole" placement and
+  /// the "I float above the scrim" placement (see [build]) render the exact
+  /// same widget.
+  Widget _introCard() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    child: IntroCardPanel(
+      ctrl: _ctrl,
+      onNavigate: _goToIntroTarget,
+      onPromptQuickMenu: () => setState(() => _pickStarterPrompted = true),
+    ),
+  );
+
+  /// The current step's card, or null once the tutorial is [IntroStep.done].
+  IntroCard? get _activeIntroCard =>
+      _ctrl.introStep.isActive ? introCardFor(_ctrl.introStep) : null;
+
+  /// True for a step whose card is pure narration with no CTA of its own
+  /// (e.g. firstNode, user 2026-09-02: "kein Button open the map") — it stays
+  /// on screen, drawn ABOVE the spotlight scrim rather than dimmed by it,
+  /// while a quick-pad tile is the actual interactive target (see
+  /// [_soloQuickPadAnchor]).
+  bool get _introCardIsNarrationOnly => _activeIntroCard?.ctaLabel == null;
+
+  /// The ONE quick-pad tile that's lit and interactive right now, or null
+  /// when the intro card itself is that one lit control instead (the usual
+  /// case: most steps' own CTA button IS the hole).
+  ///
+  /// Two ways a tile ends up here: a narration-only card that points straight
+  /// at a tile from the moment its step begins (firstNode → Map), or
+  /// pickStarter's card handing off to Monsters once ITS OWN CTA has been
+  /// pressed (see [_pickStarterPrompted]) — the card had something to press,
+  /// this one never did.
+  String? get _soloQuickPadAnchor {
+    final card = _activeIntroCard;
+    if (card == null) return null;
+    if (_introCardIsNarrationOnly) {
+      return switch (card.destination) {
+        IntroDestination.map => 'quick-map',
+        IntroDestination.collection => 'quick-monsters',
+        _ => null,
+      };
+    }
+    if (_ctrl.introStep == IntroStep.pickStarter && _pickStarterPrompted) {
+      return 'quick-monsters';
+    }
+    return null;
+  }
+
+  /// Which anchor the guided tutorial lights up right now — the CURRENT
+  /// step's own quick-pad tile when it has one, else the intro card itself.
+  /// An earlier hand-off's tile can still be showing in the pad alongside it
+  /// (see [_quickPad]), but only THIS one is the hole.
+  String get _introSpotlightAnchor => _soloQuickPadAnchor ?? 'intro-panel';
+
+  String? get _introSpotlightHint => switch (_soloQuickPadAnchor) {
+    'quick-monsters' => 'Tap Monsters to choose your starter',
+    'quick-map' => 'Tap Map to open the overworld',
+    _ => null,
+  };
+
+  /// A tile earns a permanent spot in the reduced quick pad the moment its
+  /// own step hands off to it, and keeps it through every later solo
+  /// hand-off too (user 2026-09-02: "der Monsterbutton soll auch bereits
+  /// angezeigt werden, da dieser bereits benutzt wurde") — the pad only
+  /// ever grows while the tutorial runs, never loses a tile it already
+  /// showed.
+  bool get _monstersUnlocked =>
+      _soloQuickPadAnchor == 'quick-monsters' ||
+      _ctrl.introStep.index > IntroStep.pickStarter.index;
+
+  bool get _mapUnlocked =>
+      _soloQuickPadAnchor == 'quick-map' ||
+      _ctrl.introStep.index > IntroStep.firstNode.index;
 
   /// True while the map owns the bottom of the screen: aiming, road building
   /// and move/edit mode each show their own banner down there (with the button
@@ -608,29 +727,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     // SafeArea now: the bar that used to paint its own background into the
     // gesture inset is gone, so the loose buttons have to keep off the glass
     // themselves.
-    return SafeArea(
-      top: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_ctrl.introStep.isActive)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: KeyedSubtree(
-                // The spotlight's hole — the card (CTA + skip) is the only
-                // living UI while the tutorial overlay is up.
-                key: IntroSpotlightAnchors.of('intro-panel'),
-                child: IntroCardPanel(
-                  ctrl: _ctrl,
-                  onNavigate: _goToIntroTarget,
-                ),
-              ),
-            ),
-          _quickPad(),
-        ],
-      ),
-    );
+    return SafeArea(top: false, child: _quickPad());
   }
 
   void _goToIntroTarget(IntroDestination target) => switch (target) {
@@ -1571,32 +1668,75 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// outline ones had to be swapped: the bag for its filled twin, and the
   /// daily tasks from a ticked circle — which reads as "already done" — to a
   /// flag, which is what a goal is.
-  Widget _quickPad() => QuickPad(
-    items: [
-      QuickPadItem(Icons.construction, 'Build', _showBuildMenu),
-      QuickPadItem(Icons.map, 'Map', _showOverworld),
-      QuickPadItem(Icons.pets, 'Monsters', _showCreatures),
-      // The Management hub: what is out on the road, who works where, and the
-      // housing budget. Research used to be a key here — the overworld IS
-      // research now (techs are places on it), so it would have been two doors
-      // into one room.
-      QuickPadItem(Icons.assignment, 'Manage', _showManagement),
-      QuickPadItem(
-        Icons.backpack,
-        'Bag',
-        () => openBag(context),
-        // NEW items, not the total held (user 2026-08-29) — a badge that
-        // always shows "how many things you own" never goes away, which is
-        // not what a badge is for. Clears the moment the Bag opens; see
-        // NewItems and BagScreen.
-        badge: NewItems().total,
-      ),
-      QuickPadItem(
-        Icons.flag,
-        'Daily tasks',
-        _showDailyTasks,
-        badge: _ctrl.dailyTasks.claimableCount,
-      ),
-    ],
-  );
+  Widget _quickPad() {
+    final solo = _soloQuickPadAnchor;
+    // Only the CURRENT step's own tile carries the anchor (user 2026-09-02:
+    // "Nur der jeweilige Button soll aktiv und markiert sein") — an earlier
+    // hand-off's tile still SHOWS (see below), it just isn't the hole any
+    // more, so the spotlight scrim dims and dead-zones it like everything
+    // else that isn't the one lit control right now.
+    final monsters = QuickPadItem(
+      Icons.pets,
+      'Monsters',
+      _showCreatures,
+      anchorKey: solo == 'quick-monsters'
+          ? IntroSpotlightAnchors.of('quick-monsters')
+          : null,
+    );
+    final map = QuickPadItem(
+      Icons.map,
+      'Map',
+      _showOverworld,
+      anchorKey: solo == 'quick-map' ? IntroSpotlightAnchors.of('quick-map') : null,
+    );
+    // Reduced to whichever tiles are unlocked so far — the CURRENT step's
+    // own target plus any earlier solo hand-off's tile, which stays around
+    // rather than disappearing again (user 2026-09-02: "der Monsterbutton
+    // soll auch bereits angezeigt werden, da dieser bereits benutzt
+    // wurde").
+    if (solo != null) {
+      return QuickPad(
+        items: [
+          if (_monstersUnlocked) monsters,
+          if (_mapUnlocked) map,
+        ],
+      );
+    }
+    // No button at all until it is the one actually being used (user
+    // 2026-09-02: "Zum Start soll noch gar kein Button ersichtlich sein ...
+    // Die Buttons erscheinen erst dann, wenn sie benutzt werden"). While the
+    // intro card itself is the spotlighted control (every step except the
+    // solo hand-offs above), its own CTA is the only way forward — the
+    // quick menu isn't the mechanism yet, so it stays off rather than
+    // sitting there dimmed and dead behind the scrim.
+    if (_ctrl.introStep.isActive) return const SizedBox.shrink();
+    return QuickPad(
+      items: [
+        QuickPadItem(Icons.construction, 'Build', _showBuildMenu),
+        map,
+        monsters,
+        // The Management hub: what is out on the road, who works where, and
+        // the housing budget. Research used to be a key here — the overworld
+        // IS research now (techs are places on it), so it would have been
+        // two doors into one room.
+        QuickPadItem(Icons.assignment, 'Manage', _showManagement),
+        QuickPadItem(
+          Icons.backpack,
+          'Bag',
+          () => openBag(context),
+          // NEW items, not the total held (user 2026-08-29) — a badge that
+          // always shows "how many things you own" never goes away, which is
+          // not what a badge is for. Clears the moment the Bag opens; see
+          // NewItems and BagScreen.
+          badge: NewItems().total,
+        ),
+        QuickPadItem(
+          Icons.flag,
+          'Daily tasks',
+          _showDailyTasks,
+          badge: _ctrl.dailyTasks.claimableCount,
+        ),
+      ],
+    );
+  }
 }
