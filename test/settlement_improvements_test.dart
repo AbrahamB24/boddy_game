@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:boddygame/features/creatures/models/path_node.dart';
 import 'package:boddygame/features/settlement/data/building_definitions.dart';
-import 'package:boddygame/features/settlement/data/era_definitions.dart';
 import 'package:boddygame/features/settlement/models/energy_model.dart';
 import 'package:boddygame/features/settlement/models/resource_model.dart';
 import 'package:boddygame/features/settlement/services/daily_tasks.dart';
@@ -25,12 +24,11 @@ void main() {
   });
   tearDown(kBuildingDefs.clear);
 
-  // ENERGY IS A GATE AGAIN (user 2026-07-27: "wenn ich keine Energie habe, dann
-  // läuft nichts"). It ran at kEnergyFloorRate = 0.30 from 2026-07-21; that
-  // constant is 0 now, so an empty tank stops the settlement outright. The
-  // assertions still read the constant, so the day it becomes a trickle again
-  // they follow it.
-  group('energy gates the settlement', () {
+  // ENERGY IS A DAILY-STEPS RATE (user 2026-09-14, replacing the 2026-07-27
+  // hard gate this section used to pin): [stepsToday] never gates anything
+  // any more, it only scales a continuous rate from a floor (0 steps) up to
+  // a capped bonus (10 000 steps), reset each local day.
+  group('energy scales the settlement, never stops it', () {
     final res = ResourceModel(
       settlementId: 's',
       wood: 0,
@@ -38,10 +36,9 @@ void main() {
       lastUpdatedAt: DateTime.utc(2026, 1, 1),
     );
 
-    test('an EMPTY tank produces nothing', () {
+    test('0 steps runs at the floor rate, never zero', () {
       final energy = EnergyModel(
         settlementId: 's',
-        currentEnergy: 0,
         lastUpdatedAt: DateTime.utc(2026, 1, 1),
       );
       final r = GameEngine.tick(
@@ -53,16 +50,17 @@ void main() {
       );
       expect(
         r.effectiveHours,
-        closeTo(10 * kEnergyFloorRate, 0.001),
-        reason: 'no energy, no work (user 2026-07-27)',
+        closeTo(10 * kEnergyFloorMultiplier, 0.001),
+        reason: 'no steps today, but still a working floor rate — never 0',
       );
-      expect(r.resources.wood, closeTo(100 * kEnergyFloorRate, 0.1));
+      expect(r.resources.wood, closeTo(100 * kEnergyFloorMultiplier, 0.1));
     });
 
-    test('a full tank still runs at 100% — the boost is unchanged', () {
+    test('the daily step target runs at exactly 100%', () {
       final energy = EnergyModel(
         settlementId: 's',
-        currentEnergy: kMaxEnergy,
+        stepsToday: kEnergyFullSteps.round(),
+        stepsDayKey: dateKeyFor(DateTime.utc(2026, 1, 1).toLocal()),
         lastUpdatedAt: DateTime.utc(2026, 1, 1),
       );
       final r = GameEngine.tick(
@@ -75,77 +73,79 @@ void main() {
       expect(r.effectiveHours, closeTo(2, 0.001));
     });
 
-    test('a tank that empties mid-tick pays only for the hours it had', () {
-      // 100 energy lasts 24h; a 48h tick = 24 worked + 24 idle.
+    test('steps past the target buy a capped bonus rate', () {
+      final maxBoostSteps =
+          kEnergyFullSteps +
+          1000 * (kEnergyMaxBoost / kEnergyBoostPerThousandSteps);
+      expect(
+        energyMultiplierForSteps(maxBoostSteps.round()),
+        closeTo(1.0 + kEnergyMaxBoost, 0.001),
+      );
+      // Well past the cap still reads the SAME max — it never keeps climbing.
+      expect(
+        energyMultiplierForSteps(maxBoostSteps.round() + 5000),
+        closeTo(1.0 + kEnergyMaxBoost, 0.001),
+      );
+    });
+
+    test('a tick spanning midnight resets to the floor, not yesterday\'s rate', () {
+      // Yesterday's steps must not silently keep boosting a NEW day that
+      // hasn't walked yet.
       final energy = EnergyModel(
         settlementId: 's',
-        currentEnergy: kMaxEnergy,
-        lastUpdatedAt: DateTime.utc(2026, 1, 1),
+        stepsToday: kEnergyFullSteps.round(),
+        stepsDayKey: dateKeyFor(DateTime.utc(2026, 1, 1).toLocal()),
+        lastUpdatedAt: DateTime.utc(2026, 1, 1, 23),
       );
       final r = GameEngine.tick(
         energy,
         res,
         const [],
-        DateTime.utc(2026, 1, 3),
+        DateTime.utc(2026, 1, 2, 1), // crosses local midnight
         workshopPower: {'wood': 10},
       );
-      expect(
-        r.effectiveHours,
-        closeTo(24 + 24 * kEnergyFloorRate, 0.01),
-      );
+      expect(r.energy.stepsToday, 0);
+      expect(r.energy.stepsDayKey, dateKeyFor(DateTime.utc(2026, 1, 2).toLocal()));
     });
 
-    test('the rate the top bar shows stops with it', () {
-      final empty = EnergyModel(
-        settlementId: 's',
-        currentEnergy: 0,
-        lastUpdatedAt: DateTime.utc(2026),
-      );
+    test('the rate the top bar shows matches the tick\'s own', () {
+      final empty = EnergyModel(settlementId: 's', lastUpdatedAt: DateTime.utc(2026));
       final rates = GameEngine.hourlyRates(empty, {'wood': 10});
-      expect(rates['wood'], closeTo(10 * kEnergyFloorRate, 0.001));
+      expect(rates['wood'], closeTo(10 * kEnergyFloorMultiplier, 0.001));
     });
   });
 
-  group('the action gate reads the same empty', () {
-    // Every player-triggered action (expedition, treatment, mating, incubation)
-    // asks SettlementController.hasEnergy first, so it has to agree with the
-    // tick — including the drain SINCE the last tick, or an action would slip
-    // through in the seconds after the tank ran dry.
+  group('SettlementController.energyMultiplier reads the live rate', () {
     tearDown(() => SettlementController().energy = null);
 
-    test('a full tank runs', () {
+    test('the daily target reads 100%', () {
       SettlementController().energy = EnergyModel(
         settlementId: 's',
-        currentEnergy: kMaxEnergy,
+        stepsToday: kEnergyFullSteps.round(),
+        stepsDayKey: dateKeyFor(DateTime.now()),
         lastUpdatedAt: DateTime.now(),
       );
-      expect(SettlementController().hasEnergy, isTrue);
+      expect(SettlementController().energyMultiplier, closeTo(1.0, 0.001));
     });
 
-    test('an empty tank refuses', () {
+    test('0 steps today reads the floor, not zero', () {
       SettlementController().energy = EnergyModel(
         settlementId: 's',
-        currentEnergy: 0,
+        stepsDayKey: dateKeyFor(DateTime.now()),
         lastUpdatedAt: DateTime.now(),
       );
-      expect(SettlementController().hasEnergy, isFalse);
-    });
-
-    test('a stale anchor is drained forward, not taken at face value', () {
-      // 100 energy lasts 24h. An anchor from two days ago means empty NOW,
-      // however full the last saved number looks.
-      SettlementController().energy = EnergyModel(
-        settlementId: 's',
-        currentEnergy: kMaxEnergy,
-        lastUpdatedAt: DateTime.now().subtract(const Duration(hours: 48)),
+      expect(
+        SettlementController().energyMultiplier,
+        closeTo(kEnergyFloorMultiplier, 0.001),
       );
-      expect(SettlementController().energyNow, 0);
-      expect(SettlementController().hasEnergy, isFalse);
     });
 
-    test('no settlement loaded reads as empty, not as unlimited', () {
+    test('no settlement loaded reads as the floor, not as unlimited', () {
       SettlementController().energy = null;
-      expect(SettlementController().hasEnergy, isFalse);
+      expect(
+        SettlementController().energyMultiplier,
+        closeTo(kEnergyFloorMultiplier, 0.001),
+      );
     });
   });
 
@@ -243,28 +243,27 @@ void main() {
       expect(effectiveSlots(role, 10), 5);
     });
 
-    test('the era-2 successor crosses over at its own level ~6', () {
+    test('the region-2 successor crosses over at its own level ~6', () {
       // The design formula the successor content is authored against: a maxed
-      // era-1 building beats the successor's level 1, and the successor wins
-      // from level 6.
-      final era1MaxYield = buildingYieldFactor(10); // ×5.5
-      final mult = eraProductionMult(2); // ×1.6
-      expect(mult * buildingYieldFactor(1), lessThan(era1MaxYield));
-      expect(mult * buildingYieldFactor(6), greaterThan(era1MaxYield));
+      // region-1 building beats the successor's level 1, and the successor
+      // wins from level 6.
+      final region1MaxYield = buildingYieldFactor(10); // ×5.5
+      final mult = regionProductionMult(2); // ×1.6
+      expect(mult * buildingYieldFactor(1), lessThan(region1MaxYield));
+      expect(mult * buildingYieldFactor(6), greaterThan(region1MaxYield));
     });
 
-    test('old-era buildings stay buildable after ascension', () {
-      kEraDefs
-        ..clear()
-        ..addAll({
-          'era_1': const EraDef(id: 'era_1', name: 'I', emoji: '🏺', order: 1),
-          'era_2': const EraDef(id: 'era_2', name: 'II', emoji: '🥉', order: 2),
-        });
+    test('old-region buildings stay buildable after pushing on', () {
+      // No more EraDef registry to mock (user 2026-09-05) — a building's
+      // region gate is read straight off its `eraIds` id strings
+      // (`'era_N'`), so nothing needs registering before calling
+      // availableBuildings with a region number.
+      //
       // Every building now ALSO needs a real node grant (2026-08-31: "nur
       // die Gebäude bauen lassen, welche durch die Kampagne freigespielt
       // wurden") — reusing node_1 for both; its own order doesn't matter
       // here since battlesCleared 999 clears any gate. This test is about
-      // ERA gating on top of that, not the grant itself.
+      // REGION gating on top of that, not the grant itself.
       final saved = kPathNodes['node_1']!;
       kPathNodes['node_1'] = PathNode(
         id: saved.id,
@@ -280,45 +279,36 @@ void main() {
           ],
         ),
       );
-      // High battlesCleared so map-progress gating doesn't hide era-1 content —
-      // this test is about ERA gating only.
-      final inEra2 =
-          availableBuildings('era_2', 999).map((d) => d.id).toSet();
-      expect(inEra2, contains('small_wood_camp'),
-          reason: 'era-1 buildings remain buildable once granted '
+      // High battlesCleared so map-progress gating doesn't hide region-1
+      // content — this test is about REGION gating only.
+      final inRegion2 = availableBuildings(2, 999).map((d) => d.id).toSet();
+      expect(inRegion2, contains('small_wood_camp'),
+          reason: 'region-1 buildings remain buildable once granted '
               '(user answer 8)');
-      expect(inEra2, contains('clay_camp_e2'));
-      // ...and era-2 buildings are NOT offered while still in era 1, even
-      // though the SAME node already granted them — the era gate is a
-      // second, independent condition.
-      final inEra1 =
-          availableBuildings('era_1', 999).map((d) => d.id).toSet();
-      expect(inEra1, isNot(contains('clay_camp_e2')));
+      expect(inRegion2, contains('clay_camp_e2'));
+      // ...and region-2 buildings are NOT offered while still in region 1,
+      // even though the SAME node already granted them — the region gate
+      // is a second, independent condition.
+      final inRegion1 = availableBuildings(1, 999).map((d) => d.id).toSet();
+      expect(inRegion1, isNot(contains('clay_camp_e2')));
       kPathNodes['node_1'] = saved;
-      kEraDefs.clear();
     });
 
     test('a building not yet granted by any node is not buildable, even in '
-        'its own era', () {
-      kEraDefs
-        ..clear()
-        ..addAll({
-          'era_1': const EraDef(id: 'era_1', name: 'I', emoji: '🏺', order: 1),
-        });
+        'its own region', () {
       // Battle 0, the stock fallback path — the earliest anything is
       // granted is node_1 (the Healing Hut) and node_7 (the Build Plot, its
       // own expansionsUnlocked reward system rather than a node grant, but
       // still gated by ITS OWN battle number), so nothing is buildable at
       // all yet (user 2026-08-31: "diejenigen, welche ich noch gar keinem
       // Knoten zugeordnet habe, sollen noch nicht baubar sein").
-      final start =
-          availableBuildings('era_1', 0).map((d) => d.id).toSet();
+      final start = availableBuildings(1, 0).map((d) => d.id).toSet();
       expect(start, isEmpty);
 
       // Granting it a node makes it buildable at that node's battle, same
       // as any other campaign reward — node_1 already grants the Healing
       // Hut in the seed table, so adding the Wood Camp to it proves the
-      // grant (not the era) is what changed.
+      // grant (not the region) is what changed.
       final saved = kPathNodes['node_1']!;
       kPathNodes['node_1'] = PathNode(
         id: saved.id,
@@ -333,12 +323,10 @@ void main() {
 
       // Winning the first battle unlocks the Healing Hut and the Wood Camp,
       // and nothing else earlier.
-      final afterFirst =
-          availableBuildings('era_1', 1).map((d) => d.id).toSet();
+      final afterFirst = availableBuildings(1, 1).map((d) => d.id).toSet();
       expect(afterFirst, containsAll(['healing_hut', 'small_wood_camp']));
       expect(afterFirst, isNot(contains('breeding_hut')));
       kPathNodes['node_1'] = saved;
-      kEraDefs.clear();
     });
   });
 
@@ -376,7 +364,6 @@ void main() {
       emoji: '🌲',
       order: 1,
       battleStage: 1,
-      dangerLevel: 2,
       spots: const [],
     );
     const spot = ResourceSpotDef(
@@ -415,7 +402,7 @@ void main() {
       expect(boosted.amount, greaterThan(plain.amount));
       // Travel share shrank: same mining rate, bigger haul, yet the trip is
       // not 30% longer — the cut travel absorbs part of it. Compare directly:
-      final travelPlain = kTravelSecondsPerDanger * area.dangerLevel;
+      final travelPlain = kTravelSeconds;
       final travelBoosted = travelPlain * 0.8;
       expect(travelBoosted, lessThan(travelPlain));
     });

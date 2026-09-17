@@ -17,7 +17,7 @@ void main() {
   test('the Clay Refinery is what the era-I path really unlocks', () {
     // refinery_e1 cannot exist — era I has no element to refine.
     expect(kBuildingDefs.containsKey('refinery_e1'), isFalse);
-    expect(elementForEra(1), isNull);
+    expect(elementForRegion(1), isNull);
     expect(kBuildingDefs.containsKey('refinery_e2'), isTrue);
     expect(kBuildingUnlockBattle['refinery_e2'], isNotNull,
         reason: 'the seed must grant a building that exists');

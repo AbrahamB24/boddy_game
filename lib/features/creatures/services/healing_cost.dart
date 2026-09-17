@@ -55,16 +55,16 @@ double healSecondsPerHp(CreatureRarity rarity) =>
 double healGoodsPerHp(CreatureRarity rarity) =>
     kSpeciesBalance.of(rarity).healGoodsPerHp;
 
-/// The ERA whose luxury goods pay for [c]'s treatment (user 2026-07-26: "es
-/// werden immer die Luxusressourcen benötigt, welche der Ära des Monsters
-/// entsprechen"). A species' region tier IS its era — region N is era N — so a
-/// starter is always mended with era-I supplies however far the settlement has
-/// come, and a region-3 catch demands region-3 goods.
+/// The REGION whose luxury goods pay for [c]'s treatment (user 2026-07-26:
+/// "es werden immer die Luxusressourcen benötigt, welche der Ära des
+/// Monsters entsprechen"). A species' `tier` IS the region it's native to —
+/// so a starter is always mended with region-I supplies however far the
+/// settlement has come, and a region-3 catch demands region-3 goods.
 ///
-/// Falls back to era 1 for a creature whose species def hasn't loaded: the
-/// cheapest, always-available bill, so a missing def can never make a monster
-/// unhealable.
-int creatureHealEra(CreatureInstance c) => c.species?.tier ?? 1;
+/// Falls back to region 1 for a creature whose species def hasn't loaded:
+/// the cheapest, always-available bill, so a missing def can never make a
+/// monster unhealable.
+int creatureHealRegion(CreatureInstance c) => c.species?.tier ?? 1;
 
 /// Multiplier on a K.O.'d creature's heal — BOTH its price and its duration.
 /// Reviving is not the same as bandaging: without this, being knocked out
@@ -117,7 +117,7 @@ Map<String, double> healCost(
   for (final c in creatures) {
     final goods = healGoodsFor(c) * costMult;
     if (goods <= 0) continue;
-    final era = creatureHealEra(c);
+    final era = creatureHealRegion(c);
     byEra[era] = (byEra[era] ?? 0) + goods;
   }
   if (byEra.isEmpty) return const {};

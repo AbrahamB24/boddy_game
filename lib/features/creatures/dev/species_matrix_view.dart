@@ -5,6 +5,7 @@ import '../models/ability_def.dart';
 import '../models/species_def.dart';
 import '../services/creature_defs_service.dart';
 import '../services/species_balance.dart';
+import '../../../core/ui/pressable.dart';
 
 /// The species-vs-species balancing matrix (dev tool, user spec 2026-07-21):
 /// rows = attacker (player side), columns = defender. Each cell runs
@@ -208,7 +209,7 @@ class _SpeciesMatrixViewState extends State<SpeciesMatrixView> {
     // matches read ~50% by construction.
     final off = (win - 0.5).abs() * 2; // 0 balanced … 1 extreme
     final base = win >= 0.5 ? FoE.accentBlue : FoE.danger;
-    return GestureDetector(
+    return Pressable(
       onTap: () => _showCell(a, b, r),
       child: Container(
         width: size,

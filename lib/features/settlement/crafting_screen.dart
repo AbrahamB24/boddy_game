@@ -16,6 +16,7 @@ import 'data/item_definitions.dart';
 import 'settlement_controller.dart';
 import 'widgets/scroll_paper.dart'
     show kParchmentInk, kParchmentLight, parchmentButton, parchmentButtonInk;
+import '../../core/ui/pressable.dart';
 
 /// THE WORKBENCH, AS A SCREEN (user 2026-07-29: "workshop. Crafting ist ein
 /// eigener screen und kann über den workshop geöffnet werden").
@@ -277,7 +278,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
     );
   }
 
-  Widget _dropButton(int index) => GestureDetector(
+  Widget _dropButton(int index) => Pressable(
     onTap: () => _ctrl.cancelCraft(index),
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -320,7 +321,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
     final making =
         _ctrl.craftJobs.where((j) => j.itemId == def.id).length;
     final owned = _ctrl.items[def.id] ?? 0;
-    return GestureDetector(
+    return Pressable(
       behavior: HitTestBehavior.opaque,
       onTap: () async {
         final err = await _ctrl.queueCraft(def.id);

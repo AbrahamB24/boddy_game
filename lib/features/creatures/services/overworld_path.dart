@@ -17,17 +17,21 @@ import '../../../core/tuning/game_tuning.dart';
 // battle always allows the same number of monsters (re-fighting battle 3 is
 // always 1v1). Team-size techs are gone — see kTeamSizeTechIds's removal.
 
-/// Regular battles in each era's segment BEFORE its boss. The boss is the next
-/// battle number after these, so an era segment is [kBattlesBeforeBoss] + 1
-/// battles long. One value for every era (chapters are the same shape); a
-/// single tunable dial for the whole path's length.
+/// Regular battles before a FALLBACK-generated boss (user 2026-09-05: real
+/// content no longer has a fixed region length — a region is however long
+/// the path editor makes it, ending wherever a node's own `isBoss` flag is
+/// set; see `PathNode.isBoss` / `regionForBattle` in path_node.dart). This
+/// dial only shapes the BUNDLED starter path (`_buildFallbackPath`) and the
+/// degenerate "no node authored here at all" fallback below — never a
+/// region an author has actually placed a boss in.
 ///
-/// 18 puts Era I's party-size steps (battles 6 and 15) comfortably inside the
-/// era, with the boss at battle 19.
+/// 18 puts the bundled path's party-size steps (battles 6 and 15) comfortably
+/// inside its first fallback region, with a boss at battle 19.
 int get kBattlesBeforeBoss => GameTuning.i.count(Dials.battlesBeforeBoss);
 
-/// Full length of one era segment on the line (regular battles + the boss).
-int get kBattlesPerEra => kBattlesBeforeBoss + 1;
+/// Full length of one FALLBACK region segment (regular battles + the boss) —
+/// see [kBattlesBeforeBoss].
+int get kFallbackBattlesPerRegion => kBattlesBeforeBoss + 1;
 
 /// Largest party the game ever allows.
 int get kMaxPartySize => GameTuning.i.count(Dials.maxPartySize);
@@ -70,24 +74,14 @@ int partySizeForBattle(int battleNumber) {
 int unlockedPartySize(int highestBattleReached) =>
     partySizeForBattle(highestBattleReached);
 
-/// 1-based era a battle belongs to. Battles 1..kBattlesPerEra are Era I (its
-/// boss is battle kBattlesPerEra), the next segment is Era II, and so on.
-int eraForBattle(int battleNumber) {
-  final n = battleNumber < 1 ? 1 : battleNumber;
-  return (n - 1) ~/ kBattlesPerEra + 1;
-}
-
-/// The (1-based) battle number of an era's boss — the last battle of its
-/// segment and the era gate.
-int bossBattleForEra(int era) => era * kBattlesPerEra;
-
-/// Whether [battleNumber] is an era's boss battle.
+/// Whether [battleNumber] is a boss battle — the FALLBACK answer only, for
+/// when no [PathNode] exists at this position at all (see path_node.dart's
+/// `pathNodeAtOrder`); real authored content answers this via the node's own
+/// `isBoss` flag instead, which always wins where both exist. Real regions
+/// are variable-length now (a region ends wherever a node's `isBoss` is
+/// true), so this fixed-length formula is only ever a degenerate default.
 bool isBossBattle(int battleNumber) =>
-    battleNumber > 0 && battleNumber % kBattlesPerEra == 0;
-
-/// This battle's position WITHIN its era, 1-based (1 = the era's first fight,
-/// kBattlesPerEra = its boss).
-int localBattleIndex(int battleNumber) => (battleNumber - 1) % kBattlesPerEra + 1;
+    battleNumber > 0 && battleNumber % kFallbackBattlesPerRegion == 0;
 
 /// Enemy level for a battle, scaling smoothly up the line so each fight is a
 /// little stronger than the last (user: "die Gegner sollen mitskalieren").

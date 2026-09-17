@@ -10,19 +10,20 @@ import 'package:boddygame/features/creatures/services/region_dungeon.dart';
 // a spacing rule that holds for four nodes says nothing about twenty-five.
 
 void main() {
-  setUp(() {
-    kAreaDefs
-      ..clear()
-      ..addAll({for (final a in kFallbackAreaDefs) a.id: a});
-  });
+  // kFallbackAreaDefs is empty (user 2026-09-08: the placeholder regions are
+  // gone), so the bundled fallback path's nodes carry no areaId at all now —
+  // that association only exists once Dev Mode/DB defines an area at a
+  // region's battleStage. A fresh kAreaDefs (no local seeding needed) matches
+  // that bare state.
 
   List<OverworldNode> build() => buildLinearOverworld(battlesCleared: 0);
 
   test('the real map is not empty and is Era I only at the start', () {
     final nodes = build();
     expect(nodes, hasLength(greaterThan(15)));
-    // Every node belongs to the first region while nothing beyond it is reached.
-    expect(nodes.map((n) => n.areaId).toSet(), {'verdant_hollow'});
+    // Every node belongs to the first region while nothing beyond it is
+    // reached — with no area content authored, that region has no areaId.
+    expect(nodes.map((n) => n.areaId).toSet(), {''});
   });
 
   test('no two real nodes overlap on the line', () {
@@ -59,8 +60,14 @@ void main() {
   });
 
   test('spawnPathBattle scales the pack to the battle number', () {
-    final area = kAreaDefs['verdant_hollow']!;
-    // The fallback area has no authored species pool, so eligibleSpecies falls
+    const area = AreaDef(
+      id: 'region_1',
+      name: 'Region I',
+      emoji: '1️⃣',
+      order: 1,
+      battleStage: 1,
+    );
+    // An area with no authored species pool, so eligibleSpecies falls
     // back to ALL defined species — empty in a bare test → a graceful null.
     // The scaling rule itself lives in overworld_path (party size), asserted in
     // overworld_path_test; here we only pin the graceful-empty contract.

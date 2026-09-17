@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 import '../../creatures/models/area.dart' show kResourceEmoji;
 import 'goods_definitions.dart';
 
@@ -24,22 +22,3 @@ String resourceEmoji(String id) =>
 String resourceName(String id) =>
     kGoodsDefs[id]?.name ??
     (id.isEmpty ? id : id[0].toUpperCase() + id.substring(1));
-
-/// A resource's ACCENT colour — the Trips screen's target cards use it as
-/// their backdrop (user 2026-08-30: "die Ressource... mit den entsprechenden
-/// Farben"). Thematic, not read off any def: wood, stone and gold have no
-/// colour of their own anywhere else in the content, and a good's own emoji
-/// doesn't imply one either. Anything not listed (a later era's raw or luxury
-/// good) falls back to a neutral slate rather than erroring.
-Color resourceColor(String id) => switch (id) {
-  'wood' => const Color(0xFF8B5A2B),
-  'stone' => const Color(0xFF7C8591),
-  'gold' => const Color(0xFFD4A017),
-  'fish' => const Color(0xFF2E86AB),
-  'meat' => const Color(0xFFC97B3D),
-  // Not goods, but the header strip's other two standing totals — same
-  // treatment (user 2026-08-31: "die Icons passend einfärben").
-  'energy' => const Color(0xFFD9A441),
-  'housing' => const Color(0xFF5F8B6E),
-  _ => const Color(0xFF8B95A5),
-};

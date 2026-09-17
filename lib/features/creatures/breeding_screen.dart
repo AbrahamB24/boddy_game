@@ -31,6 +31,7 @@ import 'services/creatures_controller.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/gene_bar_toggle.dart';
 import '../common/widgets/recess_bar.dart';
+import '../../core/ui/pressable.dart';
 
 // The Breeding Hut: MATING, and nothing after it (user 2026-07-26 — "Eggs
 // müssen nicht angezeigt werden … und die Hatchery auch nicht, da dies ein
@@ -215,18 +216,25 @@ class _BreedingScreenState extends State<BreedingScreen> {
             children: [
               // Wallpaper first, so they never land over a card.
               Positioned(
-                left: 4,
+                left: 14,
                 top: 0,
                 bottom: 0,
-                width: 14,
-                child: MeanderStrip(color: _ornament),
+                width: 16,
+                // fillHeight (user 2026-09-06: "oben und unten bis zur
+                // Kante") — every band runs flush top-to-bottom now, not
+                // just the hard-edged boxes it used to be reserved for.
+                child: MeanderStrip(color: _ornament, fillHeight: true),
               ),
               Positioned(
-                right: 4,
+                right: 14,
                 top: 0,
                 bottom: 0,
-                width: 14,
-                child: MeanderStrip(color: _ornament, flip: true),
+                width: 16,
+                child: MeanderStrip(
+                  color: _ornament,
+                  flip: true,
+                  fillHeight: true,
+                ),
               ),
               ListenableBuilder(
                 listenable: Listenable.merge([_breeding, _creatures]),
@@ -235,8 +243,9 @@ class _BreedingScreenState extends State<BreedingScreen> {
                     _topBar(),
                     Expanded(
                       child: ListView(
-                        // Wide sides: the bands live in that margin.
-                        padding: const EdgeInsets.fromLTRB(28, 14, 28, 14),
+                        // Wide sides: the bands live in that margin. +12/+12
+                        // (2026-09-06), matching the bands' own widened inset.
+                        padding: const EdgeInsets.fromLTRB(40, 14, 40, 14),
                         children: [
                           // ONLY the matings (user 2026-07-26). A laid egg goes
                           // to the Bag and incubating happens in the Hatchery —
@@ -464,12 +473,25 @@ class _BreedingScreenState extends State<BreedingScreen> {
         // The two slots ARE the picker (user 2026-07-26). The species
         // dropdown is gone: you choose a monster, and its species narrows the
         // other slot — the order you actually think in.
+        //
+        // Each tile CENTRED in its own half (user 2026-09-06: "die Monster
+        // in der Breite so zentriert sein, dass sie über ihren Werten
+        // stehen") — [_geneTable] below splits the same width into an A
+        // half and a B half (numbers + bar each side of the centre label),
+        // so a tile sitting at a fixed [kMonsterTileSpacing] gap from its
+        // neighbour, bunched toward the left, no longer stood over the
+        // column of values it actually names. Two equal Expanded halves put
+        // each tile's centre roughly where its own numbers+bar cluster
+        // reads below it.
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _parentSlot(first: true, c: a),
-            const SizedBox(width: kMonsterTileSpacing),
-            _parentSlot(first: false, c: b),
+            Expanded(
+              child: Center(child: _parentSlot(first: true, c: a)),
+            ),
+            Expanded(
+              child: Center(child: _parentSlot(first: false, c: b)),
+            ),
           ],
         ),
         if (a != null && b != null) ...[
@@ -488,7 +510,7 @@ class _BreedingScreenState extends State<BreedingScreen> {
           // 2026-07-27): the same parchment face, the label on top, the cost
           // and the duration on the sub-line — red when the store cannot cover
           // it. The price is part of the offer, not a caption above it.
-          GestureDetector(
+          Pressable(
             onTap: canStart ? _start : null,
             child: Opacity(
               opacity: canStart ? 1 : 0.5,
@@ -822,21 +844,27 @@ class _BreedingScreenState extends State<BreedingScreen> {
             child: Stack(
               children: [
                 Positioned(
-                  left: 12,
+                  left: 14,
                   top: 0,
                   bottom: 0,
-                  width: 14,
-                  child: MeanderStrip(color: _ornament),
+                  width: 16,
+                  child: MeanderStrip(color: _ornament, fillHeight: true),
                 ),
                 Positioned(
-                  right: 12,
+                  right: 14,
                   top: 0,
                   bottom: 0,
-                  width: 14,
-                  child: MeanderStrip(color: _ornament, flip: true),
+                  width: 16,
+                  child: MeanderStrip(
+                    color: _ornament,
+                    flip: true,
+                    fillHeight: true,
+                  ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(34, 16, 34, 16),
+                  // +4/+4 (2026-09-06): the band's inset/width grew from
+                  // 12/14 to 14/16, matching building_detail_dialog.dart.
+                  padding: const EdgeInsets.fromLTRB(38, 16, 38, 16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1054,7 +1082,7 @@ class _BreedingScreenState extends State<BreedingScreen> {
     bool selected,
     CreatureStat? sortStat,
     BuildContext ctx,
-  ) => GestureDetector(
+  ) => Pressable(
     behavior: HitTestBehavior.opaque,
     onTap: () => Navigator.pop(ctx, c.id),
     child: Column(

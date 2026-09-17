@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../settlement/widgets/scroll_paper.dart'
     show kParchmentInk, kParchmentLight;
+import '../../../core/ui/pressable.dart';
 
 /// ONE LOOK FOR EVERY SEARCH / FILTER / SORT CONTROL (user 2026-07-27: "alle
 /// filter und sortierfunktionien sollen so aussehen wie bei den eggs").
@@ -124,7 +125,7 @@ class SearchPill extends StatelessWidget {
             ),
           ),
           if (engaged)
-            GestureDetector(
+            Pressable(
               onTap: () {
                 controller.clear();
                 onChanged('');
@@ -260,7 +261,7 @@ class ActionPill extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) => Pressable(
     behavior: HitTestBehavior.opaque,
     onTap: onTap,
     child: Container(

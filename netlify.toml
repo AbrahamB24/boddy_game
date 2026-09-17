@@ -1,0 +1,14 @@
+[build]
+  # Netlify's own build image has no Flutter SDK, so this only matters if you
+  # later connect the repo directly. For now, build locally with
+  # `flutter build web --release` and deploy the `build/web` folder as-is
+  # (drag-and-drop or `netlify deploy --dir=build/web`).
+  publish = "build/web"
+
+# Flutter's web app is a single page (its own Navigator handles every
+# screen) — without this, refreshing on anything but the root, or Netlify's
+# own 404 page, would 404 instead of loading the app.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

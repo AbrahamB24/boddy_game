@@ -19,11 +19,19 @@ import '../../../core/theme/foe_theme.dart';
 //
 // Kept as one ladder, lightest to deepest, so the scroll's own painter still
 // gets a lit sheet and a darker roller without knowing the theme flipped.
-const Color kParchmentLight = Color(0xFF1F262C); // the sheet
-const Color kParchmentMid = Color(0xFF161B20); // its shade / the page ground
-const Color kParchmentDeep = Color(0xFF2A333A); // the band, the roller
-const Color kParchmentShade = Color(0xFF0F1418); // deepest — under an edge
-const Color kParchmentInk = Color(0xFFEDE3CB); // what you write with
+//
+// ALIASED to FoE's own steps (2026-09-05 blue/warm reskin), rather than a
+// second set of literals duplicating them: this file used to hardcode its own
+// copy of the exact same graphite ladder, which is exactly why the palette
+// swap in foe_theme.dart didn't reach any of these 19 call sites the first
+// time (user: "es gibt noch sehr viele Hintergründe, mäanderband und buttons,
+// welche nicht übernommen wurden"). ONE PLACE means this file asks FoE for the
+// role instead of owning a competing answer.
+const Color kParchmentLight = FoE.panelMid; // the sheet
+const Color kParchmentMid = FoE.bg; // its shade / the page ground
+const Color kParchmentDeep = FoE.panelLight; // the band, the roller
+const Color kParchmentShade = Color(0xFF0C2841); // FoE.bg, shaded — deepest, under an edge
+const Color kParchmentInk = FoE.parchment; // what you write with
 
 /// WHAT A RAISED THING CASTS. Its own constant since the theme went dark (user
 /// 2026-07-31): every shadow in the app used to be [kParchmentInk] at a low
@@ -34,21 +42,25 @@ const Color kPageShadow = Color(0xFF000000);
 
 // ── Parchment buttons (user 2026-07-23) ──
 // ONE tappable-pill look for both the Build menu and the building dialog, so
-// every button matches the scroll. SOLID green when live (no gradient, no
+// every button matches the scroll. SOLID fill when live (no gradient, no
 // border — just the fill), faded parchment when not. Use [parchmentButton] for
 // the surface and [parchmentButtonInk] for whatever sits on it.
-/// The settlement's action green — the button fill (user 2026-07-23: the lawn
-/// green of the map, a lighter olive than the old forest green). [Deep] is a
-/// shade under it for recesses.
-const Color kActionGreen = Color(0xFF8C9A3C);
-const Color kActionGreenDeep = Color(0xFF6C7A2C);
+/// The settlement's action colour — the button fill (was the lawn green of
+/// the map, then coral; now [FoE.positive]'s cyan-blue, same "good/go" role,
+/// 2026-09-05 third pass — coral clashed against the navy/teal chrome once
+/// seen live, see [FoE.gold]'s own doc). [Deep] is a shade under it for
+/// recesses.
+const Color kActionGreen = FoE.positive;
+const Color kActionGreenDeep = Color(0xFF3B9DBB); // FoE.positive, shaded — computed by hand, shade() isn't const
 
 ShapeDecoration parchmentButton({bool active = true}) => ShapeDecoration(color: active ? kActionGreen : kParchmentInk.withValues(alpha: 0.10), shape: FoE.facet(radius: 12));
 
-/// Ink on a [parchmentButton]: near-white on the green when live, faint brown
-/// when not.
+/// Ink on a [parchmentButton]: dark on the fill when live (the fill is
+/// bright enough — coral, then this cyan-blue — that the old near-white ink
+/// it originally paired with, tuned for a much darker olive green, would
+/// read as low-contrast light-on-light), faint brown when not.
 Color parchmentButtonInk({bool active = true}) =>
-    active ? const Color(0xFFF3F7EF) : kParchmentInk.withValues(alpha: 0.45);
+    active ? FoE.bg : kParchmentInk.withValues(alpha: 0.45);
 
 // kNavRollerDrop lived here: how far the nav bar's foot was clipped off the
 // bottom edge, shared so the fixed bar and the Build popup's copy of it stayed

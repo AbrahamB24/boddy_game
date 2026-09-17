@@ -1,0 +1,2477 @@
+{
+  "nightblade": {
+    "id": "nightblade",
+    "name": "Nightblade",
+    "description": "",
+    "element": "shadow",
+    "rarity": "rare",
+    "role": "allrounder|gathering",
+    "catch_rate": 0.9,
+    "evo_level_1": 21,
+    "evo_level_2": 46,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          32,
+          40,
+          49
+        ],
+        "growth": 1.6
+      },
+      "attack": {
+        "stage_base": [
+          20,
+          25,
+          31
+        ],
+        "growth": 0.7
+      },
+      "defense": {
+        "stage_base": [
+          33,
+          41,
+          51
+        ],
+        "growth": 0.6
+      },
+      "speed": {
+        "stage_base": [
+          30,
+          38,
+          47
+        ],
+        "growth": 1.2
+      },
+      "catchRate": {
+        "stage_base": [
+          22,
+          27,
+          34
+        ],
+        "growth": 0.6
+      },
+      "gathering": {
+        "stage_base": [
+          65,
+          65,
+          65
+        ],
+        "growth": 1.8
+      },
+      "production": {
+        "stage_base": [
+          8,
+          10,
+          12
+        ],
+        "growth": 0.3
+      },
+      "construction": {
+        "stage_base": [
+          11,
+          14,
+          17
+        ],
+        "growth": 0.1
+      },
+      "crafting": {
+        "stage_base": [
+          11,
+          14,
+          18
+        ],
+        "growth": 0.1
+      },
+      "breeding": {
+        "stage_base": [
+          9,
+          11,
+          14
+        ],
+        "growth": 0.3
+      },
+      "medicine": {
+        "stage_base": [
+          6,
+          7,
+          9
+        ],
+        "growth": 0.3
+      },
+      "trade": {
+        "stage_base": [
+          8,
+          10,
+          13
+        ],
+        "growth": 0.2
+      },
+      "logistics": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.5
+      },
+      "carry": {
+        "stage_base": [
+          3,
+          4,
+          5
+        ],
+        "growth": 0.5
+      }
+    },
+    "stages": [
+      {
+        "name": "Nightblade",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/nightblade_0.png?v=1785695346780",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/nightblade_0_back.png?v=1785695353286"
+      },
+      {
+        "name": "Shadowblade",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/nightblade_1.png?v=1785695349699",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/nightblade_1_back.png?v=1785695359137"
+      },
+      {
+        "name": "Deathreaper",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/nightblade_2.png?v=1785695352141",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/nightblade_2_back.png?v=1785695360228"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "schattenkralle",
+        "unlock_stage": 0
+      },
+      {
+        "id": "biss",
+        "unlock_stage": 0
+      },
+      {
+        "id": "nachtschwinge",
+        "unlock_stage": 0
+      },
+      {
+        "id": "dunkelpuls",
+        "unlock_stage": 1
+      },
+      {
+        "id": "finsternis",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "infernoclaw": {
+    "id": "infernoclaw",
+    "name": "Infernoclaw",
+    "description": "",
+    "element": "fire",
+    "rarity": "epic",
+    "role": "allrounder|gathering",
+    "catch_rate": 0.75,
+    "evo_level_1": 24,
+    "evo_level_2": 49,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          41,
+          51,
+          64
+        ],
+        "growth": 1.7
+      },
+      "attack": {
+        "stage_base": [
+          19,
+          24,
+          30
+        ],
+        "growth": 0.6
+      },
+      "defense": {
+        "stage_base": [
+          19,
+          23,
+          29
+        ],
+        "growth": 1.1
+      },
+      "speed": {
+        "stage_base": [
+          26,
+          32,
+          40
+        ],
+        "growth": 0.7
+      },
+      "catchRate": {
+        "stage_base": [
+          34,
+          43,
+          54
+        ],
+        "growth": 0.5
+      },
+      "gathering": {
+        "stage_base": [
+          67,
+          67,
+          67
+        ],
+        "growth": 1.9
+      },
+      "production": {
+        "stage_base": [
+          4,
+          5,
+          6
+        ],
+        "growth": 0.4
+      },
+      "construction": {
+        "stage_base": [
+          8,
+          10,
+          12
+        ],
+        "growth": 0.2
+      },
+      "crafting": {
+        "stage_base": [
+          3,
+          4,
+          5
+        ],
+        "growth": 0.6
+      },
+      "breeding": {
+        "stage_base": [
+          8,
+          10,
+          13
+        ],
+        "growth": 0.3
+      },
+      "medicine": {
+        "stage_base": [
+          11,
+          14,
+          18
+        ],
+        "growth": 0.5
+      },
+      "trade": {
+        "stage_base": [
+          10,
+          13,
+          16
+        ],
+        "growth": 0.7
+      },
+      "logistics": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.5
+      },
+      "carry": {
+        "stage_base": [
+          10,
+          12,
+          16
+        ],
+        "growth": 0.2
+      }
+    },
+    "stages": [
+      {
+        "name": "Infernoclaw",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/infernoclaw_0.png?v=1785695176941",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/infernoclaw_0_back.png?v=1785695184166"
+      },
+      {
+        "name": "Hellclaw",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/infernoclaw_1.png?v=1785695181770",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/infernoclaw_1_back.png?v=1785695189660"
+      },
+      {
+        "name": "Apocalyptor",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/infernoclaw_2.png?v=1785695186034",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/infernoclaw_2_back.png?v=1785695191158"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "funke",
+        "unlock_stage": 0
+      },
+      {
+        "id": "fokus_schlag",
+        "unlock_stage": 0
+      },
+      {
+        "id": "kraftakt",
+        "unlock_stage": 0
+      },
+      {
+        "id": "glutwelle",
+        "unlock_stage": 1
+      },
+      {
+        "id": "inferno",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "thornwood": {
+    "id": "thornwood",
+    "name": "Thornwood",
+    "description": "",
+    "element": "plant",
+    "rarity": "rare",
+    "role": "allrounder|gathering",
+    "catch_rate": 0.9,
+    "evo_level_1": 30,
+    "evo_level_2": 55,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          43,
+          53,
+          65
+        ],
+        "growth": 1.4
+      },
+      "attack": {
+        "stage_base": [
+          32,
+          40,
+          50
+        ],
+        "growth": 0.6
+      },
+      "defense": {
+        "stage_base": [
+          15,
+          18,
+          23
+        ],
+        "growth": 1
+      },
+      "speed": {
+        "stage_base": [
+          30,
+          38,
+          47
+        ],
+        "growth": 0.8
+      },
+      "catchRate": {
+        "stage_base": [
+          17,
+          21,
+          27
+        ],
+        "growth": 0.8
+      },
+      "gathering": {
+        "stage_base": [
+          59,
+          65,
+          65
+        ],
+        "growth": 1.8
+      },
+      "production": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.5
+      },
+      "construction": {
+        "stage_base": [
+          13,
+          16,
+          20
+        ],
+        "growth": 0.6
+      },
+      "crafting": {
+        "stage_base": [
+          8,
+          10,
+          13
+        ],
+        "growth": 0.2
+      },
+      "breeding": {
+        "stage_base": [
+          8,
+          10,
+          12
+        ],
+        "growth": 0.4
+      },
+      "medicine": {
+        "stage_base": [
+          18,
+          22,
+          28
+        ],
+        "growth": 0.4
+      },
+      "trade": {
+        "stage_base": [
+          17,
+          22,
+          27
+        ],
+        "growth": 0.2
+      },
+      "logistics": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.5
+      },
+      "carry": {
+        "stage_base": [
+          6,
+          7,
+          9
+        ],
+        "growth": 0.2
+      }
+    },
+    "stages": [
+      {
+        "name": "Thornwood",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/thornwood_0.png?v=1785698055414",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/thornwood_0_back.png?v=1785698062504"
+      },
+      {
+        "name": "Stonebark",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/thornwood_1.png?v=1785698057777",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/thornwood_1_back.png?v=1785698064770"
+      },
+      {
+        "name": "Titanwood",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/thornwood_2.png?v=1785698061054",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/thornwood_2_back.png?v=1785698067821"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "rankenhieb",
+        "unlock_stage": 0
+      },
+      {
+        "id": "panzerung",
+        "unlock_stage": 0
+      },
+      {
+        "id": "regeneration",
+        "unlock_stage": 0
+      },
+      {
+        "id": "wurzelgriff",
+        "unlock_stage": 1
+      },
+      {
+        "id": "gaia_zorn",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "emberkit": {
+    "id": "emberkit",
+    "name": "Emberkit",
+    "description": "",
+    "element": "fire",
+    "rarity": "common",
+    "role": "berserker|production,breeding,trade",
+    "catch_rate": 1.2,
+    "evo_level_1": 9,
+    "evo_level_2": 32,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          34,
+          43,
+          54
+        ],
+        "growth": 0.9
+      },
+      "attack": {
+        "stage_base": [
+          37,
+          46,
+          57
+        ],
+        "growth": 1.7
+      },
+      "defense": {
+        "stage_base": [
+          20,
+          25,
+          31
+        ],
+        "growth": 0.4
+      },
+      "speed": {
+        "stage_base": [
+          32,
+          40,
+          49
+        ],
+        "growth": 0.8
+      },
+      "catchRate": {
+        "stage_base": [
+          9,
+          11,
+          14
+        ],
+        "growth": 0.5
+      },
+      "gathering": {
+        "stage_base": [
+          5,
+          6,
+          7
+        ],
+        "growth": 0.2
+      },
+      "production": {
+        "stage_base": [
+          60,
+          60,
+          60
+        ],
+        "growth": 1.6
+      },
+      "construction": {
+        "stage_base": [
+          9,
+          11,
+          13
+        ],
+        "growth": 0.1
+      },
+      "crafting": {
+        "stage_base": [
+          6,
+          7,
+          9
+        ],
+        "growth": 0.2
+      },
+      "breeding": {
+        "stage_base": [
+          13,
+          17,
+          21
+        ],
+        "growth": 0.6
+      },
+      "medicine": {
+        "stage_base": [
+          6,
+          8,
+          10
+        ],
+        "growth": 0.1
+      },
+      "trade": {
+        "stage_base": [
+          26,
+          33,
+          41
+        ],
+        "growth": 0.8
+      },
+      "logistics": {
+        "stage_base": [
+          6,
+          7,
+          9
+        ],
+        "growth": 0.2
+      },
+      "carry": {
+        "stage_base": [
+          7,
+          8,
+          10
+        ],
+        "growth": 0.2
+      }
+    },
+    "stages": [
+      {
+        "name": "Emberkit",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/emberkit_0.png?v=1785693798506",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/emberkit_0_back.png?v=1785693994224"
+      },
+      {
+        "name": "Emberpanther",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/emberkit_1.png?v=1785693898526",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/emberkit_1_back.png?v=1785693996848"
+      },
+      {
+        "name": "Infernus Rex",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/emberkit_2.png?v=1785693903380",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/emberkit_2_back.png?v=1785693999118"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "funke",
+        "unlock_stage": 0
+      },
+      {
+        "id": "flammenstoss",
+        "unlock_stage": 0
+      },
+      {
+        "id": "kampfrausch",
+        "unlock_stage": 0
+      },
+      {
+        "id": "glutwelle",
+        "unlock_stage": 1
+      },
+      {
+        "id": "inferno",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "prismalynx": {
+    "id": "prismalynx",
+    "name": "Prismalynx",
+    "description": "",
+    "element": "light",
+    "rarity": "rare",
+    "role": "allrounder|gathering",
+    "catch_rate": 0.9,
+    "evo_level_1": 23,
+    "evo_level_2": 48,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          34,
+          42,
+          53
+        ],
+        "growth": 1.3
+      },
+      "attack": {
+        "stage_base": [
+          31,
+          39,
+          49
+        ],
+        "growth": 1
+      },
+      "defense": {
+        "stage_base": [
+          28,
+          35,
+          43
+        ],
+        "growth": 0.4
+      },
+      "speed": {
+        "stage_base": [
+          32,
+          40,
+          50
+        ],
+        "growth": 1.2
+      },
+      "catchRate": {
+        "stage_base": [
+          11,
+          14,
+          18
+        ],
+        "growth": 0.5
+      },
+      "gathering": {
+        "stage_base": [
+          65,
+          65,
+          65
+        ],
+        "growth": 1.8
+      },
+      "production": {
+        "stage_base": [
+          13,
+          16,
+          20
+        ],
+        "growth": 0.3
+      },
+      "construction": {
+        "stage_base": [
+          5,
+          6,
+          8
+        ],
+        "growth": 0.2
+      },
+      "crafting": {
+        "stage_base": [
+          12,
+          14,
+          18
+        ],
+        "growth": 0.2
+      },
+      "breeding": {
+        "stage_base": [
+          14,
+          17,
+          22
+        ],
+        "growth": 0.2
+      },
+      "medicine": {
+        "stage_base": [
+          5,
+          6,
+          7
+        ],
+        "growth": 0.5
+      },
+      "trade": {
+        "stage_base": [
+          11,
+          14,
+          17
+        ],
+        "growth": 0.3
+      },
+      "logistics": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.5
+      },
+      "carry": {
+        "stage_base": [
+          7,
+          9,
+          12
+        ],
+        "growth": 0.4
+      }
+    },
+    "stages": [
+      {
+        "name": "Prismalynx",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/prismalynx_0.png?v=1785695634172",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/prismalynx_0_back.png?v=1785695642337"
+      },
+      {
+        "name": "Spectralcat",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/prismalynx_1.png?v=1785695636739",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/prismalynx_1_back.png?v=1785695644109"
+      },
+      {
+        "name": "Prismagod",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/prismalynx_2.png?v=1785695644621",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/prismalynx_2_back.png?v=1785695661948"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "lichtblitz",
+        "unlock_stage": 0
+      },
+      {
+        "id": "strahlenstoss",
+        "unlock_stage": 0
+      },
+      {
+        "id": "kampfrausch",
+        "unlock_stage": 0
+      },
+      {
+        "id": "prisma_strahl",
+        "unlock_stage": 1
+      },
+      {
+        "id": "sonnenzorn",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "shadowmouse": {
+    "id": "shadowmouse",
+    "name": "Shadowmouse",
+    "description": "",
+    "element": "shadow",
+    "rarity": "common",
+    "role": "sprinter|gathering,carry",
+    "catch_rate": 1.2,
+    "evo_level_1": 7,
+    "evo_level_2": 25,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          39,
+          48,
+          60
+        ],
+        "growth": 1.1
+      },
+      "attack": {
+        "stage_base": [
+          26,
+          33,
+          41
+        ],
+        "growth": 1.1
+      },
+      "defense": {
+        "stage_base": [
+          11,
+          14,
+          17
+        ],
+        "growth": 0.6
+      },
+      "speed": {
+        "stage_base": [
+          35,
+          43,
+          54
+        ],
+        "growth": 1.3
+      },
+      "catchRate": {
+        "stage_base": [
+          21,
+          26,
+          33
+        ],
+        "growth": 0.3
+      },
+      "gathering": {
+        "stage_base": [
+          34,
+          43,
+          53
+        ],
+        "growth": 1.1
+      },
+      "production": {
+        "stage_base": [
+          13,
+          16,
+          20
+        ],
+        "growth": 0.2
+      },
+      "construction": {
+        "stage_base": [
+          8,
+          10,
+          13
+        ],
+        "growth": 0.4
+      },
+      "crafting": {
+        "stage_base": [
+          8,
+          11,
+          13
+        ],
+        "growth": 0.2
+      },
+      "breeding": {
+        "stage_base": [
+          10,
+          12,
+          15
+        ],
+        "growth": 0.4
+      },
+      "medicine": {
+        "stage_base": [
+          7,
+          9,
+          11
+        ],
+        "growth": 0.3
+      },
+      "trade": {
+        "stage_base": [
+          13,
+          17,
+          21
+        ],
+        "growth": 0.3
+      },
+      "logistics": {
+        "stage_base": [
+          12,
+          14,
+          18
+        ],
+        "growth": 0.2
+      },
+      "carry": {
+        "stage_base": [
+          33,
+          42,
+          52
+        ],
+        "growth": 1.5
+      }
+    },
+    "stages": [
+      {
+        "name": "Shadowmouse",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/shadowmouse_0.png?v=1785697281000",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/shadowmouse_0_back.png?v=1785697477464"
+      },
+      {
+        "name": "Nightcreeper",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/shadowmouse_1.png?v=1785697417499",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/shadowmouse_1_back.png?v=1785697481085"
+      },
+      {
+        "name": "Umbrahunter",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/shadowmouse_2.png?v=1785697420655",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/shadowmouse_2_back.png?v=1785697486187"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "schattenkralle",
+        "unlock_stage": 0
+      },
+      {
+        "id": "nachtschwinge",
+        "unlock_stage": 0
+      },
+      {
+        "id": "zeitdruck",
+        "unlock_stage": 0
+      },
+      {
+        "id": "aderlass",
+        "unlock_stage": 1
+      },
+      {
+        "id": "dunkelpuls",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "vineguard": {
+    "id": "vineguard",
+    "name": "Vineguard",
+    "description": "",
+    "element": "plant",
+    "rarity": "epic",
+    "role": "allrounder|gathering",
+    "catch_rate": 0.75,
+    "evo_level_1": 25,
+    "evo_level_2": 50,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          35,
+          43,
+          54
+        ],
+        "growth": 1.1
+      },
+      "attack": {
+        "stage_base": [
+          44,
+          56,
+          68
+        ],
+        "growth": 0.7
+      },
+      "defense": {
+        "stage_base": [
+          31,
+          39,
+          48
+        ],
+        "growth": 1.6
+      },
+      "speed": {
+        "stage_base": [
+          17,
+          21,
+          27
+        ],
+        "growth": 0.9
+      },
+      "catchRate": {
+        "stage_base": [
+          12,
+          15,
+          18
+        ],
+        "growth": 0.3
+      },
+      "gathering": {
+        "stage_base": [
+          67,
+          67,
+          67
+        ],
+        "growth": 1.9
+      },
+      "production": {
+        "stage_base": [
+          9,
+          11,
+          14
+        ],
+        "growth": 0.1
+      },
+      "construction": {
+        "stage_base": [
+          18,
+          22,
+          28
+        ],
+        "growth": 0.3
+      },
+      "crafting": {
+        "stage_base": [
+          7,
+          8,
+          10
+        ],
+        "growth": 0.4
+      },
+      "breeding": {
+        "stage_base": [
+          10,
+          13,
+          16
+        ],
+        "growth": 0.1
+      },
+      "medicine": {
+        "stage_base": [
+          18,
+          22,
+          27
+        ],
+        "growth": 0.2
+      },
+      "trade": {
+        "stage_base": [
+          6,
+          8,
+          10
+        ],
+        "growth": 0.3
+      },
+      "logistics": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.5
+      },
+      "carry": {
+        "stage_base": [
+          10,
+          12,
+          15
+        ],
+        "growth": 0.4
+      }
+    },
+    "stages": [
+      {
+        "name": "Vineguard",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/vineguard_0.png?v=1785765989837",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/vineguard_0_back.png?v=1785765995997"
+      },
+      {
+        "name": "Thornmagus",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/vineguard_1.png?v=1785765991669",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/vineguard_1_back.png?v=1785765997698"
+      },
+      {
+        "name": "Forest Sovereign",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/vineguard_2.png?v=1785765993838",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/vineguard_2_back.png?v=1785766000272"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "rankenhieb",
+        "unlock_stage": 0
+      },
+      {
+        "id": "blattsturm",
+        "unlock_stage": 0
+      },
+      {
+        "id": "zeitdruck",
+        "unlock_stage": 0
+      },
+      {
+        "id": "wurzelgriff",
+        "unlock_stage": 1
+      },
+      {
+        "id": "gaia_zorn",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "solarion": {
+    "id": "solarion",
+    "name": "Solarion",
+    "description": "Legendary allrounder — the dungeon boss of the highest stage.",
+    "element": "light",
+    "rarity": "legendary",
+    "role": "allrounder|gathering",
+    "catch_rate": 0.6,
+    "evo_level_1": 26,
+    "evo_level_2": 51,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          44,
+          55,
+          68
+        ],
+        "growth": 1.7
+      },
+      "attack": {
+        "stage_base": [
+          33,
+          41,
+          51
+        ],
+        "growth": 1
+      },
+      "defense": {
+        "stage_base": [
+          34,
+          43,
+          54
+        ],
+        "growth": 0.4
+      },
+      "speed": {
+        "stage_base": [
+          19,
+          24,
+          30
+        ],
+        "growth": 1
+      },
+      "catchRate": {
+        "stage_base": [
+          11,
+          14,
+          17
+        ],
+        "growth": 0.5
+      },
+      "gathering": {
+        "stage_base": [
+          70,
+          70,
+          70
+        ],
+        "growth": 2
+      },
+      "production": {
+        "stage_base": [
+          8,
+          10,
+          13
+        ],
+        "growth": 0.4
+      },
+      "construction": {
+        "stage_base": [
+          6,
+          7,
+          9
+        ],
+        "growth": 0.2
+      },
+      "crafting": {
+        "stage_base": [
+          11,
+          14,
+          17
+        ],
+        "growth": 0.1
+      },
+      "breeding": {
+        "stage_base": [
+          5,
+          6,
+          7
+        ],
+        "growth": 0.3
+      },
+      "medicine": {
+        "stage_base": [
+          11,
+          13,
+          17
+        ],
+        "growth": 0.4
+      },
+      "trade": {
+        "stage_base": [
+          11,
+          13,
+          17
+        ],
+        "growth": 0.2
+      },
+      "logistics": {
+        "stage_base": [
+          17,
+          21,
+          26
+        ],
+        "growth": 0.6
+      },
+      "carry": {
+        "stage_base": [
+          4,
+          5,
+          6
+        ],
+        "growth": 0.2
+      }
+    },
+    "stages": [
+      {
+        "name": "Solarion",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/solarion_0.png?v=1785697738157",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/solarion_0_back.png?v=1785697744178"
+      },
+      {
+        "name": "Solarion Prime",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/solarion_1.png?v=1785697740495",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/solarion_1_back.png?v=1785697746398"
+      },
+      {
+        "name": "Helioss",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/solarion_2.png?v=1785697741953",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/solarion_2_back.png?v=1785697749427"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "lichtblitz",
+        "unlock_stage": 0
+      },
+      {
+        "id": "strahlenstoss",
+        "unlock_stage": 0
+      },
+      {
+        "id": "prisma_strahl",
+        "unlock_stage": 0
+      },
+      {
+        "id": "regeneration",
+        "unlock_stage": 1
+      },
+      {
+        "id": "sonnenzorn",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "blazeling": {
+    "id": "blazeling",
+    "name": "Blazeling",
+    "description": "",
+    "element": "fire",
+    "rarity": "uncommon",
+    "role": "allrounder|gathering",
+    "catch_rate": 1.05,
+    "evo_level_1": 24,
+    "evo_level_2": 49,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          42,
+          53,
+          63
+        ],
+        "growth": 1.2
+      },
+      "attack": {
+        "stage_base": [
+          34,
+          43,
+          54
+        ],
+        "growth": 0.6
+      },
+      "defense": {
+        "stage_base": [
+          17,
+          21,
+          27
+        ],
+        "growth": 1.4
+      },
+      "speed": {
+        "stage_base": [
+          28,
+          34,
+          43
+        ],
+        "growth": 0.8
+      },
+      "catchRate": {
+        "stage_base": [
+          12,
+          15,
+          19
+        ],
+        "growth": 0.5
+      },
+      "gathering": {
+        "stage_base": [
+          62,
+          62,
+          62
+        ],
+        "growth": 1.7
+      },
+      "production": {
+        "stage_base": [
+          5,
+          7,
+          8
+        ],
+        "growth": 0.3
+      },
+      "construction": {
+        "stage_base": [
+          11,
+          13,
+          17
+        ],
+        "growth": 0.3
+      },
+      "crafting": {
+        "stage_base": [
+          8,
+          9,
+          12
+        ],
+        "growth": 0.4
+      },
+      "breeding": {
+        "stage_base": [
+          9,
+          11,
+          14
+        ],
+        "growth": 0.4
+      },
+      "medicine": {
+        "stage_base": [
+          12,
+          14,
+          18
+        ],
+        "growth": 0.2
+      },
+      "trade": {
+        "stage_base": [
+          6,
+          7,
+          9
+        ],
+        "growth": 0.3
+      },
+      "logistics": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.5
+      },
+      "carry": {
+        "stage_base": [
+          5,
+          7,
+          8
+        ],
+        "growth": 0.3
+      }
+    },
+    "stages": [
+      {
+        "name": "Blazeling",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/blazeling_0.png?v=1785691736109",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/blazeling_0_back.png?v=1785691741834"
+      },
+      {
+        "name": "Emberbeast",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/blazeling_1.png?v=1785691765571",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/blazeling_1_back.png?v=1785691773126"
+      },
+      {
+        "name": "Volcanwrath",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/blazeling_2.png?v=1785691769203",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/blazeling_2_back.png?v=1785691792264"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "funke",
+        "unlock_stage": 0
+      },
+      {
+        "id": "flammenstoss",
+        "unlock_stage": 0
+      },
+      {
+        "id": "zeitdruck",
+        "unlock_stage": 0
+      },
+      {
+        "id": "glutwelle",
+        "unlock_stage": 1
+      },
+      {
+        "id": "inferno",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "umbros": {
+    "id": "umbros",
+    "name": "Umbros",
+    "description": "",
+    "element": "shadow",
+    "rarity": "uncommon",
+    "role": "allrounder|gathering",
+    "catch_rate": 1.05,
+    "evo_level_1": 25,
+    "evo_level_2": 50,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          26,
+          33,
+          41
+        ],
+        "growth": 1.7
+      },
+      "attack": {
+        "stage_base": [
+          21,
+          27,
+          34
+        ],
+        "growth": 1.1
+      },
+      "defense": {
+        "stage_base": [
+          47,
+          58,
+          63
+        ],
+        "growth": 0.3
+      },
+      "speed": {
+        "stage_base": [
+          23,
+          28,
+          35
+        ],
+        "growth": 1
+      },
+      "catchRate": {
+        "stage_base": [
+          17,
+          21,
+          26
+        ],
+        "growth": 0.4
+      },
+      "gathering": {
+        "stage_base": [
+          62,
+          62,
+          62
+        ],
+        "growth": 1.7
+      },
+      "production": {
+        "stage_base": [
+          12,
+          15,
+          18
+        ],
+        "growth": 0.1
+      },
+      "construction": {
+        "stage_base": [
+          12,
+          15,
+          19
+        ],
+        "growth": 0.3
+      },
+      "crafting": {
+        "stage_base": [
+          8,
+          10,
+          13
+        ],
+        "growth": 0.3
+      },
+      "breeding": {
+        "stage_base": [
+          8,
+          10,
+          13
+        ],
+        "growth": 0.1
+      },
+      "medicine": {
+        "stage_base": [
+          5,
+          7,
+          8
+        ],
+        "growth": 0.3
+      },
+      "trade": {
+        "stage_base": [
+          9,
+          12,
+          15
+        ],
+        "growth": 0.3
+      },
+      "logistics": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.5
+      },
+      "carry": {
+        "stage_base": [
+          5,
+          6,
+          8
+        ],
+        "growth": 0.3
+      }
+    },
+    "stages": [
+      {
+        "name": "Umbros",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/umbros_0.png?v=1785698240695",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/umbros_0_back.png?v=1785698365607"
+      },
+      {
+        "name": "Umbramagus",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/umbros_1.png?v=1785698246104",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/umbros_1_back.png?v=1785698367630"
+      },
+      {
+        "name": "Darkgod",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/umbros_2.png?v=1785698364581",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/umbros_2_back.png?v=1785698369980"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "schattenkralle",
+        "unlock_stage": 0
+      },
+      {
+        "id": "nachtschwinge",
+        "unlock_stage": 0
+      },
+      {
+        "id": "kampfrausch",
+        "unlock_stage": 0
+      },
+      {
+        "id": "dunkelpuls",
+        "unlock_stage": 1
+      },
+      {
+        "id": "finsternis",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "waveshark": {
+    "id": "waveshark",
+    "name": "Waveshark",
+    "description": "",
+    "element": "water",
+    "rarity": "uncommon",
+    "role": "allrounder|gathering",
+    "catch_rate": 1.05,
+    "evo_level_1": 26,
+    "evo_level_2": 51,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          52,
+          63,
+          63
+        ],
+        "growth": 1.2
+      },
+      "attack": {
+        "stage_base": [
+          25,
+          32,
+          40
+        ],
+        "growth": 1.2
+      },
+      "defense": {
+        "stage_base": [
+          15,
+          18,
+          23
+        ],
+        "growth": 1.2
+      },
+      "speed": {
+        "stage_base": [
+          26,
+          33,
+          41
+        ],
+        "growth": 0.6
+      },
+      "catchRate": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.2
+      },
+      "gathering": {
+        "stage_base": [
+          62,
+          62,
+          62
+        ],
+        "growth": 1.7
+      },
+      "production": {
+        "stage_base": [
+          12,
+          16,
+          20
+        ],
+        "growth": 0.3
+      },
+      "construction": {
+        "stage_base": [
+          7,
+          9,
+          11
+        ],
+        "growth": 0.1
+      },
+      "crafting": {
+        "stage_base": [
+          11,
+          14,
+          18
+        ],
+        "growth": 0.3
+      },
+      "breeding": {
+        "stage_base": [
+          9,
+          11,
+          13
+        ],
+        "growth": 0.2
+      },
+      "medicine": {
+        "stage_base": [
+          10,
+          13,
+          16
+        ],
+        "growth": 0.3
+      },
+      "trade": {
+        "stage_base": [
+          13,
+          16,
+          20
+        ],
+        "growth": 0.2
+      },
+      "logistics": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.5
+      },
+      "carry": {
+        "stage_base": [
+          12,
+          15,
+          19
+        ],
+        "growth": 0.3
+      }
+    },
+    "stages": [
+      {
+        "name": "Waveshark",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/waveshark_0.png?v=1785766354614",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/waveshark_0_back.png?v=1785766360938"
+      },
+      {
+        "name": "Stormshark",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/waveshark_1.png?v=1785766356462",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/waveshark_1_back.png?v=1785766362860"
+      },
+      {
+        "name": "Leviathan",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/waveshark_2.png?v=1785766360344",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/waveshark_2_back.png?v=1785766366297"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "spritzer",
+        "unlock_stage": 0
+      },
+      {
+        "id": "aquastrahl",
+        "unlock_stage": 0
+      },
+      {
+        "id": "panzerung",
+        "unlock_stage": 0
+      },
+      {
+        "id": "flutwelle",
+        "unlock_stage": 1
+      },
+      {
+        "id": "tsunami",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "glimmergnaw": {
+    "id": "glimmergnaw",
+    "name": "Glimmergnaw",
+    "description": "",
+    "element": "light",
+    "rarity": "common",
+    "role": "guardian|construction,logistics,carry",
+    "catch_rate": 1.2,
+    "evo_level_1": 12,
+    "evo_level_2": 30,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          29,
+          36,
+          45
+        ],
+        "growth": 1
+      },
+      "attack": {
+        "stage_base": [
+          33,
+          42,
+          52
+        ],
+        "growth": 0.7
+      },
+      "defense": {
+        "stage_base": [
+          37,
+          46,
+          58
+        ],
+        "growth": 1.7
+      },
+      "speed": {
+        "stage_base": [
+          19,
+          24,
+          30
+        ],
+        "growth": 0.3
+      },
+      "catchRate": {
+        "stage_base": [
+          13,
+          16,
+          20
+        ],
+        "growth": 0.6
+      },
+      "gathering": {
+        "stage_base": [
+          7,
+          9,
+          11
+        ],
+        "growth": 0.1
+      },
+      "production": {
+        "stage_base": [
+          7,
+          9,
+          11
+        ],
+        "growth": 0.2
+      },
+      "construction": {
+        "stage_base": [
+          35,
+          43,
+          54
+        ],
+        "growth": 1.6
+      },
+      "crafting": {
+        "stage_base": [
+          8,
+          10,
+          12
+        ],
+        "growth": 0.1
+      },
+      "breeding": {
+        "stage_base": [
+          9,
+          11,
+          14
+        ],
+        "growth": 0.2
+      },
+      "medicine": {
+        "stage_base": [
+          6,
+          8,
+          10
+        ],
+        "growth": 0.3
+      },
+      "trade": {
+        "stage_base": [
+          8,
+          10,
+          13
+        ],
+        "growth": 0.1
+      },
+      "logistics": {
+        "stage_base": [
+          27,
+          34,
+          42
+        ],
+        "growth": 1.1
+      },
+      "carry": {
+        "stage_base": [
+          32,
+          40,
+          50
+        ],
+        "growth": 0.3
+      }
+    },
+    "stages": [
+      {
+        "name": "Glimmergnaw",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/glimmergnaw_0.png?v=1785694336876",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/glimmergnaw_0_back.png?v=1785694349432"
+      },
+      {
+        "name": "Boltstreak",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/glimmergnaw_1.png?v=1785694339869",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/glimmergnaw_1_back.png?v=1785694352517"
+      },
+      {
+        "name": "Lighthunter",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/glimmergnaw_2.png?v=1785694351788",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/glimmergnaw_2_back.png?v=1785694354603"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "lichtblitz",
+        "unlock_stage": 0
+      },
+      {
+        "id": "strahlenstoss",
+        "unlock_stage": 0
+      },
+      {
+        "id": "zeitdruck",
+        "unlock_stage": 0
+      },
+      {
+        "id": "prisma_strahl",
+        "unlock_stage": 1
+      },
+      {
+        "id": "sonnenzorn",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "tidelord": {
+    "id": "tidelord",
+    "name": "Tidelord",
+    "description": "",
+    "element": "water",
+    "rarity": "epic",
+    "role": "allrounder|gathering",
+    "catch_rate": 0.75,
+    "evo_level_1": 29,
+    "evo_level_2": 54,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          35,
+          44,
+          54
+        ],
+        "growth": 1
+      },
+      "attack": {
+        "stage_base": [
+          24,
+          31,
+          38
+        ],
+        "growth": 1.4
+      },
+      "defense": {
+        "stage_base": [
+          24,
+          30,
+          37
+        ],
+        "growth": 1.3
+      },
+      "speed": {
+        "stage_base": [
+          37,
+          46,
+          58
+        ],
+        "growth": 0.6
+      },
+      "catchRate": {
+        "stage_base": [
+          19,
+          23,
+          29
+        ],
+        "growth": 0.4
+      },
+      "gathering": {
+        "stage_base": [
+          67,
+          67,
+          67
+        ],
+        "growth": 1.9
+      },
+      "production": {
+        "stage_base": [
+          11,
+          14,
+          18
+        ],
+        "growth": 0.3
+      },
+      "construction": {
+        "stage_base": [
+          10,
+          12,
+          15
+        ],
+        "growth": 0.2
+      },
+      "crafting": {
+        "stage_base": [
+          9,
+          11,
+          13
+        ],
+        "growth": 0.3
+      },
+      "breeding": {
+        "stage_base": [
+          12,
+          14,
+          18
+        ],
+        "growth": 0.2
+      },
+      "medicine": {
+        "stage_base": [
+          8,
+          10,
+          13
+        ],
+        "growth": 0.3
+      },
+      "trade": {
+        "stage_base": [
+          7,
+          9,
+          11
+        ],
+        "growth": 0.3
+      },
+      "logistics": {
+        "stage_base": [
+          16,
+          20,
+          25
+        ],
+        "growth": 0.5
+      },
+      "carry": {
+        "stage_base": [
+          7,
+          9,
+          11
+        ],
+        "growth": 0.3
+      }
+    },
+    "stages": [
+      {
+        "name": "Tidelord",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/tidelord_0.png?v=1785691193632",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/tidelord_0_back.png?v=1785691422714"
+      },
+      {
+        "name": "Oceanking",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/tidelord_1.png?v=1785691383949",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/tidelord_1_back.png?v=1785691426435"
+      },
+      {
+        "name": "Abyssal Titan",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/tidelord_2.png?v=1785691386107",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/tidelord_2_back.png?v=1785699252986"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "spritzer",
+        "unlock_stage": 0
+      },
+      {
+        "id": "flutwelle",
+        "unlock_stage": 0
+      },
+      {
+        "id": "regeneration",
+        "unlock_stage": 0
+      },
+      {
+        "id": "panzerung",
+        "unlock_stage": 1
+      },
+      {
+        "id": "tsunami",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "droplet": {
+    "id": "droplet",
+    "name": "Droplet",
+    "description": "",
+    "element": "water",
+    "rarity": "common",
+    "role": "bulwark|gathering,crafting,medicine",
+    "catch_rate": 1.2,
+    "evo_level_1": 8,
+    "evo_level_2": 26,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          40,
+          51,
+          60
+        ],
+        "growth": 1.7
+      },
+      "attack": {
+        "stage_base": [
+          29,
+          36,
+          45
+        ],
+        "growth": 1.1
+      },
+      "defense": {
+        "stage_base": [
+          38,
+          47,
+          59
+        ],
+        "growth": 0.5
+      },
+      "speed": {
+        "stage_base": [
+          18,
+          22,
+          27
+        ],
+        "growth": 0.4
+      },
+      "catchRate": {
+        "stage_base": [
+          7,
+          9,
+          11
+        ],
+        "growth": 0.6
+      },
+      "gathering": {
+        "stage_base": [
+          28,
+          35,
+          44
+        ],
+        "growth": 1.4
+      },
+      "production": {
+        "stage_base": [
+          8,
+          10,
+          13
+        ],
+        "growth": 0.3
+      },
+      "construction": {
+        "stage_base": [
+          9,
+          12,
+          14
+        ],
+        "growth": 0.1
+      },
+      "crafting": {
+        "stage_base": [
+          48,
+          59,
+          60
+        ],
+        "growth": 1.1
+      },
+      "breeding": {
+        "stage_base": [
+          10,
+          13,
+          16
+        ],
+        "growth": 0.4
+      },
+      "medicine": {
+        "stage_base": [
+          18,
+          23,
+          28
+        ],
+        "growth": 0.6
+      },
+      "trade": {
+        "stage_base": [
+          5,
+          6,
+          8
+        ],
+        "growth": 0.2
+      },
+      "logistics": {
+        "stage_base": [
+          5,
+          6,
+          8
+        ],
+        "growth": 0.1
+      },
+      "carry": {
+        "stage_base": [
+          8,
+          9,
+          12
+        ],
+        "growth": 0.4
+      }
+    },
+    "stages": [
+      {
+        "name": "Droplet",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/droplet_0.png?v=1785692037139",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/droplet_0_back.png?v=1785692064456"
+      },
+      {
+        "name": "Aquaris",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/droplet_1.png?v=1785692040718",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/droplet_1_back.png?v=1785692069364"
+      },
+      {
+        "name": "Tidewarden",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/droplet_2.png?v=1785692061278",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/droplet_2_back.png?v=1785692071921"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "spritzer",
+        "unlock_stage": 0
+      },
+      {
+        "id": "aquastrahl",
+        "unlock_stage": 0
+      },
+      {
+        "id": "panzerung",
+        "unlock_stage": 0
+      },
+      {
+        "id": "regeneration",
+        "unlock_stage": 1
+      },
+      {
+        "id": "flutwelle",
+        "unlock_stage": 2
+      }
+    ]
+  },
+  "sprout": {
+    "id": "sprout",
+    "name": "Sprout",
+    "description": "",
+    "element": "plant",
+    "rarity": "common",
+    "role": "tank|production,logistics",
+    "catch_rate": 1.2,
+    "evo_level_1": 15,
+    "evo_level_2": 36,
+    "tier": 1,
+    "stats": {
+      "hp": {
+        "stage_base": [
+          37,
+          47,
+          58
+        ],
+        "growth": 2
+      },
+      "attack": {
+        "stage_base": [
+          14,
+          18,
+          22
+        ],
+        "growth": 0.4
+      },
+      "defense": {
+        "stage_base": [
+          51,
+          60,
+          60
+        ],
+        "growth": 0.9
+      },
+      "speed": {
+        "stage_base": [
+          15,
+          18,
+          23
+        ],
+        "growth": 0.4
+      },
+      "catchRate": {
+        "stage_base": [
+          15,
+          19,
+          23
+        ],
+        "growth": 0.5
+      },
+      "gathering": {
+        "stage_base": [
+          6,
+          8,
+          10
+        ],
+        "growth": 0.3
+      },
+      "production": {
+        "stage_base": [
+          41,
+          51,
+          60
+        ],
+        "growth": 1.5
+      },
+      "construction": {
+        "stage_base": [
+          4,
+          5,
+          7
+        ],
+        "growth": 0.2
+      },
+      "crafting": {
+        "stage_base": [
+          11,
+          14,
+          17
+        ],
+        "growth": 0.4
+      },
+      "breeding": {
+        "stage_base": [
+          11,
+          14,
+          17
+        ],
+        "growth": 0.2
+      },
+      "medicine": {
+        "stage_base": [
+          4,
+          6,
+          7
+        ],
+        "growth": 0.4
+      },
+      "trade": {
+        "stage_base": [
+          7,
+          8,
+          11
+        ],
+        "growth": 0.3
+      },
+      "logistics": {
+        "stage_base": [
+          44,
+          55,
+          60
+        ],
+        "growth": 0.9
+      },
+      "carry": {
+        "stage_base": [
+          10,
+          12,
+          16
+        ],
+        "growth": 0.4
+      }
+    },
+    "stages": [
+      {
+        "name": "Sprout",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/sprout_0.png?v=1785694909042",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/sprout_0_back.png?v=1785694945619"
+      },
+      {
+        "name": "Blossom Mage",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/sprout_1.png?v=1785694915782",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/sprout_1_back.png?v=1785694952758"
+      },
+      {
+        "name": "Floravat",
+        "image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/sprout_2.png?v=1785694920443",
+        "back_image_url": "https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/sprout_2_back.png?v=1785694964142"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "rankenhieb",
+        "unlock_stage": 0
+      },
+      {
+        "id": "blattsturm",
+        "unlock_stage": 0
+      },
+      {
+        "id": "aderlass",
+        "unlock_stage": 0
+      },
+      {
+        "id": "wurzelgriff",
+        "unlock_stage": 1
+      },
+      {
+        "id": "regeneration",
+        "unlock_stage": 2
+      }
+    ]
+  }
+}

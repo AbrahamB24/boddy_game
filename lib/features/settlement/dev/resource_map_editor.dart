@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/ui/pressable.dart';
 
 // Simple key(resource id)/value(amount) editor for a flat Map<String,double>
 // — used for BuildingDef.resourceCost, EraDef.advancementCost and
@@ -100,7 +101,7 @@ class _ResourceMapEditorState extends State<ResourceMapEditor> {
               ),
             ),
             const SizedBox(width: 8),
-            GestureDetector(
+            Pressable(
               onTap: () {
                 final key = _newKeyController.text.trim();
                 if (key.isEmpty || _values.containsKey(key)) return;

@@ -103,11 +103,13 @@ void main() {
     );
     settlement.buildings = layout();
     settlement.introStep = IntroStep.done;
-    // A WORKING settlement: treatment refuses on an empty tank and on an empty
-    // purse, and both refusals look exactly like "it went to the line instead".
+    // A WORKING settlement at its 100% rate (energy no longer gates
+    // treatment at all, see 2026-09-14 — only an empty purse or a full
+    // queue refuse here; the full rate just keeps this fixture's timing
+    // unaffected by the energy scale treatment now applies).
     settlement.energy = EnergyModel(
       settlementId: 's',
-      currentEnergy: 100,
+      stepsToday: kEnergyFullSteps.round(),
       lastUpdatedAt: DateTime.now(),
     );
     settlement.resources = ResourceModel(

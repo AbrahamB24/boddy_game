@@ -7,6 +7,7 @@ import '../data/water_cells.dart';
 import '../models/energy_model.dart';
 import '../models/placed_building.dart';
 import '../models/resource_model.dart';
+import 'daily_tasks.dart' show dateKeyFor;
 
 // One row in the "where does this come from" breakdown tooltip — buildings
 // of the same type are grouped together (count > 1) since the player thinks
@@ -307,6 +308,13 @@ class GameEngine {
     // because the tech/building bonuses are a SUM and this is a factor;
     // folding it in there would make it scale with them.
     double buildSpeedScale = 1.0,
+    // Sites that get NONE of this tick's construction progress, whatever
+    // [buildSpeedScale] is — the guided tutorial's Healing Hut step (user
+    // 2026-09-06: "Es soll gar kein Timer laufen") is the one caller today.
+    // A set rather than touching [buildSpeedScale] itself: that scale also
+    // prices every site's skip-with-gold cost, and a frozen rate would have
+    // divided by zero there instead of just pausing progress.
+    Set<String> frozenBuildingIds = const {},
   }) {
     final hoursDelta =
         now.difference(energy.lastUpdatedAt).inMicroseconds / 3.6e9;
@@ -318,21 +326,18 @@ class GameEngine {
       );
     }
 
-    final startEnergy = energy.currentEnergy;
-
-    // Energy is a BOOST, not a gate (user 2026-07-21): hours with energy in
-    // the tank run at full rate, hours after it empties still run at
-    // kEnergyFloorRate. An empty settlement slows to a trickle instead of
-    // stopping dead — the old hard stop punished exactly the player who
-    // hadn't walked, at the moment the game needed to win them back.
-    final drainNeeded = kDrainPerHour * hoursDelta;
-    final double fullHours = startEnergy <= 0
-        ? 0
-        : (startEnergy >= drainNeeded
-              ? hoursDelta
-              : startEnergy / kDrainPerHour);
-    final double effectiveHours =
-        fullHours + (hoursDelta - fullHours) * kEnergyFloorRate;
+    // Energy is a daily STEPS FORMULA now (user 2026-09-14), not a draining
+    // pool — [stepsToday] only means anything against TODAY's local day, so
+    // a tick spanning a midnight rollover resets it to 0 before reading the
+    // rate. Deliberately NOT split at the midnight boundary for a tick that
+    // covers real hours on both sides of it (an offline catch-up spanning
+    // overnight): the whole gap is priced at whatever today's rate is right
+    // now, same simplification the old drain model already made about
+    // energy being roughly constant across one catch-up window.
+    final todayKey = dateKeyFor(now.toLocal());
+    final stepsToday = energy.stepsDayKey == todayKey ? energy.stepsToday : 0;
+    final energyRate = energyMultiplierForSteps(stepsToday);
+    final double effectiveHours = hoursDelta * energyRate;
 
     final connected = connectedBuildingIds(buildings);
 
@@ -384,7 +389,10 @@ class GameEngine {
     final completedAt = <String, DateTime>{};
 
     final newBuildings = buildings.map((b) {
-      if (b.isComplete || b.isQueued || b.constructionSecondsRequired <= 0) {
+      if (b.isComplete ||
+          b.isQueued ||
+          b.constructionSecondsRequired <= 0 ||
+          frozenBuildingIds.contains(b.id)) {
         return b;
       }
       final newBuilt = (b.constructionSecondsBuilt + buildSecondsGained).clamp(
@@ -416,14 +424,10 @@ class GameEngine {
     );
     final newGoods = goodsTick.goods;
 
-    final newEnergyLevel = (startEnergy - kDrainPerHour * hoursDelta).clamp(
-      0.0,
-      kMaxEnergy,
-    );
-
     return GameTickResult(
       energy: energy.copyWith(
-        currentEnergy: newEnergyLevel,
+        stepsToday: stepsToday,
+        stepsDayKey: todayKey,
         lastUpdatedAt: now,
       ),
       resources: resources.copyWith(
@@ -463,8 +467,8 @@ class GameEngine {
 
     final ordered = kGoodsDefs.values.toList()
       ..sort((a, b) {
-        final byEra = a.eraOrder.compareTo(b.eraOrder);
-        return byEra != 0 ? byEra : a.id.compareTo(b.id);
+        final byRegion = a.regionOrder.compareTo(b.regionOrder);
+        return byRegion != 0 ? byRegion : a.id.compareTo(b.id);
       });
 
     for (final gDef in ordered) {
@@ -573,16 +577,24 @@ class GameEngine {
   }
 
   // ── Steps → energy ────────────────────────────────────────
-  static EnergyModel addSteps(EnergyModel energy, int steps) {
-    final gained = steps * kEnergyPerStep;
-    final newEnergy = (energy.currentEnergy + gained).clamp(0.0, kMaxEnergy);
-    return energy.copyWith(currentEnergy: newEnergy);
+  /// Credits [steps] toward TODAY's count — [now] decides which local day
+  /// that is, resetting [EnergyModel.stepsToday] to just [steps] if the
+  /// stored day has rolled over since the last credit (mirrors
+  /// [GameTickResult]'s own rollover in [tick], which handles the case
+  /// where a whole day passes with no steps credited at all).
+  static EnergyModel addSteps(EnergyModel energy, int steps, DateTime now) {
+    final todayKey = dateKeyFor(now.toLocal());
+    final carried = energy.stepsDayKey == todayKey ? energy.stepsToday : 0;
+    return energy.copyWith(
+      stepsToday: carried + steps,
+      stepsDayKey: todayKey,
+    );
   }
 
   // ── Hourly display rates ──────────────────────────────────
   // Turns the raw creature-driven workshop power into the per-hour rate shown
   // in the top bar, applying the same tech bonuses tick() does. Energy boosts
-  // everything: an empty tank runs at kEnergyFloorRate, not zero.
+  // everything, never stops it — see EnergyModel.multiplier.
   static Map<String, double> hourlyRates(
     EnergyModel energy,
     Map<String, double> workshopPower, {
@@ -594,7 +606,7 @@ class GameEngine {
     final woodBonusPct = techWood + techAll;
     final stoneBonusPct = techStone + techAll;
 
-    final active = energy.currentEnergy > 0 ? 1.0 : kEnergyFloorRate;
+    final active = energy.multiplier;
     final rates = <String, double>{
       'wood': (workshopPower['wood'] ?? 0) * (1 + woodBonusPct) * active,
       'stone': (workshopPower['stone'] ?? 0) * (1 + stoneBonusPct) * active,
@@ -617,7 +629,4 @@ class GameEngine {
     }
     return rates;
   }
-
-  static double hoursUntilEmpty(double currentEnergy) =>
-      currentEnergy / kDrainPerHour;
 }

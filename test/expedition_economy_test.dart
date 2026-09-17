@@ -17,7 +17,6 @@ const _area = AreaDef(
   emoji: '🌲',
   order: 1,
   battleStage: 1,
-  dangerLevel: 1,
   spots: [_spot],
 );
 
@@ -107,16 +106,11 @@ void main() {
     // watched closely, out-catch one long trip per day. So the invariant is
     // per-TRIP finds, not per-day.
     test('a longer variant brings more monsters per trip', () {
-      final members = [syntheticCreature({CreatureStat.catchRate: 90})];
       final short = estimateCaptureDay(
-        area: _area,
-        members: members,
         option: kCaptureHuntOptions.first,
         reactionHours: 1,
       );
       final long = estimateCaptureDay(
-        area: _area,
-        members: members,
         option: kCaptureHuntOptions.last,
         reactionHours: 1,
       );
@@ -132,8 +126,6 @@ void main() {
       // plenty. The upper 5–8 anchor is deliberately exceeded now (user
       // asked for "deutlich mehr Monster"), so only the floor is asserted.
       final est = estimateCaptureDay(
-        area: _area,
-        members: [syntheticCreature({CreatureStat.catchRate: 90})],
         option: kCaptureHuntOptions.first,
         qteSuccess: 0.85,
         reactionHours: 1,

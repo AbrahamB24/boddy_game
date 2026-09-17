@@ -123,10 +123,18 @@ class BuildingIcon extends StatelessWidget {
       return dimmed ? Opacity(opacity: 0.4, child: image) : image;
     }
     if (imageUrl != null && imageUrl!.isNotEmpty) {
+      // Same cap as the bundled path above (user 2026-09-06: "performance
+      // deutlich verbessern") — this one had none at all, so every one of
+      // the 69 buildings still on an uploaded (not bundled) picture decoded
+      // at its FULL NATIVE resolution, uncapped, every time it's drawn. The
+      // bundled path exists only for 20 of 89 buildings; this is the common
+      // case, not the edge case.
+      final cw = _decodeWidth(context);
       if (anchorBottomOverflowTop) {
         final image = CachedNetworkImage(
           imageUrl: imageUrl!,
           width: _w,
+          memCacheWidth: cw,
           fit: BoxFit.fitWidth,
           alignment: Alignment.bottomCenter,
           placeholder: (context, url) => _fallback(),
@@ -138,6 +146,7 @@ class BuildingIcon extends StatelessWidget {
         imageUrl: imageUrl!,
         width: _w,
         height: _h,
+        memCacheWidth: cw,
         fit: fit,
         placeholder: (context, url) => _fallback(),
         errorWidget: (context, url, error) => _fallback(),

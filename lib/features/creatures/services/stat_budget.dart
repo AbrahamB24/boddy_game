@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../../../core/tuning/game_tuning.dart';
 import '../models/creature_enums.dart';
 import '../models/species_balance.dart';
 import '../models/species_def.dart';
@@ -27,6 +28,12 @@ const double kDefaultCombatShare =
 /// per-rarity growth totals (9/10/11/12/13) are exactly base ÷ 30, so the rate
 /// is a flat 1/30 across every rarity.
 const double kGrowthPerLevelTarget = 1 / 30;
+
+/// How much of an archetype's featured stat(s) can swing between start value
+/// and growth (user 2026-09-07: "slow starter, welche dafür aber mehr wachsen
+/// als andere") — see [rollCurves]'s `maturityBias` parameter.
+double get kSpeciesMaturitySwing =>
+    GameTuning.i.raw(Dials.speciesMaturitySwing);
 
 /// The automatic per-evolution-stage base bump (see the species editor's "Auto
 /// Evo-Sprung"). Evolving raises each stat's socket by this fraction per stage
@@ -486,12 +493,23 @@ Map<CreatureStat, StatCurve> buildCurves({
 /// level, which a fully random growth split would throw away (growth dominates
 /// the stat past ~Lv 30) — but whether a given stat's base and its slope both
 /// land high is now chance.
+///
+/// [maturityBias] (user 2026-09-07: "slow starter, welche dafür aber mehr
+/// wachsen als andere") makes that a deliberate DIAL instead of pure chance:
+/// −1 = early bloomer (starts strong, growth-light), 0 = today's neutral
+/// roll, +1 = late bloomer (starts weak, growth-heavy). Applied to BOTH
+/// halves — combat AND work — each against its own FEATURED stat(s) (a
+/// Berserker's ATK, a Gatherer's Prio-1/2/3 stats): the same species trait
+/// ("this one grows into its role") shouldn't only apply to how well it
+/// fights and not to how well it works. One bias, one trait, both budgets —
+/// see [_applyMaturityBias].
 Map<CreatureStat, StatCurve> rollCurves({
   required CombatArchetype combat,
   required List<CreatureStat> workPriorities,
   required BudgetTargets budget,
   required math.Random rng,
   double jitter = 0.35,
+  double maturityBias = 0.0,
 }) {
   Map<CreatureStat, double> jit(Map<CreatureStat, double> w) => {
     for (final e in w.entries)
@@ -500,22 +518,68 @@ Map<CreatureStat, StatCurve> rollCurves({
   };
   final combatW = kCombatArchetypeWeights[combat]!;
   final workW = workRoleWeights(workPriorities);
+  final (combatBaseW, combatGrowthW) = _applyMaturityBias(
+    jit(combatW),
+    jit(combatW),
+    combatW,
+    maturityBias,
+  );
+  final (workBaseW, workGrowthW) = _applyMaturityBias(
+    jit(workW),
+    jit(workW),
+    workW,
+    maturityBias,
+  );
   return {
     // Note the FOUR jit() calls: one per half, per curve. Hoisting any of them
     // into a shared variable is what re-couples base to growth.
     ..._distributeSplit(
-      jit(combatW),
-      jit(combatW),
+      combatBaseW,
+      combatGrowthW,
       budget.combatBase,
       budget.combatGrowth,
     ),
     ..._distributeSplit(
-      jit(workW),
-      jit(workW),
+      workBaseW,
+      workGrowthW,
       budget.workBase,
       budget.workGrowth,
     ),
   };
+}
+
+/// Shifts weight from BASE to GROWTH ([bias] > 0, "late bloomer") or the
+/// reverse ([bias] < 0, "early bloomer"), but only for the stat(s)
+/// [archetypeWeights] itself features — those above the archetype's own mean
+/// weight (a Berserker's ATK, a Tank's HP+DEF); filler stats are untouched, so
+/// this flavors the species' SIGNATURE stat rather than blurring the whole
+/// spread. Applied to weight vectors BEFORE [_distributeSplit] renormalises,
+/// so both the base and growth TOTALS still land exactly on budget — only the
+/// shape of when the points arrive changes. [kSpeciesMaturitySwing] caps how
+/// much of a stat's excess weight can move at [bias] = ±1.
+(Map<CreatureStat, double>, Map<CreatureStat, double>) _applyMaturityBias(
+  Map<CreatureStat, double> baseWeights,
+  Map<CreatureStat, double> growthWeights,
+  Map<CreatureStat, double> archetypeWeights,
+  double bias,
+) {
+  if (bias == 0 || archetypeWeights.isEmpty) {
+    return (baseWeights, growthWeights);
+  }
+  final mean = archetypeWeights.values.fold(0.0, (a, b) => a + b) /
+      archetypeWeights.length;
+  final newBase = {...baseWeights};
+  final newGrowth = {...growthWeights};
+  for (final entry in archetypeWeights.entries) {
+    final excess = entry.value - mean;
+    if (excess <= 0) continue;
+    final swing = bias.clamp(-1.0, 1.0) * kSpeciesMaturitySwing * excess;
+    final stat = entry.key;
+    newBase[stat] = ((newBase[stat] ?? 0) - swing).clamp(0.0, double.infinity);
+    newGrowth[stat] =
+        ((newGrowth[stat] ?? 0) + swing).clamp(0.0, double.infinity);
+  }
+  return (newBase, newGrowth);
 }
 
 /// [_distribute] with a SEPARATE weighting for the growth line: [baseWeights]

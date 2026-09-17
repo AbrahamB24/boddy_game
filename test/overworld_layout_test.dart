@@ -29,10 +29,10 @@ void main() {
       final b = battles(buildLinearOverworld(battlesCleared: 0));
       final numbers = b.map((n) => n.battleNumber).toList()..sort();
       expect(numbers.first, 1);
-      expect(numbers.last, bossBattleForEra(1));
-      expect(numbers, everyElement(lessThanOrEqualTo(bossBattleForEra(1))));
+      expect(numbers.last, kFallbackBattlesPerRegion);
+      expect(numbers, everyElement(lessThanOrEqualTo(kFallbackBattlesPerRegion)));
       // Contiguous 1..boss, no gaps.
-      expect(numbers, List.generate(bossBattleForEra(1), (i) => i + 1));
+      expect(numbers, List.generate(kFallbackBattlesPerRegion, (i) => i + 1));
     });
 
     test('battle 1 is current, everything above it is locked', () {
@@ -94,19 +94,19 @@ void main() {
 
     test('clearing the Era-I boss brings Era II onto the line', () {
       final beforeBoss = battles(buildLinearOverworld(battlesCleared: 0));
-      expect(beforeBoss.any((n) => n.battleNumber > bossBattleForEra(1)),
+      expect(beforeBoss.any((n) => n.battleNumber > kFallbackBattlesPerRegion),
           isFalse);
 
       final afterBoss =
-          battles(buildLinearOverworld(battlesCleared: bossBattleForEra(1)));
-      expect(afterBoss.any((n) => n.battleNumber == bossBattleForEra(1) + 1),
+          battles(buildLinearOverworld(battlesCleared: kFallbackBattlesPerRegion));
+      expect(afterBoss.any((n) => n.battleNumber == kFallbackBattlesPerRegion + 1),
           isTrue);
       // Era II's BOSS is not asserted here any more: the bundled path stops at
       // kLastPathBattle (user 2026-07-30, "bitte lösche alle knoten ab Battle
       // 21"), so region II has whatever nodes are authored for it and no seeded
       // boss. What this test is about is the LAYOUT rule — the next region comes
       // into view when the previous boss falls — and that is unchanged.
-      expect(kLastPathBattle, greaterThanOrEqualTo(bossBattleForEra(1) + 1),
+      expect(kLastPathBattle, greaterThanOrEqualTo(kFallbackBattlesPerRegion + 1),
           reason: 'the seed must still reach into era II for this to mean '
               'anything');
     });

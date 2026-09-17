@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import '../../../core/theme/foe_theme.dart';
 import '../../creatures/models/creature_enums.dart';
 import '../../creatures/models/species_balance.dart';
+import '../../creatures/models/area.dart' show kAreaDefs;
 import '../../creatures/models/expedition.dart'
     show kBaseCaravanSlots, kBaseExpeditionSlots;
 import '../data/building_definitions.dart'
@@ -16,20 +17,16 @@ import '../data/building_definitions.dart'
         effectiveSlots,
         kBaseBuildSlots,
         kBuildPointsForHalfTime;
-import '../data/era_definitions.dart';
 import '../data/goods_definitions.dart';
 import '../data/workshop_role_effects.dart';
 import '../services/trade_center.dart' show kMaxTradeDiscount;
+import '../../../core/ui/pressable.dart';
 
-// Reusable editor for the generic `effects` JSON vocabulary shared by
-// BuildingDef.fromDefRow/toDefRow and
-// EraDef.fromDefRow/toDefRow (see building_definitions.dart /
-// era_definitions.dart). One widget, reused
-// unchanged across building_def_form.dart, tech_def_form.dart and
-// era_def_form.dart — only the allowed `type`/`target` options differ per
-// mode. era uses the same 'bonus' targets as tech (wood/stone/food/all/
-// buildSpeed) — EraDef's one-time grants are a separate, simpler
-// resource map (see ResourceMapEditor), not part of this vocabulary.
+// Reusable editor for the generic `effects` JSON vocabulary
+// (BuildingDef.fromDefRow/toDefRow — see building_definitions.dart).
+// `EffectsMode.era` is dead since eras were removed (user 2026-09-05,
+// era_def_form.dart deleted) — kept only so a `mode` switch doesn't need
+// touching everywhere `.building` is checked against it.
 enum EffectsMode { building, era }
 
 class EffectsEditor extends StatefulWidget {
@@ -238,7 +235,7 @@ class _EffectsEditorState extends State<EffectsEditor> {
             ),
           ),
         if (!_fixedShape)
-          GestureDetector(
+          Pressable(
             onTap: _addEffect,
             child: Container(
               width: double.infinity,
@@ -1035,27 +1032,38 @@ class _EffectRow extends StatelessWidget {
     );
   }
 
-  /// The "ab Ära" selector shared by every per-era palette effect: the effect
-  /// is active once the settlement reaches this era (1 = from the start).
+  /// The "ab Region" selector shared by every per-region palette effect: the
+  /// effect is active once the settlement reaches this region (1 = from the
+  /// start). Still keyed on the jsonb's `'era'` field (user 2026-09-05:
+  /// renaming that stored key would mean a data migration — only the
+  /// mechanic named "era" is gone, not this wire-format detail). Region
+  /// content used to come from a separate EraDef table; now it's just the
+  /// fixed 8-tier ladder, named from whichever AreaDef shares that region's
+  /// battleStage where one is authored.
   Widget _eraField() {
-    final eras = kEraDefs.values.toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
     final current = (effect['era'] as num?)?.toInt() ?? 1;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: DropdownButtonFormField<int>(
-        initialValue: eras.any((e) => e.order == current) ? current : 1,
+        initialValue: current.clamp(1, 8),
         decoration: const InputDecoration(
-          labelText: 'From era (effect active from)',
+          labelText: 'From region (effect active from)',
           isDense: true,
         ),
         dropdownColor: FoE.panelDark,
         style: FoE.label(size: 14).copyWith(color: FoE.parchment),
         items: [
-          for (final e in eras)
+          for (var order = 1; order <= 8; order++)
             DropdownMenuItem(
-              value: e.order,
-              child: Text('Era ${e.order} · ${e.name}'),
+              value: order,
+              child: Text(() {
+                final area = kAreaDefs.values
+                    .where((a) => a.battleStage == order)
+                    .firstOrNull;
+                return area == null
+                    ? 'Region $order'
+                    : 'Region $order · ${area.name}';
+              }()),
             ),
         ],
         onChanged: (v) => onChanged({...effect, 'era': v ?? 1}),

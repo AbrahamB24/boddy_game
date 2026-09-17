@@ -110,7 +110,6 @@ class QuickPad extends StatelessWidget {
   }
 }
 
-
 /// ONE TILE, AS A PHYSICAL KEY (user 2026-07-29: "der eckige schatten gefällt
 /// mir nicht. Allgemein soll der Button spannender werden, mehr 3d Effekt").
 ///
@@ -181,10 +180,11 @@ class _QuickTileState extends State<_QuickTile> {
               top: depth,
               height: face,
               child: DecoratedBox(
-                decoration: ShapeDecoration(color: item.active
+                decoration: ShapeDecoration(
+                  color: item.active
                       ? Color.lerp(FoE.positive, kParchmentInk, 0.55)!
                       : Color.lerp(kParchmentDeep, kParchmentInk, 0.62)!,
-                  
+
                   shadows: [
                     // Two shadows, because one cannot do both jobs: a tight
                     // dark one says the key TOUCHES the map, a wide soft one
@@ -201,7 +201,9 @@ class _QuickTileState extends State<_QuickTile> {
                       spreadRadius: -3,
                       offset: Offset(0, _down ? 3 : 7),
                     ),
-                  ], shape: FoE.facet(radius: _radius)),
+                  ],
+                  shape: FoE.facet(radius: _radius),
+                ),
               ),
             ),
             // ── The face ─────────────────────────────────────────────────
@@ -239,17 +241,26 @@ class _QuickTileState extends State<_QuickTile> {
   /// reads as badly centred.
   static const double _punch = 2;
 
-
   /// The key's top surface: the header's band, lit hard along its top edge,
   /// with the glyph pressed INTO it.
   Widget _face(QuickPadItem item) => Semantics(
     label: item.label,
     button: true,
     child: DecoratedBox(
-      decoration: ShapeDecoration(// The header's band, verbatim — these are the same material as the bar
-        // at the top of the screen.
-        color: ParchmentHeader.bandFill, shape: FoE.facet(radius: _radius, side: BorderSide(color: item.active ? FoE.positive : ParchmentHeader.bandRule,
-          width: item.active ? 1.6 : 1))),
+      decoration: ShapeDecoration(
+        // The exact background the building detail dialog uses (user
+        // 2026-09-06: "nimm ... den genau gleichen Hintergrund wie für den
+        // Gebäudedetailscreen"), not [ParchmentHeader.bandFill]'s flat
+        // approximation of its top stop.
+        gradient: ParchmentPage.pageGradient,
+        shape: FoE.facet(
+          radius: _radius,
+          side: BorderSide(
+            color: item.active ? FoE.positive : ParchmentHeader.bandRule,
+            width: item.active ? 1.6 : 1,
+          ),
+        ),
+      ),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -316,25 +327,29 @@ class _QuickTileState extends State<_QuickTile> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 constraints: const BoxConstraints(minWidth: 18),
-                decoration: ShapeDecoration(color: FoE.danger,
-                  
+                decoration: ShapeDecoration(
+                  color: FoE.danger,
+
                   // A ring in the TILE's colour, so the badge reads as pinned
                   // on it rather than as part of the map behind.
-                  
                   shadows: [
                     BoxShadow(
                       color: kPageShadow.withValues(alpha: 0.35),
                       blurRadius: 0,
                       offset: const Offset(0, 1),
                     ),
-                  ], shape: FoE.facet(radius: 9, side: BorderSide(color: kParchmentDeep, width: 1.5))),
+                  ],
+                  shape: FoE.facet(
+                    radius: 9,
+                    side: BorderSide(color: kParchmentDeep, width: 1.5),
+                  ),
+                ),
                 child: Text(
                   item.badge > 99 ? '99+' : '${item.badge}',
                   textAlign: TextAlign.center,
-                  style: FoE.dim(size: 8).copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: FoE.dim(
+                    size: 8,
+                  ).copyWith(color: Colors.white, fontWeight: FontWeight.w700),
                 ),
               ),
             ),

@@ -360,7 +360,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'lux_fish': BuildingEffects(
+  'fish_shop': BuildingEffects(
     workshops: [
       WorkshopRole(
         stat: CreatureStat.production,
@@ -372,7 +372,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'lux_meat': BuildingEffects(
+  'butcher_shop': BuildingEffects(
     workshops: [
       WorkshopRole(
         stat: CreatureStat.production,
@@ -503,6 +503,28 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
       BuildingEffect(
         type: 'healQueue',
+        value: 0,
+        levelSteps: {2: 1, 5: 1, 8: 1, 11: 1, 14: 1, 17: 1, 20: 1, 23: 1},
+      ),
+    ],
+  ),
+  // Combat School (user 2026-09-05) — same shape as the Healing Hut just
+  // above (slots + a line, both level-scaled), but NO `workshops` list: this
+  // mirrors `caravanserai`, not `healing_hut`/`scout_post`. Staffing it would
+  // mean picking one of the 8 fixed civilian work stats to reuse for
+  // something thematically unrelated, and inventing a new one is the one
+  // kind of change that re-rolls every creature's genes — not warranted
+  // here. So an authored building always contributes its capacity, worked or
+  // not.
+  'combat_school': BuildingEffects(
+    effects: [
+      BuildingEffect(
+        type: 'trainSlots',
+        value: 1,
+        levelSteps: {3: 1, 6: 1, 9: 1, 12: 1, 15: 1, 18: 1, 21: 1, 24: 1},
+      ),
+      BuildingEffect(
+        type: 'trainQueue',
         value: 0,
         levelSteps: {2: 1, 5: 1, 8: 1, 11: 1, 14: 1, 17: 1, 20: 1, 23: 1},
       ),
@@ -776,26 +798,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'lux_herbs': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.production,
-        resource: 'herbs',
-        mult: 0.2,
-        slots: 3,
-      ),
-    ],
-  ),
-  'lux_honey': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.production,
-        resource: 'honey',
-        mult: 0.2,
-        slots: 3,
-      ),
-    ],
-  ),
   'special_materials_e2': BuildingEffects(
     workshops: [
       WorkshopRole(
@@ -823,8 +825,10 @@ final Map<String, BuildingEffects> kBuildingEffects = {
     ],
     effects: [
       BuildingEffect(type: 'production', key: 'gold', value: 6.4, era: 2),
-      BuildingEffect(type: 'production', key: 'herbs', value: 2.4, era: 2),
-      BuildingEffect(type: 'production', key: 'honey', value: 2.4, era: 2),
+      // honey/herbs cut 2026-09-12 (down to one luxury per region; meat took
+      // the slot instead) — no replacement bonus line added for meat, since
+      // that would need its own production VALUE decided, not just carried
+      // over from a removed good.
     ],
   ),
   'thinker_circle': BuildingEffects(
@@ -908,16 +912,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'lux_cheese': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.production,
-        resource: 'cheese',
-        mult: 0.3,
-        slots: 3,
-      ),
-    ],
-  ),
   'lux_wine': BuildingEffects(
     workshops: [
       WorkshopRole(
@@ -956,7 +950,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
     ],
     effects: [
       BuildingEffect(type: 'production', key: 'gold', value: 10.2, era: 3),
-      BuildingEffect(type: 'production', key: 'cheese', value: 3.8, era: 3),
+      // cheese cut 2026-09-12 (down to one luxury per region) — wine survives.
       BuildingEffect(type: 'production', key: 'wine', value: 3.8, era: 3),
     ],
   ),
@@ -1020,16 +1014,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'lux_cloth': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.production,
-        resource: 'cloth',
-        mult: 0.5,
-        slots: 3,
-      ),
-    ],
-  ),
   'lux_spices': BuildingEffects(
     workshops: [
       WorkshopRole(
@@ -1069,7 +1053,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
     ],
     effects: [
       BuildingEffect(type: 'production', key: 'gold', value: 16.4, era: 4),
-      BuildingEffect(type: 'production', key: 'cloth', value: 6.1, era: 4),
+      // cloth cut 2026-09-12 (down to one luxury per region) — spices survives.
       BuildingEffect(type: 'production', key: 'spices', value: 6.1, era: 4),
     ],
   ),
@@ -1113,16 +1097,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'lux_silk': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.production,
-        resource: 'silk',
-        mult: 0.8,
-        slots: 3,
-      ),
-    ],
-  ),
   'special_materials_e5': BuildingEffects(
     workshops: [
       WorkshopRole(
@@ -1154,7 +1128,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
     effects: [
       BuildingEffect(type: 'production', key: 'gold', value: 26.2, era: 5),
       BuildingEffect(type: 'production', key: 'salt', value: 9.8, era: 5),
-      BuildingEffect(type: 'production', key: 'silk', value: 9.8, era: 5),
+      // silk cut 2026-09-12 (down to one luxury per region) — salt survives.
     ],
   ),
   'sand_camp_e6': BuildingEffects(
@@ -1184,16 +1158,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: 'clinker',
         mult: 2.1,
         slots: 8,
-      ),
-    ],
-  ),
-  'lux_chocolate': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.production,
-        resource: 'chocolate',
-        mult: 1.3,
-        slots: 3,
       ),
     ],
   ),
@@ -1238,7 +1202,8 @@ final Map<String, BuildingEffects> kBuildingEffects = {
     ],
     effects: [
       BuildingEffect(type: 'production', key: 'gold', value: 41.9, era: 6),
-      BuildingEffect(type: 'production', key: 'chocolate', value: 15.7, era: 6),
+      // chocolate cut 2026-09-12 (down to one luxury per region) — coffee
+      // survives.
       BuildingEffect(type: 'production', key: 'coffee', value: 15.7, era: 6),
     ],
   ),
@@ -1269,16 +1234,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: 'glasswork',
         mult: 3.4,
         slots: 8,
-      ),
-    ],
-  ),
-  'lux_porcelain': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.production,
-        resource: 'porcelain',
-        mult: 2,
-        slots: 3,
       ),
     ],
   ),
@@ -1324,7 +1279,8 @@ final Map<String, BuildingEffects> kBuildingEffects = {
     ],
     effects: [
       BuildingEffect(type: 'production', key: 'gold', value: 67.1, era: 7),
-      BuildingEffect(type: 'production', key: 'porcelain', value: 25.2, era: 7),
+      // porcelain cut 2026-09-12 (down to one luxury per region) — tea
+      // survives.
       BuildingEffect(type: 'production', key: 'tea', value: 25.2, era: 7),
     ],
   ),
@@ -1355,16 +1311,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: 'vault',
         mult: 5.4,
         slots: 8,
-      ),
-    ],
-  ),
-  'lux_jewelry': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.production,
-        resource: 'jewelry',
-        mult: 3.2,
-        slots: 3,
       ),
     ],
   ),
@@ -1411,7 +1357,8 @@ final Map<String, BuildingEffects> kBuildingEffects = {
     ],
     effects: [
       BuildingEffect(type: 'production', key: 'gold', value: 107.4, era: 8),
-      BuildingEffect(type: 'production', key: 'jewelry', value: 40.3, era: 8),
+      // jewelry cut 2026-09-12 (down to one luxury per region) — perfume
+      // survives.
       BuildingEffect(type: 'production', key: 'perfume', value: 40.3, era: 8),
     ],
   ),

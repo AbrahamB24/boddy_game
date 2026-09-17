@@ -13,9 +13,11 @@ import 'data/item_definitions.dart';
 import 'services/new_items.dart';
 import 'settlement_controller.dart';
 import '../common/widgets/monster_tile_grid.dart';
+import '../common/widgets/parchment_kit.dart' show ParchmentDivider;
 import '../common/widgets/parchment_page.dart';
 import 'widgets/parchment_sheet.dart';
 import 'widgets/scroll_paper.dart' show parchmentButton, parchmentButtonInk;
+import '../../core/ui/pressable.dart';
 
 /// The bag: everything the settlement owns that isn't a resource.
 ///
@@ -69,7 +71,8 @@ class BagScreen extends StatefulWidget {
   State<BagScreen> createState() => _BagScreenState();
 }
 
-class _BagScreenState extends State<BagScreen> {
+class _BagScreenState extends State<BagScreen>
+    with SingleTickerProviderStateMixin {
   final _ctrl = SettlementController();
   final _creatures = CreaturesController();
   final _breeding = BreedingController();
@@ -77,7 +80,16 @@ class _BagScreenState extends State<BagScreen> {
   /// The item whose target picker is open; null = the plain list.
   String? _using;
 
-  _BagTab _tab = _BagTab.items;
+  // A real TabBar/TabController now (user 2026-09-06: "Oben die Reiter
+  // genau gleich gestalten wie bei Management") rather than a row of
+  // hand-styled pill buttons — matches ManagementScreen's own tabs exactly
+  // instead of a second, drifting copy of "what a tab row looks like".
+  late final TabController _tabs = TabController(
+    length: _BagTab.values.length,
+    vsync: this,
+  );
+
+  _BagTab get _tab => _BagTab.values[_tabs.index];
 
   /// A frozen copy of NewItems' counts, taken the instant this screen opens
   /// — BEFORE [NewItems.markSeen] clears the live map (user 2026-08-29:
@@ -100,11 +112,18 @@ class _BagScreenState extends State<BagScreen> {
     // drawer after some other screen ticked.
     _breeding.addListener(_onBreedingChanged);
     _breeding.load().then((_) => _breeding.refreshEggs());
+    // A picker left open in another drawer would keep listing targets for
+    // an item this one does not show.
+    _tabs.addListener(() {
+      if (_tabs.indexIsChanging) return;
+      setState(() => _using = null);
+    });
   }
 
   @override
   void dispose() {
     _breeding.removeListener(_onBreedingChanged);
+    _tabs.dispose();
     super.dispose();
   }
 
@@ -174,14 +193,22 @@ class _BagScreenState extends State<BagScreen> {
             _BagTab.eggs: eggs.length,
             _BagTab.packs: packs.fold<int>(0, (s, e) => s + e.value),
           }),
+          // The app's own section rule (user 2026-08-31) — see
+          // [ParchmentDivider] for why it stops short of the bands. Same as
+          // ManagementScreen's own tab bar.
+          const ParchmentDivider(),
           Expanded(
             child: ListView(
-              // The page's own side padding, so the drawers line up with every
-              // other page's content and clear the meander bordure.
+              // kMonsterTilePageMargin (24), not ParchmentPage.kParchmentPagePad
+              // (36) — the egg drawer's grid is a [monsterTileGrid], which
+              // sizes tiles off the raw device width assuming a 24px host
+              // margin, same as the Monsters screen (user 2026-09-11: "bitte
+              // 3 Boxen nebeneinander und nicht nur 2", caught on the hunt
+              // group picker but the same mismatch here).
               padding: EdgeInsets.fromLTRB(
-                ParchmentPage.kParchmentPagePad,
+                kMonsterTilePageMargin,
                 8,
-                ParchmentPage.kParchmentPagePad,
+                kMonsterTilePageMargin,
                 20 + MediaQuery.of(context).viewPadding.bottom,
               ),
               children: switch (_tab) {
@@ -270,42 +297,27 @@ class _BagScreenState extends State<BagScreen> {
 
   /// The drawers, with what each one holds. A count on the tab means you never
   /// have to open an empty one to find that out.
-  Widget _tabBar(Map<_BagTab, int> counts) => Padding(
-    padding: const EdgeInsets.fromLTRB(30, 4, 30, 6),
-    // Scrolls: "Resource packs" alone is wide, and a fourth drawer would push
-    // the row off a narrow phone.
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final t in _BagTab.values)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GestureDetector(
-                onTap: () => setState(() {
-                  _tab = t;
-                  // A picker left open in another drawer would keep listing
-                  // targets for an item this one does not show.
-                  _using = null;
-                }),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
-                  ),
-                  decoration: parchmentButton(active: _tab == t),
-                  child: Text(
-                    counts[t]! > 0 ? '${t.label} ${counts[t]}' : t.label,
-                    style: FoE.label(
-                      size: 12,
-                    ).copyWith(color: parchmentButtonInk(active: _tab == t)),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    ),
+  ///
+  /// A real [TabBar] now, styled exactly like [ManagementScreen]'s own (user
+  /// 2026-09-06) rather than a row of hand-styled pill buttons — same
+  /// [FoE.gold] label/indicator, same [FoE.textDim] unselected tone.
+  Widget _tabBar(Map<_BagTab, int> counts) => TabBar(
+    controller: _tabs,
+    labelColor: FoE.gold,
+    unselectedLabelColor: FoE.textDim,
+    indicatorColor: FoE.gold,
+    // Scrollable, unlike Management's fixed three (2026-07-27): "Resource
+    // packs" plus a count is wide enough on its own to push a fixed-width
+    // split into wrapping or truncation on a narrow phone.
+    isScrollable: true,
+    // Centred when they fit (user 2026-09-06), scrolling from centre rather
+    // than pinned to the left — matters only on a wide enough screen/count
+    // combo that the three tabs don't already fill the row.
+    tabAlignment: TabAlignment.center,
+    tabs: [
+      for (final t in _BagTab.values)
+        Tab(text: counts[t]! > 0 ? '${t.label} ${counts[t]}' : t.label),
+    ],
   );
 
   Widget _emptyDrawer(String message) => Padding(
@@ -442,7 +454,7 @@ class _BagScreenState extends State<BagScreen> {
           style: FoE.dim(size: 10).copyWith(color: ParchmentSheet.inkSoft),
         ),
       ),
-      GestureDetector(
+      Pressable(
         onTap: targets.isEmpty
             ? null
             : () => setState(() => _using = picking ? null : def.id),
@@ -460,7 +472,7 @@ class _BagScreenState extends State<BagScreen> {
     ],
   );
 
-  Widget _targetTile(ItemDef def, CreatureInstance c) => GestureDetector(
+  Widget _targetTile(ItemDef def, CreatureInstance c) => Pressable(
     onTap: () => _use(def, c),
     child: Container(
       margin: const EdgeInsets.only(top: 6),
@@ -490,6 +502,8 @@ class _BagScreenState extends State<BagScreen> {
     ItemKind.catchBoost => '🪤 Used on a hunt encounter',
     ItemKind.expeditionYield => '🎒 Used when sending an expedition',
     ItemKind.breedSpeed => '🥚 Used on a running breeding or hatching job',
+    ItemKind.cureStatus ||
+    ItemKind.cureDebuffs => '⚔️ Used during a battle (Items menu)',
     _ => '',
   };
 
@@ -520,7 +534,7 @@ class _BagScreenState extends State<BagScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        GestureDetector(
+        Pressable(
           onTap: _using == def.id ? null : () => _redeem(def),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),

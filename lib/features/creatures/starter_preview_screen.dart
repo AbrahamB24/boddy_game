@@ -54,7 +54,11 @@ class _StarterPreviewScreenState extends State<StarterPreviewScreen> {
       statBase: CreatureInstance.rollBaseGenes(species, rng),
       statSlope: CreatureInstance.rollSlopeGenes(species, rng),
       isStarter: true,
-    );
+      // This preview IS the real detail screen (user 2026-09-02), abilities
+      // included — backfill here so what's shown before adopting matches
+      // what CreaturesController.adoptStarter grants once it is.
+      learnedAbilityIds: null,
+    )..backfillAbilities();
   }
 
   Future<void> _confirm() async {
@@ -90,8 +94,13 @@ class _StarterPreviewScreenState extends State<StarterPreviewScreen> {
         width: double.infinity,
         constraints: const BoxConstraints(minHeight: FoE.tapTarget),
         alignment: Alignment.center,
+        // The starter's OWN element colour (user 2026-09-05: "den choose
+        // button in der Farbe des Typs"), not the app's generic accent —
+        // this button is the one place on the screen that's already
+        // committing to a specific starter, so it wears that starter's
+        // colour rather than a neutral one.
         decoration: BoxDecoration(
-          gradient: FoE.goldGradient,
+          color: widget.species.element.color,
           borderRadius: BorderRadius.circular(FoE.radiusSmall),
         ),
         child: Text(

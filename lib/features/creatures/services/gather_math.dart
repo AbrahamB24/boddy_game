@@ -14,11 +14,10 @@ import '../../../core/tuning/game_tuning.dart';
 // mining speed, the group's summed CARRY stat caps how much a single trip can
 // haul, and a trip returns as soon as the load is full (or the spot runs dry).
 
-/// Travel overhead added to every trip, per area danger level (each way folded
-/// in). Keeps far/dangerous areas slower even for a quick haul.
+/// Flat travel overhead added to every trip (each way folded in). Keeps a
+/// trip from resolving instantly even for a quick haul.
 /// PROVISIONAL: halved 600→300 after the first playtest.
-double get kTravelSecondsPerDanger =>
-    GameTuning.i.raw(Dials.travelSecondsPerDanger);
+double get kTravelSeconds => GameTuning.i.raw(Dials.travelSecondsPerDanger);
 
 /// Hard ceiling so a viable trip with a near-zero rate can't compute an
 /// absurd duration (defensive — the UI blocks sending a non-viable group).
@@ -92,7 +91,7 @@ GatherPlan planGather({
   final ratePerHour = dials.ratePerHour(gatherPower);
   final amount = math.min(loadCap, math.max(0.0, availableStock));
 
-  final travel = kTravelSecondsPerDanger * area.dangerLevel * travelMult;
+  final travel = kTravelSeconds * travelMult;
   final miningSeconds = (ratePerHour > 0 && amount > 0)
       ? (amount / ratePerHour) * 3600.0
       : 0.0;

@@ -3,19 +3,24 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
+import '../../core/ui/pressable.dart';
 import '../../core/ui/snack.dart';
 import '../common/widgets/parchment_page.dart';
+import '../common/widgets/plain_icon_button.dart';
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
 import '../settlement/settlement_controller.dart';
 import 'models/area.dart';
 import 'models/combatant.dart';
 import 'models/creature_instance.dart';
+import 'models/path_node.dart' show regionForBattle;
 import 'models/species_def.dart' show kSpeciesDefs;
+import 'widgets/creature_sprite.dart' show decodeWidthFor;
 import 'battle_prep_screen.dart';
 import 'battle_screen.dart';
 import 'services/battle_rewards.dart';
 import 'services/combat_engine.dart' show CombatOutcome;
+import 'survival_screen.dart' show openSurvivalMode;
 import 'services/creatures_controller.dart';
 import 'services/overworld_layout.dart';
 import 'services/overworld_path.dart';
@@ -26,7 +31,7 @@ import 'services/region_dungeon.dart'
 // ONE straight line you climb (linear rebuild 2026-07-24). Numbered BATTLES run
 // bottom → top, each a little stronger. Tapping the CURRENT battle fights it —
 // winning it steps you up the line (grows the party, unlocks buildings), and an
-// era boss unlocks the next region + its legendary.
+// a region boss unlocks the next region + its legendary.
 //
 // The map is ONLY the campaign now (2026-07-25): research nodes were removed
 // with the tech system, and the resource spots + hunt moved to the Expeditions
@@ -201,6 +206,11 @@ class _OverworldScreenState extends State<OverworldScreen>
                             'assets/images/overworld_grass.png',
                             fit: BoxFit.cover,
                             filterQuality: FilterQuality.medium,
+                            // Capped, not native 1080x1080 (user 2026-09-06:
+                            // "performance deutlich verbessern") — a 4.4 MB
+                            // RGBA decode for a texture that only ever tiles
+                            // BoxFit.cover across the canvas's own width.
+                            cacheWidth: decodeWidthFor(context, _canvas.width),
                           ),
                         ),
                       ),
@@ -268,6 +278,18 @@ class _OverworldScreenState extends State<OverworldScreen>
       // refuses to do anything reads as broken (user 2026-09-02: "zurück
       // sollte nicht anwählbar sein").
       showBack: !_tutorialLocksThisScreen,
+      // Survival Mode's entry point (user 2026-09-06) — hidden during the
+      // tutorial for the same reason the back arrow is: a lit control that
+      // leads off the guided chain reads as broken, not as a bonus feature.
+      trailing: _tutorialLocksThisScreen
+          ? null
+          : PlainIconButton(
+              icon: Icons.whatshot_rounded,
+              size: 22,
+              color: ParchmentHeader.engravedInk,
+              shadows: ParchmentHeader.engraved(depth: 1.2),
+              onTap: () => openSurvivalMode(context),
+            ),
     ),
   );
 
@@ -391,17 +413,27 @@ class _OverworldScreenState extends State<OverworldScreen>
       if (node.isBoss) await _grantBossRewards(area, node.battleNumber);
       if (introNodeStep != null) await _settlement.advanceIntro(introNodeStep);
     }
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // Straight back to the settlement after the tutorial's FIRST fight (user
+    // 2026-09-06) rather than staying on this map — node 2 would otherwise
+    // sit right there, tappable before the buildHealingHut → buildRoad →
+    // assignHealer → healStarter → firstCapture steps in between have run.
+    if (introNodeStep == IntroStep.firstNode) {
+      Navigator.pop(context);
+      return;
+    }
+    setState(() {});
   }
 
-  /// After a region boss falls the FIRST time: unlock the next region (rides on
-  /// dungeonMaxStage, same as before) and award the region legendary. PUSHING
-  /// ON — moving the settlement's own tier up to match — is still a manual,
-  /// paid step at the Castle (unchanged).
+  /// After a region boss falls the FIRST time: unlock the next region
+  /// (rides on dungeonMaxStage) and award the region legendary. Fully
+  /// automatic (user 2026-09-05: eras and the paid Castle ascension are
+  /// gone) — the next region's buildings/costs/level cap apply the instant
+  /// this returns, nothing left to pay for or trigger separately.
   Future<void> _grantBossRewards(AreaDef area, int battleNumber) async {
-    final era = eraForBattle(battleNumber); // == area.battleStage
-    final firstClear = _settlement.dungeonMaxStage <= era;
-    await _settlement.unlockDungeonStage(era);
+    final region = regionForBattle(battleNumber); // == area.battleStage
+    final firstClear = _settlement.dungeonMaxStage <= region;
+    await _settlement.unlockDungeonStage(region);
     if (!firstClear) return;
     final legendary = kSpeciesDefs[area.bossSpeciesId];
     if (legendary == null) return;
@@ -417,9 +449,8 @@ class _OverworldScreenState extends State<OverworldScreen>
     if (!mounted) return;
     context.snack(
       caught != null
-          ? '👑 ${caught.displayName} joins you! The next region is open — '
-                'push on at the Castle.'
-          : 'The next region is open — push on at the Castle.',
+          ? '👑 ${caught.displayName} joins you! The next region is open.'
+          : 'The next region is open!',
     );
   }
 }
@@ -504,7 +535,7 @@ class _MapNode extends StatelessWidget {
       );
     }
 
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       // ── Nur noch die Scheibe (user 2026-07-31) ──

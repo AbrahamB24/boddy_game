@@ -26,16 +26,6 @@ SpeciesDef _species(
   ],
 );
 
-AreaDef _area(int danger, {List<String> pool = const []}) => AreaDef(
-  id: 'a$danger',
-  name: 'A',
-  emoji: '🌲',
-  order: 1,
-  battleStage: 1,
-  dangerLevel: danger,
-  speciesPoolIds: pool,
-);
-
 void main() {
   setUp(() {
     kSpeciesDefs
@@ -57,18 +47,10 @@ void main() {
   });
 
   group('rarityWeights', () {
-    test('sum to 100 at every danger and shift toward rare', () {
-      for (var d = 1; d <= 5; d++) {
-        final w = rarityWeights(d);
-        final sum = w.values.reduce((a, b) => a + b);
-        expect(sum, closeTo(100, 1e-9), reason: 'danger $d');
-      }
-      final safe = rarityWeights(1);
-      final wild = rarityWeights(5);
-      expect(wild[CreatureRarity.common]!, lessThan(safe[CreatureRarity.common]!));
-      expect(wild[CreatureRarity.rare]!, greaterThan(safe[CreatureRarity.rare]!));
-      expect(wild[CreatureRarity.legendary]!,
-          greaterThan(safe[CreatureRarity.legendary]!));
+    test('sums to 100 by default', () {
+      final w = rarityWeights();
+      final sum = w.values.reduce((a, b) => a + b);
+      expect(sum, closeTo(100, 1e-9));
     });
   });
 
@@ -77,9 +59,8 @@ void main() {
   // gefangen werden können. Es sind alle immer frei zum Fangen, ausser die
   // Legendären, welche dem Pool erst nach dem Besiegen hinzugefügt werden."
   //
-  // A hunt used to roll from the AREA's own pool, and areas open with the path,
-  // so the roster you could reach was a function of progress. The area now
-  // supplies only the DANGER the rarity odds are read from.
+  // A hunt used to roll from the AREA's own pool — not any more, the pool is
+  // global (catchableSpecies).
   group('catchableSpecies', () {
     test('every non-legendary species, whatever the path says', () {
       kSpeciesDefs['leg'] = _species('leg', CreatureRarity.legendary);
@@ -98,7 +79,6 @@ void main() {
           emoji: '🌲',
           order: 1,
           battleStage: 3,
-          dangerLevel: 5,
           bossSpeciesId: 'leg',
         );
       // Standing ON the stage is not yet past it — the boss is still up.
@@ -121,7 +101,6 @@ void main() {
           emoji: '🌲',
           order: 1,
           battleStage: 1,
-          dangerLevel: 1,
           speciesPoolIds: ['mouse'],
         );
       expect(catchableSpecies(0).map((s) => s.id), contains('stray'));
@@ -131,23 +110,7 @@ void main() {
   group('rollEncounter', () {
     test('null when no species are defined at all', () {
       kSpeciesDefs.clear();
-      expect(rollEncounter(_area(1), math.Random(1), dungeonMaxStage: 0),
-          isNull);
-    });
-
-    test('rolls species the area never listed', () {
-      // The area's pool names only the mouse; the wolf must still turn up.
-      final rng = math.Random(5);
-      var sawWolf = false;
-      for (var i = 0; i < 500 && !sawWolf; i++) {
-        sawWolf = rollEncounter(
-              _area(5, pool: ['mouse']),
-              rng,
-              dungeonMaxStage: 0,
-            )?.id ==
-            'wolf';
-      }
-      expect(sawWolf, isTrue);
+      expect(rollEncounter(math.Random(1), dungeonMaxStage: 0), isNull);
     });
 
     test('an undefeated legendary never turns up, a defeated one does', () {
@@ -160,41 +123,22 @@ void main() {
           emoji: '🌲',
           order: 1,
           battleStage: 1,
-          dangerLevel: 5, // legendary weight is highest here
           bossSpeciesId: 'leg',
         );
       final rng = math.Random(9);
       for (var i = 0; i < 500; i++) {
         expect(
-          rollEncounter(_area(5), rng, dungeonMaxStage: 1)?.id,
+          rollEncounter(rng, dungeonMaxStage: 1)?.id,
           isNot('leg'),
         );
       }
       var seen = false;
       for (var i = 0; i < 500 && !seen; i++) {
-        seen = rollEncounter(_area(5), rng, dungeonMaxStage: 2)?.id == 'leg';
+        seen = rollEncounter(rng, dungeonMaxStage: 2)?.id == 'leg';
       }
       expect(seen, isTrue, reason: 'a beaten legendary must appear');
     });
 
-    test('dangerous areas find the rare species more often', () {
-      int rareCount(int danger) {
-        final rng = math.Random(42);
-        var count = 0;
-        for (var i = 0; i < 2000; i++) {
-          if (rollEncounter(_area(danger), rng, dungeonMaxStage: 0)?.id ==
-              'wolf') {
-            count++;
-          }
-        }
-        return count;
-      }
-
-      final safe = rareCount(1);
-      final wild = rareCount(5);
-      expect(safe, greaterThan(0)); // rare is possible even in the safe area
-      expect(wild, greaterThan(safe * 2)); // 10% → 30% of the weight (~3x)
-    });
   });
 
   group('catch QTE', () {
@@ -291,32 +235,25 @@ void main() {
       );
     });
 
-    test('longer variants: longer, more finds, rarer odds', () {
+    test('longer variants: longer, more finds', () {
       var prevSeconds = 0;
       var prevFinds = 0;
-      var prevBias = -1.0;
       for (final o in kCaptureHuntOptions) {
         expect(o.seconds, greaterThan(prevSeconds),
             reason: 'duration strictly increases');
         expect(o.finds, greaterThan(prevFinds),
             reason: 'finds strictly increase');
-        expect(o.rareBias, greaterThanOrEqualTo(prevBias),
-            reason: 'rare bias never drops');
         prevSeconds = o.seconds;
         prevFinds = o.finds;
-        prevBias = o.rareBias;
       }
     });
 
-    test('every hunt sends exactly ONE monster', () {
-      // User 2026-07-30: "Pro Hunt wird immer nur ein Monster geschickt."
-      // Party size used to climb with the trip length, which made the long
-      // hunts unreachable for the players who most needed them and tied up six
-      // monsters for a day. Time is the only price now.
-      for (final o in kCaptureHuntOptions) {
-        expect(o.hunters, 1, reason: o.id);
-      }
-    });
+    // 'every hunt sends exactly ONE monster' (added 2026-07-30, removed
+    // 2026-09-11): CaptureHuntOption no longer carries a hunters field at
+    // all. All of a hunt's finds are now fought as ONE continuous
+    // multi-wild battle rather than one battle per find, and team size
+    // follows the same growing teamSizeCap Gather already uses — see
+    // kCaptureHuntOptions's own comment.
 
     test('the six variants match the user spec (10m..24h, finds 1..12)', () {
       expect(kCaptureHuntOptions.map((o) => o.seconds),
@@ -336,17 +273,6 @@ void main() {
       }
     });
 
-    test('rare bias shifts odds toward the rare end', () {
-      final base = rarityWeights(1);
-      final biased = biasedRarityWeights(1, 1.0);
-      // Common share falls, legendary share rises.
-      expect(biased[CreatureRarity.common]!,
-          lessThan(base[CreatureRarity.common]!));
-      expect(biased[CreatureRarity.legendary]!,
-          greaterThan(base[CreatureRarity.legendary]!));
-      // Zero bias is a no-op.
-      expect(biasedRarityWeights(1, 0), base);
-    });
   });
 
   group('capture payload helpers', () {

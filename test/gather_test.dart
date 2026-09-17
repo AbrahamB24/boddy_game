@@ -36,7 +36,6 @@ const _area = AreaDef(
   emoji: '🌲',
   order: 1,
   battleStage: 1,
-  dangerLevel: 2,
   spots: [_spot],
 );
 
@@ -145,19 +144,18 @@ void main() {
       expect(empty.isViable, isFalse);
     });
 
-    test('duration includes per-danger travel overhead', () {
+    test('duration includes the flat travel overhead', () {
       final plan = planGather(
         area: _area,
         spot: _spot,
         members: [_mob(gathering: 50, carry: 30)],
         availableStock: 100000,
       );
-      // Mining time from the dials plus danger-scaled travel — computed from
-      // the constants so balance tweaks don't break the test.
+      // Mining time from the dials plus the flat travel overhead — computed
+      // from the constants so balance tweaks don't break the test.
       final rate = _wood.ratePerHour(50);
       final miningSeconds = (_wood.loadCap(30) / rate) * 3600;
-      final travelSeconds = _area.dangerLevel * kTravelSecondsPerDanger;
-      expect(plan.duration.inSeconds, (miningSeconds + travelSeconds).round());
+      expect(plan.duration.inSeconds, (miningSeconds + kTravelSeconds).round());
     });
   });
 

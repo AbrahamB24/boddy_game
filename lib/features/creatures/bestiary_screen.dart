@@ -8,6 +8,7 @@ import 'models/species_def.dart';
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/creature_sprite.dart';
+import '../../core/ui/pressable.dart';
 import '../common/widgets/recess_bar.dart';
 import '../settlement/widgets/scroll_paper.dart' show kParchmentInk;
 
@@ -160,7 +161,7 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
     final progress = _progressFor(species.id);
     final rep = _representativeFor(species.id);
     final discovered = progress.owned > 0;
-    return GestureDetector(
+    return Pressable(
       // Tapping a line you have started opens your best of it. An undiscovered
       // line has nothing to open, and must not pretend otherwise.
       onTap: rep == null

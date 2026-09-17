@@ -2,7 +2,7 @@ import 'package:flutter/material.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:boddygame/features/settlement/data/building_definitions.dart';
-import 'package:boddygame/features/settlement/data/era_definitions.dart';
+import 'package:boddygame/features/settlement/data/item_definitions.dart';
 import 'package:boddygame/features/settlement/services/game_defs_controller.dart';
 
 /// Regression: editing ONE def in Dev Mode wiped every other one.
@@ -48,9 +48,9 @@ void main() {
     kBuildingDefs
       ..clear()
       ..addAll(kFallbackBuildingDefs);
-    kEraDefs
+    kItemDefs
       ..clear()
-      ..addAll(kFallbackEraDefs);
+      ..addAll(kFallbackItemDefs);
   });
 
   group('one authored def must not wipe the roster', () {
@@ -102,11 +102,14 @@ void main() {
   });
 
   group('the same rule holds for the other bundled maps', () {
-    test('eras', () {
-      final one = kFallbackEraDefs['era_1']!;
-      mergeInto(kEraDefs, kFallbackEraDefs, {'era_1': one});
-      expect(kEraDefs.length, kFallbackEraDefs.length);
-      expect(kEraDefs['era_2'], isNotNull);
+    test('items', () {
+      final firstId = kFallbackItemDefs.keys.first;
+      final one = kFallbackItemDefs[firstId]!;
+      mergeInto(kItemDefs, kFallbackItemDefs, {firstId: one});
+      expect(kItemDefs.length, kFallbackItemDefs.length);
+      for (final id in kFallbackItemDefs.keys) {
+        expect(kItemDefs[id], isNotNull, reason: '$id went missing');
+      }
     });
   });
 

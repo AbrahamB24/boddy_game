@@ -16,7 +16,7 @@ void main() {
     // The premise of the whole feature: era II is where raw becomes refined.
     final frame = kGoodsDefs['frame']!;
     expect(frame.refinedFrom, {'wood': 2, 'stone': 2});
-    expect(elementForEra(2)?.id, 'frame');
+    expect(elementForRegion(2)?.id, 'frame');
   });
 
   test('a recipe is reported only for goods that are assembled', () {

@@ -49,12 +49,9 @@ class RarityConfig {
   final double breedGoods;
 
   /// How often a monster of this rarity appears on capture expeditions (user
-  /// 2026-07-25). [encounterWeightBase] is the weight at danger level 1, and
-  /// [encounterWeightPerDanger] shifts it by that much per danger level above 1
-  /// (so danger D uses base + perDanger·(D−1)). Weights are relative within the
-  /// area's pool. See rarityWeights in capture_math.dart.
+  /// 2026-07-25) — relative to the other rarities' own weight. See
+  /// rarityWeights in capture_math.dart.
   final double encounterWeightBase;
-  final double encounterWeightPerDanger;
 
   /// Catch DIFFICULTY: how many times the shrinking ring must land in the golden
   /// zone (perfect hits in a row) to catch this rarity — miss once and it
@@ -77,7 +74,6 @@ class RarityConfig {
     this.healGoodsPerHp = 0.1,
     this.breedGoods = 10,
     this.encounterWeightBase = 20,
-    this.encounterWeightPerDanger = 0,
     this.catchHits = 1,
   });
 
@@ -109,7 +105,6 @@ class RarityConfig {
     double? healGoodsPerHp,
     double? breedGoods,
     double? encounterWeightBase,
-    double? encounterWeightPerDanger,
     int? catchHits,
   }) => RarityConfig(
     combatBase: combatBase ?? this.combatBase,
@@ -127,8 +122,6 @@ class RarityConfig {
     healGoodsPerHp: healGoodsPerHp ?? this.healGoodsPerHp,
     breedGoods: breedGoods ?? this.breedGoods,
     encounterWeightBase: encounterWeightBase ?? this.encounterWeightBase,
-    encounterWeightPerDanger:
-        encounterWeightPerDanger ?? this.encounterWeightPerDanger,
     catchHits: catchHits ?? this.catchHits,
   );
 
@@ -148,7 +141,6 @@ class RarityConfig {
     'healGoodsPerHp': healGoodsPerHp,
     'breedGoods': breedGoods,
     'encounterWeightBase': encounterWeightBase,
-    'encounterWeightPerDanger': encounterWeightPerDanger,
     'catchHits': catchHits,
   };
 
@@ -175,8 +167,6 @@ class RarityConfig {
       breedGoods: d('breedGoods', fallback.breedGoods),
       encounterWeightBase:
           d('encounterWeightBase', fallback.encounterWeightBase),
-      encounterWeightPerDanger:
-          d('encounterWeightPerDanger', fallback.encounterWeightPerDanger),
       catchHits: (j['catchHits'] as num?)?.toInt() ?? fallback.catchHits,
     );
   }
@@ -231,17 +221,26 @@ class SpeciesBalance {
   }
 }
 
-/// The historical code defaults: total base per rarity (270→290, +5/step),
-/// split combat:work = 180:190, growth = base ÷ 30, no attribute caps, catch
-/// rate by rarity (1.2 → 0.6). See docs/balancing.md §3.
+/// The historical code defaults: total base per rarity, split combat:work =
+/// 180:190, growth = base ÷ 30, no attribute caps, catch rate by rarity
+/// (1.2 → 0.6). See docs/balancing.md §3.
+///
+/// Totals re-curved 2026-09-07 (user request): the old ladder was flat
+/// (270→290, +5/step, only +7% common→legendary) even though encounter rarity
+/// (60×) and catch difficulty (4×/2×) already scale hard with rarity — a
+/// legendary was ~60× rarer to find and up to 4× harder to catch for barely
+/// any extra power. Re-curved to an accelerating ladder that reaches +30%
+/// common→legendary (user picked +30 over an initial +40 proposal); growth
+/// and the encounter/catch numbers above are untouched, this only widens the
+/// stat-budget spread.
 SpeciesBalance defaultSpeciesBalance() {
   const combatShare = 180 / 370;
   const totals = {
     CreatureRarity.common: 270.0,
-    CreatureRarity.uncommon: 275.0,
-    CreatureRarity.rare: 280.0,
-    CreatureRarity.epic: 285.0,
-    CreatureRarity.legendary: 290.0,
+    CreatureRarity.uncommon: 284.0,
+    CreatureRarity.rare: 302.0,
+    CreatureRarity.epic: 324.0,
+    CreatureRarity.legendary: 351.0,
   };
   const catch_ = {
     CreatureRarity.common: 1.2,
@@ -268,22 +267,14 @@ SpeciesBalance defaultSpeciesBalance() {
   // [breed] so the out-of-the-box pacing is what it always was (the Hatchery
   // used the mating figure); tune the two apart in Dev Mode.
   const hatch = breed;
-  // Encounter weight = base@danger1 + slope·(danger−1). These reproduce the old
-  // hardcoded rarityWeights curve exactly (common 60→20, rare 10→30, epic
-  // 4→18, legendary 1→7 across danger 1..5; uncommon flat 25).
+  // Encounter weight, relative to the other rarities — sums to 100 so it
+  // reads directly as percentages before any hunt-length bias.
   const weightBase = {
     CreatureRarity.common: 60.0,
     CreatureRarity.uncommon: 25.0,
     CreatureRarity.rare: 10.0,
     CreatureRarity.epic: 4.0,
     CreatureRarity.legendary: 1.0,
-  };
-  const weightSlope = {
-    CreatureRarity.common: -10.0,
-    CreatureRarity.uncommon: 0.0,
-    CreatureRarity.rare: 5.0,
-    CreatureRarity.epic: 3.5,
-    CreatureRarity.legendary: 1.5,
   };
   // Healing by rarity (user 2026-07-26): rarer = longer on the table. Seeded
   // from the old flat 25 s/HP at COMMON and rising from there, so the early
@@ -379,7 +370,6 @@ SpeciesBalance defaultSpeciesBalance() {
           healGoodsPerHp: healGoods[e.key]!,
           breedGoods: breedGoods[e.key]!,
           encounterWeightBase: weightBase[e.key]!,
-          encounterWeightPerDanger: weightSlope[e.key]!,
           catchHits: hits[e.key]!,
         ),
     },

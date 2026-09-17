@@ -58,7 +58,7 @@ List<BuildingDef> _offerable(String nodeId) {
 }
 
 /// The era the form files a building under (empty eraIds = every era).
-int? _eraOf(BuildingDef d) => d.eraIds.isEmpty ? null : d.startEraOrder;
+int? _eraOf(BuildingDef d) => d.eraIds.isEmpty ? null : d.startRegionOrder;
 
 List<BuildingDef> _inEra(List<BuildingDef> defs, int era) =>
     defs.where((d) => _eraOf(d) == null || _eraOf(d) == era).toList();
@@ -67,7 +67,7 @@ List<BuildingDef> _inEra(List<BuildingDef> defs, int era) =>
 Future<void> _selectAllEras(WidgetTester tester) async {
   await tester.tap(find.byType(DropdownButtonFormField<int?>));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('All eras').last);
+  await tester.tap(find.text('All regions').last);
   await tester.pumpAndSettle();
 }
 
@@ -83,7 +83,7 @@ void main() {
     expect(find.text(kBuildingDefs['trading_post']!.name), findsOneWidget);
   });
 
-  testWidgets('on «All eras» every FREE building is offered, none dropped', (
+  testWidgets('on «All regions» every FREE building is offered, none dropped', (
     tester,
   ) async {
     await _pump(tester, kPathNodes['node_11']!);
@@ -132,7 +132,7 @@ void main() {
     ) async {
       await _pump(tester, kPathNodes['node_11']!);
       // Era I is what battle 11 is, and the dropdown says so up front.
-      expect(find.textContaining('Era 1'), findsWidgets);
+      expect(find.textContaining('Region 1'), findsWidgets);
       // A later era's building is not in the way.
       final later = _offerable('node_11').firstWhere((d) => _eraOf(d) == 3);
       expect(find.text(later.name), findsNothing, reason: later.id);

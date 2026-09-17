@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
+import '../common/widgets/app_back_button.dart';
 import '../common/widgets/parchment_kit.dart';
 import '../settlement/widgets/scroll_paper.dart'
     show kParchmentLight, kParchmentMid;
@@ -18,19 +19,26 @@ import 'services/combat_engine.dart';
 import 'services/expedition_controller.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/creature_sprite.dart' show decodeWidthFor;
+import 'widgets/wild_preview.dart';
+import '../../core/ui/pressable.dart';
 
 // The catch moment (user design, 2026-07-15; QTE moved INTO the battle
-// 2026-07-18): fight the found monster down into its catchable band — the rarer
-// it is, the lower it must go (catchHpThreshold), and killing it forfeits the
-// catch. Once it's in the band the battle's Catch button lights up; pressing it
-// plays the ring QTE right there in the fight. A caught wild pops back here as a
-// [CatchSuccess]; a MISS just spends that turn and the fight goes on.
+// 2026-07-18; hunts rebuilt as ONE continuous multi-wild battle 2026-09-11):
+// fight the wilds down into their catchable band — the rarer one is, the
+// lower it must go (catchHpThreshold), and killing one forfeits ITS catch,
+// not the fight. Once a wild is in the band the battle's Catch button lights
+// up for it; pressing it plays the ring QTE right there and, hit or miss,
+// the fight goes on (see BattleScreen._catchSucceed/_catchMiss).
 //
-// A longer hunt brings back SEVERAL finds (kCaptureHuntOptions) — they're
-// played back to back, each its own battle. Progress is checkpointed after
-// every find (ExpeditionController.advanceCaptureFind), so leaving and
-// reopening resumes at the next unplayed find and can never double-credit.
-// Fleeing a battle skips only that find; a wiped group forfeits the rest.
+// A longer hunt still brings back SEVERAL finds (kCaptureHuntOptions) — but
+// they're now ALL fielded together in one battle (CombatEngine's own
+// field-of-3-plus-bench, the same mechanic dungeon/Survival/Training battles
+// already use), not played one at a time. That's what fixed the problem a
+// solo hunter used to have on a long hunt: N sequential fights with no HP
+// reset between them meant it would get KO'd partway through and forfeit
+// every find after that (user: "Das schaffe ich wohl mit nur einem Monster
+// nicht"). The whole battle is one atomic unit — no per-find checkpoint any
+// more, same as any other fight in the game already has no mid-battle save.
 class CaptureEncounterScreen extends StatefulWidget {
   final Expedition expedition;
   const CaptureEncounterScreen({super.key, required this.expedition});
@@ -42,84 +50,69 @@ class CaptureEncounterScreen extends StatefulWidget {
 enum _Phase { intro, done }
 
 class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
-  // The hunt's rolled finds and which one is up next (resumes from the
-  // persisted checkpoint).
-  late final List<String> _findIds;
-  late int _findIndex;
   late final int _level;
 
-  // Per-find state — reset by _prepareFind().
-  SpeciesDef? _species;
-  Combatant? _wild;
-  // A caught wild that had nowhere to go (housing full) — held so the player can
-  // free a slot in the Monsters screen and come back to keep it, instead of
-  // losing it (user 2026-07-17). Null once committed or when there was room.
-  Combatant? _pendingWild;
+  /// Every find that still resolves to a real species, built once. A find
+  /// whose species def was since removed is simply left out — with several
+  /// wilds fielded at once there's no single "current find" left to show a
+  /// dedicated "trail went cold" screen for; it just quietly isn't there.
+  late final List<Combatant> _wilds;
+
   _Phase _phase = _Phase.intro;
-  bool _caught = false;
   bool _finishing = false;
-  // Set once finishCaptureTrip ran (last find played or hunt forfeited) —
-  // flips the done button from "Next find" to "Head home".
-  bool _tripFinished = false;
-  // Overrides the done-overlay line when the battle decided the outcome —
-  // defeated wild, wiped group, fled.
-  String? _doneText;
+
+  // Set once the one continuous battle has resolved.
+  int _caughtCount = 0;
+  int _defeatedCount = 0;
+  int _lostCount = 0; // forfeited: fled, or a wipe left some unfought
+  List<Combatant> _pendingWilds = []; // caught, but no room to house (yet)
+  String? _doneNote; // overrides the summary line (wipe/cold trail)
 
   @override
   void initState() {
     super.initState();
     final e = widget.expedition;
-    _findIds = e.captureFindSpeciesIds;
-    _findIndex = _findIds.isEmpty
-        ? 0
-        : e.captureFindsDone.clamp(0, _findIds.length - 1);
     _level = (e.payload['level'] as num?)?.toInt() ?? 1;
-    _prepareFind();
-  }
-
-  /// Loads find [_findIndex] and resets all per-find state.
-  void _prepareFind() {
-    _species = _findIds.isEmpty ? null : kSpeciesDefs[_findIds[_findIndex]];
-    _caught = false;
-    _finishing = false;
-    _doneText = null;
-    _pendingWild = null;
-    final species = _species;
-    if (species != null) {
-      // Jumpstart: the intro's first battle is fought by a lone starter, so the
-      // wild is weakened while the chain runs. The inline QTE is NOT eased — but
-      // a missed tap during the tutorial restarts the ring instead of ending the
-      // find (BattleScreen.guaranteedCatch), so the catch stays a skill check
-      // the player simply cannot fail out of.
-      _wild = Combatant.fromSpecies(
-        species,
-        level: _level,
-        id: 'wild',
-        statScale: SettlementController().jumpstartActive
-            ? kJumpstartEnemyStatMult
-            : kCaptureWildStatMult,
-      )
-        // Tutorial promise: "it cannot faint" — overkill (which normally
-        // forfeits the find) is impossible, the wild floors at 1 HP.
-        ..cannotBeKoed = _introRun;
-    } else {
-      _wild = null;
+    final wilds = <Combatant>[];
+    final ids = e.captureFindSpeciesIds;
+    for (var i = 0; i < ids.length; i++) {
+      final species = kSpeciesDefs[ids[i]];
+      if (species == null) continue;
+      wilds.add(
+        Combatant.fromSpecies(
+          species,
+          level: _level,
+          id: 'wild$i',
+          // Jumpstart: the intro's first battle is fought by a lone starter,
+          // so every wild is weakened while the chain runs. The inline QTE
+          // is NOT eased — but a missed tap during the tutorial restarts the
+          // ring instead of burning the attempt (BattleScreen.guaranteedCatch),
+          // so the catch stays a skill check the player cannot fail out of.
+          statScale: SettlementController().jumpstartActive
+              ? kJumpstartEnemyStatMult
+              : kCaptureWildStatMult,
+        )
+          // Tutorial promise: "it cannot faint" — overkill (which normally
+          // forfeits that wild's own catch) is impossible, it floors at 1 HP.
+          ..cannotBeKoed = _introRun,
+      );
+    }
+    _wilds = wilds;
+    if (_wilds.isEmpty) {
+      ExpeditionController().logResult('A trail went cold — nothing there.');
+      _forfeitRest(null, immediate: true);
     }
   }
 
   /// True while the guided tutorial owns this hunt: the catch is guaranteed
-  /// (HP-floored wild, endlessly retried QTE).
+  /// (HP-floored wilds, endlessly retried QTE).
   bool get _introRun => SettlementController().introStep.isActive;
 
-  bool get _isLastFind => _findIndex + 1 >= _findIds.length;
-
-  /// The battle phase: fight the wild down into its catchable band, then use the
-  /// in-battle Catch button. A successful catch pops [CatchSuccess]; killing it
-  /// or withdrawing loses just this find; a wiped group forfeits the rest.
+  /// The one continuous battle: every fielded/benched wild fought and caught
+  /// or defeated freely until none are left, the team wipes, or the player
+  /// flees.
   Future<void> _startBattle() async {
-    final species = _species;
-    final wild = _wild;
-    if (species == null || wild == null) return;
+    if (_wilds.isEmpty) return;
     final creatures = CreaturesController();
     final team = widget.expedition.memberIds
         .map(creatures.byId)
@@ -136,9 +129,9 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
       MaterialPageRoute(
         builder: (_) => BattleScreen(
           team: team,
-          enemies: [wild],
-          title: 'Wild ${species.name}',
-          catchThresholdFraction: catchHpThreshold(species.rarity),
+          enemies: _wilds,
+          title: _wilds.length > 1 ? 'Wild hunt' : 'Wild encounter',
+          isCapture: true,
           guaranteedCatch: _introRun,
           // A hunt is fought in the region it was sent to, so the battlefield
           // looks like that region (user 2026-07-31).
@@ -148,211 +141,277 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
     );
     if (!mounted) return;
 
-    // Caught it in the fight — record it.
-    if (result is CatchSuccess) {
-      await _endFind(caught: true);
+    if (result is HuntBattleResult) {
+      await _finishHunt(result);
       return;
     }
     if (result == CombatOutcome.defeat) {
       await _forfeitRest('Your group was defeated — the hunt is over.');
       return;
     }
-    final note = result == CombatOutcome.victory
-        ? '${species.name} was defeated — nothing left to catch.'
-        : '${species.name} escaped as you withdrew.';
-    await _endFind(caught: false, note: note);
+    // Fled before the fight otherwise resolved — nothing was caught or
+    // defeated.
+    await _finishHunt(const HuntBattleResult(CombatOutcome.fled, [], 0));
   }
 
-  /// Resolves the CURRENT find (caught or lost), checkpoints it, and — after
-  /// the last find — closes the whole trip (casualties, member release).
-  Future<void> _endFind({required bool caught, String? note}) async {
+  /// Resolves the whole hunt from the battle's own result: houses every
+  /// catch (any that don't fit come back as [_pendingWilds]), logs one
+  /// summary line, and ends the trip — all in one shot, since the battle
+  /// itself was one atomic unit.
+  Future<void> _finishHunt(HuntBattleResult result) async {
     if (_finishing) return;
     _finishing = true;
-    final ctrl = ExpeditionController();
-    final wild = _wild;
-    if (caught && wild != null) {
-      if (CreaturesController().housingFull) {
-        // No room — hold the catch; the done overlay lets the player free a
-        // slot and come back to keep it (see _goReleaseAndReturn).
-        _pendingWild = wild;
-      } else {
-        await ctrl.recordCatch(wild);
-      }
-    } else if (note != null) {
-      ctrl.logResult(note);
-    } else if (wild != null) {
-      ctrl.logResult('${wild.name} slipped away!');
+    final resolved = result.caught.length + result.defeatedCount;
+    final lost = _wilds.length - resolved;
+    if (lost > 0) {
+      ExpeditionController().logResult(
+        '$lost find${lost > 1 ? 's' : ''} left unplayed — '
+        '${result.outcome == CombatOutcome.fled ? 'you withdrew.' : 'the hunt ended early.'}',
+      );
     }
-    await ctrl.advanceCaptureFind(widget.expedition);
-    if (_isLastFind) {
-      await ctrl.finishCaptureTrip(widget.expedition);
-      _tripFinished = true;
-    }
+    final pending = await ExpeditionController().resolveCaptureTrip(
+      widget.expedition,
+      caught: result.caught,
+      defeatedCount: result.defeatedCount,
+    );
     if (mounted) {
       setState(() {
-        _caught = caught;
-        _doneText = note;
+        _caughtCount = result.caught.length;
+        _defeatedCount = result.defeatedCount;
+        _lostCount = lost;
+        _pendingWilds = pending;
         _phase = _Phase.done;
       });
     }
   }
 
-  /// Ends the WHOLE hunt early (wiped/unconscious group): remaining finds are
-  /// forfeited without being played.
-  Future<void> _forfeitRest(String note) async {
+  /// Ends the WHOLE hunt early (wiped/unconscious group, or nothing to hunt
+  /// at all): every find is forfeited without being played.
+  Future<void> _forfeitRest(String? note, {bool immediate = false}) async {
     if (_finishing) return;
     _finishing = true;
     await ExpeditionController().finishCaptureTrip(
       widget.expedition,
       note: note,
     );
-    _tripFinished = true;
-    if (mounted) {
-      setState(() {
-        _caught = false;
-        _doneText = note;
-        _phase = _Phase.done;
-      });
-    }
+    _lostCount = _wilds.length;
+    _doneNote = note;
+    if (immediate) return; // called from initState — build() runs fresh
+    if (mounted) setState(() => _phase = _Phase.done);
   }
 
-  /// The catch had no room: open the Monsters screen so the player can release
-  /// one or more, then — back here — commit the held catch if a slot is now free.
+  /// The catch(es) had no room: open the Monsters screen so the player can
+  /// release one or more, then — back here — claim whichever pending wilds
+  /// now fit. Several can be pending at once (2026-09-11 — a continuous
+  /// battle can catch more than housing has room for in one go), so this
+  /// retries all of them, not just one.
   Future<void> _goReleaseAndReturn() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const CollectionScreen()),
     );
     if (!mounted) return;
-    final wild = _pendingWild;
-    if (wild != null && !CreaturesController().housingFull) {
-      await ExpeditionController().recordCatch(wild);
-      if (mounted) setState(() => _pendingWild = null);
-    } else {
-      // Still full (nothing released) — keep the prompt.
-      setState(() {});
+    final ctrl = ExpeditionController();
+    final stillPending = <Combatant>[];
+    for (final wild in _pendingWilds) {
+      final kept =
+          CreaturesController().housingFull ? null : await ctrl.claimPendingWild(wild);
+      if (kept == null) stillPending.add(wild);
     }
-  }
-
-  /// Moves on to the next unplayed find (done overlay's "Next find" button).
-  void _nextFind() {
-    setState(() {
-      _findIndex += 1;
-      _prepareFind();
-      _phase = _Phase.intro;
-    });
+    if (mounted) setState(() => _pendingWilds = stillPending);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final species = _species;
-    return Scaffold(
-      // The same sheet as everything else (user 2026-07-27) — the encounter is
-      // a page you are taken to, not a place of its own.
-      backgroundColor: kParchmentMid,
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [kParchmentLight, kParchmentMid],
-          ),
-        ),
-        child: SafeArea(
-        child: species == null || _wild == null
-            ? _goneView()
-            : Column(
-                children: [
-                  const SizedBox(height: 18),
-                  Text('A wild encounter!', style: FoE.title(size: 16)),
-                  if (_findIds.length > 1)
-                    Text(
-                      'Find ${_findIndex + 1} / ${_findIds.length}',
-                      style: FoE.dim(size: 11),
-                    ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${species.name} · Lv $_level',
-                    style: FoE.label(size: 13)
-                        .copyWith(color: species.rarity.color),
-                  ),
-                  Text(species.rarity.label,
-                      style: FoE.dim(size: 11)
-                          .copyWith(color: species.rarity.color)),
-                  Expanded(child: Center(child: _sprite(species))),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: _footer(species),
-                  ),
-                ],
-              ),
+  Widget build(BuildContext context) => Scaffold(
+    // The same sheet as everything else (user 2026-07-27) — the encounter is
+    // a page you are taken to, not a place of its own.
+    backgroundColor: kParchmentMid,
+    body: DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [kParchmentLight, kParchmentMid],
         ),
       ),
+      child: SafeArea(
+        // A back button was simply missing (user 2026-09-14) — nothing
+        // stopped a player who wanted to leave the fight for later (the
+        // hunt already landed; the encounter is deferrable, see the class
+        // doc above) without going through it right now. Positioned over
+        // everything rather than folded into [_body]'s own Column so it
+        // reads the same regardless of phase, same as every other screen's
+        // corner back arrow.
+        child: Stack(
+          children: [
+            _wilds.isEmpty ? _goneView() : _body(),
+            Positioned(
+              top: 8,
+              left: 8,
+              child: AppBackButton(onTap: () => Navigator.of(context).pop()),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _body() => Column(
+    children: [
+      const SizedBox(height: 18),
+      Text(
+        _wilds.length == 1 ? 'A wild encounter!' : 'A wild hunt!',
+        style: FoE.title(size: 16),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        _wilds.length == 1
+            ? '1 find, Lv $_level'
+            : '${_wilds.length} finds, Lv $_level',
+        style: FoE.dim(size: 11),
+      ),
+      Expanded(child: Center(child: _preview())),
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: _footer(),
+      ),
+    ],
+  );
+
+  /// A row of small sprites standing in for "what this hunt has fielded" —
+  /// there's no single "the" find any more once a hunt can bring back
+  /// several at once (2026-09-11), so this replaces the old one big
+  /// species portrait.
+  Widget _preview() {
+    final shown = _wilds.take(9).toList();
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final w in shown) _thumb(w),
+        if (_wilds.length > shown.length)
+          SizedBox(
+            width: 56,
+            height: 56,
+            child: Center(
+              child: Text(
+                '+${_wilds.length - shown.length}',
+                style: FoE.dim(size: 13),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
-  Widget _sprite(SpeciesDef species) => SizedBox(
-    width: 180,
-    height: 180,
-    child: species.stageAt(0).imageUrl == null
-        ? const Icon(Icons.pets, color: kAccent, size: 80)
-        : Image.network(
-            species.stageAt(0).imageUrl!,
-            filterQuality: FilterQuality.none,
-            fit: BoxFit.contain,
-            cacheWidth: decodeWidthFor(context, 180),
-            errorBuilder: (_, _, _) =>
-                const Icon(Icons.pets, color: kAccent, size: 80),
+  Widget _thumb(Combatant c) {
+    final species = c.speciesId == null ? null : kSpeciesDefs[c.speciesId];
+    final url = species?.stageAt(0).imageUrl;
+    // Never caught before (user 2026-09-14) — same "discovered" test the
+    // Bestiary and the detail screen's own preview badge use, shown right
+    // here too so a new species stands out before you even open the
+    // preview to check.
+    final isNew =
+        c.speciesId != null &&
+        !CreaturesController().creatures.any(
+          (owned) => owned.speciesId == c.speciesId,
+        );
+    final art = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        SizedBox(
+          width: 56,
+          height: 56,
+          child: url == null
+              ? Icon(Icons.pets, color: species?.rarity.color ?? kAccent, size: 32)
+              : Image.network(
+                  url,
+                  filterQuality: FilterQuality.none,
+                  fit: BoxFit.contain,
+                  cacheWidth: decodeWidthFor(context, 56),
+                  errorBuilder: (_, _, _) =>
+                      Icon(Icons.pets, color: species?.rarity.color, size: 32),
+                ),
+        ),
+        if (isNew)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: ShapeDecoration(
+                color: FoE.goldBright,
+                shape: FoE.facet(radius: 5),
+              ),
+              child: Text(
+                'NEW',
+                style: FoE.dim(size: 7).copyWith(
+                  color: kInk,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
           ),
-  );
+      ],
+    );
+    // Tap to preview THIS find's own stats before deciding whether it's
+    // worth fighting for (user 2026-09-14: "ich will den Monsterdetailscreen
+    // über den Catchmodus öffnen können für genau dieses noch nicht
+    // gefangene Monster") — only while the battle hasn't started yet; once
+    // it's over these thumbnails show what was caught/lost, not a find still
+    // worth sizing up.
+    if (_phase != _Phase.intro) return art;
+    return Pressable(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => openWildPreview(context, c),
+      child: art,
+    );
+  }
 
-  Widget _footer(SpeciesDef species) {
+  Widget _footer() {
     switch (_phase) {
       case _Phase.intro:
-        final pct = (catchHpThreshold(species.rarity) * 100).round();
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Fight it down to ≤$pct% HP — without killing it! — to light up '
-              'the Catch button. The lower its HP, the BIGGER the golden ring. '
-              'Then tap Catch and hit the ring: '
-              '${qteHitsRequired(species.rarity) == 1 ? 'one clean hit and it\'s yours' : '${qteHitsRequired(species.rarity)} perfect hits in a row'} — a miss just spends that turn.',
+              'Fight a wild down into its catchable band — without killing '
+              'it! — to light up Catch for it. Rarer finds need more, '
+              'perfect hits in a row; a miss just spends AP and the fight '
+              'goes on, same as attacking. Catch what you want, fight the '
+              'rest down for XP.',
               textAlign: TextAlign.center,
               style: FoE.dim(size: 12),
             ),
             const SizedBox(height: 12),
-            _bigBtn('⚔️ Face it!', _startBattle),
+            _bigBtn('⚔️ Face them!', _startBattle),
           ],
         );
       case _Phase.done:
-        // Caught but no room to house it — offer to free a slot and keep it.
-        if (_pendingWild != null) {
+        if (_pendingWilds.isNotEmpty) {
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                '🎉 ${species.name} was caught!',
-                textAlign: TextAlign.center,
-                style: FoE.title(size: 15).copyWith(color: kParchmentGo),
-              ),
+              _summaryLine(),
               const SizedBox(height: 8),
               Text(
-                '🏠 But your settlement is full. Release a monster to make '
-                'room and keep it — otherwise it stays behind.',
+                '🏠 ${_pendingWilds.length} caught, but your settlement is '
+                'full. Release monsters to make room and keep '
+                '${_pendingWilds.length > 1 ? 'them' : 'it'} — otherwise '
+                '${_pendingWilds.length > 1 ? 'they stay' : 'it stays'} '
+                'behind.',
                 textAlign: TextAlign.center,
                 style: FoE.dim(size: 12).copyWith(color: kAccent),
               ),
               const SizedBox(height: 12),
               _bigBtn('🐾 Free a slot (Monsters)', _goReleaseAndReturn),
               const SizedBox(height: 8),
-              GestureDetector(
-                onTap: _tripFinished
-                    ? () => Navigator.of(context).pop()
-                    : _nextFind,
+              Pressable(
+                onTap: () => Navigator.of(context).pop(),
                 child: Text(
-                  _tripFinished
-                      ? 'Leave it behind · Head home'
-                      : 'Leave it behind · Next find',
+                  'Leave ${_pendingWilds.length > 1 ? 'them' : 'it'} behind '
+                  '· Head home',
                   style: FoE.dim(size: 12).copyWith(color: kInkFaint),
                 ),
               ),
@@ -362,29 +421,41 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              _caught
-                  ? '🎉 ${species.name} was caught!'
-                  : _doneText ?? '💨 ${species.name} escaped!',
-              textAlign: TextAlign.center,
-              style: FoE.title(size: 15).copyWith(
-                color: _caught ? kParchmentGo : const Color(0xFF9B3B22),
-              ),
-            ),
+            _summaryLine(),
             const SizedBox(height: 12),
-            _tripFinished
-                ? _bigBtn('Head home', () => Navigator.of(context).pop())
-                : _bigBtn(
-                    '➡️ Next find (${_findIndex + 2}/${_findIds.length})',
-                    _nextFind,
-                  ),
+            _bigBtn('Head home', () => Navigator.of(context).pop()),
           ],
         );
     }
   }
 
-  /// Shown when the CURRENT find's species no longer exists (def removed) —
-  /// skips just that find; the rest of the hunt goes on.
+  /// The done-phase headline: caught / defeated / lost, plainly (user
+  /// 2026-09-11 — no special framing needed for a "good" kill).
+  Widget _summaryLine() {
+    if (_doneNote != null) {
+      return Text(
+        _doneNote!,
+        textAlign: TextAlign.center,
+        style: FoE.title(size: 15).copyWith(color: const Color(0xFF9B3B22)),
+      );
+    }
+    final parts = <String>[
+      if (_caughtCount > 0) '🎉 $_caughtCount caught',
+      if (_defeatedCount > 0) '⚔️ $_defeatedCount defeated for XP',
+      if (_lostCount > 0) '💨 $_lostCount lost',
+    ];
+    return Text(
+      parts.isEmpty ? 'Nothing came of it.' : parts.join('  ·  '),
+      textAlign: TextAlign.center,
+      style: FoE.title(
+        size: 15,
+      ).copyWith(color: _caughtCount > 0 ? kParchmentGo : kInk),
+    );
+  }
+
+  /// Shown only when NONE of the hunt's finds resolve to a real species any
+  /// more (every one removed from Dev Mode) — the whole trip is forfeited
+  /// immediately rather than opening onto an empty fight.
   Widget _goneView() => Center(
     child: Padding(
       padding: const EdgeInsets.all(24),
@@ -399,17 +470,7 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
             style: FoE.dim(size: 12),
           ),
           const SizedBox(height: 14),
-          _bigBtn(_isLastFind ? 'Head home' : '➡️ Next find', () async {
-            final ctrl = ExpeditionController();
-            ctrl.logResult('A trail went cold — nothing there.');
-            await ctrl.advanceCaptureFind(widget.expedition);
-            if (_isLastFind) {
-              await ctrl.finishCaptureTrip(widget.expedition);
-              if (mounted) Navigator.of(context).pop();
-            } else {
-              _nextFind();
-            }
-          }),
+          _bigBtn('Head home', () => Navigator.of(context).pop()),
         ],
       ),
     ),

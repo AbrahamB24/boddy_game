@@ -18,6 +18,7 @@ import 'services/creatures_controller.dart';
 import 'services/healing_cost.dart';
 import 'widgets/creature_sprite.dart';
 import '../common/widgets/recess_bar.dart';
+import '../../core/ui/pressable.dart';
 
 /// The Healing Hut.
 ///
@@ -518,7 +519,7 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
         : slots + _freeQueue!;
     final takes = room < waiting.length ? room : waiting.length;
     final live = _busy == null && takes > 0;
-    return GestureDetector(
+    return Pressable(
       onTap: live ? () => _run('all', _creatures.healAll) : null,
       child: Opacity(
         opacity: live ? 1 : 0.55,
@@ -575,7 +576,7 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
     Color color,
     VoidCallback? onTap, {
     bool filled = false,
-  }) => GestureDetector(
+  }) => Pressable(
     behavior: HitTestBehavior.opaque,
     onTap: onTap,
     child: Opacity(

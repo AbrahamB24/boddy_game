@@ -45,13 +45,15 @@ QUALITY = 88
 # Flutter's 100 MB image cache — which on CanvasKit came out as "memory access
 # out of bounds" inside the wasm heap rather than as a clean eviction.
 #
-# 640 is chosen against the DEVICE pixels, not against taste: the widest
-# building is drawn 320 logical px across, and on a 2x screen at map zoom 1
-# that is exactly 640 — so the art lands 1:1 and every pixel shipped is a
-# pixel used. Zooming past 1x softens it, which a stylised sprite survives;
-# shipping four times the pixels for that case is what broke the web build.
-# docs/renders keeps the full-size pictures; only what SHIPS is capped.
-APP_MAX_WIDTH = 640
+# 640 was chosen against the DEVICE pixels: the widest building is drawn 320
+# logical px across, and on a 2x screen at map zoom 1 that is exactly 640.
+# Raised to 960 (user 2026-09-06) for 3x screens — 320 logical px * 3 — at the
+# cost of ~92 MB of decoded RGBA for the current 24 assets, close enough to
+# Flutter's 100 MB default cache that main.dart now raises that budget too
+# (see PaintingBinding.instance.imageCache there). Zooming past 1x still
+# softens it, which a stylised sprite survives; docs/renders keeps the
+# full-size pictures, only what SHIPS is capped.
+APP_MAX_WIDTH = 960
 
 
 def pack(src: pathlib.Path, dst_dir: pathlib.Path, quality: int,

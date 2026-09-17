@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/ui/pressable.dart';
 import '../../settlement/widgets/scroll_paper.dart' show kParchmentInk;
 import '../models/breeding_job.dart';
 import '../models/creature_enums.dart';
@@ -58,7 +59,7 @@ class EggCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final species = kSpeciesDefs[job.speciesId];
 
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       // THE WHOLE CELL TAKES THE TAP (user 2026-07-27: "wenn ich auf das ei
       // klicke, soll es auch ausgewählt werden, nicht nur der name").

@@ -17,19 +17,20 @@ void main() {
       expect(partySizeForBattle(15), 3);
     });
 
-    test('the cap climbs to 6 within Era II and never past it', () {
-      // Somewhere in Era II the cap must reach the maximum of 6.
-      final era2Boss = bossBattleForEra(2);
-      expect(partySizeForBattle(era2Boss), kMaxPartySize);
+    test('the cap climbs to 6 within region II and never past it', () {
+      // Somewhere in region II the cap must reach the maximum of 6.
+      final region2Boss = 2 * kFallbackBattlesPerRegion;
+      expect(partySizeForBattle(region2Boss), kMaxPartySize);
       // And it is bounded there no matter how far the line runs.
       expect(partySizeForBattle(10000), kMaxPartySize);
     });
 
-    test('3 is the Era-I cap: it is only exceeded once Era II begins', () {
-      final era1Boss = bossBattleForEra(1);
-      expect(partySizeForBattle(era1Boss), 3);
-      // The step to 4 lands on Era II's first battle, not before.
-      expect(partySizeForBattle(era1Boss + 1), 4);
+    test('3 is the region-I cap: it is only exceeded once region II begins',
+        () {
+      final region1Boss = kFallbackBattlesPerRegion;
+      expect(partySizeForBattle(region1Boss), 3);
+      // The step to 4 lands on region II's first battle, not before.
+      expect(partySizeForBattle(region1Boss + 1), 4);
     });
 
     test('unlockedPartySize mirrors the furthest battle reached', () {
@@ -39,24 +40,12 @@ void main() {
     });
   });
 
-  group('battle ↔ era mapping (one continuous line)', () {
-    test('the first segment is Era I, boss included', () {
-      expect(eraForBattle(1), 1);
-      expect(eraForBattle(kBattlesPerEra), 1);
-      expect(eraForBattle(kBattlesPerEra + 1), 2);
-    });
-
-    test('bosses sit at the end of each era segment', () {
+  group('isBossBattle fallback formula (real content overrides via '
+      "PathNode.isBoss — see path_node.dart's regionForBattle)", () {
+    test('bosses sit at the end of each fallback region segment', () {
       expect(isBossBattle(kBattlesBeforeBoss), isFalse);
-      expect(isBossBattle(bossBattleForEra(1)), isTrue);
-      expect(isBossBattle(bossBattleForEra(2)), isTrue);
-      expect(bossBattleForEra(1), kBattlesPerEra);
-    });
-
-    test('local index runs 1..kBattlesPerEra within an era', () {
-      expect(localBattleIndex(1), 1);
-      expect(localBattleIndex(kBattlesPerEra), kBattlesPerEra);
-      expect(localBattleIndex(kBattlesPerEra + 1), 1);
+      expect(isBossBattle(kFallbackBattlesPerRegion), isTrue);
+      expect(isBossBattle(2 * kFallbackBattlesPerRegion), isTrue);
     });
   });
 
@@ -69,7 +58,7 @@ void main() {
       // Bosses spike above the curve, so the fight AFTER a boss dips back to it
       // — that break is by design. The regular fights themselves never drop.
       var prev = 0;
-      for (var n = 1; n <= bossBattleForEra(2); n++) {
+      for (var n = 1; n <= 2 * kFallbackBattlesPerRegion; n++) {
         if (isBossBattle(n)) continue;
         final lvl = enemyLevelForBattle(n);
         expect(lvl, greaterThanOrEqualTo(prev), reason: 'battle $n');
@@ -78,7 +67,7 @@ void main() {
     });
 
     test('bosses fight above their line position', () {
-      final boss = bossBattleForEra(1);
+      final boss = kFallbackBattlesPerRegion;
       // A boss is stronger than the plain curve at its own position.
       expect(enemyLevelForBattle(boss), 1 + (boss - 1) ~/ 2 + kBossLevelBonus);
     });
@@ -89,7 +78,7 @@ void main() {
         () {
       // The whole point: you are never confronted with as many monsters as you
       // can bring until you have unlocked a bigger party.
-      for (var n = 1; n <= bossBattleForEra(2); n++) {
+      for (var n = 1; n <= 2 * kFallbackBattlesPerRegion; n++) {
         expect(enemyCountForBattle(n), lessThan(partySizeForBattle(n) + 1));
         expect(enemyCountForBattle(n), lessThanOrEqualTo(partySizeForBattle(n)));
         expect(enemyCountForBattle(n), greaterThanOrEqualTo(1));

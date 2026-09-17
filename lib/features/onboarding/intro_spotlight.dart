@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
+import '../../core/ui/pressable.dart';
 
 // ── Tutorial spotlight ────────────────────────────────────────
 // The guided intro (user design 2026-07-17) highlights exactly ONE control at
@@ -268,7 +269,7 @@ class _Scrim extends StatelessWidget {
   const _Scrim({required this.rect, required this.color, this.onTap});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) => Pressable(
     behavior: HitTestBehavior.opaque,
     onTap: onTap ?? () {},
     child: ColoredBox(color: color),

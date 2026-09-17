@@ -12,9 +12,9 @@ import '../../creatures/models/species_balance.dart';
 import '../../creatures/models/species_def.dart';
 import '../../creatures/models/xp_balance.dart';
 import '../data/building_definitions.dart';
-import '../data/era_definitions.dart';
 import '../data/gather_defs.dart';
 import '../data/item_definitions.dart';
+import '../../../core/ui/pressable.dart';
 
 // ── Getting the tuned state OUT (user 2026-07-29) ──────────────────────────
 // "Ich will 'unabhängig' von dir sein. Alles was ich im Devmode eingebe, soll
@@ -106,12 +106,6 @@ class DevExportSheet extends StatelessWidget {
       '${kGatherDefs.length} Abbau-Einstellungen.',
       () => {for (final e in kGatherDefs.entries) e.key: e.value.toDefRow()},
     ),
-    _Export(
-      '🏺',
-      'Äras',
-      '${kEraDefs.length} Ären.',
-      () => {for (final e in kEraDefs.entries) e.key: e.value.toDefRow()},
-    ),
   ];
 
   Future<void> _copy(BuildContext context, _Export e) async {
@@ -168,7 +162,7 @@ class DevExportSheet extends StatelessWidget {
               separatorBuilder: (_, _) => const SizedBox(height: 6),
               itemBuilder: (context, i) {
                 final e = items[i];
-                return GestureDetector(
+                return Pressable(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => _copy(context, e),
                   child: Container(

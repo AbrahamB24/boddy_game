@@ -7,6 +7,7 @@ import '../../creatures/models/species_def.dart';
 import '../../creatures/widgets/battle_scene.dart';
 import '../services/game_defs_service.dart';
 import 'dev_theme.dart';
+import '../../../core/ui/pressable.dart';
 
 // Create/edit form for a single overworld AreaDef — same trusted-single-author
 // dev-content pattern as EraDefForm. `battle_stage` doubles as the unlock gate
@@ -45,7 +46,6 @@ class _AreaDefFormState extends State<AreaDefForm> {
   late int _order;
   late String _description;
   late int _battleStage;
-  late int _dangerLevel;
   late List<_SpotDraft> _spots;
   late Set<String> _pool;
   String? _bossSpeciesId;
@@ -67,7 +67,6 @@ class _AreaDefFormState extends State<AreaDefForm> {
             : kAreaDefs.values.map((a) => a.order).reduce((a, b) => a > b ? a : b) + 1);
     _description = d?.description ?? '';
     _battleStage = d?.battleStage ?? _order;
-    _dangerLevel = d?.dangerLevel ?? 1;
     _spots = [
       for (final s in d?.spots ?? const <ResourceSpotDef>[])
         _SpotDraft(
@@ -104,7 +103,6 @@ class _AreaDefFormState extends State<AreaDefForm> {
       order: _order,
       description: _description.trim(),
       battleStage: _battleStage,
-      dangerLevel: _dangerLevel,
       spots: [
         for (final s in _spots)
           ResourceSpotDef(
@@ -182,7 +180,7 @@ class _AreaDefFormState extends State<AreaDefForm> {
                       ),
                     ),
                     child: Center(
-                      child: Text('Ära $_battleStage', style: FoE.dim(size: 10)),
+                      child: Text('Region $_battleStage', style: FoE.dim(size: 10)),
                     ),
                   )
                 : Image.network(_imageUrl!, fit: BoxFit.cover),
@@ -192,7 +190,7 @@ class _AreaDefFormState extends State<AreaDefForm> {
         Expanded(
           child: Text(
             _imageUrl == null
-                ? 'Kein Bild — der Kampf nutzt den Verlauf dieser Ära.'
+                ? 'Kein Bild — der Kampf nutzt den Verlauf dieser Region.'
                 : 'Kampfplatz-Bild gesetzt.',
             style: FoE.dim(size: 11),
           ),
@@ -207,7 +205,7 @@ class _AreaDefFormState extends State<AreaDefForm> {
             ),
           )
         else ...[
-          GestureDetector(
+          Pressable(
             onTap: _pickImage,
             child: Container(
               padding:
@@ -274,19 +272,8 @@ class _AreaDefFormState extends State<AreaDefForm> {
                 Expanded(child: _numRow('Order', _order, onChanged: (v) => _order = v)),
               ],
             ),
-            Row(
-              children: [
-                Expanded(
-                  child: _numRow('Battle stage (unlock gate)', _battleStage,
-                      onChanged: (v) => _battleStage = v),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _numRow('Danger (1-5)', _dangerLevel,
-                      onChanged: (v) => setState(() => _dangerLevel = v.clamp(1, 5))),
-                ),
-              ],
-            ),
+            _numRow('Battle stage (unlock gate)', _battleStage,
+                onChanged: (v) => _battleStage = v),
             _imageRow(),
             _textRow('Description', _description, onChanged: (v) => _description = v),
             const SizedBox(height: 16),
@@ -382,7 +369,7 @@ class _AreaDefFormState extends State<AreaDefForm> {
   Widget _sectionLabel(String text) =>
       Text(text, style: FoE.label(size: 14).copyWith(color: FoE.gold));
 
-  Widget _chip(String label, bool selected, VoidCallback onTap) => GestureDetector(
+  Widget _chip(String label, bool selected, VoidCallback onTap) => Pressable(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -393,7 +380,7 @@ class _AreaDefFormState extends State<AreaDefForm> {
     ),
   );
 
-  Widget _addButton(String label, VoidCallback onTap) => GestureDetector(
+  Widget _addButton(String label, VoidCallback onTap) => Pressable(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -405,7 +392,7 @@ class _AreaDefFormState extends State<AreaDefForm> {
 
   Widget _saveButton() => SizedBox(
     width: double.infinity,
-    child: GestureDetector(
+    child: Pressable(
       onTap: _saving ? null : _save,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),

@@ -6,8 +6,13 @@ import '../../../core/tuning/game_tuning.dart';
 import '../../creatures/models/creature_enums.dart' show CreatureStat;
 import 'building_effects.dart';
 import '../../creatures/models/path_node.dart' show pathBuildingUnlockBattle;
-import 'era_definitions.dart' show kEraDefs;
 import 'goods_definitions.dart';
+
+/// Parses the region order out of a region-id string (still `'era_N'` —
+/// renaming the id itself would mean a data migration, so it stays an
+/// internal identifier; only the MECHANIC it named is gone). Returns null for
+/// a malformed/unknown id.
+int? _regionOrderOfId(String id) => int.tryParse(id.split('_').last);
 
 // ── Building levels (user design 2026-07-17) ────────────────
 // Every placed building carries a level (PlacedBuilding.level, default 1).
@@ -34,14 +39,15 @@ const int kFreeBuildingLevelCap = 5;
 /// form and the game disagree.
 const int kMaxBuildingLevel = 10;
 
-/// Design formula for a successor building's base values, one era up:
-/// base(era N) ≈ base(era 1) × this^(N−1). With the ×1.6 step and the linear
-/// yield curve, era N+1 level 1 stays below a maxed era-N building, and the
-/// crossover lands at level 6 — exactly the "old L10 beats new L1, new wins
-/// from L5/6" the user asked for. A GUIDE for authoring content (dev mode /
-/// fallback defs), not something read at runtime.
-double eraProductionMult(int eraOrder) =>
-    math.pow(1.6, eraOrder.clamp(1, 99) - 1).toDouble();
+/// Design formula for a successor building's base values, one region up:
+/// base(region N) ≈ base(region 1) × this^(N−1). With the ×1.6 step and the
+/// linear yield curve, region N+1 level 1 stays below a maxed region-N
+/// building, and the crossover lands at level 6 — exactly the "old L10
+/// beats new L1, new wins from L5/6" the user asked for. A GUIDE for
+/// authoring content (dev mode / fallback defs), not something read at
+/// runtime.
+double regionProductionMult(int regionOrder) =>
+    math.pow(1.6, regionOrder.clamp(1, 99) - 1).toDouble();
 
 /// Worker slots a role offers at building [level]. The old automatic "+1 slot
 /// every 3 levels" rule is GONE (user 2026-07-25): slot growth is authored
@@ -81,23 +87,24 @@ double buildingCostFactor(int level) => math.pow(1.6, level - 1).toDouble();
 /// Build-time multiplier to build/upgrade TO [level]: same shape as cost.
 double buildingTimeFactor(int level) => math.pow(1.6, level - 1).toDouble();
 
-/// The highest level [def] may reach while the settlement is in era [eraOrder].
-/// Reads the def's per-era caps ([BuildingDef.maxLevelPerEra]): the level of the
-/// highest era key ≤ eraOrder — so a persistent building unlocks more levels as
-/// the settlement ascends. Empty map → the [kMaxBuildingLevel] default. A
-/// building whose earliest defined cap is a LATER era floors to that earliest
-/// cap.
+/// The highest level [def] may reach while the settlement has reached region
+/// [regionOrder]. Reads the def's per-region caps
+/// ([BuildingDef.maxLevelPerEra]): the level of the highest region key ≤
+/// regionOrder — so a persistent building unlocks more levels as the
+/// settlement pushes on. Empty map → the [kMaxBuildingLevel] default. A
+/// building whose earliest defined cap is a LATER region floors to that
+/// earliest cap.
 ///
 /// The AUTHORED number wins (user 2026-07-26). This used to clamp it to
 /// [kMaxBuildingLevel], so a def edited to 21 levels in Dev Mode still stopped
 /// at 10 in play, with no hint anywhere that the extra levels were being
 /// thrown away.
-int maxBuildingLevelFor(BuildingDef def, int eraOrder) {
+int maxBuildingLevelFor(BuildingDef def, int regionOrder) {
   final m = def.maxLevelPerEra;
   if (m.isEmpty) return kMaxBuildingLevel;
   int? bestEra;
   for (final era in m.keys) {
-    if (era <= eraOrder && (bestEra == null || era > bestEra)) bestEra = era;
+    if (era <= regionOrder && (bestEra == null || era > bestEra)) bestEra = era;
   }
   if (bestEra != null) return math.max(1, m[bestEra]!);
   final earliest = m.keys.reduce((a, b) => a < b ? a : b);
@@ -484,30 +491,46 @@ class WorkshopRole {
 }
 
 // ── Game constants ────────────────────────────────────────
-// Every number below is a DIAL since 2026-07-29 (Settlement → Energie): they
-// decide the whole day's pacing, and pacing is the thing that gets retuned
-// most. The arithmetic between them stays here so the three can never
-// disagree — steps buy energy, energy drains over a chosen number of hours.
-double get kEnergyPerStep => 1.0 / GameTuning.i.raw(Dials.energyStepsPerPoint);
-double get kMaxEnergy => GameTuning.i.raw(Dials.energyMax);
-// A full bar drains over `energyEmptyHours` — at the defaults (100 energy,
-// 100 steps each, 24 h) that is 10 000 steps/day to break even.
-double get kDrainPerHour =>
-    kMaxEnergy / GameTuning.i.raw(Dials.energyEmptyHours);
+// Every number below is a DIAL (Settlement → Energie): they decide the whole
+// day's pacing, and pacing is the thing that gets retuned most.
+//
+// ENERGY IS A DAILY-STEPS FORMULA, NOT A DRAINING POOL (user 2026-09-14,
+// replacing the 2026-07-27 hard gate) — there is no more "tank" that empties
+// over time. [energyMultiplierForRate] reads TODAY's step count straight
+// off [EnergyModel.stepsToday] and always returns SOME rate: 5000 steps is
+// the 100% baseline, fewer steps ramp linearly down to a floor (never a full
+// stop, unlike the old hard gate this replaces), and steps beyond 5000 buy a
+// bonus rate on top, capped at 10 000 steps/day. Nothing here ever GATES an
+// action any more — see SettlementController.hasEnergy, now permanently
+// true; every reader of this multiplies a rate by it instead.
+double get kEnergyFullSteps => GameTuning.i.raw(Dials.energyFullSteps);
+double get kEnergyFloorMultiplier =>
+    GameTuning.i.raw(Dials.energyFloorMultiplier);
+double get kEnergyBoostPerThousandSteps =>
+    GameTuning.i.raw(Dials.energyBoostPerThousandSteps);
+double get kEnergyMaxBoost => GameTuning.i.raw(Dials.energyMaxBoost);
 
-/// Production rate with the tank EMPTY — ZERO since 2026-07-27 (user: "wenn ich
-/// keine Energie habe, dann läuft nichts, keine Expedition, kein Heilen,
-/// Produzieren, Hatchen etc.").
-///
-/// It ran at 0.30 between 2026-07-21 and then, as a deliberate softening ("Boost,
-/// nicht Gate"). That is reversed: an empty settlement now stops, and energy is
-/// the gate on every action as well as on the passive tick — see
-/// SettlementController.hasEnergy.
-///
-/// Kept as a named getter rather than inlined: every reader still says WHY it
-/// multiplies by something, and the trickle now comes back from Dev Mode
-/// (Settlement → Energie) instead of from an edit here.
-double get kEnergyFloorRate => GameTuning.i.raw(Dials.energyFloorRate);
+/// The rate multiplier for [stepsToday] — 1.0 at [kEnergyFullSteps], ramping
+/// linearly from [kEnergyFloorMultiplier] at 0 steps, then bonus-ramping
+/// linearly past full at [kEnergyBoostPerThousandSteps] per 1000 extra
+/// steps, capped at `1.0 + kEnergyMaxBoost`. THE one place every rate in the
+/// game reads "how much energy do I have right now" — production,
+/// construction speed, everything [SettlementController.hasEnergy] used to
+/// gate outright.
+double energyMultiplierForSteps(int stepsToday) {
+  final full = kEnergyFullSteps;
+  final floor = kEnergyFloorMultiplier;
+  if (stepsToday <= 0) return floor;
+  if (full <= 0 || stepsToday >= full) {
+    final extra = full <= 0 ? 0.0 : (stepsToday - full).toDouble();
+    final boost = (kEnergyBoostPerThousandSteps * extra / 1000.0).clamp(
+      0.0,
+      kEnergyMaxBoost,
+    );
+    return 1.0 + boost;
+  }
+  return floor + (1.0 - floor) * (stepsToday / full);
+}
 
 /// Max simultaneous active construction sites, before any building adds more.
 int get kBaseBuildSlots => GameTuning.i.count(Dials.baseBuildSlots);
@@ -796,9 +819,12 @@ class BuildingDef {
   final Map<String, double>
   resourceCost; // keys: 'wood', 'stone' (no food — food is now a good)
   final double constructionHours;
-  // Eras this building is buildable in. Empty = available in every era
-  // (used by castle/road, which must always be placeable). A building
-  // can list several non-contiguous eras — see EraDef in era_definitions.dart.
+  // Regions this building is buildable in — still `'era_N'` id strings
+  // (renaming them would mean a data migration; only the mechanic named
+  // "era" is gone, not this internal identifier — see [_regionOrderOfId]).
+  // Empty = available in every region (used by castle/road, which must
+  // always be placeable). A building can list several non-contiguous
+  // regions.
   final List<String> eraIds;
   final bool isMainBuilding;
   final bool isUnique;
@@ -997,33 +1023,34 @@ class BuildingDef {
 
   double get constructionSeconds => constructionHours * 3600;
 
-  /// The era ORDER this building first becomes buildable in (min of [eraIds];
-  /// 1 when it lists none — the always-available structures).
-  int get startEraOrder {
+  /// The region ORDER this building first becomes buildable in (min of
+  /// [eraIds]; 1 when it lists none — the always-available structures).
+  int get startRegionOrder {
     if (eraIds.isEmpty) return 1;
-    final orders = eraIds.map((id) => kEraDefs[id]?.order).whereType<int>();
+    final orders = eraIds.map(_regionOrderOfId).whereType<int>();
     return orders.isEmpty ? 1 : orders.reduce(math.min);
   }
 
-  /// The era ORDER whose level band contains [level]. Bands are contiguous —
-  /// era E covers (prevMax, maxLevelPerEra[E]] — so a persistent building is
-  /// paid in each era's own materials as it climbs. Empty caps → [startEraOrder].
-  int eraOrderForLevel(int level) {
-    if (maxLevelPerEra.isEmpty) return startEraOrder;
-    final eras = maxLevelPerEra.keys.toList()..sort();
-    for (final e in eras) {
-      if (level <= maxLevelPerEra[e]!) return e;
+  /// The region ORDER whose level band contains [level]. Bands are
+  /// contiguous — region R covers (prevMax, maxLevelPerEra[R]] — so a
+  /// persistent building is paid in each region's own materials as it
+  /// climbs. Empty caps → [startRegionOrder].
+  int regionOrderForLevel(int level) {
+    if (maxLevelPerEra.isEmpty) return startRegionOrder;
+    final regions = maxLevelPerEra.keys.toList()..sort();
+    for (final r in regions) {
+      if (level <= maxLevelPerEra[r]!) return r;
     }
-    return eras.last;
+    return regions.last;
   }
 
-  /// The first (lowest) level of era [order]'s band — 1 for the earliest capped
-  /// era, and the level after the previous era's cap otherwise.
-  int firstLevelOfEra(int order) {
+  /// The first (lowest) level of region [order]'s band — 1 for the earliest
+  /// capped region, and the level after the previous region's cap otherwise.
+  int firstLevelOfRegion(int order) {
     if (maxLevelPerEra.isEmpty) return 1;
-    final eras = maxLevelPerEra.keys.toList()..sort();
+    final regions = maxLevelPerEra.keys.toList()..sort();
     var prevMax = 0;
-    for (final e in eras) {
+    for (final e in regions) {
       if (e == order) return prevMax + 1;
       prevMax = maxLevelPerEra[e]!;
     }
@@ -1093,6 +1120,19 @@ class BuildingDef {
   int healQueueAt(int level, {int eraOrder = 99}) =>
       effectAt('healQueue', '', eraOrder, level: level).round();
 
+  /// How many lessons the Combat School can run at once at [level] (user
+  /// 2026-09-05) — from a `trainSlots` effect, level-scaled. 0 when unset;
+  /// see SettlementController.trainCapacity, where "no building authored
+  /// any" means unlimited.
+  int trainSlotsAt(int level, {int eraOrder = 99}) =>
+      effectAt('trainSlots', '', eraOrder, level: level).round();
+
+  /// How many monsters may WAIT for a lesson at [level] — from a
+  /// `trainQueue` effect. 0 when unset; see SettlementController.
+  /// trainQueueCapacity.
+  int trainQueueAt(int level, {int eraOrder = 99}) =>
+      effectAt('trainQueue', '', eraOrder, level: level).round();
+
   /// Percentage points off the trade spread this building grants at [level]
   /// (user 2026-07-25) — from a `trade` effect, level-scaled. 0 when unset, so
   /// only a Trade Center improves rates. See SettlementController.tradeDiscount,
@@ -1119,20 +1159,20 @@ class BuildingDef {
       {for (final e in effects) if (e.type == type) e.key};
 
   /// Resource cost to build/upgrade this building TO [level]. When [costPerEra]
-  /// is authored, the level's era band (see [eraOrderForLevel]) names the
+  /// is authored, the level's region band (see [regionOrderForLevel]) names the
   /// resources and their base amounts, and [costFactor] scales them from that
   /// band's first level up. Otherwise the flat [resourceCost] scaled by
   /// [costFactor]^(level−1) (the legacy path).
   Map<String, double> resourceCostAt(int level) {
     if (costPerEra.isNotEmpty) {
-      final era = eraOrderForLevel(level);
-      // Nearest defined band at or below this era, else the lowest defined one.
-      final base = costPerEra[era] ??
-          costPerEra[(costPerEra.keys.where((e) => e <= era).toList()
+      final region = regionOrderForLevel(level);
+      // Nearest defined band at or below this region, else the lowest one.
+      final base = costPerEra[region] ??
+          costPerEra[(costPerEra.keys.where((e) => e <= region).toList()
                     ..sort())
                   .lastOrNull ??
               (costPerEra.keys.toList()..sort()).first];
-      final f = math.pow(costFactor, level - firstLevelOfEra(era)).toDouble();
+      final f = math.pow(costFactor, level - firstLevelOfRegion(region)).toDouble();
       return {for (final e in (base ?? const {}).entries) e.key: e.value * f};
     }
     final f = math.pow(costFactor, level - 1).toDouble();
@@ -1353,13 +1393,12 @@ class BuildingDef {
   }
 }
 
-// ── Era I ──────────────────────────────────────────────────
+// ── Region I ───────────────────────────────────────────────
 // Sourced from Balancing/Houses.xlsx + Balancing/Research.xlsx — every
 // building/tech below reproduces those sheets' numbers exactly (cross-
 // checked against the sheet's own "Metric" validation block). Everything is
-// assigned to Era I (`eraIds: ['era_1']`) except the two always-available
-// structures (Main Hall/Castle, Road, `eraIds: []`) — see
-// EraDef/kEraDefs in era_definitions.dart for the progression track itself.
+// assigned to region I (`eraIds: ['era_1']`) except the two always-available
+// structures (Main Hall/Castle, Road, `eraIds: []`).
 //
 // Construction/research times are calibrated the same way as before: at
 // 1 440 s of progress credited per real hour (one active build slot / one
@@ -1490,11 +1529,11 @@ Map<String, double> _rosterCost(int era, double k) {
   final s = k * math.pow(1.4, era - 1);
   c['wood'] = (120 * s).roundToDouble();
   c['stone'] = (80 * s).roundToDouble();
-  final el = elementForEra(era);
+  final el = elementForRegion(era);
   if (el != null) {
     c[el.id] = math.max(4.0, 20 * k * math.pow(0.9, era - 2)).roundToDouble();
   }
-  final rw = rawForEra(era);
+  final rw = rawForRegion(era);
   if (rw != null) {
     c[rw.id] = math.max(2.0, 10 * k * math.pow(0.9, era - 2)).roundToDouble();
   }
@@ -1533,11 +1572,13 @@ String _luxWord(String id) => const {
   // 'meat' already gets via [_luxNameOverride]'s "Butcher Shop" — fish just
   // happens to fit the generic "{good} {word}" template, so no override
   // needed for it.
-  'fish': 'Shop', 'honey': 'Apiary', 'herbs': 'Garden',
-  'wine': 'Vineyard', 'cheese': 'Dairy', 'spices': 'Garden', 'cloth': 'Weavery',
-  'salt': 'Works', 'silk': 'Farm', 'coffee': 'Roastery',
-  'chocolate': 'Chocolatier', 'tea': 'House', 'porcelain': 'Kiln',
-  'perfume': 'Perfumery', 'jewelry': 'Jeweler',
+  'fish': 'Shop',
+  'wine': 'Vineyard',
+  'spices': 'Garden',
+  'salt': 'Works',
+  'coffee': 'Roastery',
+  'tea': 'House',
+  'perfume': 'Perfumery',
 }[id] ?? 'Works';
 
 /// A full name that doesn't fit the "{good} {word}" template at all — meat
@@ -1545,6 +1586,16 @@ String _luxWord(String id) => const {
 /// (user 2026-08-31: "Ab jetzt ist es nicht mehr fur sondern meat... dafür
 /// butcher shop"). Checked before [_luxWord] builds the generic name.
 String? _luxNameOverride(String id) => const {'meat': 'Butcher Shop'}[id];
+
+/// The ID for a luxury building — `fish`/`meat` (era I only, see
+/// goods_definitions.dart's regionOrder: 1) get the plain shop-front ids the
+/// user's renamed Blender sources use (fish_shop.blend, butcher_shop.blend,
+/// 2026-09-06); every other luxury across every era keeps the generic
+/// `lux_<goodId>` pattern.
+String _luxId(String id) => const {
+  'fish': 'fish_shop',
+  'meat': 'butcher_shop',
+}[id] ?? 'lux_$id';
 
 List<BuildingDef> _buildRoster() {
   final defs = <BuildingDef>[];
@@ -1592,9 +1643,9 @@ List<BuildingDef> _buildRoster() {
   for (var era = 1; era <= 8; era++) {
     final matCap = _rosterCapMaterial(era);
     final civCap = _rosterCapCivic(era);
-    final element = elementForEra(era);
+    final element = elementForRegion(era);
 
-    final rawIds = era == 1 ? const ['wood', 'stone'] : [rawForEra(era)!.id];
+    final rawIds = era == 1 ? const ['wood', 'stone'] : [rawForRegion(era)!.id];
     for (final res in rawIds) {
       final g = kGoodsDefs[res];
       final baseName =
@@ -1705,12 +1756,12 @@ List<BuildingDef> _buildRoster() {
     }
 
     final luxuries = kGoodsDefs.values
-        .where((g) => g.isSupply && g.eraOrder == era)
+        .where((g) => g.isSupply && g.regionOrder == era)
         .toList()
       ..sort((a, b) => a.id.compareTo(b.id));
     for (final lux in luxuries) {
       defs.add(BuildingDef(
-        id: 'lux_${lux.id}',
+        id: _luxId(lux.id),
         name: '${lux.emoji} '
             '${_luxNameOverride(lux.id) ?? '${lux.name} ${_luxWord(lux.id)}'}',
         color: const Color(0xFF8D6E4A),
@@ -1734,7 +1785,7 @@ List<BuildingDef> _buildRoster() {
       BuildingEffect(type: 'production', key: 'wood', value: _rate1(3 * _eraMult(era)), era: era),
       BuildingEffect(type: 'production', key: 'stone', value: _rate1(3 * _eraMult(era)), era: era),
       for (var e = 2; e <= era; e++)
-        BuildingEffect(type: 'production', key: rawForEra(e)!.id, value: _rate1(2 * _eraMult(era)), era: era),
+        BuildingEffect(type: 'production', key: rawForRegion(e)!.id, value: _rate1(2 * _eraMult(era)), era: era),
       if (element != null)
         BuildingEffect(type: 'production', key: element.id, value: _rate1(1.5 * _eraMult(era)), era: era),
     ];
@@ -1809,6 +1860,29 @@ List<BuildingDef> _buildRoster() {
         // gets scaled onto this smaller tile instead of redrawn, matching
         // the castle's own plan-scaling trick (tool/blender/render_building.py
         // HEALING_HUT_PLAN_W/H).
+        gridW: 5,
+        gridH: 4,
+        resourceCost: _rosterCost(1, 0.6),
+        constructionHours: _eraBuildHours(120, 1),
+        eraIds: const ['era_1'],
+        maxLevelPerEra: civCap,
+        costPerEra: _rosterCostPerEra(civCap, 0.6),
+        costFactor: 1.3,
+        timeFactor: 1.3,
+      ));
+      // Combat School (user 2026-09-05) — evolution no longer grants a move
+      // by itself; this is where a creature actually learns one (every
+      // neutral move + every move of its own type, gated by that move's own
+      // stage — see ability_def.dart's learnableAbilitiesFor). Era 1, same as
+      // every other core-loop building since the "no feature unlocks" pass —
+      // move variety matters from the very first fights, not partway through
+      // the game. No bundled art yet (a Blender pass is a separate,
+      // hands-on follow-up — see [[blender-render-kit]]); sized/costed off
+      // the Healing Hut as the closest analog until real numbers are tuned.
+      defs.add(BuildingDef(
+        id: 'combat_school',
+        name: 'Combat School',
+        color: const Color(0xFFB5442E),
         gridW: 5,
         gridH: 4,
         resourceCost: _rosterCost(1, 0.6),
@@ -2119,8 +2193,8 @@ const Map<String, (double, double)> kChimneyAnchor = {
   // the chimney mouth in the picture. Projected through the same camera as
   // before (hhchim-1_pot, the left of the two stacks).
   'healing_hut': (0.627, 0.5),
-  'lux_fish': (0.517, 0.377),
-  'lux_meat': (0.863, 0.536),
+  'fish_shop': (0.517, 0.377),
+  'butcher_shop': (0.863, 0.536),
   'large_stone_camp': (0.454, 0.342),
   'builder_camp': (0.456, 0.374),
   // 'large_wood_camp' had an entry here, but that building's chimney is
@@ -2158,8 +2232,8 @@ const Map<String, (double, double)> kChimneyAnchor = {
 const Map<String, int> kBuildingUnlockBattle = {
   'healing_hut': 1, // "Nach dem 1. Kampf" — heal up right after the first win.
   'large_house': 3, // more housing than the starting Small House
-  'lux_fish': 4,
-  'lux_meat': 6,
+  'fish_shop': 4,
+  'butcher_shop': 6,
   'building_plot': 7, // expansion ground (still capped by expansionsUnlocked)
   'large_wood_camp': 9, // the bigger production buildings come mid-era
   'large_stone_camp': 10,
@@ -2175,7 +2249,7 @@ const Map<String, int> kBuildingUnlockBattle = {
   // rafinery wird jeweils beim zweitletzten Knotenpunkt freigeschalten"), i.e.
   // 18 with the boss at 19.
   //
-  // It is era II's, not era I's: era I has no element (elementForEra(1) is
+  // It is era II's, not era I's: era I has no element (elementForRegion(1) is
   // null), so no `refinery_e1` def is ever generated — the entry that stood here
   // named a building that does not exist and unlocked nothing at all. What the
   // node really grants is the right to the CLAY REFINERY, built once you ascend,
@@ -2232,19 +2306,23 @@ int buildingUnlockBattle(String buildingId) =>
 bool buildingHasPathReward(String buildingId) =>
     buildingUnlockBattle(buildingId) > 0;
 
+/// [currentRegion] is `SettlementController.dungeonMaxStage` — the region
+/// reached automatically on the last boss clear (user 2026-09-05: no more
+/// paid Castle ascension standing between "boss beaten" and "buildings
+/// available").
 List<BuildingDef> availableBuildings(
-  String currentEraId,
+  int currentRegion,
   int battlesCleared,
 ) {
-  // CUMULATIVE eras (user 2026-07-22): older buildings STAY buildable when an
-  // era passes — a def is available once any of its eras has been reached.
-  // Exact matching used to make every era-1 building vanish on ascension.
-  final currentOrder = kEraDefs[currentEraId]?.order ?? 1;
-  bool eraReached(BuildingDef b) {
+  // CUMULATIVE regions (user 2026-07-22): older buildings STAY buildable
+  // when a region passes — a def is available once any of its regions has
+  // been reached. Exact matching used to make every region-1 building
+  // vanish on ascension.
+  bool regionReached(BuildingDef b) {
     if (b.eraIds.isEmpty) return true;
     for (final id in b.eraIds) {
-      final order = kEraDefs[id]?.order;
-      if (order != null && order <= currentOrder) return true;
+      final order = _regionOrderOfId(id);
+      if (order != null && order <= currentRegion) return true;
     }
     return false;
   }
@@ -2254,7 +2332,7 @@ List<BuildingDef> availableBuildings(
         (b) =>
             !b.isMainBuilding &&
             !b.isRoad &&
-            eraReached(b) &&
+            regionReached(b) &&
             // A Building Plot is governed by expansionsUnlocked/
             // buildPlotLimit, not by a path reward — it stays exempt from
             // this gate the way it already is from the battle number.

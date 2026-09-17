@@ -57,7 +57,10 @@ void main() {
     test('an untouched status burns exactly as it always did', () {
       final t = _mob();
       t.applyMainStatus(MainStatusKind.burn);
-      expect(t.mainStatusTurnsRemaining, mainStatusDuration(MainStatusKind.burn));
+      expect(
+        t.mainStatusTurnsRemaining,
+        mainStatusDuration(MainStatusKind.burn),
+      );
       expect(
         t.mainStatusValue,
         closeTo(statusDotFraction(MainStatusKind.burn, 0), 1e-9),
@@ -102,20 +105,25 @@ void main() {
       expect(t.mainStatus, isNull);
     });
 
-    test('frost: the value is the SPEED lost, and the skip chance stays fixed',
-        () {
-      final t = _mob(speed: 100);
-      t.applyMainStatus(MainStatusKind.frost, value: 0.75);
-      expect(t.effectiveSpeed, closeTo(25, 1e-9));
-      // Frost's own 10 % turn loss is not the authored number — it is what being
-      // frozen is, and the form says so.
-      var skips = 0;
-      final rng = math.Random(7);
-      for (var i = 0; i < 400; i++) {
-        if (t.rollSkipTurn(rng)) skips++;
-      }
-      expect(skips / 400, closeTo(statusSkipChance(MainStatusKind.frost), 0.06));
-    });
+    test(
+      'frost: the value is the SPEED lost, and the skip chance stays fixed',
+      () {
+        final t = _mob(speed: 100);
+        t.applyMainStatus(MainStatusKind.frost, value: 0.75);
+        expect(t.effectiveSpeed, closeTo(25, 1e-9));
+        // Frost's own 10 % turn loss is not the authored number — it is what being
+        // frozen is, and the form says so.
+        var skips = 0;
+        final rng = math.Random(7);
+        for (var i = 0; i < 400; i++) {
+          if (t.rollSkipTurn(rng)) skips++;
+        }
+        expect(
+          skips / 400,
+          closeTo(statusSkipChance(MainStatusKind.frost), 0.06),
+        );
+      },
+    );
 
     test('fear: the value IS the chance to lose the turn', () {
       final t = _mob();
@@ -148,21 +156,24 @@ void main() {
       expect(t.effectiveSpeed, closeTo(100, 1e-9));
     });
 
-    test('the engine hands the ABILITY\'s numbers over, not the catalog\'s', () {
-      // The whole point: two fire moves that differ in more than power.
-      final attacker = _mob(id: 'a');
-      final target = _mob(id: 'd', hp: 400);
-      final engine = CombatEngine(
-        players: [attacker],
-        enemies: [target],
-        rng: math.Random(1),
-      );
-      attacker.ap = 8;
-      engine.useAbility(attacker, _burn(turns: 9, value: 0.25), target);
-      expect(target.mainStatus, MainStatusKind.burn);
-      expect(target.mainStatusTurnsRemaining, 9);
-      expect(target.mainStatusValue, closeTo(0.25, 1e-9));
-    });
+    test(
+      'the engine hands the ABILITY\'s numbers over, not the catalog\'s',
+      () {
+        // The whole point: two fire moves that differ in more than power.
+        final attacker = _mob(id: 'a');
+        final target = _mob(id: 'd', hp: 400);
+        final engine = CombatEngine(
+          players: [attacker],
+          enemies: [target],
+          rng: math.Random(1),
+        );
+        attacker.ap = 8;
+        engine.useAbility(attacker, _burn(turns: 9, value: 0.25), target);
+        expect(target.mainStatus, MainStatusKind.burn);
+        expect(target.mainStatusTurnsRemaining, 9);
+        expect(target.mainStatusValue, closeTo(0.25, 1e-9));
+      },
+    );
   });
 
   group('the list is a view over the slots', () {
@@ -211,16 +222,17 @@ void main() {
     test('one per family — a second main status cannot be stored', () {
       // Not a validation message but a fact: the engine can only ever apply one
       // (main statuses are mutually exclusive on the target).
-      final def = AbilityDef(
-        id: 'x',
-        name: 'X',
-        element: CreatureElement.fire,
-        kind: AbilityKind.damage,
-        target: AbilityTarget.enemy,
-      ).withEffects(const [
-        AbilityEffect(kind: AbilityEffectKind.burn),
-        AbilityEffect(kind: AbilityEffectKind.frost),
-      ]);
+      final def =
+          AbilityDef(
+            id: 'x',
+            name: 'X',
+            element: CreatureElement.fire,
+            kind: AbilityKind.damage,
+            target: AbilityTarget.enemy,
+          ).withEffects(const [
+            AbilityEffect(kind: AbilityEffectKind.burn),
+            AbilityEffect(kind: AbilityEffectKind.frost),
+          ]);
       expect(def.inflictMain, MainStatusKind.frost, reason: 'last one wins');
       expect(def.effects.where((e) => e.kind.mainStatus != null).length, 1);
     });
@@ -243,18 +255,22 @@ void main() {
         'inflict_main_chance': 0.3,
       });
       expect(back.inflictMainTurns, 0);
-      expect(back.effects.single.resolvedTurns,
-          mainStatusDuration(MainStatusKind.burn));
+      expect(
+        back.effects.single.resolvedTurns,
+        mainStatusDuration(MainStatusKind.burn),
+      );
     });
   });
 
   group('the form says exactly what the fight does', () {
     test('burn states the damage, the duration AND the hidden attack sap', () {
-      final lines = describeAbilityEffect(const AbilityEffect(
-        kind: AbilityEffectKind.burn,
-        turns: 4,
-        value: 0.10,
-      )).join(' ');
+      final lines = describeAbilityEffect(
+        const AbilityEffect(
+          kind: AbilityEffectKind.burn,
+          turns: 4,
+          value: 0.10,
+        ),
+      ).join(' ');
       expect(lines, contains('10 %'));
       expect(lines, contains('4 turns'));
       // The part nobody could see before: picking Burn also saps attack.
@@ -268,11 +284,13 @@ void main() {
     });
 
     test('poison states the escalation and the total', () {
-      final lines = describeAbilityEffect(const AbilityEffect(
-        kind: AbilityEffectKind.poison,
-        turns: 3,
-        value: 0.06,
-      )).join(' ');
+      final lines = describeAbilityEffect(
+        const AbilityEffect(
+          kind: AbilityEffectKind.poison,
+          turns: 3,
+          value: 0.06,
+        ),
+      ).join(' ');
       expect(lines, contains('MORE every turn'));
       expect(lines, contains('Total'));
     });
@@ -281,8 +299,11 @@ void main() {
       for (final k in [AbilityEffectKind.heal, AbilityEffectKind.lifesteal]) {
         expect(k.isTimed, isFalse, reason: k.name);
         expect(AbilityEffect(kind: k).resolvedTurns, 0, reason: k.name);
-        expect(describeAbilityEffect(AbilityEffect(kind: k)).join(' '),
-            isNot(contains('turns')), reason: k.name);
+        expect(
+          describeAbilityEffect(AbilityEffect(kind: k)).join(' '),
+          isNot(contains('turns')),
+          reason: k.name,
+        );
       }
     });
 
@@ -309,10 +330,16 @@ void main() {
         if (k.isTimed) {
           expect(k.defaultTurns, greaterThan(0), reason: k.name);
         }
-        expect(describeAbilityEffect(AbilityEffect(kind: k)).length,
-            greaterThanOrEqualTo(2), reason: k.name);
-        expect(summariseAbilityEffect(AbilityEffect(kind: k)),
-            contains(k.label), reason: k.name);
+        expect(
+          describeAbilityEffect(AbilityEffect(kind: k)).length,
+          greaterThanOrEqualTo(2),
+          reason: k.name,
+        );
+        expect(
+          summariseAbilityEffect(AbilityEffect(kind: k)),
+          contains(k.label),
+          reason: k.name,
+        );
       }
     });
   });
@@ -340,17 +367,51 @@ void main() {
       priority: priority,
     ).withEffects(effects);
 
-    test('the scale is anchored on the damage it is compared with', () {
-      // Power 40 is the basic attack, and the basic attack costs
-      // kBasicAttackApCost. If those two ever disagree, "comparable with AP" is
-      // just a claim.
-      expect(move(power: CombatEngine.basicAttackPower).resolvedApCost,
-          kBasicAttackApCost);
-    });
+    test(
+      'Attack is pinned to its own AP cost, no longer auto-derived from '
+      'power',
+      () {
+        // Until 2026-09-08 this scale was anchored so raw power 40 (Attack's
+        // own power) auto-priced at exactly kBasicAttackApCost — the two
+        // were the same number purely by calibration (40 ÷ 13 ≈ 3). The
+        // user then asked for Attack to cost 2 AP specifically WITHOUT
+        // touching its damage (power stays 40, so the rest of the damage
+        // scale is untouched too) — which breaks that coincidence on
+        // purpose: a GENERIC power-40 move still auto-prices via the normal
+        // formula, while Attack itself now carries an EXPLICIT apCost that
+        // always matches the dial regardless of what power/powerPerAp do.
+        expect(
+          move(power: CombatEngine.basicAttackPower).resolvedApCost,
+          isNot(kBasicAttackApCost),
+          reason: 'a generic power-40 move still prices off the normal '
+              'formula, not the Attack-specific pin',
+        );
+        final attack = AbilityDef(
+          id: 'attack',
+          name: 'Attack',
+          element: CreatureElement.neutral,
+          kind: AbilityKind.damage,
+          target: AbilityTarget.enemy,
+          power: CombatEngine.basicAttackPower,
+          apCost: kBasicAttackApCost,
+        );
+        expect(
+          attack.resolvedApCost,
+          kBasicAttackApCost,
+          reason: 'Attack itself is pinned, so it always matches the dial',
+        );
+      },
+    );
 
     test('twice the magnitude is twice the power', () {
-      final weak = const AbilityEffect(kind: AbilityEffectKind.burn, value: 0.05);
-      final strong = const AbilityEffect(kind: AbilityEffectKind.burn, value: 0.10);
+      final weak = const AbilityEffect(
+        kind: AbilityEffectKind.burn,
+        value: 0.05,
+      );
+      final strong = const AbilityEffect(
+        kind: AbilityEffectKind.burn,
+        value: 0.10,
+      );
       expect(strong.power, closeTo(weak.power * 2, 1e-9));
     });
 
@@ -362,24 +423,33 @@ void main() {
 
     test('half the chance is half the power', () {
       final sure = const AbilityEffect(kind: AbilityEffectKind.burn, chance: 1);
-      final maybe = const AbilityEffect(kind: AbilityEffectKind.burn, chance: 0.5);
+      final maybe = const AbilityEffect(
+        kind: AbilityEffectKind.burn,
+        chance: 0.5,
+      );
       expect(maybe.power, closeTo(sure.power / 2, 1e-9));
     });
 
     test('a longer, surer, heavier effect really costs more AP', () {
       // The exact abuse the flat surcharge allowed: same power, same slot, nine
       // times the burn, and it used to be the same 4 AP.
-      final standard = move(power: 50, effects: const [
-        AbilityEffect(kind: AbilityEffectKind.burn, chance: 0.3),
-      ]);
-      final monstrous = move(power: 50, effects: const [
-        AbilityEffect(
-          kind: AbilityEffectKind.burn,
-          chance: 1,
-          turns: 9,
-          value: 0.25,
-        ),
-      ]);
+      final standard = move(
+        power: 50,
+        effects: const [
+          AbilityEffect(kind: AbilityEffectKind.burn, chance: 0.3),
+        ],
+      );
+      final monstrous = move(
+        power: 50,
+        effects: const [
+          AbilityEffect(
+            kind: AbilityEffectKind.burn,
+            chance: 1,
+            turns: 9,
+            value: 0.25,
+          ),
+        ],
+      );
       expect(monstrous.totalPower, greaterThan(standard.totalPower * 5));
       expect(monstrous.resolvedApCost, greaterThan(standard.resolvedApCost));
       // And it is not silently clamped mid-way any more: a status move can now
@@ -389,20 +459,26 @@ void main() {
 
     test('a COST has negative power and makes the move cheaper', () {
       final plain = move(power: 90);
-      final withRecoil = move(power: 90, effects: const [
-        AbilityEffect(kind: AbilityEffectKind.recoil, value: 0.33),
-      ]);
+      final withRecoil = move(
+        power: 90,
+        effects: const [
+          AbilityEffect(kind: AbilityEffectKind.recoil, value: 0.33),
+        ],
+      );
       expect(withRecoil.effects.single.power, lessThan(0));
       expect(withRecoil.totalPower, lessThan(plain.totalPower));
-      expect(withRecoil.resolvedApCost,
-          lessThanOrEqualTo(plain.resolvedApCost));
+      expect(
+        withRecoil.resolvedApCost,
+        lessThanOrEqualTo(plain.resolvedApCost),
+      );
     });
 
     test('poison is priced on its ESCALATING total, not value × turns', () {
       // 6 % then 8 % then 10 % — its shape is the catalog's, so a flat
       // value × turns would under-price every poison in the game.
       const p = AbilityEffect(kind: AbilityEffectKind.poison, turns: 3);
-      final flat = p.resolvedValue * 3 * AbilityEffectKind.poison.powerCoefficient;
+      final flat =
+          p.resolvedValue * 3 * AbilityEffectKind.poison.powerCoefficient;
       expect(p.power, greaterThan(flat));
     });
 
@@ -422,8 +498,10 @@ void main() {
     });
 
     test('priority is still paid for', () {
-      expect(move(power: 50, priority: 1).resolvedApCost,
-          greaterThan(move(power: 50).resolvedApCost));
+      expect(
+        move(power: 50, priority: 1).resolvedApCost,
+        greaterThan(move(power: 50).resolvedApCost),
+      );
     });
   });
 
@@ -437,13 +515,19 @@ void main() {
     test('sleep steals turns at its own chance', () {
       final t = _mob();
       t.applyMainStatus(MainStatusKind.sleep);
-      expect(t.mainStatusTurnsRemaining, mainStatusDuration(MainStatusKind.sleep));
+      expect(
+        t.mainStatusTurnsRemaining,
+        mainStatusDuration(MainStatusKind.sleep),
+      );
       var skips = 0;
       final rng = math.Random(11);
       for (var i = 0; i < 400; i++) {
         if (t.rollSkipTurn(rng)) skips++;
       }
-      expect(skips / 400, closeTo(statusSkipChance(MainStatusKind.sleep), 0.06));
+      expect(
+        skips / 400,
+        closeTo(statusSkipChance(MainStatusKind.sleep), 0.06),
+      );
       // It is a MAIN status, so it cannot be doubled up with a freeze.
       t.applyMainStatus(MainStatusKind.frost);
       expect(t.mainStatus, MainStatusKind.sleep);
@@ -466,9 +550,11 @@ void main() {
       final base = t.effectiveDefense;
       t.applySecondaryDebuff(SecondaryDebuffKind.defenseDown, value: 0.4);
       expect(t.effectiveDefense, closeTo(base * 0.6, 1e-9));
-      // Two turns by default, then gone.
-      t.tickStatusEndOfRound();
-      t.tickStatusEndOfRound();
+      // kSecondaryDebuffDuration turns by default (a Dial since 2026-09-08),
+      // then gone.
+      for (var i = 0; i < kSecondaryDebuffDuration; i++) {
+        t.tickStatusEndOfRound();
+      }
       expect(t.effectiveDefense, closeTo(base, 1e-9));
     });
 
@@ -554,18 +640,19 @@ void main() {
     });
 
     test('the new effects round-trip through the row', () {
-      final def = AbilityDef(
-        id: 'x',
-        name: 'X',
-        element: CreatureElement.plant,
-        kind: AbilityKind.damage,
-        target: AbilityTarget.enemy,
-        power: 60,
-      ).withEffects(const [
-        AbilityEffect(kind: AbilityEffectKind.sleep, chance: 0.4, turns: 3),
-        AbilityEffect(kind: AbilityEffectKind.defenseDown, chance: 0.8),
-        AbilityEffect(kind: AbilityEffectKind.recoil, value: 0.2),
-      ]);
+      final def =
+          AbilityDef(
+            id: 'x',
+            name: 'X',
+            element: CreatureElement.plant,
+            kind: AbilityKind.damage,
+            target: AbilityTarget.enemy,
+            power: 60,
+          ).withEffects(const [
+            AbilityEffect(kind: AbilityEffectKind.sleep, chance: 0.4, turns: 3),
+            AbilityEffect(kind: AbilityEffectKind.defenseDown, chance: 0.8),
+            AbilityEffect(kind: AbilityEffectKind.recoil, value: 0.2),
+          ]);
       final back = AbilityDef.fromDefRow(def.toDefRow());
       expect(back.inflictMain, MainStatusKind.sleep);
       expect(back.inflictMainTurns, 3);
@@ -597,17 +684,21 @@ void main() {
   group('the AP rules', () {
     tearDown(GameTuning.i.debugClear);
 
-    AbilityDef move(int power, {int prio = 0, int ap = 0, List<AbilityEffect> fx = const []}) =>
-        AbilityDef(
-          id: 'm',
-          name: 'M',
-          element: CreatureElement.fire,
-          kind: AbilityKind.damage,
-          target: AbilityTarget.enemy,
-          power: power,
-          priority: prio,
-          apCost: ap,
-        ).withEffects(fx);
+    AbilityDef move(
+      int power, {
+      int prio = 0,
+      int ap = 0,
+      List<AbilityEffect> fx = const [],
+    }) => AbilityDef(
+      id: 'm',
+      name: 'M',
+      element: CreatureElement.fire,
+      kind: AbilityKind.damage,
+      target: AbilityTarget.enemy,
+      power: power,
+      priority: prio,
+      apCost: ap,
+    ).withEffects(fx);
 
     test('the exchange rate is a DIAL, and it really moves the price', () {
       expect(move(65).resolvedApCost, (65 / kPowerPerAp).round());
@@ -619,13 +710,17 @@ void main() {
 
     test('priority is priced through the same rate, off its own dial', () {
       final base = move(50).totalPower;
-      expect(move(50, prio: 2).resolvedApCost,
-          ((base + 2 * kPriorityPower) / kPowerPerAp).round());
+      expect(
+        move(50, prio: 2).resolvedApCost,
+        ((base + 2 * kPriorityPower) / kPowerPerAp).round(),
+      );
       GameTuning.i.set(Dials.priorityPower, 60);
       // …up to the pool, which is where every price stops (see the pricing-out
       // test below).
-      expect(move(50, prio: 2).resolvedApCost,
-          ((base + 120) / kPowerPerAp).round().clamp(2, kMaxActionPoints));
+      expect(
+        move(50, prio: 2).resolvedApCost,
+        ((base + 120) / kPowerPerAp).round().clamp(2, kMaxActionPoints),
+      );
     });
 
     test('the BUFF dial is a floor, not a fixed price any more', () {
@@ -638,7 +733,12 @@ void main() {
       ).withEffects(fx);
       GameTuning.i.set(Dials.buffApCost, 4);
       // A stock buff sits on the floor…
-      expect(buff(const [AbilityEffect(kind: AbilityEffectKind.rage)]).resolvedApCost, 4);
+      expect(
+        buff(const [
+          AbilityEffect(kind: AbilityEffectKind.rage),
+        ]).resolvedApCost,
+        4,
+      );
       // …and a big one climbs off it. Before the fix both were the dial's value,
       // which made the dial say nothing about any buff that had an effect.
       expect(
@@ -672,12 +772,28 @@ void main() {
     test('the flat surcharges and the 4-AP status clamp are really gone', () {
       // Two moves that the old formula priced identically: +8 for a status, then
       // clamped to 4 whatever it did.
-      final mild = move(50, fx: const [
-        AbilityEffect(kind: AbilityEffectKind.burn, chance: 0.2, turns: 2, value: 0.03),
-      ]);
-      final harsh = move(50, fx: const [
-        AbilityEffect(kind: AbilityEffectKind.burn, chance: 1, turns: 6, value: 0.15),
-      ]);
+      final mild = move(
+        50,
+        fx: const [
+          AbilityEffect(
+            kind: AbilityEffectKind.burn,
+            chance: 0.2,
+            turns: 2,
+            value: 0.03,
+          ),
+        ],
+      );
+      final harsh = move(
+        50,
+        fx: const [
+          AbilityEffect(
+            kind: AbilityEffectKind.burn,
+            chance: 1,
+            turns: 6,
+            value: 0.15,
+          ),
+        ],
+      );
       expect(harsh.resolvedApCost, greaterThan(mild.resolvedApCost));
       expect(harsh.resolvedApCost, greaterThan(4));
     });
@@ -687,11 +803,21 @@ void main() {
       expect(move(50, ap: 1).resolvedApCost, 1);
     });
 
-    test('the basic attack stays the anchor of the whole scale', () {
-      // If these two ever drift, "power is comparable with AP" is a claim with
-      // nothing behind it: the free attack IS 40 power and DOES cost its dial.
-      expect(move(CombatEngine.basicAttackPower).resolvedApCost,
-          kBasicAttackApCost);
-    });
+    test(
+      'a generic power-40 move auto-prices off the formula, not the '
+      'Attack-specific pin (user 2026-09-08)',
+      () {
+        // Attack used to BE this exact case (power 40, apCost 0/auto), which
+        // is why the two numbers used to match by calibration. Since Attack
+        // now carries an explicit apCost (kBasicAttackApCost, pinned so it
+        // can be tuned to 2 without touching its own power/damage), a plain
+        // move that merely SHARES Attack's power auto-prices via the normal
+        // formula instead — round(40 ÷ kPowerPerAp).
+        expect(
+          move(CombatEngine.basicAttackPower).resolvedApCost,
+          isNot(kBasicAttackApCost),
+        );
+      },
+    );
   });
 }

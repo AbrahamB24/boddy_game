@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../models/creature_enums.dart' show CreatureElement;
 import 'creature_backdrop.dart';
+import 'creature_sprite.dart' show decodeWidthFor;
 
 // ── Der Kampfplatz (user 2026-07-31) ─────────────────────────
 // "Jetzt kann der Hintergrund nicht mehr der Typ sein, da es mehrere haben kann.
@@ -67,6 +68,11 @@ class BattleScene extends StatelessWidget {
             imageUrl!,
             fit: BoxFit.cover,
             filterQuality: FilterQuality.medium,
+            // Capped, not native (user 2026-09-06: "performance deutlich
+            // verbessern") — this fills the whole arena at StackFit.expand,
+            // so its own device-pixel width is the right bound; screen width
+            // is the closest thing to that available without a LayoutBuilder.
+            cacheWidth: decodeWidthFor(context, MediaQuery.sizeOf(context).width),
             // A broken URL leaves the ground below standing rather than a grey
             // box with an icon in it — the fallback IS the design, not an error
             // state, so failing back to it costs nothing.

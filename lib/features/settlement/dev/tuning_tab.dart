@@ -3,6 +3,7 @@ import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/tuning/game_tuning.dart';
+import '../../../core/ui/pressable.dart';
 
 // ── One menu for a whole group of dials (user 2026-07-29) ──────────────────
 // "mir ist wichtig, dass es so einfach und übersichtlich wie nur möglich ist."
@@ -207,7 +208,7 @@ class _TuningTabState extends State<TuningTab> {
           // quiet, and what you altered is visible at a glance.
           if (overridden) ...[
             const SizedBox(height: 4),
-            GestureDetector(
+            Pressable(
               onTap: () => _resetDial(d),
               behavior: HitTestBehavior.opaque,
               child: Row(
@@ -240,7 +241,7 @@ class _TuningTabState extends State<TuningTab> {
             style: FoE.dim(size: 11),
           ),
         ),
-        GestureDetector(
+        Pressable(
           onTap: _saving ? null : _save,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),

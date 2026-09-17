@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:boddygame/features/settlement/data/building_definitions.dart';
 import 'package:boddygame/features/settlement/data/goods_definitions.dart';
 import 'package:boddygame/features/settlement/models/energy_model.dart';
 import 'package:boddygame/features/settlement/services/game_engine.dart';
@@ -16,9 +17,10 @@ import 'package:boddygame/features/settlement/services/game_engine.dart';
 // This pins the ENGINE half of that: the rate a refinery's input really carries.
 // The sheet's rows are derived from exactly these numbers.
 void main() {
+  // Exactly the daily target — 100% rate, so these exact-value assertions hold.
   EnergyModel energy() => EnergyModel(
     settlementId: 's',
-    currentEnergy: 100,
+    stepsToday: kEnergyFullSteps.round(),
     lastUpdatedAt: DateTime(2026),
   );
 
@@ -44,15 +46,11 @@ void main() {
     expect(rates['frame'], 4 - 6, reason: '4 made, 6 eaten by the daub');
   });
 
-  test('an empty tank stops production, and with it the burn', () {
-    final flat = EnergyModel(
-      settlementId: 's',
-      currentEnergy: 0,
-      lastUpdatedAt: DateTime(2026),
-    );
+  test('0 steps floors production, and with it the burn, together', () {
+    final flat = EnergyModel(settlementId: 's', lastUpdatedAt: DateTime(2026));
     final rates = GameEngine.hourlyRates(flat, {'frame': 5, 'wood': 30});
     // Whatever the floor dial says, the two must scale TOGETHER: a settlement
-    // that stops making planks must stop eating wood for them.
+    // making fewer planks must burn proportionally less wood for them.
     expect(rates['frame']! * 2, closeTo(-(rates['stone'] ?? 0), 0.001));
   });
 }

@@ -18,6 +18,7 @@ import 'services/breeding_controller.dart';
 import 'widgets/egg_card.dart';
 import 'widgets/egg_details.dart';
 import '../common/widgets/monster_tile_grid.dart';
+import '../../core/ui/pressable.dart';
 
 /// ONE EGG, OPENED FROM THE BAG (user 2026-07-27: "sobald ich auf ein Ei
 /// drücke. Komme ich in ein neues Menü, welches das Ei zusammen mit den Stats
@@ -160,7 +161,7 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
       // The one action, in the Hatchery's own button shape: what it does on
       // top, the wait it commits you to underneath — and the reason in place of
       // the label when the Hatchery cannot take it.
-      GestureDetector(
+      Pressable(
         onTap: () => Navigator.pushReplacement(
           context,
           MaterialPageRoute(

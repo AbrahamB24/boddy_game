@@ -19,6 +19,7 @@ import 'teams_screen.dart';
 import 'widgets/creature_backdrop.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/creature_sprite.dart';
+import '../../core/ui/pressable.dart';
 
 /// Sort orders for the collection grid (user request 2026-07-17). `newest`
 /// is the controller's own order — catch order — so the default costs no
@@ -320,7 +321,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
   }
 
   Widget _speciesCard(SpeciesDef species) {
-    return GestureDetector(
+    return Pressable(
       onTap: () => _previewStarter(species),
       child: Container(
         // radius 12, not 10 (2026-08-31 audit) — the standard list-card

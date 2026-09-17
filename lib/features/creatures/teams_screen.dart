@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/snack.dart';
+import '../common/widgets/filter_pills.dart';
 import '../common/widgets/parchment_page.dart';
+import 'models/creature_enums.dart';
 import 'models/creature_instance.dart';
 import 'models/saved_team.dart';
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
+import '../../core/ui/pressable.dart';
 
 // Saved battle rosters. The active team is what battleTeam() hands to every
 // fight in the game, so this screen is the ONLY place the player says who
@@ -232,7 +235,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 
   Widget _miniBtn(String label, VoidCallback onTap, {bool danger = false}) =>
-      GestureDetector(
+      Pressable(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -270,11 +273,112 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
   );
   late final List<String> _picked = [...?widget.team?.memberIds];
 
+  // Sort/filter/search, added everywhere a monster or a group is picked
+  // (user 2026-09-11: "überall, wo ich ein Monster oder eine Gruppe
+  // auswähle, sollen diese nach dem entsprechenden Wert geordnet sein und
+  // eine Sortier, Filter- und Suchfunktion haben"). Same shared pills every
+  // other picker uses, ranked by total power by default — the number this
+  // list's own row already prints.
+  final _search = TextEditingController();
+  String _query = '';
+  CreatureElement? _filterElement;
+  String? _sortKey; // null = total power
+  bool _descending = true;
+
   @override
   void dispose() {
     _name.dispose();
+    _search.dispose();
     super.dispose();
   }
+
+  List<CreatureInstance> _roster(CreaturesController ctrl) {
+    final q = _query.trim().toLowerCase();
+    final list = [
+      for (final c in ctrl.creatures)
+        if ((_filterElement == null || c.species?.element == _filterElement) &&
+            (q.isEmpty || c.displayName.toLowerCase().contains(q)))
+          c,
+    ];
+    int cmp(CreatureInstance a, CreatureInstance b) {
+      final r = switch (_sortKey) {
+        'level' => a.level.compareTo(b.level),
+        'name' => a.displayName.compareTo(b.displayName),
+        _ => totalPower(a).compareTo(totalPower(b)),
+      };
+      return _descending ? -r : r;
+    }
+    list.sort(cmp);
+    return list;
+  }
+
+  Widget _controlsRow() => Row(
+    children: [
+      Expanded(
+        flex: 3,
+        child: SearchPill(
+          controller: _search,
+          palette: PillPalette.parchment,
+          onChanged: (v) => setState(() => _query = v),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        flex: 2,
+        child: MenuPill<String>(
+          palette: PillPalette.parchment,
+          icon: Icons.swap_vert,
+          label: switch (_sortKey) {
+            'level' => 'Level',
+            'name' => 'Name',
+            _ => 'Power',
+          },
+          engaged: _sortKey != null || !_descending,
+          value: _sortKey ?? '',
+          entries: const [
+            MapEntry('', 'Power'),
+            MapEntry('level', 'Level'),
+            MapEntry('name', 'Name'),
+          ],
+          trailing: Icon(
+            _descending ? Icons.arrow_downward : Icons.arrow_upward,
+            size: 14,
+            color: FoE.goldBright,
+          ),
+          selectedTrailing: _descending ? '↓' : '↑',
+          onSelected: (v) => setState(() {
+            final picked = v.isEmpty ? null : v;
+            if (picked == _sortKey) {
+              _descending = !_descending;
+            } else {
+              _sortKey = picked;
+              _descending = true;
+            }
+          }),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        flex: 2,
+        child: MenuPill<String>(
+          palette: PillPalette.parchment,
+          icon: Icons.filter_alt_outlined,
+          label: _filterElement?.label ?? 'Every type',
+          engaged: _filterElement != null,
+          value: _filterElement?.name ?? '',
+          entries: [
+            const MapEntry('', 'Every type'),
+            for (final e in CreatureElement.values)
+              if (e != CreatureElement.neutral)
+                MapEntry(e.name, '${e.emoji} ${e.label}'),
+          ],
+          onSelected: (v) => setState(
+            () => _filterElement = v.isEmpty ? null : CreatureElement.fromName(v),
+          ),
+        ),
+      ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -320,18 +424,20 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
               style: FoE.dim(size: 11),
             ),
             const SizedBox(height: 8),
+            _controlsRow(),
+            const SizedBox(height: 8),
             Flexible(
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  for (final c in ctrl.creatures) _row(c, cap),
+                  for (final c in _roster(ctrl)) _row(c, cap),
                 ],
               ),
             ),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: GestureDetector(
+              child: Pressable(
                 onTap: () => Navigator.pop(
                   context,
                   _TeamDraft(_name.text, _picked),
@@ -359,7 +465,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
     // Over-cap picks are allowed but flagged: the cap grows with research, and
     // silently refusing the 4th monster reads as a bug rather than a rule.
     final overCap = picked && at >= cap;
-    return GestureDetector(
+    return Pressable(
       onTap: () => setState(
         () => picked ? _picked.remove(c.id) : _picked.add(c.id),
       ),

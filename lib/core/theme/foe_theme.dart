@@ -29,48 +29,65 @@ class FoE {
   FoE._();
 
   // ── Colours ───────────────────────────────────────────────
-  // THE app palette. DARK since 2026-07-31 (user: "setzte das ganze app in den
-  // darkmode") — it was the parchment scroll of the Build menu rolled out
-  // everywhere, and it is now the same design on dark stock:
+  // THE app palette. Blue/warm reskin since 2026-09-05 (user handed over 6
+  // hex codes as "die neue Color Palette für das ganze UI") — replacing the
+  // 2026-07-31 graphite/lawn-green/amber/red set with a cool NAVY→TEAL
+  // surface ramp and a warm CORAL/RED-ORANGE accent pair. Per the user's own
+  // role split: the 3 cool tones become the surfaces, the 3 warm tones
+  // become accent + danger — and, deliberately, danger and the old amber
+  // "secondary accent" collapse into the SAME red-orange rather than staying
+  // two separate hues:
   //
-  //   Graphite     #161B20 … #2A333A   the surfaces
-  //   Cream        #EDE3CB             text and hairlines (the old ink, flipped)
-  //   Lawn Green   #A8B84A             primary accent / "good" / actions
-  //   Amber        #D9A93C             secondary accent, highlights
-  //   Red          #E05548             danger
+  //   Navy         #11395D … #036989 … #5999AF   the surfaces (dark → light)
+  //   Cream        #EDE3CB             text and hairlines — UNCHANGED
+  //   Coral        #FD9B6C             primary accent / "good" / actions
+  //   Red-orange   #DA3D27             secondary accent AND danger, merged
+  //   Brick        #8D2F18             shade of the accent / dim hairline
   //
   // ONE PLACE. The theme is flipped HERE, in the constants, rather than by
   // giving every screen a dark variant: the names carry the ROLE (bg, panelMid,
   // border, textDim) and always did, so a screen that asked for "the card
   // surface" gets the dark card surface without knowing a thing about it. The
   // handful of names that describe the old material rather than the role —
-  // `parchment` for the body text — are kept for API stability and say so.
+  // `parchment` for the body text, `accentBlue` for what is now coral — are
+  // kept for API stability and say so.
   //
-  // Surfaces are STEPS OF GRAPHITE — the page, one step up for cards, another
-  // for raised/active — the same hue, not new colours. The creature ELEMENT
-  // colours (fire/water/plant/…) are NOT part of this and stay as they are: they
-  // encode game meaning, not chrome.
-  static const bg = Color(0xFF161B20); // the page
+  // Surfaces are STEPS, not new colours per step: [bg]/[panelMid]/[panelLight]
+  // are the 3 given navy tones directly; [panelDark] and the map tones are
+  // interpolated between them, same spacing the old graphite ramp used. The
+  // creature ELEMENT colours (fire/water/plant/…) are NOT part of this and
+  // stay as they are: they encode game meaning, not chrome.
+  static const bg = Color(0xFF11395D); // the page
 
   /// Backdrops for a TILE, in the two states it has — kept as image assets for
   /// the few places that still paint a tile; most surfaces use the parchment
   /// steps below now.
   static const tileActive = 'assets/images/tile_active.jpg';
   static const tileInactive = 'assets/images/tile_inactive.jpg';
-  static const panelDark = Color(0xFF1B2126); // recessed / bars
-  static const panelMid = Color(0xFF1F262C); // the card surface
-  static const panelLight = Color(0xFF2A333A); // raised / active
+  static const panelDark = Color(
+    0xFF0D476A,
+  ); // recessed / bars — bg→panelMid, closer to bg
+  static const panelMid = Color(0xFF036989); // the card surface
+  static const panelLight = Color(0xFF5999AF); // raised / active
   static const border = Color(0x33EDE3CB); // hairline
 
-  /// Dim accent hairline — amber taken down, so an accented edge belongs to the
-  /// accent rather than becoming a new colour.
-  static const borderGold = Color(0x66D9A93C);
+  /// Dim accent hairline — the accent taken down, so an accented edge belongs
+  /// to the accent rather than becoming a new colour.
+  static const borderGold = Color(0x664CC9F0);
 
-  // Amber, lifted off the paper tuning: the old burnt #9A6A18 was picked to
-  // read on cream and turns to mud on graphite.
-  static const gold = Color(0xFFD9A93C);
-  static const goldBright = Color(0xFFF0C25A);
-  static const accentBlue = Color(0xFFA8B84A); // lawn green — secondary/actions
+  // Cyan-blue (2026-09-05, third pass) — coral turned out to be the wrong
+  // call too: it read fine as a swatch but clashed as an actual highlight
+  // against the navy/teal chrome once seen in the app (user, on the Build
+  // menu's active tab and card: "bitte nicht koralle nehmen als Farbe,
+  // sondern einen anderen Blauton"). A bright, more SATURATED blue than the
+  // surface ladder (bg/panelMid/panelLight are all fairly desaturated navy
+  // and steel) is what actually reads as "active" against them — the same
+  // hue family instead of a warm one, but distinct in saturation/lightness
+  // rather than in hue. [danger] is unaffected either time — still its own
+  // red-orange, for alerts only.
+  static const gold = Color(0xFF4CC9F0);
+  static const goldBright = Color(0xFF70D4F3); // lit version of gold
+  static const accentBlue = Color(0xFF4CC9F0); // cyan-blue — secondary/actions
 
   /// Primary body text. Named `parchment` from the old fantasy palette, then the
   /// ink of the light theme, and now the cream that ink was written on — the
@@ -80,13 +97,41 @@ class FoE {
   static const textDim = Color(0xFFA79B82); // faded — secondary text
   static const textMuted = Color(0xFF7A7263); // dimmer — disabled
 
-  static const mapBase = Color(0xFF1C2429);
-  static const mapAlt = Color(0xFF222B31);
+  static const mapBase = Color(0xFF0D476A); // == panelDark
+  static const mapAlt = Color(0xFF08587A); // panelDark→panelMid midpoint
   static const mapGrid = Color(0x14FFFFFF);
-  static const danger = Color(0xFFE05548); // red, lifted to read on graphite
+  // Coral now (user 2026-09-06: "alle Warnhinweise sollen in der Farbe
+  // Koralle sein"), not its own red-orange — every alert in the app reads
+  // [danger], so this is the one place that recolours all of them at once.
+  // Same hex as [coral] below (0xFFFD9B6C); written out rather than aliased
+  // to it because [coral] is declared later in this file and a `const`
+  // can't forward-reference.
+  static const danger = Color(0xFFFD9B6C);
 
-  /// "Good" — full HP, gains, ready states: the lawn green.
-  static const positive = Color(0xFFA8B84A);
+  /// "Good" — full HP, gains, ready states: the accent's own cyan-blue.
+  static const positive = Color(0xFF4CC9F0);
+
+  /// A resource sitting AT or OVER its storage cap — not [positive]/[gold] (a
+  /// ready/active state): a full store is neither, it is a ceiling worth
+  /// noticing so you build more storage or spend the surplus down. The
+  /// original pre-reskin accent (see this file's own palette history above),
+  /// retired everywhere else on 2026-09-05.
+  ///
+  /// Same hex as [danger] since later that day ("alle Warnhinweise sollen in
+  /// der Farbe Koralle sein") — this stopped being a hue that set warnings
+  /// apart from real alerts the moment [danger] itself became this colour;
+  /// the two names now just mark two different REASONS to reach for the
+  /// identical value.
+  static const coral = Color(0xFFFD9B6C);
+
+  // A warm cream→tan pair (user 2026-09-05), for surfaces that want to read
+  // as a light card against the navy/teal chrome rather than another step of
+  // it — the expedition target tiles were tinted per-resource (brown for
+  // Wood, grey for Stone, gold for Gold) before this; now every tile shares
+  // this same pair regardless of what it targets. Dark ink ([bg]) belongs on
+  // both, the same rule [parchmentButtonInk] uses for a fill this light.
+  static const cream = Color(0xFFF5EFEB);
+  static const tan = Color(0xFFA88C6C);
 
   // ── Shape & metrics ───────────────────────────────────────
   // ── LOW POLY (user 2026-07-31) ──
@@ -236,12 +281,22 @@ class FoE {
   // 11px on a phone — which the pixel fonts were not. Sizes are passed through
   // as-is; the old title() shaved a point off to compensate for Silkscreen's
   // width, and that hack is gone.
+  //
+  // decoration: TextDecoration.none is explicit on every one of these (user
+  // 2026-09-06: "nie mit Unterstrich", after a tutorial hint bubble rendered
+  // underlined) — none of these four ever left it unset before, which meant
+  // whatever ambient DefaultTextStyle a widget happened to inherit (Flutter's
+  // own no-DefaultTextStyle-ancestor fallback carries an underline) could
+  // survive the merge into Text's actual style. Setting it here, once, wins
+  // that merge everywhere these are used instead of it being one more thing
+  // every call site has to remember to override for itself.
   static TextStyle title({double size = 14}) => GoogleFonts.outfit(
     color: parchment,
     fontSize: size + 2,
     fontWeight: FontWeight.w700,
     letterSpacing: -0.2,
     height: 1.2,
+    decoration: TextDecoration.none,
   );
 
   static TextStyle value({double size = 13}) => GoogleFonts.outfit(
@@ -249,6 +304,7 @@ class FoE {
     fontSize: size + 1,
     fontWeight: FontWeight.w600,
     height: 1.25,
+    decoration: TextDecoration.none,
   );
 
   static TextStyle label({double size = 11}) => GoogleFonts.outfit(
@@ -256,6 +312,7 @@ class FoE {
     fontSize: size + 1,
     fontWeight: FontWeight.w400,
     height: 1.4,
+    decoration: TextDecoration.none,
   );
 
   static TextStyle dim({double size = 10}) => GoogleFonts.outfit(
@@ -263,5 +320,6 @@ class FoE {
     fontSize: size + 1,
     fontWeight: FontWeight.w400,
     height: 1.35,
+    decoration: TextDecoration.none,
   );
 }

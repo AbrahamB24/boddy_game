@@ -12,10 +12,13 @@ import 'package:boddygame/features/settlement/data/building_art.dart';
 //
 // The bundled renders are 1024-1372 px across because that is the size they
 // are AUTHORED at, and the map draws a building about 200 logical px wide.
-// Decoded at source resolution the twenty assets need 80 MB of RGBA, with a
-// 32 MB map background on top, against Flutter's 100 MB default image cache.
-// The cache evicts and re-decodes on every pan, and on the web that comes out
-// as heap corruption rather than as a clean out-of-memory.
+//
+// SHIPPED width raised from 640 to 960 (user 2026-09-06, for 3x displays) —
+// tool/pack_art.py's own APP_MAX_WIDTH — which is why main.dart now raises
+// PaintingBinding's own image cache from Flutter's 100 MB default to 200 MB:
+// the twenty-odd bundled assets alone decode to ~92 MB at 960, which left
+// almost no headroom under the old default before other art (roads,
+// creatures, UI chrome) started evicting a building mid-frame.
 //
 // Two invariants, because the failure needs both halves to come back:
 //
@@ -61,8 +64,8 @@ void main() {
     test('nothing ships wider than pack_art caps it', () {
       for (final id in kBundledBuildingArt) {
         final s = _webpSize(File(buildingAsset(id)!));
-        expect(s!.w, lessThanOrEqualTo(640),
-            reason: '$id ships at ${s.w} px; tool/pack_art.py -w 640 is what '
+        expect(s!.w, lessThanOrEqualTo(960),
+            reason: '$id ships at ${s.w} px; tool/pack_art.py -w 960 is what '
                 'keeps the map inside the image cache');
       }
     });
@@ -77,7 +80,7 @@ void main() {
       }
     });
 
-    test('decoded at source resolution they stay under 48 MB', () {
+    test('decoded at source resolution they stay under 150 MB', () {
       var bytes = 0;
       final worst = <String, int>{};
       for (final id in kBundledBuildingArt) {
@@ -89,19 +92,26 @@ void main() {
       }
       final mb = bytes / (1024 * 1024);
       final biggest = worst.entries.reduce((a, b) => a.value > b.value ? a : b);
-      expect(mb, lessThan(48),
-          reason: 'the twenty bundled renders would decode to '
+      // 150, not 48 (user 2026-09-06's 640→960 bump) — ~92 MB today, and
+      // main.dart's own image cache is 200 MB now (raised alongside the same
+      // change) rather than Flutter's 100 MB default, so this still leaves
+      // real headroom for roads/creatures/UI chrome above the bundled set
+      // without silently creeping back to zero slack.
+      expect(mb, lessThan(150),
+          reason: 'the bundled renders would decode to '
               '${mb.toStringAsFixed(0)} MB — biggest is ${biggest.key} at '
               '${(biggest.value / 1024 / 1024).toStringAsFixed(1)} MB. The '
-              'image cache holds 100 MB by default; past that it evicts and '
+              'image cache holds 200 MB (main.dart); past that it evicts and '
               're-decodes on every pan.');
     });
 
-    test('no single picture decodes to more than 4 MB', () {
+    test('no single picture decodes to more than 5 MB', () {
       for (final id in kBundledBuildingArt) {
         final s = _webpSize(File(buildingAsset(id)!));
         if (s == null) continue;
-        expect(s.w * s.h * 4, lessThan(4 * 1024 * 1024),
+        // 5, not 4 MB (user 2026-09-06's 640→960 bump) — the widest current
+        // picture is ~4.3 MB at 960 px wide.
+        expect(s.w * s.h * 4, lessThan(5 * 1024 * 1024),
             reason: '$id is ${s.w}x${s.h}');
       }
     });

@@ -1,7 +1,14 @@
 import 'dart:math' as math;
 
+import 'ability_def.dart';
 import 'creature_enums.dart';
 import 'species_def.dart';
+
+/// At most this many learned abilities may be equipped (battle-usable) at
+/// once (user 2026-09-05: "ich kann mehr als 6 Fähigkeiten erlernen, aber
+/// nur einige davon ausrüsten"). `attack` sits outside this cap entirely —
+/// it is free and always on.
+const int kMaxEquippedAbilities = 6;
 
 // One creature OWNED by a player — a row in the `creatures` table. Species
 // data (per-stat mean curves, stages, abilities) lives in kSpeciesDefs; this
@@ -94,6 +101,99 @@ class CreatureInstance {
   /// still this same row.
   final bool isStarter;
 
+  // ── Ability training (Combat School, user 2026-09-05) ───────
+  // Evolution no longer grants a move by itself — what a creature knows is
+  // now trained by hand, and what's trained stays known forever. See
+  // [learnableAbilities] for what may EVER be learned; these two lists are
+  // what actually has been.
+  //
+  // `_learnedAbilityIds` is nullable ONLY to tell a pre-migration row (the DB
+  // column is NULL) from a real, deliberately-empty one ([]) — see
+  // [needsAbilityBackfill]. Every reader just uses [learnedAbilityIds],
+  // which never surfaces null.
+  List<String>? _learnedAbilityIds;
+
+  /// Every ability id this creature has ever finished training (never
+  /// includes `'attack'` — that one is free and always known).
+  List<String> get learnedAbilityIds => _learnedAbilityIds ?? const [];
+  set learnedAbilityIds(List<String> v) => _learnedAbilityIds = v;
+
+  /// True for a row saved before ability training existed — the Combat
+  /// School and gene-backfill share the same shape (see
+  /// [CreatureInstance.rollBaseGenes]'s [needsGeneBackfill]): a one-time,
+  /// per-creature migration on load rather than a SQL backfill, since the
+  /// starting content (what the OLD species+stage rule already granted) is
+  /// Dart-side knowledge, not something SQL can compute.
+  bool get needsAbilityBackfill => _learnedAbilityIds == null;
+
+  /// Which of [learnedAbilityIds] are actually battle-usable right now (in
+  /// button order), capped at [kMaxEquippedAbilities]. `attack` is not in
+  /// here — Combatant always prepends it separately.
+  List<String> equippedAbilityIds;
+
+  /// Resolves [equippedAbilityIds] against the live ability catalog, dropping
+  /// any id a def no longer exists for (a move deleted in Dev Mode).
+  List<AbilityDef> get equippedAbilities => [
+    for (final id in equippedAbilityIds)
+      if (kAbilityDefs[id] case final def?) def,
+  ];
+
+  /// Everything this creature may EVER learn at its current stage — every
+  /// neutral move plus every move of its own element, gated by each move's
+  /// own [AbilityDef.unlockStage]. See [learnableAbilitiesFor].
+  List<AbilityDef> get learnableAbilities {
+    final s = species;
+    if (s == null) return const [];
+    return learnableAbilitiesFor(s.element, stage);
+  }
+
+  /// When this creature's current lesson finishes, or null when it isn't
+  /// training. Mirrors [healingUntil]/[isHealing] exactly.
+  DateTime? trainingUntil;
+  bool get isTraining =>
+      trainingUntil != null && trainingUntil!.isAfter(DateTime.now());
+
+  /// The ability being learned right now (training or queued), or null.
+  String? trainingAbilityId;
+
+  /// When this creature joined the Combat School's line, or null. Mirrors
+  /// [healQueuedAt]/[isQueuedForHealing] exactly.
+  DateTime? trainQueuedAt;
+  bool get isQueuedForTraining => trainQueuedAt != null && !isTraining;
+
+  /// Time left on the current lesson, or zero when not training.
+  Duration get trainingRemaining {
+    final until = trainingUntil;
+    if (until == null) return Duration.zero;
+    final left = until.difference(DateTime.now());
+    return left.isNegative ? Duration.zero : left;
+  }
+
+  /// One-time migration for a row that predates ability training
+  /// ([needsAbilityBackfill]): grants, as both learned AND equipped
+  /// (capped at [kMaxEquippedAbilities]), exactly what the OLD species+stage
+  /// rule already gave this creature for free — so nobody's team goes silent
+  /// the moment this feature ships. New creatures created from here on start
+  /// with neither list touched by this at all (constructor default `[]`, not
+  /// null), so this only ever fires once, on truly legacy rows.
+  ///
+  /// Returns false — a no-op, try again next [CreaturesController.load] —
+  /// when the species/ability defs haven't finished loading yet, exactly
+  /// like [backfillGenes] does for the same reason: writing an empty result
+  /// now would look identical to "genuinely knows nothing" forever after.
+  bool backfillAbilities() {
+    final s = species;
+    if (s == null || kAbilityDefs.isEmpty) return false;
+    final ids = <String>[
+      for (final sa in s.abilitiesAt(stage))
+        if (sa.abilityId != 'attack' && kAbilityDefs.containsKey(sa.abilityId))
+          sa.abilityId,
+    ];
+    _learnedAbilityIds = ids;
+    equippedAbilityIds = ids.take(kMaxEquippedAbilities).toList();
+    return true;
+  }
+
   CreatureInstance({
     required this.id,
     required this.userId,
@@ -113,7 +213,18 @@ class CreatureInstance {
     this.parentAId,
     this.parentBId,
     this.isStarter = false,
-  }) : currentHp = currentHp ?? -1;
+    // Defaults to `[]`, NOT left to fall through to null: every ordinary
+    // construction site (catch, hatch, starter adopt) must start a creature
+    // with "knows nothing yet", not with [needsAbilityBackfill] true. Only
+    // [CreatureInstance.fromRow] ever passes an explicit `null` here — that's
+    // the one legacy-row case the backfill exists for.
+    List<String>? learnedAbilityIds = const [],
+    this.equippedAbilityIds = const [],
+    this.trainingUntil,
+    this.trainingAbilityId,
+    this.trainQueuedAt,
+  }) : currentHp = currentHp ?? -1,
+       _learnedAbilityIds = learnedAbilityIds;
 
   bool get isAssigned => assignedBuildingId != null && assignedStat != null;
 
@@ -148,10 +259,17 @@ class CreatureInstance {
   // Stat(Level) = Ausgangswert + WertProLevel·(Level-1) — linear, per the
   // balance spec. Kept unrounded until the very last step to avoid
   // compounding rounding error across 75 levels.
-  int statValue(CreatureStat stat) {
+  int statValue(CreatureStat stat) => statValueAtLevel(stat, level);
+
+  /// [statValue], but at an arbitrary level rather than this instance's own
+  /// — the creature detail screen's Lvl-1/Max preview toggle (user
+  /// 2026-09-14) reads THIS so it can show what a creature's genes are worth
+  /// at a shared reference level without touching [level] itself (which
+  /// other screens/XP logic on the same object read concurrently).
+  int statValueAtLevel(CreatureStat stat, int atLevel) {
     final base = statBase[stat] ?? 10;
     final slope = statSlope[stat] ?? 1;
-    final raw = base + slope * (level - 1);
+    final raw = base + slope * (atLevel - 1);
     return math.max(1, raw.round());
   }
 
@@ -318,6 +436,24 @@ class CreatureInstance {
       parentAId: row['parent_a'] as String?,
       parentBId: row['parent_b'] as String?,
       isStarter: row['is_starter'] as bool? ?? false,
+      // NULL (column missing, or a genuinely pre-migration row) is kept as
+      // null — that's [needsAbilityBackfill]'s sentinel, not "knows
+      // nothing"; only a real `[]` from the DB means the latter.
+      learnedAbilityIds: (row['learned_ability_ids'] as List?)
+          ?.map((e) => e as String)
+          .toList(),
+      equippedAbilityIds:
+          (row['equipped_ability_ids'] as List?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
+      trainingAbilityId: row['training_ability_id'] as String?,
+      trainingUntil: row['training_until'] == null
+          ? null
+          : DateTime.tryParse(row['training_until'] as String)?.toLocal(),
+      trainQueuedAt: row['train_queued_at'] == null
+          ? null
+          : DateTime.tryParse(row['train_queued_at'] as String)?.toLocal(),
     );
   }
 
@@ -346,5 +482,14 @@ class CreatureInstance {
     // schema change. See [[expedition-overworld-redesign]].
     'parent_a': parentAId,
     'parent_b': parentBId,
+    // null (never backfilled yet) is written back as null on purpose — an
+    // in-flight backfill always sets a real list before the next save, so
+    // this only round-trips the sentinel for a row this session hasn't
+    // touched at all.
+    'learned_ability_ids': _learnedAbilityIds,
+    'equipped_ability_ids': equippedAbilityIds,
+    'training_ability_id': trainingAbilityId,
+    'training_until': trainingUntil?.toUtc().toIso8601String(),
+    'train_queued_at': trainQueuedAt?.toUtc().toIso8601String(),
   };
 }

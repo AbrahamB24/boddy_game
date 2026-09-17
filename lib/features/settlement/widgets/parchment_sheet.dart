@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../common/widgets/parchment_page.dart';
 import 'meander_strip.dart';
-import 'scroll_paper.dart' show kParchmentInk, kParchmentMid;
+import 'scroll_paper.dart' show kParchmentInk;
 
 /// The bottom sheet every settlement menu wears (user 2026-07-27: "Bag und
 /// Energy sollen im gleichen Stil gestaltet werden wie die anderen neueren
@@ -66,14 +66,13 @@ class ParchmentSheet extends StatelessWidget {
       builder: (_, scrollCtrl) => ClipRRect(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
         child: Container(
-          decoration: BoxDecoration(
-            // ONE TONE with a lit top edge (2026-07-31, low poly): a sheet is
-            // a slab pushed up over the page, and the plane that catches the
-            // light is its near edge — not a wash down its whole height.
-            color: kParchmentMid,
-            border: Border(
-              top: BorderSide(color: FoE.lit(kParchmentMid), width: 2),
-            ),
+          decoration: const BoxDecoration(
+            // [ParchmentPage.pageGradient], verbatim — the same body the
+            // building detail dialog uses (user 2026-09-05: "genau gleich
+            // aufgemaut sein wie der Gebäude detailscreen"), replacing the
+            // flat single-tone fill this used to be a lit top edge stood in
+            // for.
+            gradient: ParchmentPage.pageGradient,
           ),
           // The bands run the FULL sheet height now, behind the title band
           // too (user 2026-08-31: "das Mäanderband soll oben weitergehen
@@ -86,25 +85,31 @@ class ParchmentSheet extends StatelessWidget {
             children: [
               // Wallpaper first, so a band can never land over a card.
               //
-              // Flush at the sheet's own edge now (user 2026-08-30: "die
-              // Deko an den Rand nehmen, wie bei anderen Screens auch") —
-              // the strip already keeps its own air on both sides
-              // ([_FacetPainter._inset]), so the outer 4px this Positioned
-              // added on top of that was pure dead margin, not part of the
-              // motif.
+              // 14px inset / 16px wide (user 2026-09-06: "das Mäanderband so
+              // viel Abstand zum Rand haben wie beim Gebäudedetailscreen"),
+              // superseding the 2026-08-30 flush-to-edge decision below — a
+              // blanket app-wide rule now, matching building_detail_dialog
+              // .dart's own geometry exactly rather than running each sheet's
+              // edge to the true edge.
               Positioned(
-                left: 0,
+                left: 14,
                 top: 0,
                 bottom: 0,
-                width: 14,
-                child: MeanderStrip(color: ornament),
+                width: 16,
+                // fillHeight (user 2026-09-06: "oben und unten bis zur
+                // Kante") — flush top-to-bottom everywhere now.
+                child: MeanderStrip(color: ornament, fillHeight: true),
               ),
               Positioned(
-                right: 0,
+                right: 14,
                 top: 0,
                 bottom: 0,
-                width: 14,
-                child: MeanderStrip(color: ornament, flip: true),
+                width: 16,
+                child: MeanderStrip(
+                  color: ornament,
+                  flip: true,
+                  fillHeight: true,
+                ),
               ),
               Column(
                 // STRETCH (user 2026-08-30: "die Deko an den Rand nehmen") —
@@ -130,7 +135,10 @@ class ParchmentSheet extends StatelessWidget {
                   // sheet is no exception.
                   ParchmentHeader.band(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 10, 16, 10),
+                      // +16/+16 (2026-09-06): the band moved from flush
+                      // (edge at 14) to a 14px inset/16px wide band (edge
+                      // at 30), matching building_detail_dialog.dart.
+                      padding: const EdgeInsets.fromLTRB(36, 10, 32, 10),
                       child: Row(
                         children: [
                           Expanded(

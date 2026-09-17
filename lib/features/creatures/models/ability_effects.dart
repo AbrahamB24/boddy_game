@@ -1,3 +1,4 @@
+import 'creature_enums.dart' show CreatureElement;
 import 'status_effects.dart';
 
 // ── What an ability's effect MEANS in combat ─────────────────
@@ -69,12 +70,19 @@ enum AbilityEffectKind {
   burn,
   poison,
   frost,
+  freeze,
+  petrify,
+  paralysis,
+  soaked,
+  dazzled,
   fear,
   sleep,
+  confusion,
   blind,
   slow,
   attackDown,
   defenseDown,
+  regression,
   heal,
   regen,
   lifesteal,
@@ -86,8 +94,24 @@ enum AbilityEffectKind {
   selfSpeedDown;
 
   AbilityEffectFamily get family => switch (this) {
-    burn || poison || frost || fear || sleep => AbilityEffectFamily.mainStatus,
-    blind || slow || attackDown || defenseDown => AbilityEffectFamily.debuff,
+    burn ||
+    poison ||
+    frost ||
+    freeze ||
+    petrify ||
+    paralysis ||
+    soaked ||
+    dazzled ||
+    fear ||
+    sleep ||
+    confusion =>
+      AbilityEffectFamily.mainStatus,
+    blind ||
+    slow ||
+    attackDown ||
+    defenseDown ||
+    regression =>
+      AbilityEffectFamily.debuff,
     heal => AbilityEffectFamily.heal,
     regen => AbilityEffectFamily.regen,
     lifesteal => AbilityEffectFamily.lifesteal,
@@ -100,12 +124,19 @@ enum AbilityEffectKind {
     burn => 'Burn',
     poison => 'Poison',
     frost => 'Frost',
+    freeze => 'Freeze',
+    petrify => 'Petrify',
+    paralysis => 'Paralysis',
+    soaked => 'Soaked',
+    dazzled => 'Dazzled',
     fear => 'Fear',
     sleep => 'Sleep',
+    confusion => 'Confusion',
     blind => 'Blind',
     slow => 'Slow',
     attackDown => 'Weaken (attack down)',
     defenseDown => 'Expose (defense down)',
+    regression => 'Regression (all stats down)',
     heal => 'Heal',
     regen => 'Regeneration',
     lifesteal => 'Lifesteal',
@@ -121,12 +152,19 @@ enum AbilityEffectKind {
     burn => '🔥',
     poison => '☠️',
     frost => '❄️',
+    freeze => '🥶',
+    petrify => '🗿',
+    paralysis => '⚡',
+    soaked => '💧',
+    dazzled => '✨',
     fear => '😨',
     sleep => '😴',
+    confusion => '💫',
     blind => '👁️',
     slow => '🐌',
     attackDown => '💤',
     defenseDown => '🪓',
+    regression => '⏪',
     heal => '💚',
     regen => '🌱',
     lifesteal => '🩸',
@@ -136,6 +174,13 @@ enum AbilityEffectKind {
     haste => '⏱️',
     selfDefDown || selfSpeedDown => '⚠️',
   };
+
+  /// The element this effect exposes its target to on top of its own type's
+  /// weaknesses, or null (user 2026-09-15). Only meaningful for
+  /// [AbilityEffectFamily.mainStatus] — derived from [mainStatus] so this
+  /// stays in the one place that mapping lives.
+  CreatureElement? get exposesElement =>
+      mainStatus == null ? null : mainStatusExposure(mainStatus!);
 
   /// Whether the effect RUNS for a while. A heal and a lifesteal happen once
   /// and are over, so their duration field is meaningless — that is the "falls
@@ -162,12 +207,19 @@ enum AbilityEffectKind {
     burn => 'Damage per turn (% of max HP)',
     poison => 'Damage on the FIRST turn (% of max HP)',
     frost => 'Speed lost (%)',
+    freeze => 'Chance the turn is skipped (%)',
+    petrify => 'Chance the turn is skipped (%)',
+    paralysis => 'Chance the turn is skipped (%)',
+    soaked => 'Attack the target loses (%)',
+    dazzled => 'Accuracy the target loses (%)',
     fear => 'Chance the turn is skipped (%)',
     sleep => 'Chance the turn is skipped (%)',
+    confusion => 'Chance it hits ITSELF instead, each of its turns (%)',
     blind => 'Accuracy lost (%)',
     slow => 'Speed lost (%)',
     attackDown => 'Attack the target loses (%)',
     defenseDown => 'Defense the target loses (%)',
+    regression => 'Attack, defense AND speed the target loses, all at once (%)',
     heal => 'HP restored (% of max HP)',
     regen => 'HP restored per turn (% of max HP)',
     lifesteal => 'Of the damage dealt (%)',
@@ -186,12 +238,19 @@ enum AbilityEffectKind {
     burn => statusDotFraction(MainStatusKind.burn, 0),
     poison => statusDotFraction(MainStatusKind.poison, 0),
     frost => 1 - statusSpeedMult(MainStatusKind.frost),
+    freeze => statusSkipChance(MainStatusKind.freeze),
+    petrify => statusSkipChance(MainStatusKind.petrify),
+    paralysis => statusSkipChance(MainStatusKind.paralysis),
+    soaked => 1 - statusAttackMult(MainStatusKind.soaked),
+    dazzled => 1 - statusAccuracyMult(MainStatusKind.dazzled),
     fear => statusSkipChance(MainStatusKind.fear),
     sleep => statusSkipChance(MainStatusKind.sleep),
+    confusion => statusSkipChance(MainStatusKind.confusion),
     blind => 1 - secondaryAccuracyMult(SecondaryDebuffKind.blind),
     slow => 1 - secondarySpeedMult(SecondaryDebuffKind.speedDown),
     attackDown => 1 - secondaryAttackMult(SecondaryDebuffKind.attackDown),
     defenseDown => 1 - secondaryDefenseMult(SecondaryDebuffKind.defenseDown),
+    regression => 1 - secondaryRegressionMult(SecondaryDebuffKind.regression),
     // A heal, a lifesteal, a regen and a recoil have no catalog entry — the
     // move's own percentage IS the effect, so these are the seed values the form
     // starts a fresh one at.
@@ -211,10 +270,21 @@ enum AbilityEffectKind {
     burn => mainStatusDuration(MainStatusKind.burn),
     poison => mainStatusDuration(MainStatusKind.poison),
     frost => mainStatusDuration(MainStatusKind.frost),
+    freeze => mainStatusDuration(MainStatusKind.freeze),
+    petrify => mainStatusDuration(MainStatusKind.petrify),
+    paralysis => mainStatusDuration(MainStatusKind.paralysis),
+    soaked => mainStatusDuration(MainStatusKind.soaked),
+    dazzled => mainStatusDuration(MainStatusKind.dazzled),
     fear => mainStatusDuration(MainStatusKind.fear),
     sleep => mainStatusDuration(MainStatusKind.sleep),
+    confusion => mainStatusDuration(MainStatusKind.confusion),
     regen => 3,
-    blind || slow || attackDown || defenseDown => kSecondaryDebuffDuration,
+    blind ||
+    slow ||
+    attackDown ||
+    defenseDown ||
+    regression =>
+      kSecondaryDebuffDuration,
     armor || rage || haste => kSelfBuffDuration,
     selfDefDown || selfSpeedDown => 1,
     heal || lifesteal || recoil => 0,
@@ -269,8 +339,14 @@ enum AbilityEffectKind {
     burn => MainStatusKind.burn,
     poison => MainStatusKind.poison,
     frost => MainStatusKind.frost,
+    freeze => MainStatusKind.freeze,
+    petrify => MainStatusKind.petrify,
+    paralysis => MainStatusKind.paralysis,
+    soaked => MainStatusKind.soaked,
+    dazzled => MainStatusKind.dazzled,
     fear => MainStatusKind.fear,
     sleep => MainStatusKind.sleep,
+    confusion => MainStatusKind.confusion,
     _ => null,
   };
 
@@ -280,6 +356,7 @@ enum AbilityEffectKind {
     slow => SecondaryDebuffKind.speedDown,
     attackDown => SecondaryDebuffKind.attackDown,
     defenseDown => SecondaryDebuffKind.defenseDown,
+    regression => SecondaryDebuffKind.regression,
     _ => null,
   };
 
@@ -302,8 +379,14 @@ enum AbilityEffectKind {
     MainStatusKind.burn => burn,
     MainStatusKind.poison => poison,
     MainStatusKind.frost => frost,
+    MainStatusKind.freeze => freeze,
+    MainStatusKind.petrify => petrify,
+    MainStatusKind.paralysis => paralysis,
+    MainStatusKind.soaked => soaked,
+    MainStatusKind.dazzled => dazzled,
     MainStatusKind.fear => fear,
     MainStatusKind.sleep => sleep,
+    MainStatusKind.confusion => confusion,
   };
 
   static AbilityEffectKind ofDebuff(SecondaryDebuffKind k) => switch (k) {
@@ -311,6 +394,7 @@ enum AbilityEffectKind {
     SecondaryDebuffKind.speedDown => slow,
     SecondaryDebuffKind.attackDown => attackDown,
     SecondaryDebuffKind.defenseDown => defenseDown,
+    SecondaryDebuffKind.regression => regression,
   };
 
   static AbilityEffectKind ofSelfBuff(SelfBuffKind k) => switch (k) {
@@ -441,6 +525,30 @@ List<String> describeAbilityEffect(AbilityEffect e) {
       out.add('It also has a '
           '${_pct(statusSkipChance(MainStatusKind.frost))} chance to lose each '
           'of those turns entirely (fixed).');
+    case AbilityEffectKind.freeze:
+      out.add('The target loses each of its next $t turns with a ${_pct(v)} '
+          'chance — rolled again at the start of every one of them.');
+      out.add('The heavier of Ice\'s two ailments — frost chips speed, this '
+          'one nearly stops the target cold.');
+    case AbilityEffectKind.petrify:
+      out.add('The target loses each of its next $t turns with a ${_pct(v)} '
+          'chance — rolled again at the start of every one of them.');
+    case AbilityEffectKind.paralysis:
+      out.add('The target loses each of its next $t turns with a ${_pct(v)} '
+          'chance — rolled again at the start of every one of them.');
+    case AbilityEffectKind.soaked:
+      out.add('The target deals ${_pct(v)} LESS damage for ${_turns(t)}.');
+      out.add('No damage of its own — Water\'s ailment is a pure attack sap.');
+    case AbilityEffectKind.dazzled:
+      out.add('The target\'s attacks miss ${_pct(v)} more often for '
+          '${_turns(t)}.');
+      out.add('The heavier, timed cousin of the secondary Blind debuff.');
+    case AbilityEffectKind.confusion:
+      out.add('Each of the target\'s next $t turns, there is a ${_pct(v)} '
+          'chance it hits ITSELF instead of acting — a typeless hit using its '
+          'own attack and defense.');
+      out.add('No type owns this one: it never exposes a weakness the way '
+          'the other main statuses do.');
     case AbilityEffectKind.fear:
       out.add('The target loses each of its next $t turns with a ${_pct(v)} '
           'chance — rolled again at the start of every one of them.');
@@ -459,6 +567,12 @@ List<String> describeAbilityEffect(AbilityEffect e) {
           '${_pct(v)} less.');
       out.add('The support move for a party: it multiplies what everyone else '
           'does to that target, not what you do.');
+    case AbilityEffectKind.regression:
+      out.add('The target loses ${_pct(v)} attack, defense AND speed together '
+          'for ${_turns(t)} — "Deevolution": it fights like a weaker, '
+          'earlier stage of itself for a while.');
+      out.add('Battle-only: nothing about the monster itself changes once '
+          'the fight ends.');
     case AbilityEffectKind.regen:
       out.add('The USER heals ${_pct(v)} of its max HP at the end of each of '
           'its own turns, for ${_turns(t)} — ${_pct(v * t)} in total if it '
@@ -499,9 +613,17 @@ List<String> describeAbilityEffect(AbilityEffect e) {
   switch (e.kind.family) {
     case AbilityEffectFamily.mainStatus:
       out.add('Lands on a ${_pct(e.resolvedChance)} roll, and ONLY if the '
-          'target carries no other main status (burn/frost/poison/fear are '
-          'mutually exclusive) — a second attempt on an afflicted target is '
-          'simply wasted.');
+          'target carries no other main status — they are mutually '
+          'exclusive, so a second attempt on an afflicted target is simply '
+          'wasted.');
+      final exposed = e.kind.exposesElement;
+      if (exposed != null) {
+        out.add('${e.kind.emoji} ${e.kind.label} exposes the target to '
+            '${exposed.emoji} ${exposed.label}\'s weaknesses TOO, on top of '
+            'its own — whichever hits harder applies.');
+      }
+      out.add('Also loses this status early with a chance that grows every '
+          'round it is active — it is never a fixed lock.');
     case AbilityEffectFamily.debuff:
       out.add('Lands on a ${_pct(e.resolvedChance)} roll. It stacks alongside a '
           'main status; re-applying only refreshes the duration.');

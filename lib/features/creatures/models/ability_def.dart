@@ -26,11 +26,10 @@ enum AbilityKind {
   final String label;
   const AbilityKind(this.label);
 
-  static AbilityKind fromName(String? name) =>
-      AbilityKind.values.firstWhere(
-        (k) => k.name == name,
-        orElse: () => AbilityKind.damage,
-      );
+  static AbilityKind fromName(String? name) => AbilityKind.values.firstWhere(
+    (k) => k.name == name,
+    orElse: () => AbilityKind.damage,
+  );
 }
 
 enum AbilityTarget {
@@ -151,9 +150,37 @@ class AbilityDef {
   /// Author-set AP cost (Dev Mode, user request). 0 = AUTO: derive it from
   /// power/effects (the original rule, see [_derivedApCost]). >0 = use this
   /// exact value (clamped 1..[kMaxActionPoints]). Either way it is capped per
-  /// species-assignment so a starting ability stays affordable — see
-  /// Combatant._resolveAbilities.
+  /// [unlockStage] so a move stays affordable the moment it's learnable —
+  /// see Combatant._capToStage.
   final int apCost;
+
+  /// The evolution STAGE this move may be learned from (0/1/2) — the Combat
+  /// School gate (user 2026-09-05). Replaces the old per-species
+  /// `SpeciesAbility.unlockStage`: a move's stage requirement is now a
+  /// property of the move itself, since what a creature may learn is no
+  /// longer a curated species list but "every neutral move + every move of
+  /// its own type" (see [learnableAbilitiesFor]) — that rule needs the gate
+  /// to live on the ability, not on a per-species assignment that no longer
+  /// exists.
+  final int unlockStage;
+
+  /// `kind == damage`, `target == enemy` only: chance to land ONE MORE hit
+  /// after the first (user 2026-09-08: "nicht nur 1 gegner treffen sondern 2
+  /// oder 3... mit jedem Treffer sinkt die Chance, noch einen Treffer zu
+  /// landen"). 0 = a plain single hit. Capped at 3 total hits: hit 2 needs
+  /// this chance to succeed once, hit 3 needs it to succeed AGAIN — an
+  /// independent second roll at the same chance — so the compound odds of
+  /// reaching a 3rd hit ([extraHitChance]²) are always lower than reaching a
+  /// 2nd, with no separate "chance for hit 3" field needed.
+  final double extraHitChance;
+
+  /// Where the extra hit(s) from [extraHitChance] land: `true` = the SAME
+  /// target again (a classic multi-hit/Serienangriff move — more burst on
+  /// one enemy, useful even 1v1); `false` = a DIFFERENT living enemy each
+  /// time (a cleave move — spreads damage across the field, does nothing
+  /// extra with only one enemy up). The user asked for both as separate move
+  /// types, not one move doing either.
+  final bool extraHitSameTarget;
 
   const AbilityDef({
     required this.id,
@@ -184,6 +211,9 @@ class AbilityDef {
     this.regenTurns = 0,
     this.recoilValue = 0,
     this.apCost = 0,
+    this.unlockStage = 0,
+    this.extraHitChance = 0,
+    this.extraHitSameTarget = false,
   });
 
   // ── The effect LIST (user 2026-07-30) ──────────────────────
@@ -290,6 +320,9 @@ class AbilityDef {
       regenTurns: regen?.turns ?? 0,
       recoilValue: recoil?.resolvedValue ?? 0,
       apCost: apCost,
+      unlockStage: unlockStage,
+      extraHitChance: extraHitChance,
+      extraHitSameTarget: extraHitSameTarget,
     );
   }
 
@@ -310,6 +343,15 @@ class AbilityDef {
     var total = kind == AbilityKind.damage ? power.toDouble() : 0.0;
     for (final e in effects) {
       total += e.power;
+    }
+    // Extra hits (user 2026-09-08) are priced the same way a status chance
+    // is: expected value = magnitude × chance. Hit 2 is worth power ×
+    // extraHitChance; hit 3 needs that SAME roll to land twice, so it is
+    // worth power × extraHitChance² — always less, matching the shrinking
+    // odds of actually reaching it.
+    if (kind == AbilityKind.damage && extraHitChance > 0) {
+      total += power * extraHitChance;
+      total += power * extraHitChance * extraHitChance;
     }
     return total;
   }
@@ -351,8 +393,8 @@ class AbilityDef {
   /// author overruling the formula on purpose.
   bool get isOverPricedOut => apCost == 0 && totalPower > kMaxPricedPower;
 
-  /// A copy with a forced explicit [apCost] — used to cap a starting ability to
-  /// its unlock stage's AP ceiling (Combatant._resolveAbilities).
+  /// A copy with a forced explicit [apCost] — used to cap a move to its own
+  /// unlock stage's AP ceiling (Combatant._capToStage).
   AbilityDef withApCost(int cost) => AbilityDef(
     id: id,
     name: name,
@@ -382,6 +424,9 @@ class AbilityDef {
     regenTurns: regenTurns,
     recoilValue: recoilValue,
     apCost: cost,
+    unlockStage: unlockStage,
+    extraHitChance: extraHitChance,
+    extraHitSameTarget: extraHitSameTarget,
   );
 
   factory AbilityDef.fromDefRow(Map<String, dynamic> row) => AbilityDef(
@@ -443,6 +488,11 @@ class AbilityDef {
     recoilValue: (row['recoil_value'] as num?)?.toDouble() ?? 0,
     // 0 (or a pre-migration row with no column) = auto-derive.
     apCost: (row['ap_cost'] as num?)?.toInt() ?? 0,
+    // 0 (or a pre-migration row with no column) = learnable from stage 1.
+    unlockStage: (row['unlock_stage'] as num?)?.toInt() ?? 0,
+    // Absent on a pre-2026-09-08 row → the move is a plain single hit.
+    extraHitChance: (row['extra_hit_chance'] as num?)?.toDouble() ?? 0,
+    extraHitSameTarget: row['extra_hit_same_target'] as bool? ?? false,
   );
 
   Map<String, dynamic> toDefRow() => {
@@ -474,6 +524,9 @@ class AbilityDef {
     'regen_turns': regenTurns,
     'recoil_value': recoilValue,
     'ap_cost': apCost,
+    'unlock_stage': unlockStage,
+    'extra_hit_chance': extraHitChance,
+    'extra_hit_same_target': extraHitSameTarget,
   };
 }
 
@@ -481,3 +534,25 @@ class AbilityDef {
 /// in-place-overwrite pattern as kBuildingDefs). Empty until the DB rows
 /// exist — there is no bundled fallback content for creatures.
 final Map<String, AbilityDef> kAbilityDefs = {};
+
+/// Every move a creature of [element] may ever learn once it reaches [stage]
+/// — the Combat School's whole curriculum (user 2026-09-05).
+///
+/// Replaces the old per-species curated `SpeciesAbility` list: "Monster
+/// können alle neutralen Fähigkeiten und ihre Typfähigkeit erlernen" means
+/// there is no hand-picked subset any more — every NEUTRAL move plus every
+/// move of the creature's OWN element is fair game, gated only by each
+/// move's own [AbilityDef.unlockStage]. `attack` is excluded: it is free,
+/// universal, and never trained (see Combatant._fallbackAttack).
+///
+/// The single source of truth for "what may this creature ever learn" —
+/// read by the Creature Detail screen, the Combat School screen, and wild/
+/// enemy moveset generation ([Combatant.fromSpecies]).
+List<AbilityDef> learnableAbilitiesFor(CreatureElement element, int stage) =>
+    kAbilityDefs.values
+        .where((a) => a.id != 'attack')
+        .where(
+          (a) => a.element == CreatureElement.neutral || a.element == element,
+        )
+        .where((a) => a.unlockStage <= stage)
+        .toList();

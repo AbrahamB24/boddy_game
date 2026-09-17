@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/ui/pressable.dart';
 
 /// WHAT THE BARS MEASURE — a two-segment switch over any stat table (user
 /// 2026-07-27: "lvl 1 und das Icon sollen klickbar sein. Wenn ich das level up
@@ -74,7 +75,7 @@ class GeneBarToggle extends StatelessWidget {
     required bool active,
     required VoidCallback onTap,
     required Widget child,
-  }) => GestureDetector(
+  }) => Pressable(
     behavior: HitTestBehavior.opaque,
     onTap: onTap,
     child: Container(

@@ -7,7 +7,9 @@ import '../../creatures/expeditions_screen.dart';
 import '../../creatures/hatchery_screen.dart';
 import '../../settlement/crafting_screen.dart';
 import '../../settlement/widgets/parchment_sheet.dart';
+import '../widgets/parchment_page.dart';
 import 'game_events.dart';
+import '../../../core/ui/pressable.dart';
 
 /// The bell: how many things happened that you haven't looked at, and what.
 ///
@@ -43,10 +45,18 @@ class NotificationButton extends StatelessWidget {
                   top: 8,
                   right: 6,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
                     constraints: const BoxConstraints(minWidth: 16),
-                    decoration: ShapeDecoration(color: FoE.danger, shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.panelDark, width: 1.5))),
+                    decoration: ShapeDecoration(
+                      color: FoE.danger,
+                      shape: FoE.facet(
+                        radius: 8,
+                        side: BorderSide(color: FoE.panelDark, width: 1.5),
+                      ),
+                    ),
                     child: Text(
                       // Caps the badge: "99+" keeps the header stable no matter
                       // how long you were away.
@@ -76,7 +86,7 @@ class NotificationButton extends StatelessWidget {
 /// and neither should own a second copy of the listener.
 class NotificationBadge extends StatefulWidget {
   final Widget Function(BuildContext context, int unread, VoidCallback open)
-      builder;
+  builder;
 
   const NotificationBadge({super.key, required this.builder});
 
@@ -117,12 +127,7 @@ void showEventSheet(BuildContext context) {
   // Read on open, not on close: you've seen the count, and leaving it unread
   // would make the badge nag about things already on screen.
   GameEventLog().markAllRead();
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => const _EventSheet(),
-  );
+  showDialog<void>(context: context, builder: (_) => const _EventSheet());
 }
 
 class _EventSheet extends StatefulWidget {
@@ -153,11 +158,8 @@ class _EventSheetState extends State<_EventSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => ParchmentSheet(
+  Widget build(BuildContext context) => ParchmentDialog(
     title: 'What happened',
-    initialSize: 0.55,
-    minSize: 0.3,
-    maxSize: 0.92,
     trailing: _log.events.isEmpty
         ? null
         : TextButton(
@@ -167,7 +169,7 @@ class _EventSheetState extends State<_EventSheet> {
               style: FoE.dim(size: 11).copyWith(color: ParchmentSheet.accent),
             ),
           ),
-    builder: (context, scrollCtrl) => _log.events.isEmpty
+    child: _log.events.isEmpty
         ? Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -175,20 +177,16 @@ class _EventSheetState extends State<_EventSheet> {
                 'Nothing yet.\n\nExpeditions, research and your monsters '
                 'levelling up will show up here.',
                 textAlign: TextAlign.center,
-                style: FoE.dim(size: 12).copyWith(
-                  color: ParchmentSheet.inkSoft,
-                ),
+                style: FoE.dim(
+                  size: 12,
+                ).copyWith(color: ParchmentSheet.inkSoft),
               ),
             ),
           )
         : ListView.separated(
-            controller: scrollCtrl,
-            padding: EdgeInsets.fromLTRB(
-              26,
-              8,
-              26,
-              20 + MediaQuery.of(context).viewPadding.bottom,
-            ),
+            // +12/+12 (2026-09-06): ParchmentDialog's own bands widened by
+            // that on each side.
+            padding: const EdgeInsets.fromLTRB(38, 12, 38, 8),
             itemCount: _log.events.length,
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, i) => _row(context, _log.events[i]),
@@ -200,7 +198,7 @@ class _EventSheetState extends State<_EventSheet> {
   ///
   /// Every line here used to be a dead `Container`: "Hunt over" told you and then
   /// left you to close the sheet and find the Scout Post yourself. Null for the
-  /// kinds with nowhere specific to go (a casualty is news, not a place).
+  /// kinds with nowhere specific to go.
   static Widget? _destinationOf(GameEventKind kind) => switch (kind) {
     GameEventKind.expedition => const ExpeditionsScreen(),
     GameEventKind.breeding => const HatcheryScreen(),
@@ -209,7 +207,6 @@ class _EventSheetState extends State<_EventSheet> {
     // all are, and it is the screen that shows what changed.
     GameEventKind.levelUp || GameEventKind.caught => const CollectionScreen(),
     GameEventKind.building || GameEventKind.research => null,
-    GameEventKind.casualty => null,
   };
 
   Widget _row(BuildContext context, GameEvent e) {
@@ -250,17 +247,14 @@ class _EventSheetState extends State<_EventSheet> {
         child: body,
       );
     }
-    return GestureDetector(
+    return Pressable(
       behavior: HitTestBehavior.opaque,
       onTap: () {
         Feel.tap();
         // Closes the feed first: coming back from the screen to a sheet you have
         // already acted on is a step nobody wants.
         Navigator.pop(context);
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => destination),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (_) => destination));
       },
       child: Container(
         padding: const EdgeInsets.all(12),

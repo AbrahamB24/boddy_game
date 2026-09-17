@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:boddygame/core/ui/pressable.dart';
 import 'package:boddygame/features/common/widgets/parchment_kit.dart';
 
 // The pieces the parchment SCREENS are built from (user 2026-07-29: "designe
@@ -21,6 +22,11 @@ void main() {
       var taps = 0;
       await pump(tester, ParchmentButton(label: 'Send', onTap: () => taps++));
       await tester.tap(find.text('Send'));
+      // Pressable now waits for its own press/release animation before
+      // actually firing onTap (user 2026-09-07: "die Animation abwarten,
+      // bevor der Effekt ausgelöst wird") — a bare tap alone no longer fires
+      // it in the same frame.
+      await tester.pump(Pressable.duration);
       expect(taps, 1);
     });
 
@@ -62,6 +68,8 @@ void main() {
         ParchmentCard(onTap: () => taps++, child: const Text('Gather wood')),
       );
       await tester.tap(find.text('Gather wood'));
+      // Same delayed-fire as ParchmentButton — see the comment above.
+      await tester.pump(Pressable.duration);
       expect(taps, 1);
     });
 

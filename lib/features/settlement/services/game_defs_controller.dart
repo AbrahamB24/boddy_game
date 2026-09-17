@@ -4,7 +4,6 @@ import '../../../core/supabase/supabase_client.dart';
 import '../../creatures/models/area.dart';
 import '../../creatures/models/path_node.dart';
 import '../data/building_definitions.dart';
-import '../data/era_definitions.dart';
 import '../data/gather_defs.dart';
 import '../data/item_definitions.dart';
 import 'game_defs_service.dart';
@@ -104,8 +103,6 @@ class GameDefsController extends ChangeNotifier {
   /// Reloading here makes a save mean the same thing whatever realtime does.
   Future<void> saveBuildingDef(BuildingDef def) =>
       _saveThenReload(() => _svc.upsertBuildingDef(def));
-  Future<void> saveEraDef(EraDef def) =>
-      _saveThenReload(() => _svc.upsertEraDef(def));
   Future<void> savePathNode(PathNode node) =>
       _saveThenReload(() => _svc.upsertPathNode(node));
 
@@ -157,8 +154,6 @@ class GameDefsController extends ChangeNotifier {
   /// used to happen by accident, now on purpose.
   Future<void> restoreBuildingDef(String id) =>
       _saveThenReload(() => _svc.deleteBuildingDef(id));
-  Future<void> deleteEraDef(String id) =>
-      _saveThenReload(() => _svc.deleteEraDef(id));
   Future<void> deletePathNode(String id) =>
       _saveThenReload(() => _svc.deletePathNode(id));
   Future<void> deleteItemDef(String id) =>
@@ -179,41 +174,38 @@ class GameDefsController extends ChangeNotifier {
     }
     _loading = true;
     try {
+      // PARALLEL, not sequential (found 2026-09-12 auditing "loading feels
+      // slow") — five independent tables used to load one after another,
+      // each its own network round trip, so this took the SUM of all five
+      // instead of the time of the slowest one. This is one of the branches
+      // [SettlementController.load] awaits alongside everything else, so
+      // that sum landed directly on the loading screen's own duration.
+      final rows = await Future.wait([
+        _svc.loadBuildingDefRows(),
+        _svc.loadAreaDefRows(),
+        _svc.loadPathNodeRows(),
+        _svc.loadItemDefRows(),
+        _svc.loadGatherDefRows(),
+      ]);
       mergeDefRows(
         kBuildingDefs,
         kFallbackBuildingDefs,
-        await _svc.loadBuildingDefRows(),
+        rows[0],
         BuildingDef.fromDefRow,
         retired: retiredBuildingIds,
       );
       mergeDefRows(
-        kEraDefs,
-        kFallbackEraDefs,
-        await _svc.loadEraDefRows(),
-        EraDef.fromDefRow,
-      );
-      mergeDefRows(
         kAreaDefs,
         {for (final a in kFallbackAreaDefs) a.id: a},
-        await _svc.loadAreaDefRows(),
+        rows[1],
         AreaDef.fromDefRow,
       );
-      mergeDefRows(
-        kPathNodes,
-        kFallbackPathNodes,
-        await _svc.loadPathNodeRows(),
-        PathNode.fromDefRow,
-      );
-      mergeDefRows(
-        kItemDefs,
-        kFallbackItemDefs,
-        await _svc.loadItemDefRows(),
-        ItemDef.fromDefRow,
-      );
+      mergeDefRows(kPathNodes, kFallbackPathNodes, rows[2], PathNode.fromDefRow);
+      mergeDefRows(kItemDefs, kFallbackItemDefs, rows[3], ItemDef.fromDefRow);
       mergeDefRows(
         kGatherDefs,
         kFallbackGatherDefs,
-        await _svc.loadGatherDefRows(),
+        rows[4],
         ResourceGatherDef.fromDefRow,
       );
     } catch (e) {
@@ -237,12 +229,6 @@ class GameDefsController extends ChangeNotifier {
         event: PostgresChangeEvent.all,
         schema: 'public',
         table: 'building_defs',
-        callback: (_) => load(),
-      )
-      ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'era_defs',
         callback: (_) => load(),
       )
       ..onPostgresChanges(

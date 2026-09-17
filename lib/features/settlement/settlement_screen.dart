@@ -1,3 +1,5 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'data/resource_icons.dart';
@@ -5,21 +7,29 @@ import '../../core/ui/feel_button.dart';
 import '../../core/orientation_lock.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/number_format.dart';
-import '../../core/ui/duration_format.dart';
+import '../creatures/models/area.dart';
+import '../creatures/models/species_def.dart' show kSpeciesDefs;
+import '../creatures/services/overworld_layout.dart' show areaForRegion;
+import 'data/building_art.dart' show kBundledBuildingArt, buildingAsset;
 import 'data/building_definitions.dart';
-import 'data/era_definitions.dart';
 import 'data/goods_definitions.dart';
-import 'dev/dev_mode_screen.dart';
+// Deferred (user 2026-09-06: "performance deutlich verbessern") — Dev Mode
+// is ~12.6k lines (every def form, the balance tools, the combat lab), all
+// of which used to compile straight into the initial main.dart.js bundle
+// for every player even though almost none of them ever open it. `loadLibrary`
+// only fetches this chunk the first time _showDevMode is actually called.
+import 'dev/dev_mode_screen.dart' deferred as dev_mode;
 import 'services/daily_tasks.dart';
-import 'services/game_engine.dart';
 import 'services/new_items.dart';
 import 'services/step_tracker_service.dart';
 import 'settlement_controller.dart';
 import 'build_menu_screen.dart';
 import 'sheets/energy_sheet.dart';
 import 'bag_screen.dart';
+import 'profile_screen.dart';
 import 'resource_detail_screen.dart';
 import 'widgets/meander_strip.dart';
+import 'widgets/parchment_sheet.dart';
 import 'widgets/quick_pad.dart';
 import 'widgets/scroll_paper.dart';
 import 'widgets/settlement_map.dart';
@@ -27,6 +37,7 @@ import '../common/events/game_events.dart';
 import '../common/widgets/parchment_page.dart';
 import '../common/events/notification_button.dart';
 import '../creatures/collection_screen.dart';
+import 'housing_screen.dart';
 import 'management_screen.dart';
 import '../creatures/expeditions_screen.dart';
 import '../creatures/models/creature_enums.dart' show kHealingHutBuildingId;
@@ -35,6 +46,8 @@ import '../onboarding/intro_card_panel.dart';
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
 import '../common/widgets/recess_bar.dart';
+import '../../core/ui/pressable.dart';
+import '../social/social_screen.dart';
 
 class SettlementScreen extends StatefulWidget {
   const SettlementScreen({super.key});
@@ -44,7 +57,10 @@ class SettlementScreen extends StatefulWidget {
 }
 
 class _SettlementScreenState extends State<SettlementScreen>
-    with OrientationLock<SettlementScreen>, WidgetsBindingObserver {
+    with
+        OrientationLock<SettlementScreen>,
+        WidgetsBindingObserver,
+        SingleTickerProviderStateMixin {
   final _ctrl = SettlementController();
   // Lets the tutorial's CTAs open a building's dialog directly (heal step,
   // assign step) instead of asking a brand-new player to find it on the map.
@@ -59,6 +75,21 @@ class _SettlementScreenState extends State<SettlementScreen>
   // in the quick menu. Reset once the step moves on, so a later replay of
   // the intro (skip/restart) starts the card fresh again.
   bool _pickStarterPrompted = false;
+
+  // ── Eras panel expand/collapse (user 2026-09-06) ────────────
+  // AnimatedSize looked instant no matter how long its duration ran —
+  // [_erasPanel] sits as the size-determining child of a Stack that ALSO
+  // has two full-height Positioned MeanderStrips in it, and something in
+  // that combination was skipping the intermediate frames instead of
+  // interpolating through them. A driven [SizeTransition] doesn't depend on
+  // the parent re-measuring an implicitly-animated child at all — it clips
+  // and scales a fixed-size child by its OWN controller's value every
+  // frame, which is the actual "extends downward, retracts back up" reveal
+  // that was asked for.
+  late final AnimationController _erasCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 500),
+  );
 
   // PORTRAIT. This screen used to force landscape, which is flatly at odds
   // with everything else: the phone frame, the header, the sheets and the
@@ -79,10 +110,100 @@ class _SettlementScreenState extends State<SettlementScreen>
     WidgetsBinding.instance.addObserver(this);
     _ctrl.addListener(_rebuild);
     NewItems().addListener(_rebuild);
-    _ctrl.load();
     // Real step counter: watches the hardware sensor and credits steps as
     // energy automatically (user 2026-07-18).
     StepTrackerService().start();
+    _bootstrap();
+  }
+
+  /// True once every picture the game's first frame (or a moment later) could
+  /// need has actually finished decoding — [_loading] stays up until then, see
+  /// [build].
+  bool _assetsReady = false;
+
+  /// Loads the game's DATA before showing it (user 2026-09-11: "vor dem
+  /// Gamestart einen Ladescreen, bei welchem alles vorgeladen wird"), then
+  /// precaches only the LOCAL art that first frame needs — every network
+  /// picture keeps loading in the BACKGROUND after the game is already on
+  /// screen.
+  ///
+  /// The first version of this (also 2026-09-11) awaited every picture in the
+  /// game before flipping [_assetsReady] — every uploaded building's URL AND
+  /// every species' art, front and back, every stage, whether this save has
+  /// ever seen it or not. That is ~250+ network fetches blocking the very
+  /// first frame, which is exactly the regression the player reported one
+  /// message later ("die performance ist jetzt sehr schlecht"): the loading
+  /// screen got dramatically SLOWER, not faster. Bundled building renders are
+  /// local assets (fast, no network) and cover every building this save
+  /// actually starts with, so those alone are worth blocking on; everything
+  /// that needs the network is reference art for buildings not yet built and
+  /// species this save may never even encounter — precaching THAT in the
+  /// background is exactly as good for the player and does not hold the
+  /// front door shut while it happens.
+  Future<void> _bootstrap() async {
+    await _ctrl.load();
+    if (!mounted) return;
+    if (_ctrl.error != null) {
+      setState(() => _assetsReady = true);
+      return;
+    }
+    final local = <Future<void>>[];
+    for (final id in kBundledBuildingArt) {
+      final asset = buildingAsset(id);
+      if (asset != null) local.add(precacheImage(AssetImage(asset), context));
+    }
+    // One broken asset must not hang the loading screen forever.
+    await Future.wait(local.map((f) => f.catchError((_) {})));
+    if (!mounted) return;
+    setState(() => _assetsReady = true);
+    _precacheNetworkArtInBackground();
+  }
+
+  /// Everything that needs the network, fired AFTER the game is already
+  /// showing — see [_bootstrap]. Fire-and-forget: nothing awaits this, it
+  /// just warms the cache so the Bestiary/battle/build-menu don't hit a cold
+  /// fetch the first time they draw a picture this save hasn't needed yet.
+  ///
+  /// THE PROVIDER MUST MATCH THE WIDGET (found auditing this 2026-09-12) —
+  /// [BuildingIcon] draws every uploaded (non-bundled) picture through
+  /// [CachedNetworkImage], never plain [Image.network]. Flutter's ImageCache
+  /// keys on the ImageProvider's own type, so precaching a `NetworkImage`
+  /// here populated a cache entry [CachedNetworkImageProvider] never looks
+  /// up — every uploaded building has been fetched over the network TWICE
+  /// since this precache first shipped (2026-09-06): once here, wastefully,
+  /// and once for real the first time [BuildingIcon] actually drew it.
+  /// [CachedNetworkImageProvider] is what actually lands in its cache (and,
+  /// via flutter_cache_manager, on disk). Species art keeps the platform
+  /// split [CreatureSprite] itself uses — `Image.network` on web, otherwise
+  /// the same cached provider — for the same reason.
+  void _precacheNetworkArtInBackground() {
+    // The other ~69 of 89 buildings — no bundled render yet, so their picture
+    // is whatever got uploaded in Dev Mode (BuildingDef.imageUrl). Bundled
+    // wins over imageUrl (see data/building_art.dart), so skip a building
+    // already covered by [_bootstrap] rather than fetch a picture nothing
+    // ever draws.
+    for (final def in kBuildingDefs.values) {
+      final url = def.imageUrl;
+      if (url != null && url.isNotEmpty && buildingAsset(def.id) == null) {
+        precacheImage(CachedNetworkImageProvider(url), context)
+            .catchError((_) {});
+      }
+    }
+    final speciesUrls = <String>{};
+    for (final species in kSpeciesDefs.values) {
+      for (final stage in species.stages) {
+        final front = stage.imageUrl;
+        final back = stage.backImageUrl;
+        if (front != null && front.isNotEmpty) speciesUrls.add(front);
+        if (back != null && back.isNotEmpty) speciesUrls.add(back);
+      }
+    }
+    for (final url in speciesUrls) {
+      final ImageProvider provider = kIsWeb
+          ? NetworkImage(url)
+          : CachedNetworkImageProvider(url);
+      precacheImage(provider, context).catchError((_) {});
+    }
   }
 
   @override
@@ -92,6 +213,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     _ctrl.removeListener(_rebuild);
     NewItems().removeListener(_rebuild);
     _ctrl.stopTicker();
+    _erasCtrl.dispose();
     super.dispose();
   }
 
@@ -123,6 +245,11 @@ class _SettlementScreenState extends State<SettlementScreen>
     MaterialPageRoute(builder: (_) => ManagementScreen(initialTab: initialTab)),
   );
 
+  void _showSocial() => Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const SocialScreen()),
+  );
+
   // Overworld — the front door to expeditions (gather/capture/battle). Battle
   // routes into the existing dungeon run per area; the quick-menu button is
   // the interim entrance until a placeable map/portal building exists.
@@ -131,9 +258,38 @@ class _SettlementScreenState extends State<SettlementScreen>
     MaterialPageRoute(builder: (_) => const OverworldScreen()),
   );
 
-  void _showDevMode() => Navigator.push(
+  Future<void> _showDevMode() async {
+    await dev_mode.loadLibrary();
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => dev_mode.DevModeScreen()),
+    );
+  }
+
+  void _showProfile() => Navigator.push(
     context,
-    MaterialPageRoute(builder: (_) => const DevModeScreen()),
+    MaterialPageRoute(
+      builder: (_) => ProfileScreen(
+        onOpenDevMode: _ctrl.isDev ? _showDevMode : null,
+      ),
+    ),
+  );
+
+  /// Same tap-target/icon-button shape as [FeelButton]/[NotificationButton]
+  /// right beside it — the account settings a player was otherwise never
+  /// shown at all (user 2026-09-15).
+  Widget _profileButton() => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: _showProfile,
+      borderRadius: BorderRadius.circular(FoE.radiusSmall),
+      child: SizedBox(
+        width: FoE.tapTarget,
+        height: FoE.tapTarget,
+        child: Icon(Icons.person_outline, size: 20, color: FoE.textDim),
+      ),
+    ),
   );
 
   /// Opens Build and applies whatever the player picked.
@@ -227,6 +383,18 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// Whether the bar is unfolded to show every era's resources.
   bool _erasOpen = false;
 
+  void _openEras() {
+    setState(() => _erasOpen = true);
+    _erasCtrl.forward();
+  }
+
+  void _closeEras() {
+    setState(() => _erasOpen = false);
+    _erasCtrl.reverse();
+  }
+
+  void _toggleEras() => _erasOpen ? _closeEras() : _openEras();
+
   // ── Build ─────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -239,8 +407,9 @@ class _SettlementScreenState extends State<SettlementScreen>
     // Welcome-back digest: queued by load() when the player was away a while;
     // shown exactly once, after this frame so the sheet has a laid-out screen
     // under it.
+    final ready = !_ctrl.isLoading && _assetsReady;
     final digest = _ctrl.pendingDigest;
-    if (digest != null && !_ctrl.isLoading) {
+    if (digest != null && ready) {
       _ctrl.pendingDigest = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showDigest(digest);
@@ -250,7 +419,7 @@ class _SettlementScreenState extends State<SettlementScreen>
       // The map fills this itself; the colour only shows while it loads and
       // behind the edges, so it is the page tone like everywhere else.
       backgroundColor: kParchmentMid,
-      body: _ctrl.isLoading
+      body: !ready
           ? _loading()
           : _ctrl.error != null
           ? _error()
@@ -322,7 +491,11 @@ class _SettlementScreenState extends State<SettlementScreen>
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  color: kParchmentMid,
+                  // Same top-to-bottom sheet-into-shade gradient as every
+                  // other page/dialog ground (ParchmentPage.pageGradient,
+                  // user 2026-09-05) — this dialog still had the flat
+                  // single-tone fill that rule replaced everywhere else.
+                  gradient: ParchmentPage.pageGradient,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.4),
@@ -339,17 +512,17 @@ class _SettlementScreenState extends State<SettlementScreen>
                     // card, not a free page margin, so the usual centred-
                     // with-margin run left a visible gap at both ends.
                     Positioned(
-                      left: 4,
+                      left: 14,
                       top: 0,
                       bottom: 0,
-                      width: 14,
+                      width: 16,
                       child: MeanderStrip(color: ornament, fillHeight: true),
                     ),
                     Positioned(
-                      right: 4,
+                      right: 14,
                       top: 0,
                       bottom: 0,
-                      width: 14,
+                      width: 16,
                       child: MeanderStrip(
                         color: ornament,
                         flip: true,
@@ -357,7 +530,9 @@ class _SettlementScreenState extends State<SettlementScreen>
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(30, 18, 30, 16),
+                      // +12/+12 (2026-09-06): same band-width delta as
+                      // every other page's kParchmentPagePad.
+                      padding: const EdgeInsets.fromLTRB(42, 18, 42, 16),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -463,7 +638,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                             ),
                           ),
                           const SizedBox(height: 16),
-                          GestureDetector(
+                          Pressable(
                             // Dismissing MARKS THEM READ. This screen has just
                             // shown the same set the bell would, so leaving the
                             // badge nagging about it would send the player to
@@ -516,8 +691,35 @@ class _SettlementScreenState extends State<SettlementScreen>
     ).copyWith(color: ink.withValues(alpha: 0.6), letterSpacing: 1),
   );
 
-  Widget _loading() =>
-      Center(child: CircularProgressIndicator(color: FoE.gold));
+  /// The REAL loading screen (user 2026-09-11) — up until [_ctrl.load]
+  /// finishes AND every picture from [_bootstrap] has actually decoded, not
+  /// just a bare spinner over the (still empty) map. Same parchment gradient
+  /// and title as the sign-in screen, so app launch reads as one continuous
+  /// piece rather than a flash of brand, then a blank wait, then the game.
+  Widget _loading() => DecoratedBox(
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [kParchmentLight, kParchmentMid],
+      ),
+    ),
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Bøddy Game', style: FoE.title(size: 22)),
+          const SizedBox(height: 28),
+          CircularProgressIndicator(color: FoE.gold),
+          const SizedBox(height: 16),
+          Text(
+            _ctrl.isLoading ? 'Loading your settlement…' : 'Preparing the map…',
+            style: FoE.dim(size: 12),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _error() => Center(
     child: Text(_ctrl.error!, style: const TextStyle(color: Colors.redAccent)),
@@ -552,7 +754,7 @@ class _SettlementScreenState extends State<SettlementScreen>
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _erasOpen = false),
+            onTap: _closeEras,
           ),
         ),
       // Stacked rather than each Positioned at a guessed offset: the top bar's
@@ -582,6 +784,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                   // the sound); long-press for the vibration switch too.
                   const FeelButton(),
                   const NotificationButton(),
+                  _profileButton(),
                   const SizedBox(width: 4),
                 ],
               ),
@@ -675,6 +878,11 @@ class _SettlementScreenState extends State<SettlementScreen>
       return switch (card.destination) {
         IntroDestination.map => 'quick-map',
         IntroDestination.collection => 'quick-monsters',
+        IntroDestination.build => 'quick-build',
+        // Not a quick-pad tile — the Healing Hut itself, on the map (user
+        // 2026-09-06: "lass mich das Gebäude anklicken") — see
+        // SettlementMapState's own anchorKey wiring in _buildingTile.
+        IntroDestination.healingHut => 'map-healing-hut',
         _ => null,
       };
     }
@@ -693,6 +901,8 @@ class _SettlementScreenState extends State<SettlementScreen>
   String? get _introSpotlightHint => switch (_soloQuickPadAnchor) {
     'quick-monsters' => 'Tap Monsters to choose your starter',
     'quick-map' => 'Tap Map to open the overworld',
+    'quick-build' => 'Tap Build to open the build menu',
+    'map-healing-hut' => 'Tap the Healing Hut to open it',
     _ => null,
   };
 
@@ -709,6 +919,10 @@ class _SettlementScreenState extends State<SettlementScreen>
   bool get _mapUnlocked =>
       _soloQuickPadAnchor == 'quick-map' ||
       _ctrl.introStep.index > IntroStep.firstNode.index;
+
+  bool get _buildUnlocked =>
+      _soloQuickPadAnchor == 'quick-build' ||
+      _ctrl.introStep.index > IntroStep.buildHealingHut.index;
 
   /// True while the map owns the bottom of the screen: aiming, road building
   /// and move/edit mode each show their own banner down there (with the button
@@ -753,11 +967,11 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// The strip itself used to be everything the settlement had ever unlocked,
   /// wrapped over as many rows as it took: era III was fourteen cells and three
   /// rows of header, and by era VIII it would have been twenty-two. It is
-  /// exactly seven cells in EVERY era now — this era's two build resources,
-  /// this era's two luxuries, gold, energy, housing — because that is what a
-  /// decision on this screen is made of. Everything older is one tap away in
-  /// the eras menu at the end of the row, which is the whole reason the strip
-  /// can afford to be this short.
+  /// exactly six cells in EVERY era now — this era's two build resources,
+  /// this era's one luxury (down from two, 2026-09-12), gold, energy, housing —
+  /// because that is what a decision on this screen is made of. Everything
+  /// older is one tap away in the eras menu at the end of the row, which is
+  /// the whole reason the strip can afford to be this short.
   ///
   /// SafeArea, not a fixed height: pinned to the very top, so on a notched
   /// phone it would otherwise sit under the cutout.
@@ -789,37 +1003,51 @@ class _SettlementScreenState extends State<SettlementScreen>
     child: Column(
       children: [
         ParchmentHeader.band(
+          // The exact background the building detail dialog uses (user
+          // 2026-09-06: "nimm ... den genau gleichen Hintergrund wie für den
+          // Gebäudedetailscreen") rather than [ParchmentHeader.bandFill]'s
+          // flat approximation of it — this screen has no ambient
+          // [ParchmentPage] gradient behind it to show through, so the band
+          // draws the real one itself.
+          gradient: ParchmentPage.pageGradient,
+          // Lifts it off the map behind it (user 2026-09-06: "damit sich
+          // dieser besser von der Map abhebt") — every other [band] caller
+          // sits on the flat parchment page and stays shadowless, but this
+          // one floats directly over the isometric settlement with nothing
+          // but colour to tell the two apart. [_mapShadow], not [FoE.drop],
+          // so the shadow reaches the LEFT edge too (user 2026-09-06).
+          shadow: _mapShadow,
           // The same Greek-key bordure every ParchmentPage carries down its
           // sides (user 2026-08-31: "bei der Ressourcenübersicht bitte auch
-          // das Mäanderband an den Seiten einfügen"), on the band's own dark
-          // fill rather than a page's parchment — [ParchmentPage.ornament]
-          // is the ink for BOTH, since the app went dark-mode-first and that
-          // ink already reads on graphite.
+          // das Mäanderband an den Seiten einfügen") — [ParchmentPage
+          // .ornament] is the ink for both, since the app went
+          // dark-mode-first and that ink already reads on graphite.
           child: Stack(
             children: [
               // Bands BEHIND the content, same paint order ParchmentPage
               // uses — drawn first so the resource cells sit on top of them
               // rather than the other way round.
               Positioned(
-                left: 4,
+                left: 14,
                 top: 0,
                 bottom: 0,
-                width: 14,
+                width: 16,
                 // Flush to the box's own top/bottom edge (user 2026-08-31:
                 // "das Band soll oben und unten bis wirklich zur Kante der
                 // Box gehen") — this panel IS a hard-edged box, not a free
                 // page margin, so the usual centred-with-margin run left a
-                // visible gap at both ends.
+                // visible gap at both ends. Left/right inset 14/width 16
+                // (2026-09-06), matching building_detail_dialog.dart.
                 child: MeanderStrip(
                   color: ParchmentPage.ornament,
                   fillHeight: true,
                 ),
               ),
               Positioned(
-                right: 4,
+                right: 14,
                 top: 0,
                 bottom: 0,
-                width: 14,
+                width: 16,
                 child: MeanderStrip(
                   color: ParchmentPage.ornament,
                   flip: true,
@@ -833,73 +1061,180 @@ class _SettlementScreenState extends State<SettlementScreen>
             ],
           ),
         ),
-        Center(child: _erasTab()),
+        _erasWave(),
       ],
     ),
   );
 
-  /// How far the tab hangs below the band.
-  static const double _kErasTabH = 26;
+  /// The main screen's own drop shadow — straight down, not [FoE.drop]'s
+  /// usual down-RIGHT diagonal (user 2026-09-06: "der Schatten... soll auch
+  /// links bis zum Rand gehen") — the diagonal is why every other [FoE.drop]
+  /// user only ever shows a sliver on the right/bottom: shifting the shadow
+  /// rect sideways tucks its left edge behind the box itself. Shared between
+  /// the header band and the eras tab hanging off it, so the two read as one
+  /// continuous shape lifted off the map, not two mismatched edges.
+  static final List<BoxShadow> _mapShadow = [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.45),
+      offset: const Offset(0, 3),
+    ),
+  ];
 
-  /// The pull that unfolds the bar. Cut from the band's own gradient with only
-  /// its bottom corners rounded.
-  Widget _erasTab() => GestureDetector(
-    onTap: () => setState(() => _erasOpen = !_erasOpen),
-    behavior: HitTestBehavior.opaque,
-    child: Container(
-      width: 64,
-      height: _kErasTabH,
-      alignment: Alignment.bottomCenter,
-      padding: const EdgeInsets.only(bottom: 2),
-      decoration: BoxDecoration(
-        color: ParchmentHeader.bandFill,
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(13)),
-        boxShadow: ParchmentHeader.bandShadow,
-      ),
-      child: AnimatedRotation(
-        // The arrow turns to point back at the bar it just pulled open — the
-        // one thing that says "this closes again" without a second glyph.
-        turns: _erasOpen ? 0.5 : 0,
-        duration: const Duration(milliseconds: 180),
-        child: Icon(
-          Icons.expand_more_rounded,
-          size: 26,
-          color: ParchmentHeader.engravedInk,
-          shadows: ParchmentHeader.engraved(depth: 1),
+  /// How deep the wave hangs at its LOWEST point, and how shallow at its
+  /// highest — a full-width wave spanning the header's own width, reading as
+  /// the header's edge itself flowing down into a pull, rather than a
+  /// separate control bolted under it.
+  static const double _kWaveMin = 8;
+  static const double _kWaveMax = 26;
+
+  /// How far in from EACH edge the curve takes to reach full depth, as a
+  /// fraction of the width — centred and symmetric (user 2026-09-07: "der
+  /// Headerbutton soll mittig sein und auf beide Seiten auslaufen", then
+  /// "wieder deutlich schmaler und weniger hoch"). The middle stretch (the
+  /// remaining `1 - 2*_kWaveTaper`) stays flat at full depth; both sides
+  /// mirror the same ogee back up to the shallow lip.
+  static const double _kWaveTaper = 0.38;
+
+  /// The pull that unfolds the bar — belongs TO the header, not beside it
+  /// (user 2026-09-06: "dieser gehört zum Header. Daher gibt es keinen
+  /// Übergang"), so it must never restart its own gradient. A LinearGradient
+  /// always fits itself to its OWN box, which is why this paints a flat
+  /// [FoE.bg] fill (the gradient's own end stop) instead of a fresh
+  /// gradient — see the CROSS-FADE note this comment used to carry on the
+  /// old fixed-height tab; a wave of varying height has the identical
+  /// problem for the same reason.
+  Widget _erasWave() => FractionallySizedBox(
+    // Centred and narrow (user 2026-09-08: "so dass er links und rechts
+    // nicht bis an die Handykante kommt, sondern nur etwa 20% der Breite in
+    // der Mitte einnimmt") — no longer spans the header's full width.
+    widthFactor: 0.2,
+    child: Pressable(
+      onTap: _toggleEras,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: double.infinity,
+        height: _kWaveMax,
+        child: CustomPaint(
+          painter: _EraWavePainter(
+            waveMin: _kWaveMin,
+            waveMax: _kWaveMax,
+            taper: _kWaveTaper,
+            shadow: _mapShadow.first,
+          ),
+          child: Align(
+            // The arrow sits where the wave actually IS deep enough to hold
+            // it — dead centre, now that the plateau itself is centred.
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: AnimatedRotation(
+                // The arrow turns to point back at the bar it just pulled open
+                // — the one thing that says "this closes again" without a
+                // second glyph. Same duration as [_erasPanel]'s own
+                // AnimatedSize (user 2026-09-06, then "noch langsamere
+                // Animation, so dass man es gut sieht") so the arrow finishes
+                // turning exactly as the panel finishes moving, instead of
+                // visibly settling first.
+                turns: _erasOpen ? 0.5 : 0,
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.easeInOutCubic,
+                child: Icon(
+                  Icons.expand_more_rounded,
+                  size: 26,
+                  color: ParchmentHeader.engravedInk,
+                  shadows: ParchmentHeader.engraved(depth: 1),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     ),
   );
 
-  /// Everything the settlement holds, era by era — the bar's second half, shown
-  /// only when it is unfolded.
+  /// Everything the settlement holds, region by region — the bar's second
+  /// half, shown only when it is unfolded.
   ///
-  /// [AnimatedSize] rather than a fixed height: the list is as long as the eras
-  /// you have reached, and a hardcoded height would clip era VIII or leave a gap
-  /// in era I.
+  /// Every region the GOODS ladder reaches ([kMaxRegionOrder]), not just the
+  /// ones with a map ([kAreaDefs]) yet (user 2026-09-05: "alle Ressourcen
+  /// angezeigt bekommen, welche im Spiel vorhanden sind oder sein werden" —
+  /// e.g. Crystal Vault, region VIII's element, used to be invisible here
+  /// because no area past III has been built yet). A region without a map
+  /// still has a resource ladder authored for it, so it still gets a row —
+  /// just with a placeholder name until [areaForRegion] finds one.
+  ///
+  /// [SizeTransition] driven by [_erasCtrl], not [AnimatedSize] — the list
+  /// is as long as [kMaxRegionOrder] says, so a hardcoded height would clip
+  /// a late region or leave a gap with only a few, but AnimatedSize here
+  /// looked instant regardless of its own duration (user 2026-09-06: "es
+  /// sieht noch immer aus, als würde es direkt aufgeklappt sein"). Sitting
+  /// as the size-determining child of a Stack that also carries two
+  /// full-height Positioned MeanderStrips, something about that combination
+  /// skipped straight to the end size instead of interpolating through it.
+  /// A driven transition sidesteps the question entirely: [_erasCtrl]'s own
+  /// value scales and clips a CHILD THAT'S ALWAYS FULLY BUILT, frame by
+  /// frame, rather than asking a parent to notice and animate an implicitly
+  /// changing child size.
   Widget _erasPanel() {
-    final eras = kEraDefs.values.toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
-    final currentEra = _ctrl.settlement?.eraIndex ?? 1;
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOutCubic,
-      alignment: Alignment.topCenter,
-      child: !_erasOpen
-          ? const SizedBox(width: double.infinity)
-          : Padding(
-              // Clear of the tab, which hangs over the band's bottom edge.
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < eras.length; i++) ...[
-                    if (i > 0) _eraDivider(),
-                    _eraMenuRow(eras[i], eras[i].order == currentEra),
-                  ],
-                ],
+    final currentRegion = _ctrl.dungeonMaxStage;
+    return SizeTransition(
+      sizeFactor: CurvedAnimation(
+        parent: _erasCtrl,
+        curve: Curves.easeInOutCubic,
+      ),
+      // Reveals downward from the header (user 2026-09-06: "ich möchte
+      // aber, dass es nach unten ausfährt und wieder zurückfährt") rather
+      // than growing from the centre.
+      axisAlignment: -1,
+      child: Padding(
+        // Clear of the tab, which hangs over the band's bottom edge.
+        padding: const EdgeInsets.only(bottom: 10),
+        // Own bands, not just a taller reach of _topBar's (user 2026-09-05:
+        // "bei todays goals links und rechts noch das Mäanderband
+        // hinzufügen") — self-contained so the panel always carries them
+        // regardless of how the transition interacts with the outer
+        // Stack's sizing. Same 14/16 geometry _topBar's own pair uses (user
+        // 2026-09-06: widened from 4/14 to match building_detail_dialog.dart),
+        // so the two line up as one continuous band down the whole card.
+        child: Stack(
+          children: [
+            Positioned(
+              left: 14,
+              top: 0,
+              bottom: 0,
+              width: 16,
+              child: MeanderStrip(
+                color: ParchmentPage.ornament,
+                fillHeight: true,
               ),
             ),
+            Positioned(
+              right: 14,
+              top: 0,
+              bottom: 0,
+              width: 16,
+              child: MeanderStrip(
+                color: ParchmentPage.ornament,
+                flip: true,
+                fillHeight: true,
+              ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var region = 1; region <= kMaxRegionOrder; region++) ...[
+                  if (region > 1) _eraDivider(),
+                  _eraMenuRow(
+                    region,
+                    areaForRegion(region)?.name ?? 'Unentdeckt',
+                    region == currentRegion,
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -912,11 +1247,12 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// already uses, rather than [ParchmentDivider]'s parchment-page [FoE
   /// .border].
   Widget _eraDivider() => Padding(
-    // 26/24, not 18/16 (user 2026-09-01: "die Trennstriche sollen nicht
-    // ganz bis zum Mäanderband gehen") — the row content's own inset
-    // stops exactly where the band ends, which put the rule flush against
-    // it with no breathing room; a few px more leaves a visible gap.
-    padding: const EdgeInsets.fromLTRB(26, 0, 24, 0),
+    // 38/36, not 26/24 (user 2026-09-06: the band widened from a 4px
+    // inset/14px width to building_detail_dialog.dart's 14px inset/16px
+    // width) — same +8/+8 breathing room past the band's new edge that
+    // 26/24 gave it past the old one (user 2026-09-01: "die Trennstriche
+    // sollen nicht ganz bis zum Mäanderband gehen").
+    padding: const EdgeInsets.fromLTRB(38, 0, 36, 0),
     child: Container(height: 2, color: kParchmentInk.withValues(alpha: 0.13)),
   );
 
@@ -957,37 +1293,37 @@ class _SettlementScreenState extends State<SettlementScreen>
     ),
   );
 
-  void _showDailyTasks() => showModalBottomSheet(
+  /// THE SAME SHEET as Notifications, the Bag, the Build menu — a centred
+  /// [ParchmentDialog] (user 2026-09-05: "dieses Menü soll genau gleich
+  /// aufgemaut sein wie der Gebäude detailscreen. Notifications ebenfalls",
+  /// then 2026-09-06: "todays goals soll auch so aufgebaut sein" and "what
+  /// happend [the bell] soll genau so gestaltet sein ... wie todays goals").
+  void _showDailyTasks() => showDialog<void>(
     context: context,
-    backgroundColor: FoE.panelDark,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
-    ),
-    builder: (ctx) => StatefulBuilder(
+    builder: (dialogCtx) => StatefulBuilder(
       builder: (ctx, setLocal) {
         final tasks = _ctrl.dailyTasks.tasks;
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            18,
-            16,
-            18,
-            16 + MediaQuery.of(ctx).viewPadding.bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Today\'s goals', style: FoE.title(size: 15)),
-              const SizedBox(height: 4),
-              Text(
-                'Three fresh goals every day — small rewards for playing a '
-                'round of everything.',
-                style: FoE.dim(size: 11),
-              ),
-              const SizedBox(height: 12),
-              for (var i = 0; i < tasks.length; i++)
-                _dailyTaskRow(i, tasks[i], setLocal),
-            ],
+        return ParchmentDialog(
+          title: 'Today\'s goals',
+          child: SingleChildScrollView(
+            // +12/+12 (2026-09-06): ParchmentDialog's own bands widened by
+            // that on each side.
+            padding: const EdgeInsets.fromLTRB(38, 12, 38, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Three fresh goals every day — small rewards for playing '
+                  'a round of everything.',
+                  style: FoE.dim(
+                    size: 11,
+                  ).copyWith(color: ParchmentSheet.inkSoft),
+                ),
+                const SizedBox(height: 12),
+                for (var i = 0; i < tasks.length; i++)
+                  _dailyTaskRow(i, tasks[i], setLocal),
+              ],
+            ),
           ),
         );
       },
@@ -1005,7 +1341,11 @@ class _SettlementScreenState extends State<SettlementScreen>
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
-      decoration: FoE.panel(radius: 10),
+      // Same recess Notifications' own rows sit in (ParchmentSheet.card),
+      // not a second, differently-tinted panel (user 2026-09-05: "genau
+      // gleich aufgemaut wie der Gebäude detailscreen. Notifications
+      // ebenfalls").
+      decoration: ParchmentSheet.card,
       child: Row(
         children: [
           Text(t.kind.emoji, style: const TextStyle(fontSize: 18)),
@@ -1061,15 +1401,16 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// with, then the three standing totals (gold, energy, housing).
   Widget _resourceRow() {
     final rates = _ctrl.hourlyRates;
-    final era = _ctrl.settlement?.eraIndex ?? 1;
+    final era = _ctrl.dungeonMaxStage;
     // Eight cells while a refinery is unlocked but its era has not arrived —
     // see [_eraResources]. Every cell is an Expanded, so the row still fits.
 
     return Padding(
-      // 18/16, not 4/2 (user 2026-08-31: the band now carries a meander
-      // strip down each side) — clears the strip's own 4 + 14 px reach so
-      // the first and last cell's icons don't sit half under it.
-      padding: const EdgeInsets.fromLTRB(18, 0, 16, 5),
+      // 30/28, not 18/16 (user 2026-09-06: the band widened from a 4px
+      // inset/14px width to building_detail_dialog.dart's 14px inset/16px
+      // width) — clears the strip's own 14 + 16 px reach so the first and
+      // last cell's icons don't sit half under it.
+      padding: const EdgeInsets.fromLTRB(30, 0, 28, 5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -1120,13 +1461,13 @@ class _SettlementScreenState extends State<SettlementScreen>
       (id: 'wood', emoji: '🪵', name: 'Wood'),
       (id: 'stone', emoji: '🪨', name: 'Stone'),
     ] else
-      for (final g in buildGoodsOfEra(era))
+      for (final g in buildGoodsOfRegion(era))
         (id: g.id, emoji: g.emoji, name: g.name),
     // Right after the build pair, because that is what it IS — a build
-    // material, one era early.
+    // material, one region early.
     for (final g in _previewedGoods(era, cleared))
       (id: g.id, emoji: g.emoji, name: g.name),
-    for (final g in luxuriesOfEra(era))
+    for (final g in luxuriesOfRegion(era))
       (id: g.id, emoji: g.emoji, name: g.name),
   ];
 
@@ -1147,14 +1488,14 @@ class _SettlementScreenState extends State<SettlementScreen>
     if (cleared <= 0) return const [];
     final out = <GoodsDef>[];
     for (final g in kGoodsDefs.values) {
-      if (!g.isElement || g.eraOrder <= era) continue;
-      // Null = no node gates a producer, so the material arrives with its era —
-      // the rule the strip already follows, not a preview.
+      if (!g.isElement || g.regionOrder <= era) continue;
+      // Null = no node gates a producer, so the material arrives with its
+      // region — the rule the strip already follows, not a preview.
       final at = producerUnlockBattle(g.id);
       if (at == null || cleared < at) continue;
       out.add(g);
     }
-    out.sort((a, b) => a.eraOrder.compareTo(b.eraOrder));
+    out.sort((a, b) => a.regionOrder.compareTo(b.regionOrder));
     return out;
   }
 
@@ -1234,17 +1575,26 @@ class _SettlementScreenState extends State<SettlementScreen>
         final digits = rate.abs() >= 10 ? 0 : 1;
         return _cellBody(
           emoji: emoji,
-          iconColor: resourceColor(resourceId),
+          // UI colour, not the resource's own tint (user 2026-09-12, undoing
+          // 2026-08-31's "die Icons passend einfärben" — now reads as noise
+          // rather than variety once every header cell's badge fights for
+          // attention in its own hue). Matches the target cards' own cream/tan
+          // treatment (see expeditions_screen.dart's _targetCard).
+          iconColor: FoE.gold,
           value: _short(amount),
           sub: over
               ? 'over ${_short(cap)}'
               : full
               ? 'full'
               : '${losing ? '' : '+'}${rate.toStringAsFixed(digits)}/h',
+          // Coral for AT or OVER the cap (user 2026-09-06: "wenn ein Maximum
+          // erreicht wurde, dies bitte in der Farbe Koralle darstellen") —
+          // one colour for both, since [over] used to fall through this
+          // chain with no colour of its own at all.
           subColor: losing
               ? FoE.danger
-              : full
-              ? const Color(0xFF9B3B22)
+              : (full || over)
+              ? FoE.coral
               : null,
         );
       },
@@ -1337,11 +1687,15 @@ class _SettlementScreenState extends State<SettlementScreen>
     final cap = _ctrl.housingCapacity;
     final full = used >= cap;
     return _headerCell(
-      // Tab 2 — Trips, Work, Housing (the order changed on 2026-07-29).
-      onTap: () => _showManagement(initialTab: 2),
+      // Its own screen now (2026-09-11) — Housing left Management for the
+      // same door every sheltering building opens it through.
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const HousingScreen()),
+      ),
       child: _cellBody(
         emoji: '🛏',
-        iconColor: resourceColor('housing'),
+        iconColor: FoE.gold,
         value: '$used/$cap',
         sub: full ? 'full' : '${cap - used} free',
         valueColor: full ? FoE.danger : null,
@@ -1357,13 +1711,19 @@ class _SettlementScreenState extends State<SettlementScreen>
   ///
   /// A real dropdown rather than a sheet, because it belongs to the strip it
   /// abbreviates: it opens against it and closes when you look away.
-  Widget _eraMenuRow(EraDef era, bool current) {
+  Widget _eraMenuRow(int region, String name, bool current) {
     final items = <({String id, String emoji, String name})>[
-      ..._eraResources(era.order),
+      ..._eraResources(region),
     ];
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(0, 8, 16, 8),
+      // 30 on the right too, matching the left column's own SizedBox(30)
+      // clearance below — the panel's own meander strips now reach the same
+      // 14-30 span on both sides (widened from 4-18, user 2026-09-06), so a
+      // bare 16 let a wide chip row's right edge sit half under the band
+      // (user 2026-09-05: "schauen, dass es keine Kollisionen gibt ... in
+      // die Mitte schieben").
+      padding: const EdgeInsets.fromLTRB(0, 8, 30, 8),
       // NO fill, and no border of its own any more (user 2026-08-31: "lass
       // den grünen halbtransparenten Schatten/Box [weg]"; 2026-09-01: "die
       // Trennstriche im era panel so machen wie bei Management") — the
@@ -1381,7 +1741,7 @@ class _SettlementScreenState extends State<SettlementScreen>
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(width: 18), // clears the band
+            const SizedBox(width: 30), // clears the band
             Container(
               width: 3,
               color: current ? FoE.positive : Colors.transparent,
@@ -1396,17 +1756,18 @@ class _SettlementScreenState extends State<SettlementScreen>
                     children: [
                       // No icon, no dot (user 2026-08-31: "überall die
                       // Icons streichen und den Punkt zwischen Zahl und
-                      // Text") — the roman numeral and the era's name,
+                      // Text") — the roman numeral and the region's name,
                       // plainly.
                       Expanded(
                         child: Text(
-                          '${_roman(era.order)}  ${era.displayName}',
+                          '${_roman(region)}  $name',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: FoE.label(size: 11).copyWith(
                             color: current ? FoE.positive : FoE.parchment,
-                            fontWeight:
-                                current ? FontWeight.w700 : FontWeight.w400,
+                            fontWeight: current
+                                ? FontWeight.w700
+                                : FontWeight.w400,
                           ),
                         ),
                       ),
@@ -1437,14 +1798,14 @@ class _SettlementScreenState extends State<SettlementScreen>
         // Close the DROPDOWN, not the route (2026-09-01 fix: "wenn ich eine
         // Ressource beim era panel anklicke und ... auf den zurückbutton
         // drücke, kommt ein blackscreen"). The eras panel is inline now
-        // (AnimatedSize + _erasOpen), not the popup its own history once
-        // was — this Navigator.pop() was a leftover from back when it WAS
-        // one, and since SettlementScreen is the app's root route, popping
-        // it here quietly emptied the Navigator's history. Pushing
+        // (_erasCtrl + _erasOpen), not the popup its own history once was —
+        // this Navigator.pop() was a leftover from back when it WAS one, and
+        // since SettlementScreen is the app's root route, popping it here
+        // quietly emptied the Navigator's history. Pushing
         // ResourceDetailScreen straight after papered over it (there was
         // still a route to push onto), until backing OUT of that screen had
         // nothing valid left underneath it.
-        setState(() => _erasOpen = false);
+        _closeEras();
         _showResourceBreakdown(resourceId: id, emoji: emoji, title: name);
       },
       borderRadius: BorderRadius.circular(8),
@@ -1488,31 +1849,29 @@ class _SettlementScreenState extends State<SettlementScreen>
         onTap: _showEnergyOverview,
         child: _cellBody(
           emoji: '⚡',
-          iconColor: resourceColor('energy'),
+          iconColor: FoE.gold,
           value: '—',
           sub: '',
         ),
       );
     }
-    final pct = energy.currentEnergy;
-    final isEmpty = pct <= 0;
-    // Remaining-time estimate at the current tick's snapshot — no dedicated
-    // 1s ticker needed here (unlike EnergySheet's live countdown): at this
-    // drain rate (kMaxEnergy/kDrainPerHour = 24h), fmtDuration only shows
-    // minute resolution, so the screen's normal 5s-tick rebuild is already
-    // more than fine-grained enough for it to read as live.
-    final hoursLeft = GameEngine.hoursUntilEmpty(pct);
+    // Energy is a daily-steps RATE now (user 2026-09-14), not a draining
+    // pool with an hours-until-empty countdown — [energy.percent] is already
+    // exactly current, no live extrapolation needed. Red only at the floor
+    // (0 steps today yet): everything above that is a real, working rate,
+    // just not a boosted one.
+    final atFloor = energy.stepsToday <= 0;
     return _headerCell(
       onTap: _showEnergyOverview,
       // Ink, not white: the strip is a LIT PARCHMENT band now, and white on
       // cream is a number you cannot read.
       child: _cellBody(
         emoji: '⚡',
-        iconColor: resourceColor('energy'),
-        value: pct.toStringAsFixed(0),
-        sub: isEmpty ? 'empty' : fmtDuration(hoursLeft * 3600),
-        valueColor: isEmpty ? FoE.danger : null,
-        subColor: isEmpty ? FoE.danger : null,
+        iconColor: FoE.gold,
+        value: '${energy.percent.round()}%',
+        sub: '${energy.stepsToday} steps',
+        valueColor: atFloor ? FoE.danger : null,
+        subColor: atFloor ? FoE.danger : null,
       ),
     );
   }
@@ -1585,7 +1944,7 @@ class _SettlementScreenState extends State<SettlementScreen>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  GestureDetector(
+                  Pressable(
                     onTap: () => Navigator.pop(context, false),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -1599,7 +1958,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                       ),
                     ),
                   ),
-                  GestureDetector(
+                  Pressable(
                     onTap: () => Navigator.pop(context, true),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -1629,7 +1988,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     if (ok == true) await _ctrl.resetSettlement();
   }
 
-  Widget _debugBtn(String emoji, VoidCallback onTap) => GestureDetector(
+  Widget _debugBtn(String emoji, VoidCallback onTap) => Pressable(
     onTap: onTap,
     child: Container(
       width: 20,
@@ -1687,7 +2046,17 @@ class _SettlementScreenState extends State<SettlementScreen>
       Icons.map,
       'Map',
       _showOverworld,
-      anchorKey: solo == 'quick-map' ? IntroSpotlightAnchors.of('quick-map') : null,
+      anchorKey: solo == 'quick-map'
+          ? IntroSpotlightAnchors.of('quick-map')
+          : null,
+    );
+    final build = QuickPadItem(
+      Icons.construction,
+      'Build',
+      _showBuildMenu,
+      anchorKey: solo == 'quick-build'
+          ? IntroSpotlightAnchors.of('quick-build')
+          : null,
     );
     // Reduced to whichever tiles are unlocked so far — the CURRENT step's
     // own target plus any earlier solo hand-off's tile, which stays around
@@ -1699,6 +2068,7 @@ class _SettlementScreenState extends State<SettlementScreen>
         items: [
           if (_monstersUnlocked) monsters,
           if (_mapUnlocked) map,
+          if (_buildUnlocked) build,
         ],
       );
     }
@@ -1720,6 +2090,7 @@ class _SettlementScreenState extends State<SettlementScreen>
         // IS research now (techs are places on it), so it would have been
         // two doors into one room.
         QuickPadItem(Icons.assignment, 'Manage', _showManagement),
+        QuickPadItem(Icons.group, 'Social', _showSocial),
         QuickPadItem(
           Icons.backpack,
           'Bag',
@@ -1739,4 +2110,64 @@ class _SettlementScreenState extends State<SettlementScreen>
       ],
     );
   }
+}
+
+/// The wave's silhouette (user 2026-09-07: "der Headerbutton soll mittig
+/// sein und auf beide Seiten auslaufen", then "einmal konvex und einmal
+/// konkav vom Rand bis zur Mitte... Aktuell hat es noch eine Ecke, diese
+/// muss auch geschwungen werden"): flush with the header along the top and
+/// the two vertical ends, THIN at both edges ([waveMin] deep), flowing up
+/// through one true ogee on each side — a convex arc straight off the
+/// vertical edge, then a concave arc into a centred plateau at [waveMax]
+/// deep — the two sides are exact mirrors of each other.
+Path _eraWavePath(Size size, double waveMin, double waveMax, double taper) {
+  final w = size.width;
+  final tw = w * taper;
+  final leftDeepX = tw;
+  final rightDeepX = w - tw;
+  // How deep the curve's single inflection point sits — not used as a
+  // literal path vertex, only to place the control points that give it a
+  // vertical tangent at the edge and a horizontal one at the plateau.
+  final midDepth = waveMin + (waveMax - waveMin) * 0.7;
+  return Path()
+    ..moveTo(0, 0)
+    ..lineTo(0, waveMin)
+    // Control point 1 shares the START's x (0) — the curve leaves the
+    // straight edge travelling STRAIGHT DOWN, so the two meet with no kink,
+    // the corner the earlier "ease" version still had. Control point 2
+    // shares the END's y (waveMax) — the curve arrives at the plateau
+    // travelling level, same as before. One cubic, one inflection: convex
+    // first, concave second.
+    ..cubicTo(0, midDepth, tw * 0.5, waveMax, leftDeepX, waveMax)
+    ..lineTo(rightDeepX, waveMax)
+    ..cubicTo(w - tw * 0.5, waveMax, w, midDepth, w, waveMin)
+    ..lineTo(w, 0)
+    ..close();
+}
+
+class _EraWavePainter extends CustomPainter {
+  final double waveMin;
+  final double waveMax;
+  final double taper;
+  final BoxShadow shadow;
+  const _EraWavePainter({
+    required this.waveMin,
+    required this.waveMax,
+    required this.taper,
+    required this.shadow,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _eraWavePath(size, waveMin, waveMax, taper);
+    canvas.drawPath(path.shift(shadow.offset), Paint()..color = shadow.color);
+    canvas.drawPath(path, Paint()..color = FoE.bg);
+  }
+
+  @override
+  bool shouldRepaint(covariant _EraWavePainter old) =>
+      old.waveMin != waveMin ||
+      old.waveMax != waveMax ||
+      old.taper != taper ||
+      old.shadow != shadow;
 }

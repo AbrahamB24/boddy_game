@@ -371,16 +371,36 @@ Rect isoArtBounds(
 /// painted on top of it — the single most obvious way an isometric map looks
 /// broken.
 ///
-/// The key is the footprint's LAST cell, not its first (user 2026-08-01, with
-/// the roads). A 2×2 building starting at (4,4) reaches to (5,5), and a
-/// neighbour at (5,4) is beside it, not behind it — keyed on the north corner
-/// the big building would sort as though it stood a tile and a half further
-/// back than it does, and its neighbour would paint over its wall.
+/// Tried FIRST: does one footprint's whole x- or y-extent sit entirely
+/// before the other's (user 2026-09-07, with a screenshot: a 10×10 Castle
+/// drawn in front of an adjacent small_quarry that should have been in
+/// front of IT)? A single "sum of the far corner" key — the fix the roads
+/// bug below needed — breaks down the moment the two footprints are very
+/// different sizes: a huge building's far corner can out-sum a small
+/// neighbour's even when that neighbour sits strictly SOUTH of it (straddling
+/// none of its rows), because the huge footprint's own far corner is so much
+/// further east. Axis domination catches exactly that case, since it never
+/// looks at the far corner at all — only whether every cell of one lies
+/// strictly before every cell of the other along an axis they don't both
+/// occupy.
+///
+/// Falls back to the far-corner sum when axis domination is silent (the
+/// footprints only touch diagonally, or one claims each direction at once —
+/// a genuine tie along the (x+y) depth axis) — this is the roads fix (user
+/// 2026-08-01): the key is the footprint's LAST cell, not its first. A 2×2
+/// building starting at (4,4) reaches to (5,5), and a neighbour at (5,4) is
+/// beside it, not behind it — keyed on the north corner the big building
+/// would sort as though it stood a tile and a half further back than it
+/// does, and its neighbour would paint over its wall.
 ///
 /// Ties go to the one further east, so the order is total and therefore stable:
 /// an unstable sort makes two neighbours swap between frames and flicker.
 int isoDrawOrder(int ax, int ay, int aw, int ah, int bx, int by, int bw,
     int bh) {
+  final aBehind = ax + aw <= bx || ay + ah <= by;
+  final bBehind = bx + bw <= ax || by + bh <= ay;
+  if (aBehind && !bBehind) return -1;
+  if (bBehind && !aBehind) return 1;
   final byDepth = (ax + aw + ay + ah).compareTo(bx + bw + by + bh);
   return byDepth != 0 ? byDepth : ax.compareTo(bx);
 }

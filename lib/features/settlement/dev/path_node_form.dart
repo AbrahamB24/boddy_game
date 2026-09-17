@@ -6,7 +6,7 @@ import '../../creatures/models/area.dart' show kAreaDefs;
 import '../../creatures/models/path_node.dart';
 import '../../creatures/models/species_def.dart' show SpeciesDef, kSpeciesDefs;
 import '../../creatures/services/overworld_path.dart'
-    show enemyCountForBattle, enemyLevelForBattle, kBattlesPerEra;
+    show enemyCountForBattle, enemyLevelForBattle;
 import '../data/building_definitions.dart' show BuildingDef, kBuildingDefs;
 import '../data/goods_definitions.dart' show kGoodsDefs;
 import '../data/item_definitions.dart'
@@ -21,6 +21,7 @@ import '../data/item_definitions.dart'
 import '../data/resource_icons.dart';
 import '../services/game_defs_controller.dart';
 import 'dev_theme.dart';
+import '../../../core/ui/pressable.dart';
 
 // Create/edit one battle NODE on the linear path (user 2026-07-25). Same
 // trusted-single-author dev pattern as AreaDefForm; saved to Supabase
@@ -88,53 +89,58 @@ class _PathNodeFormState extends State<PathNodeForm> {
   late List<_ItemDraft> _items;
   late Set<String> _buildings;
   late int _expansions;
+  late int _huntOptions;
   String _buildingFilter = '';
 
-  /// ONE era filter for every picker on this form (user 2026-07-26: "gib mir
-  /// einen filter für die Belohnungen und gegner nach ära"). null = show all.
+  /// ONE region filter for every picker on this form (user 2026-07-26: "gib
+  /// mir einen filter für die Belohnungen und gegner nach ära"). null = show
+  /// all.
   ///
-  /// One knob rather than four, because a node belongs to exactly one era: when
-  /// you author battle 7 you want era-I species, era-I buildings and era-I
-  /// goods, and setting that three times is three chances to forget one.
+  /// One knob rather than four, because a node belongs to exactly one
+  /// region: when you author battle 7 you want region-I species, region-I
+  /// buildings and region-I goods, and setting that three times is three
+  /// chances to forget one.
   ///
   /// It NEVER hides something already on the node — a picked species/item that
   /// falls outside the filter still shows, or its dropdown would lose its own
   /// value and silently rewrite the node on the next save.
-  int? _eraFilter;
+  int? _regionFilter;
 
   bool get _isNew => widget.existing == null;
 
-  /// The era a node sits in: its area's battle stage when it has one, else the
-  /// band its [order] falls in. This is what the filter starts on, so opening a
-  /// node lands on its own era with no clicking.
-  int get _nodeEra {
+  /// The region a node sits in: its area's battle stage when it has one,
+  /// else [regionForBattle] on its [order]. This is what the filter starts
+  /// on, so opening a node lands on its own region with no clicking.
+  int get _nodeRegion {
     final stage = _areaId == null ? null : kAreaDefs[_areaId]?.battleStage;
     if (stage != null) return stage;
-    return ((_order - 1) ~/ kBattlesPerEra) + 1;
+    return regionForBattle(_order);
   }
 
-  bool _inEra(int? era) =>
-      _eraFilter == null || era == null || era == _eraFilter;
+  bool _inRegion(int? region) =>
+      _regionFilter == null || region == null || region == _regionFilter;
 
-  /// A building's first buildable era. An empty eraIds means "every era", so it
-  /// is never filtered out (null = always shown).
-  int? _eraOfBuilding(BuildingDef d) =>
-      d.eraIds.isEmpty ? null : d.startEraOrder;
+  /// A building's first buildable region. An empty eraIds means "every
+  /// region", so it is never filtered out (null = always shown).
+  int? _regionOfBuilding(BuildingDef d) =>
+      d.eraIds.isEmpty ? null : d.startRegionOrder;
 
-  /// A resource's era comes from the goods table; wood/stone/gold are era I.
-  int _eraOfResource(String id) => kGoodsDefs[id]?.eraOrder ?? 1;
+  /// A resource's region comes from the goods table; wood/stone/gold are
+  /// region I.
+  int _regionOfResource(String id) => kGoodsDefs[id]?.regionOrder ?? 1;
 
-  /// An item has no era of its own — its RECIPE does. The latest good it
-  /// consumes is the era it belongs to; a recipe with no concrete ingredients
-  /// is billed against whatever the settlement has, so it counts as era I.
-  int _eraOfItem(ItemDef d) => d.ingredients.keys
-      .map(_eraOfResource)
+  /// An item has no region of its own — its RECIPE does. The latest good it
+  /// consumes is the region it belongs to; a recipe with no concrete
+  /// ingredients is billed against whatever the settlement has, so it
+  /// counts as region I.
+  int _regionOfItem(ItemDef d) => d.ingredients.keys
+      .map(_regionOfResource)
       .fold<int>(1, (a, b) => a > b ? a : b);
 
   /// The items the filter currently offers — also what "+ Item" starts a new
   /// row on, and what decides whether that button is shown at all.
-  List<ItemDef> get _itemsInEra =>
-      kItemDefs.values.where((d) => _inEra(_eraOfItem(d))).toList()
+  List<ItemDef> get _itemsInRegion =>
+      kItemDefs.values.where((d) => _inRegion(_regionOfItem(d))).toList()
         ..sort((a, b) => a.name.compareTo(b.name));
 
   @override
@@ -165,9 +171,11 @@ class _PathNodeFormState extends State<PathNodeForm> {
     ];
     _buildings = {...?d?.rewards.buildings};
     _expansions = d?.rewards.expansions ?? 0;
-    // Open on the node's OWN era — that is what you are authoring, and it makes
-    // the filter useful without a click. "Alle" is one dropdown entry away.
-    _eraFilter = _nodeEra;
+    _huntOptions = d?.rewards.huntOptions ?? 0;
+    // Open on the node's OWN region — that is what you are authoring, and it
+    // makes the filter useful without a click. "Alle" is one dropdown entry
+    // away.
+    _regionFilter = _nodeRegion;
   }
 
   @override
@@ -203,6 +211,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
         },
         buildings: _buildings.toList(),
         expansions: _expansions,
+        huntOptions: _huntOptions,
       ),
     );
     try {
@@ -314,7 +323,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
     child: Row(
       children: [
         Expanded(
-          child: GestureDetector(
+          child: Pressable(
             onTap: pool.isEmpty ? null : () => _rollEnemies(pool),
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 10),
@@ -362,9 +371,9 @@ class _PathNodeFormState extends State<PathNodeForm> {
 
   /// Which resources a package may hold, filtered by the era like everything
   /// else on this form.
-  List<String> get _packResourcesInEra => [
+  List<String> get _packResourcesInRegion => [
     for (final id in ['wood', 'stone', 'gold', ...kGoodsDefs.keys])
-      if (_inEra(_eraOfResource(id))) id,
+      if (_inRegion(_regionOfResource(id))) id,
   ];
 
   void _setPack(_ItemDraft row, {String? resourceId, int? amount}) {
@@ -390,8 +399,8 @@ class _PathNodeFormState extends State<PathNodeForm> {
     final sizes = packSizesFor(resourceId);
     final amount = parts?.amount ?? sizes.first;
     final options = [
-      for (final id in _packResourcesInEra) id,
-      if (!_packResourcesInEra.contains(resourceId)) resourceId,
+      for (final id in _packResourcesInRegion) id,
+      if (!_packResourcesInRegion.contains(resourceId)) resourceId,
     ];
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -495,15 +504,15 @@ class _PathNodeFormState extends State<PathNodeForm> {
   Widget build(BuildContext context) {
     // Filtered, but never without the species this node already fights: a
     // dropdown whose value is missing from its own item list throws.
-    // EVERY species, whatever the era filter says (user 2026-07-30: "Monster
-    // werden keine Ära mehr haben in Zukunft"). The filter still governs
-    // resources, items and buildings — those really do belong to an era — but a
-    // monster is no longer tied to one, so hiding it here would only hide
-    // content that is perfectly valid to fight in region I.
+    // EVERY species, whatever the region filter says (user 2026-07-30:
+    // "Monster werden keine Ära mehr haben in Zukunft"). The filter still
+    // governs resources, items and buildings — those really do belong to a
+    // region — but a monster is no longer tied to one, so hiding it here
+    // would only hide content that is perfectly valid to fight in region I.
     //
-    // (SpeciesDef.tier still exists and still decides which era's GOODS a
-    // mating or a treatment is billed in — that is an economic fact about a
-    // monster, not a statement about where it may appear.)
+    // (SpeciesDef.tier still exists and still decides which region's GOODS
+    // a mating or a treatment is billed in — that is an economic fact about
+    // a monster, not a statement about where it may appear.)
     final species = kSpeciesDefs.values.toList()
       ..sort((a, b) => a.name.compareTo(b.name));
     final areas = kAreaDefs.values.toList()
@@ -555,12 +564,12 @@ class _PathNodeFormState extends State<PathNodeForm> {
             ),
             _areaDropdown(areas),
             _checkboxRow(
-              'Boss (opens the next region/era)',
+              'Boss (opens the next region)',
               _isBoss,
               (v) => setState(() => _isBoss = v),
             ),
             const SizedBox(height: 12),
-            _eraFilterDropdown(areas),
+            _regionFilterDropdown(areas),
             const SizedBox(height: 16),
 
             _sectionLabel(
@@ -593,7 +602,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
               Text(
                 kSpeciesDefs.isEmpty
                     ? 'No species defined yet (Dev Mode → Species).'
-                    : 'No species in this era — set the filter to «All eras».',
+                    : 'No species in this region — set the filter to «All regions».',
                 style: FoE.dim(size: 10).copyWith(color: Colors.redAccent),
               )
             else
@@ -632,9 +641,9 @@ class _PathNodeFormState extends State<PathNodeForm> {
             const SizedBox(height: 4),
             ..._items.where((i) => isPackId(i.itemId)).map(_packRow),
             _addButton('+ Package', () {
-              final first = _packResourcesInEra.isEmpty
+              final first = _packResourcesInRegion.isEmpty
                   ? 'wood'
-                  : _packResourcesInEra.first;
+                  : _packResourcesInRegion.first;
               // Starts on the SMALLEST rung: a reward that is too big is worse
               // than one that is too small, and the ladder is one tap away.
               setState(
@@ -650,18 +659,18 @@ class _PathNodeFormState extends State<PathNodeForm> {
             Text('Items (dropped into the bag)', style: FoE.dim(size: 11)),
             const SizedBox(height: 4),
             ..._plainItems.map(_itemRow),
-            if (_itemsInEra.isEmpty)
+            if (_itemsInRegion.isEmpty)
               Text(
                 kItemDefs.isEmpty
                     ? 'No items defined yet (Dev Mode → Items).'
-                    : 'No items in this era — set the filter to «All eras».',
+                    : 'No items in this region — set the filter to «All regions».',
                 style: FoE.dim(size: 10).copyWith(color: Colors.redAccent),
               )
             else
               _addButton('+ Item', () {
                 setState(
                   () => _items.add(
-                    _ItemDraft(itemId: _itemsInEra.first.id, count: 1),
+                    _ItemDraft(itemId: _itemsInRegion.first.id, count: 1),
                   ),
                 );
               }),
@@ -671,6 +680,19 @@ class _PathNodeFormState extends State<PathNodeForm> {
               _expansions,
               onChanged: (v) =>
                   setState(() => _expansions = v.toInt().clamp(0, 99)),
+            ),
+            const SizedBox(height: 12),
+            _numRow(
+              'Longer hunts unlocked (+N variants)',
+              _huntOptions,
+              onChanged: (v) =>
+                  setState(() => _huntOptions = v.toInt().clamp(0, 5)),
+            ),
+            Text(
+              'Adds to whatever the Scout Post already grants — the '
+              '10-min hunt always exists; each point here (from either '
+              'source, combined) opens the next of the 6 lengths.',
+              style: FoE.dim(size: 10).copyWith(color: FoE.textMuted),
             ),
             const SizedBox(height: 12),
             Text('Unlock buildings', style: FoE.dim(size: 11)),
@@ -703,7 +725,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
       style: FoE.label(size: 15).copyWith(color: FoE.parchment),
       decoration: const InputDecoration(labelText: 'Region (area)'),
       items: [
-        const DropdownMenuItem(value: null, child: Text('— derive from era —')),
+        const DropdownMenuItem(value: null, child: Text('— derive from region —')),
         for (final a in areas)
           DropdownMenuItem(
             value: a.id as String,
@@ -718,40 +740,43 @@ class _PathNodeFormState extends State<PathNodeForm> {
   /// and buildings (user 2026-07-26). It changes nothing about the node — it is
   /// a lens on the lists, so switching it can never alter what is saved.
   ///
-  /// Eras are named from the AREAS, since that is where a battle stage is
-  /// authored; an era with no area still gets a numbered entry so a filter is
-  /// never missing a step.
-  Widget _eraFilterDropdown(List areas) {
+  /// Regions are named from the AREAS, since that is where a battle stage is
+  /// authored; a region with no area still gets a numbered entry so a filter
+  /// is never missing a step.
+  Widget _regionFilterDropdown(List areas) {
     final stages = <int>{
       for (final a in areas) a.battleStage as int,
-      _nodeEra,
+      _nodeRegion,
     }.toList()..sort();
     String label(int stage) {
       for (final a in areas) {
-        if (a.battleStage == stage) return '${a.emoji} Era $stage · ${a.name}';
+        if (a.battleStage == stage) {
+          return '${a.emoji} Region $stage · ${a.name}';
+        }
       }
-      return 'Era $stage';
+      return 'Region $stage';
     }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: DropdownButtonFormField<int?>(
-        initialValue: stages.contains(_eraFilter) ? _eraFilter : null,
+        initialValue: stages.contains(_regionFilter) ? _regionFilter : null,
         isExpanded: true,
         dropdownColor: FoE.panelMid,
         style: FoE.label(size: 15).copyWith(color: FoE.parchment),
         decoration: const InputDecoration(
-          labelText: 'Filter: era (pickers only — it does not change the node)',
+          labelText:
+              'Filter: region (pickers only — it does not change the node)',
         ),
         items: [
-          const DropdownMenuItem(value: null, child: Text('All eras')),
+          const DropdownMenuItem(value: null, child: Text('All regions')),
           for (final s in stages)
             DropdownMenuItem(
               value: s,
               child: Text(label(s), overflow: TextOverflow.ellipsis),
             ),
         ],
-        onChanged: (v) => setState(() => _eraFilter = v),
+        onChanged: (v) => setState(() => _regionFilter = v),
       ),
     );
   }
@@ -843,7 +868,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
             .where(
               (d) =>
                   !isPackId(d.id) &&
-                  (d.id == i.itemId || _inEra(_eraOfItem(d))),
+                  (d.id == i.itemId || _inRegion(_regionOfItem(d))),
             )
             .toList()
           ..sort((a, b) => a.name.compareTo(b.name));
@@ -967,7 +992,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
               !_buildings.contains(d.id) &&
               !elsewhere.containsKey(d.id) &&
               matches(d) &&
-              _inEra(_eraOfBuilding(d)),
+              _inRegion(_regionOfBuilding(d)),
         )
         .toList();
     // Not offered, but findable: a SEARCH is a question, and "it is not here"
@@ -1056,7 +1081,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
       Text(text, style: FoE.label(size: 14).copyWith(color: FoE.gold));
 
   Widget _chip(String label, bool selected, VoidCallback onTap) =>
-      GestureDetector(
+      Pressable(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1070,7 +1095,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
         ),
       );
 
-  Widget _addButton(String label, VoidCallback onTap) => GestureDetector(
+  Widget _addButton(String label, VoidCallback onTap) => Pressable(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1081,7 +1106,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
   );
 
   Widget _checkboxRow(String label, bool value, ValueChanged<bool> onChanged) =>
-      GestureDetector(
+      Pressable(
         onTap: () => onChanged(!value),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1105,7 +1130,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
 
   Widget _saveButton() => SizedBox(
     width: double.infinity,
-    child: GestureDetector(
+    child: Pressable(
       onTap: _saving ? null : _save,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),

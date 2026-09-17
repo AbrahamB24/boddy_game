@@ -45,5 +45,6 @@ flutter:
     - assets/images/roads/
     - assets/images/buildings/
     - assets/images/resources/
+    - assets/images/terrain/
     - assets/sfx/
     - assets/music/

@@ -59,6 +59,41 @@ int genePower(Map<CreatureStat, double> genes) => CreatureStat.values.fold(
       (sum, s) => sum + math.max(1, (genes[s] ?? 10).round()).toInt(),
     );
 
+/// The best [stat] among [owned] — each read AT [atLevel] rather than at its
+/// own current level, so this is a fair GENE comparison regardless of how far
+/// any of them have actually been levelled (user 2026-09-14: judging whether
+/// a wild worth catching, or an owned creature worth keeping, beats what you
+/// already have, only means something at a shared reference level — see the
+/// detail screen's Lvl-1/Max toggle). Null when [owned] is empty, so the
+/// caller can tell "nothing to compare against" from "tied at 0".
+int? bestOwnedStatAtLevel(
+  Iterable<CreatureInstance> owned,
+  CreatureStat stat,
+  int atLevel,
+) {
+  int? best;
+  for (final c in owned) {
+    final v = c.statValueAtLevel(stat, atLevel);
+    if (best == null || v > best) best = v;
+  }
+  return best;
+}
+
+/// The best growth-per-level GENE for [stat] among [owned] (user
+/// 2026-09-14: "die pro Stufe Statboni ebenfalls markieren"). Unlike
+/// [bestOwnedStatAtLevel] this needs no reference level — growth is already
+/// a flat rate, exactly as rolled, so it's comparable on its own. Null when
+/// [owned] is empty. Same missing-gene default (0) the Stats tab's own
+/// growth column already prints.
+double? bestOwnedGrowth(Iterable<CreatureInstance> owned, CreatureStat stat) {
+  double? best;
+  for (final c in owned) {
+    final v = c.statSlope[stat] ?? 0;
+    if (best == null || v > best) best = v;
+  }
+  return best;
+}
+
 /// Which side a monster leans to, 0..1 (0 = purely civil, 1 = purely combat,
 /// 0.5 = balanced). Drives the "where are its strengths" bar.
 double combatShare(CreatureInstance c) {

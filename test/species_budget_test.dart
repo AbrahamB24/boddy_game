@@ -10,13 +10,15 @@ void main() {
   tearDown(() => kSpeciesBalance = defaultSpeciesBalance());
 
   test('the default reproduces the historical per-rarity totals + split', () {
+    // Totals re-curved 2026-09-07 (user request): 270/284/302/324/351, +30%
+    // common->legendary (was a flat +7%). See defaultSpeciesBalance().
     expect(budgetBaseTotal(rarity: CreatureRarity.common), closeTo(270, 1e-9));
     expect(
       budgetBaseTotal(rarity: CreatureRarity.legendary),
-      closeTo(290, 1e-9),
+      closeTo(351, 1e-9),
     );
     final b = defaultBudget(rarity: CreatureRarity.rare);
-    expect(b.combatBase + b.workBase, closeTo(280, 1e-9));
+    expect(b.combatBase + b.workBase, closeTo(302, 1e-9));
     expect(b.combatBase / (b.combatBase + b.workBase), closeTo(180 / 370, 1e-9));
     expect(b.combatGrowth, closeTo(b.combatBase / 30, 1e-9));
     expect(b.workGrowth, closeTo(b.workBase / 30, 1e-9));

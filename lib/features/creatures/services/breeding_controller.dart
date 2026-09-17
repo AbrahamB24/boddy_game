@@ -231,11 +231,6 @@ class BreedingController extends ChangeNotifier {
     final species = kSpeciesDefs[a.speciesId];
     if (species == null) return 'Unknown species.';
 
-    // NOTHING RUNS ON AN EMPTY TANK (user 2026-07-27) — mating included.
-    if (!SettlementController().hasEnergy) {
-      return SettlementController.kNoEnergyMessage;
-    }
-
     // The Breeding Hut's concurrent-mating cap (its `breeding` effect, summed
     // over levels). No hut / no free slot → nothing to start.
     if (breedingSlots <= 0) return 'Build a Breeding Hut first.';
@@ -248,10 +243,16 @@ class BreedingController extends ChangeNotifier {
     // on post cut the rarity base incubation, down to half.
     final settlement = SettlementController();
     final workerPower = settlement.breedingPower(kBreedingHutBuildingId);
-    final hours = breedingHours(
-      kSpeciesBalance.of(species.rarity).breedHours,
-      workerPower,
-    );
+    // No more energy gate (user 2026-09-14, was "NOTHING RUNS ON AN EMPTY
+    // TANK" from 2026-07-27) — low energy now stretches the mating out
+    // instead of refusing to start it at all, the same inverse-rate scale
+    // ExpeditionController bakes into a trip's own duration.
+    final hours =
+        breedingHours(
+          kSpeciesBalance.of(species.rarity).breedHours,
+          workerPower,
+        ) /
+        settlement.energyMultiplier;
 
     // A mating COSTS SUPPLIES (user 2026-07-27) — the goods of the era the
     // PARENTS come from, not the settlement's. See breeding_cost.dart. Charged
@@ -299,9 +300,6 @@ class BreedingController extends ChangeNotifier {
   /// Returns null on success or a user-facing error.
   Future<String?> placeInHatchery(BreedingJob job) async {
     if (job.status != BreedingStatus.egg) return 'That egg is not ready.';
-    if (!SettlementController().hasEnergy) {
-      return SettlementController.kNoEnergyMessage;
-    }
     if (hatcherySlots <= 0) return 'Build a Hatchery first.';
     if (freeHatcherySlots <= 0) {
       return 'All hatchery slots are busy ($hatcherySlots).';
@@ -311,12 +309,16 @@ class BreedingController extends ChangeNotifier {
 
     // The egg's OWN clock and the Hatchery's OWN staff (user 2026-07-26):
     // hatchHours driven by the hatchers here, not by the hut's breeders.
-    final workerPower =
-        SettlementController().hatchingPower(kHatcheryBuildingId);
-    final hours = breedingHours(
-      kSpeciesBalance.of(species.rarity).hatchHours,
-      workerPower,
-    );
+    // No more energy gate (user 2026-09-14) — see BreedingController.start's
+    // own comment; low energy stretches the incubation instead.
+    final settlement = SettlementController();
+    final workerPower = settlement.hatchingPower(kHatcheryBuildingId);
+    final hours =
+        breedingHours(
+          kSpeciesBalance.of(species.rarity).hatchHours,
+          workerPower,
+        ) /
+        settlement.energyMultiplier;
     final readyAt = DateTime.now().add(
       Duration(milliseconds: (hours * 3600000).round()),
     );
@@ -476,7 +478,11 @@ class BreedingController extends ChangeNotifier {
       statSlope: statSlope,
       parentAId: job.parentAId,
       parentBId: job.parentBId,
+      // Opens already knowing its innate kit, same as a starter — see
+      // CreaturesController.adoptStarter's own doc.
+      learnedAbilityIds: null,
     );
+    baby.backfillAbilities();
 
     try {
       final created = await _creatureSvc.insert(baby);

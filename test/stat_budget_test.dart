@@ -369,16 +369,23 @@ void main() {
       expect(b, greaterThan(prev), reason: '${r.name} must out-budget the tier below');
       prev = b;
     }
-    // User 2026-07-17 "seltene nur ein bisschen besser": the whole spread stays
-    // TIGHT — legendary is only modestly above common, not a different league.
+    // Superseded 2026-09-07 (user request): the 2026-07-17 "nur ein bisschen
+    // besser" TIGHT-spread rule is gone — legendary is now deliberately +30 %
+    // over common (270 -> 351; an initial +40 % proposal was pulled back to
+    // +30 %). Headroom kept at 1.35 so the assertion still catches an
+    // accidental blow-out, not to keep the spread tight.
     expect(
       budget(CreatureRarity.legendary),
-      lessThan(budget(CreatureRarity.common) * 1.25),
+      lessThan(budget(CreatureRarity.common) * 1.35),
     );
     // ...and well inside the ceiling the boss fight can survive: the region
-    // boss is a legendary with a x1.2 elite bonus on top, and budget scales
-    // ~cubically (docs/balancing.md §4c). Past ~1.5 the boss stops being
-    // beatable at all — this guard is what keeps the era gate passable.
+    // boss is a legendary with a x1.2 elite bonus on top. Re-verified via
+    // combat_monte_carlo.dart on 2026-09-07 after the re-curve: a 3-team vs.
+    // this boss still wins 90-96% at every level 11-24 (was 100% before the
+    // re-curve) — nowhere near the old docs/balancing.md §4c collapse zone,
+    // which no longer reproduces on the current engine at all (even the OLD
+    // curve's ratio no longer drops below 100%, so that table is stale, not a
+    // live guard this change threatens). 1.8 kept as a generous ceiling.
     expect(
       budget(CreatureRarity.legendary) / budget(CreatureRarity.common) * 1.2,
       lessThan(1.8),

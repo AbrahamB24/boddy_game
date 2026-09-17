@@ -139,6 +139,8 @@ String buildingEffectLabel(String type) => switch (type) {
   'heal' => 'Healing cut',
   'healSlots' => 'Healing slots',
   'healQueue' => 'Waiting room',
+  'trainSlots' => 'Training slots',
+  'trainQueue' => 'Waiting room',
   'housing' => 'Housing',
   'breeding' => 'Simultaneous matings',
   'hatching' => 'Simultaneous incubations',
@@ -187,6 +189,8 @@ String buildingEffectEmoji(String type) => switch (type) {
   'huntOptions' => '🏕',
   'healSlots' => '🩺',
   'healQueue' => '⏳',
+  'trainSlots' => '🥋',
+  'trainQueue' => '⏳',
   'heal' => '🩹',
   'trade' => '💱',
   'craftSlots' => '⚗️',
@@ -216,6 +220,8 @@ const Set<String> kEffectRowTypes = {
   'heal',
   'healSlots',
   'healQueue',
+  'trainSlots',
+  'trainQueue',
   // NO 'xp' — the work XP rate is settlement-wide since 2026-07-30, not a
   // per-building effect. Every post states it on its own line instead (see
   // SettlementMap._productionSection), which is where it belongs: it is what a

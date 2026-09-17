@@ -91,21 +91,21 @@ void main() {
     });
 
     test('a later era\'s good gathers sensibly without a row of its own', () {
-      // No dev row for honey/clay yet — the fallback must still be usable, the
+      // No dev row for wine/clay yet — the fallback must still be usable, the
       // same way a new good already sells at the goods rate on day one.
-      final honey = gatherDefFor('honey'); // era II luxury
-      expect(honey.unitsPerCarry, greaterThan(0));
-      expect(honey.secondsPerUnitPerStat, greaterThan(0));
+      final wine = gatherDefFor('wine'); // region III luxury
+      expect(wine.unitsPerCarry, greaterThan(0));
+      expect(wine.secondsPerUnitPerStat, greaterThan(0));
       // A build material stacks better than a luxury.
       final material = kGoodsDefs.values.firstWhere((g) => !g.isSupply);
       expect(gatherDefFor(material.id).unitsPerCarry,
-          greaterThan(honey.unitsPerCarry));
+          greaterThan(wine.unitsPerCarry));
     });
 
     test('the editor lists the authored dials and every good', () {
       final listed = gatherTunableResources();
       expect(listed, containsAll(kGatherDefs.keys));
-      expect(listed, contains('honey'));
+      expect(listed, contains('wine'));
       expect(listed.toSet().length, listed.length, reason: 'no duplicates');
     });
   });

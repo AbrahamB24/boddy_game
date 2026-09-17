@@ -187,6 +187,28 @@ class CombatEngine extends ChangeNotifier {
   /// player/AI action so a later turn-end notify never re-floats stale numbers.
   final List<CombatEvent> lastEvents = [];
 
+  /// One-shot override for the tutorial's scripted first fight (user
+  /// 2026-09-04): consumed by the very next damaging hit this engine
+  /// resolves — a forced Miss, or a forced exact number — in place of the
+  /// real accuracy roll and [_rollDamage]. Without this, the scripted beats
+  /// could only fix the HP a hit left BEHIND; the floating number and log
+  /// line still showed whatever the real stats/RNG produced, which almost
+  /// never matched the document's own "3 damage", "Miss", "8 damage"... Set
+  /// right before the one real engine call each beat makes; cleared
+  /// automatically the instant a damage hit consumes it.
+  ({int damage, bool miss})? scriptedNextHit;
+
+  /// One-shot AP-cost override for the very next [useAbility] call, same
+  /// shape as [scriptedNextHit] but for what the move COSTS rather than what
+  /// it deals. Used ONLY by the tutorial's scripted "tackle" beat (user
+  /// 2026-09-05: "ich starte mit 3 AP, sollte aber nur mit 2 starten") — the
+  /// opening actor's deliberately-lean AP used to get invisibly topped up to
+  /// afford a full Attack ([kBasicAttackApCost] > the opener's own
+  /// [kStartApFirst]); scripting the COST down to what the player actually
+  /// sees keeps the AP counter honest instead of silently jumping ahead of
+  /// their own tap.
+  int? scriptedApCost;
+
   // ── Balancing instrumentation (dev matrix tool) ───────────
   /// AP-spending actions taken this battle, per side. This is what the
   /// balancing tool's "a fight lasts 3–10 actions" rule counts — attacks and
@@ -204,7 +226,8 @@ class CombatEngine extends ChangeNotifier {
     if (actor.isPlayerSide) {
       playerActionsTaken++;
       if (ability != null) {
-        playerAbilityUses[ability.id] = (playerAbilityUses[ability.id] ?? 0) + 1;
+        playerAbilityUses[ability.id] =
+            (playerAbilityUses[ability.id] ?? 0) + 1;
       }
     } else {
       enemyActionsTaken++;
@@ -214,11 +237,24 @@ class CombatEngine extends ChangeNotifier {
     }
   }
 
+  /// PvP mode (2026-09-15, social/real-time-6v6 feature): when true, the
+  /// "enemies" side gets the SAME player-grade field control as [players] —
+  /// a bounded bench that pauses for a chosen reserve on faint
+  /// ([needsEnemySwitch]/[switchActiveEnemy]) instead of the PvE wave's
+  /// unlimited bench that refills itself instantly. PvE combat (the default,
+  /// `isPvp: false`) is byte-for-byte unchanged: every branch this flag adds
+  /// is dead code unless a caller opts in, which only battle_screen.dart's
+  /// own `isPvp` mode does. Necessary because in a real PvP match BOTH sides
+  /// are humans who expect to choose their own reserve, and
+  /// [switchActivePlayer] was written player-only.
+  final bool isPvp;
+
   CombatEngine({
     required this.players,
     required this.enemies,
     math.Random? rng,
     this.deterministicCombat = false,
+    this.isPvp = false,
   }) : rng = rng ?? math.Random() {
     // Initial schedule; the tiny index epsilon makes equal-speed ties
     // deterministic (list order) instead of map-iteration luck.
@@ -243,20 +279,77 @@ class CombatEngine extends ChangeNotifier {
   /// (Combatant has no ==), which is what we want.
   final Set<Combatant> _opened = {};
 
-  /// Seeds the opening AP pools (user 2026-07-20): whoever acts FIRST opens on
-  /// [kStartApFirst], everyone else on [kStartApSecond]. Deliberately NOT a
-  /// regen — turn one is the lean one, and a reserve coming in later arrives on
-  /// whatever this left it with.
+  /// Seeds the opening AP pools (user 2026-07-20, ramp extended 2026-09-04):
+  /// whoever acts FIRST opens on [kStartApFirst], whoever is next opens on
+  /// [kStartApSecond], and each one behind that opens one AP richer than the
+  /// one before it — a monster standing sixth in the opening order is not
+  /// stuck on the same lean pool as the one standing second — capped at its
+  /// own stage's capacity. Deliberately NOT a regen — turn one is the lean
+  /// one, and a reserve coming in later arrives on whatever this left it
+  /// with.
   void _seedOpeningAp() {
     final first = _acting;
-    for (final c in [...players, ...enemies]) {
-      c.ap = identical(c, first) ? kStartApFirst : kStartApSecond;
+    if (first != null) {
+      first.ap = math.min(maxActionPointsForStage(first.stage), kStartApFirst);
+    }
+    // Everyone else, ramped in the order they'll actually come up — field
+    // members before whatever is still waiting on the bench.
+    final rest = [...players, ...enemies]
+      ..removeWhere((c) => identical(c, first))
+      ..sort((a, b) => a.nextTurnAt.compareTo(b.nextTurnAt));
+    for (var i = 0; i < rest.length; i++) {
+      final c = rest[i];
+      c.ap = math.min(maxActionPointsForStage(c.stage), kStartApSecond + i);
     }
     // The first actor is already standing in its opening turn — mark it so its
     // NEXT turn is the one that regenerates.
     if (first != null) _opened.add(first);
     _turnPriority = 0;
   }
+
+  /// Overrides who opens the fight — used ONLY by the tutorial's scripted
+  /// first battle, whose enemy is picked purely for TYPE effectiveness
+  /// against whatever starter it's fighting (see `scriptedFirstBattleEnemy`)
+  /// and fights at its own natural stats, unlike an ordinary jumpstart fight.
+  /// Real speed decides turn order everywhere else in the game; this one
+  /// fight's opening beat ("tackle") is authored to be the player's, not
+  /// rolled, so a starter that happens to be slower than its counter-picked
+  /// opponent must not lose the coin flip.
+  ///
+  /// SWAPS ap with whoever [_seedOpeningAp] actually gave the opening turn
+  /// to, rather than re-running that seed with [c] as `first` — re-seeding
+  /// would touch every OTHER combatant's ap too (the whole `rest` ramp), not
+  /// just these two. [_opened] is corrected the same way: [_seedOpeningAp]
+  /// already (wrongly, as it turns out) marked the real opener as having had
+  /// its first turn — undo that and mark [c] instead, so whichever of the
+  /// two genuinely takes ITS first turn later still skips the one-time regen
+  /// bonus exactly once, not zero or two times.
+  void forceOpeningActor(Combatant c) {
+    final old = _acting;
+    if (old == null || identical(old, c)) return;
+    _acting = c;
+    final tmp = c.ap;
+    c.ap = old.ap;
+    old.ap = tmp;
+    _opened.remove(old);
+    _opened.add(c);
+  }
+
+  /// Forces [c] to act NEXT, no AP/[_opened] bookkeeping touched — for
+  /// correcting turn order MID-fight rather than at the opening turn (see
+  /// [forceOpeningActor] for that one). Used by the tutorial's scripted
+  /// battle after each of its three enemy beats: with only two combatants on
+  /// the field, a genuinely faster enemy (battle 1's own doc: picked for
+  /// type effectiveness, fighting at natural stats — nothing evens out its
+  /// speed) can win two or three real CTB turns in a row before the
+  /// player's own `nextTurnAt` next comes up, each one an unscripted
+  /// fallback hit the HP-guard in `_runScriptedEnemyBeat` keeps harmless but
+  /// still visibly plays out (user 2026-09-05: "infernoclaw attackiert
+  /// weiterhin 3x nacheinander (2 davon sind nicht im tutorial
+  /// festgehalten)"). Forcing the player back to `_acting` the instant the
+  /// ONE authored enemy beat resolves is what actually stops the extras from
+  /// ever getting scheduled, rather than just neutering their damage.
+  void forceActing(Combatant c) => _acting = c;
 
   /// Starts the acting monster's turn: it REGENERATES its stage's regen, capped
   /// at its capacity — it does not refill. Unspent points from earlier turns are
@@ -313,8 +406,11 @@ class CombatEngine extends ChangeNotifier {
   Combatant? _acting;
 
   /// Fills empty slots on [side]'s field from its bench, in roster order.
-  void _fillField(List<Combatant> side, List<Combatant?> field,
-      {bool schedule = true}) {
+  void _fillField(
+    List<Combatant> side,
+    List<Combatant?> field, {
+    bool schedule = true,
+  }) {
     for (var i = 0; i < kFieldSlots; i++) {
       if (field[i] != null) continue;
       final next = _nextFromBench(side, field);
@@ -335,10 +431,14 @@ class CombatEngine extends ChangeNotifier {
   }
 
   /// Everyone actually standing on the field, alive, in slot order.
-  List<Combatant> get fieldPlayers =>
-      [for (final c in playerField) if (c != null && c.alive) c];
-  List<Combatant> get fieldEnemies =>
-      [for (final c in enemyField) if (c != null && c.alive) c];
+  List<Combatant> get fieldPlayers => [
+    for (final c in playerField)
+      if (c != null && c.alive) c,
+  ];
+  List<Combatant> get fieldEnemies => [
+    for (final c in enemyField)
+      if (c != null && c.alive) c,
+  ];
 
   /// The field of whichever side [c] fights for.
   List<Combatant> _fieldOf(Combatant c) =>
@@ -373,16 +473,19 @@ class CombatEngine extends ChangeNotifier {
   /// once its pool drops below this.
   int _minActionCost() {
     var min = kBasicAttackApCost; // an attack is always available
-    if (currentActor.isPlayerSide && benchedPlayers.isNotEmpty) {
-      min = math.min(min, kSwitchApCost);
+    if (currentActor.isPlayerSide) {
+      min = math.min(min, kItemApCost); // Items button is always up
+      if (benchedPlayers.isNotEmpty) min = math.min(min, kSwitchApCost);
     }
     return min;
   }
 
   /// True while the acting side still has AP to do something — the UI keeps
   /// the action panel open until this is false (then auto-ends).
-  bool get canActThisTurn => outcome == null &&
+  bool get canActThisTurn =>
+      outcome == null &&
       !needsPlayerSwitch &&
+      !needsEnemySwitch &&
       currentActor.ap >= _minActionCost();
 
   /// The player's acting monster, or — outside its turn — the first one
@@ -431,6 +534,23 @@ class CombatEngine extends ChangeNotifier {
   bool get needsPlayerSwitch =>
       outcome == null && openPlayerSlots > 0 && benchedPlayers.isNotEmpty;
 
+  /// Empty enemy slots a reserve is waiting to fill — only meaningful in
+  /// [isPvp] mode; in PvE the enemy bench refills itself instantly (see
+  /// [_resolveFaints]), so this is never owed.
+  int get openEnemySlots {
+    if (!isPvp) return 0;
+    var n = 0;
+    for (final c in enemyField) {
+      if (c == null || !c.alive) n++;
+    }
+    return n;
+  }
+
+  /// [needsPlayerSwitch]'s mirror for the enemy side, gated behind [isPvp] —
+  /// see that flag's doc comment.
+  bool get needsEnemySwitch =>
+      isPvp && outcome == null && openEnemySlots > 0 && benchedEnemies.isNotEmpty;
+
   // Whole-roster liveness — drives victory/defeat (a side loses only when its
   // WHOLE roster is down, not when the field empties).
   List<Combatant> get alivePlayers =>
@@ -452,11 +572,23 @@ class CombatEngine extends ChangeNotifier {
       playerField.any((f) => identical(f, c)) ||
       enemyField.any((f) => identical(f, c));
 
-  Combatant _lowestNextTurn() => _activeAlive
-      .reduce((a, b) => a.nextTurnAt <= b.nextTurnAt ? a : b);
+  Combatant _lowestNextTurn() =>
+      _activeAlive.reduce((a, b) => a.nextTurnAt <= b.nextTurnAt ? a : b);
 
   bool get isPlayerTurn =>
-      outcome == null && !needsPlayerSwitch && currentActor.isPlayerSide;
+      outcome == null &&
+      !needsPlayerSwitch &&
+      !needsEnemySwitch &&
+      currentActor.isPlayerSide;
+
+  /// [isPlayerTurn]'s mirror for the enemy side — only meaningful in [isPvp]
+  /// mode, where the "enemy" is a second human with the same voluntary-
+  /// switch rights (see [switchActiveEnemy]).
+  bool get isEnemyTurn =>
+      outcome == null &&
+      !needsPlayerSwitch &&
+      !needsEnemySwitch &&
+      !currentActor.isPlayerSide;
 
   /// Upcoming turn order for the initiative bar. EVERY monster on the field is
   /// in it now (up to six), ordered by when the CTB queue reaches them — which
@@ -489,7 +621,8 @@ class CombatEngine extends ChangeNotifier {
   /// single opponent to measure against, and taking the fastest enemy's
   /// position would have handed slow reserves a free strike.
   void _sendIn(Combatant c) {
-    final now = _acting?.nextTurnAt ??
+    final now =
+        _acting?.nextTurnAt ??
         (_activeAlive.isEmpty ? c.nextTurnAt : _lowestNextTurn().nextTurnAt);
     c.nextTurnAt = now + _turnCost / c.effectiveSpeed;
   }
@@ -554,6 +687,105 @@ class CombatEngine extends ChangeNotifier {
     return null;
   }
 
+  /// [switchActivePlayer]'s exact mirror for the enemy side — only usable in
+  /// [isPvp] mode (an enemy roster index otherwise has no bench to switch
+  /// from at all; PvE's unlimited bench refills itself, see
+  /// [_resolveFaints]). See the [isPvp] field's doc comment for why this
+  /// exists.
+  String? switchActiveEnemy(int index) {
+    if (!isPvp) return 'Not a PvP match';
+    if (outcome != null) return 'The battle is over';
+    if (index < 0 || index >= enemies.length) return 'No such monster';
+    final target = enemies[index];
+    if (!target.alive) return '${target.name} is K.O.';
+    if (enemyField.any((f) => identical(f, target))) {
+      return '${target.name} is already fighting';
+    }
+
+    final forced = needsEnemySwitch;
+    if (!forced && !isEnemyTurn) {
+      return 'You can only switch on your turn';
+    }
+    if (forced) {
+      final slot = enemyField.indexWhere((c) => c == null || !c.alive);
+      if (slot < 0) return 'No free slot';
+      enemyField[slot] = target;
+      _sendIn(target);
+      lastEvents.clear();
+      actionSeq++;
+      lastAction = '🔄 ${target.name} steps up!';
+      _advanceIfPending();
+      _checkOutcome();
+      notifyListeners();
+      return null;
+    }
+    final outgoing = currentActor;
+    if (outgoing.ap < kSwitchApCost) {
+      return 'Not enough AP to switch ($kSwitchApCost needed)';
+    }
+    final slot = enemyField.indexWhere((c) => identical(c, outgoing));
+    if (slot < 0) return 'That monster is not on the field';
+    outgoing.ap -= kSwitchApCost;
+    target.nextTurnAt = outgoing.nextTurnAt;
+    enemyField[slot] = target;
+    _acting = target;
+    lastEvents.clear();
+    actionSeq++;
+    lastAction = '🔄 ${target.name} steps up!';
+    _afterAction(target);
+    return null;
+  }
+
+  /// Spends [kItemApCost] AP for [actor] using a battle item — the fixed
+  /// price is the same for every item (user 2026-09-05: "ein Item benutzen,
+  /// kostet immer 1 AP"), unlike an ability's power-derived cost. The actual
+  /// heal/buff is applied by the caller directly on the Combatant (items
+  /// aren't AbilityDefs); this just gates and spends the AP through the same
+  /// [_afterAction] path everything else uses, so the turn stays open when
+  /// AP is left over instead of always ending it.
+  ///
+  /// Returns a user-facing error (not enough AP / not this monster's turn)
+  /// or null when the AP was spent.
+  String? useItem(Combatant actor) {
+    if (outcome != null || !actor.alive) return 'The battle is over.';
+    if (!identical(actor, currentActor)) return 'Not this monster\'s turn.';
+    if (actor.ap < kItemApCost) {
+      return 'Not enough AP ($kItemApCost needed).';
+    }
+    actor.ap -= kItemApCost;
+    lastEvents.clear();
+    actionSeq++;
+    lastAction = '🎒 ${actor.name} uses an item';
+    _afterAction(actor);
+    return null;
+  }
+
+  /// Spends [kCatchApCost] AP for [actor] attempting a hunt catch — same
+  /// gate/spend/continue shape as [useItem]. The hit-or-miss QTE result
+  /// itself lives in the UI (battle_screen.dart's ring mini-game); this only
+  /// prices the ATTEMPT through the shared AP economy, so trying to catch a
+  /// fielded wild costs as much as attacking it and competes with attacking
+  /// for the turn instead of being a free, unconditional turn-ender
+  /// (2026-09-11 — catching used to always end the whole battle, so it never
+  /// needed an AP price of its own).
+  ///
+  /// Called once the QTE overlay has already closed (hit or miss), same
+  /// timing [endTurn] used to be called at — spending AP/continuing the turn
+  /// while the ring overlay is still up would let an enemy act underneath it.
+  String? attemptCatch(Combatant actor) {
+    if (outcome != null || !actor.alive) return 'The battle is over.';
+    if (!identical(actor, currentActor)) return 'Not this monster\'s turn.';
+    if (actor.ap < kCatchApCost) {
+      return 'Not enough AP ($kCatchApCost needed).';
+    }
+    actor.ap -= kCatchApCost;
+    lastEvents.clear();
+    actionSeq++;
+    lastAction = '🪤 ${actor.name} tries a catch';
+    _afterAction(actor);
+    return null;
+  }
+
   /// Clears the fallen out of both fields and refills what can be refilled.
   ///
   /// The enemy's bench is UNLIMITED and steps in by itself the moment a slot
@@ -562,11 +794,36 @@ class CombatEngine extends ChangeNotifier {
   /// is a decision, and [needsPlayerSwitch] holds the fight for it.
   void _resolveFaints() {
     for (var i = 0; i < kFieldSlots; i++) {
-      if (playerField[i] != null && !playerField[i]!.alive) playerField[i] = null;
+      if (playerField[i] != null && !playerField[i]!.alive) {
+        playerField[i] = null;
+      }
       if (enemyField[i] != null && !enemyField[i]!.alive) enemyField[i] = null;
     }
+    // PvP: the "enemy" is a human too, and picks their own reserve — the
+    // same reason the player's own side is left empty here (see this
+    // method's own doc comment above). PvE keeps the unlimited-bench
+    // auto-fill unchanged.
+    if (!isPvp) _fillField(enemies, enemyField);
+    _checkOutcome();
+  }
+
+  /// Removes a caught wild from the fight entirely — not fainted, GONE — so
+  /// it no longer counts toward [enemies]/[totalXpReward] (a catch is the
+  /// reward, it earns no kill XP on top) and can never be targeted again.
+  /// Refills the vacated slot from the bench exactly like a faint does, then
+  /// re-checks the outcome, since this may have been the last one standing
+  /// (2026-09-11 — hunts now field several wilds in ONE continuous battle
+  /// instead of one battle per find, so a catch must continue the fight
+  /// rather than end it).
+  void catchEnemy(Combatant wild) {
+    if (outcome != null) return;
+    for (var i = 0; i < kFieldSlots; i++) {
+      if (identical(enemyField[i], wild)) enemyField[i] = null;
+    }
+    enemies.remove(wild);
     _fillField(enemies, enemyField);
     _checkOutcome();
+    notifyListeners();
   }
 
   // ── Actions ───────────────────────────────────────────────
@@ -574,14 +831,14 @@ class CombatEngine extends ChangeNotifier {
   /// (AbilityDef.apCost); otherwise it is derived from the move's strength.
   /// This just delegates to [AbilityDef.resolvedApCost] — the one source of
   /// truth (the value the abilities are already capped to per unlock stage in
-  /// Combatant._resolveAbilities).
+  /// Combatant._capToStage).
   static int abilityApCost(AbilityDef ability) => ability.resolvedApCost;
 
   /// Convenience wrapper, not a separate mechanic — Attack is a genuine
   /// AbilityDef now (user 2026-09-03: "attack soll eine normale Fähigkeit
   /// sein. Falls es noch andere gibt, bitte auch diese als echte Fähigkeit
-  /// aufnehmen"), resolved onto every combatant by Combatant._resolveAbilities
-  /// alongside its species' own moves, and this just runs it through the
+  /// aufnehmen"), resolved onto every combatant by Combatant.fromInstance/
+  /// fromSpecies alongside its equipped/wild moves, and this just runs it through the
   /// exact same [useAbility] every other move goes through (same accuracy
   /// roll, same damage formula, same crit/miss handling, same log format).
   /// Kept under its own name because every existing caller — the AI's own
@@ -591,13 +848,16 @@ class CombatEngine extends ChangeNotifier {
   void basicAttack(Combatant actor, Combatant target) {
     final attack = actor.abilities.firstWhere(
       (a) => a.id == 'attack',
-      orElse: () => const AbilityDef(
+      orElse: () => AbilityDef(
         id: 'attack',
         name: 'Attack',
         element: CreatureElement.neutral,
         kind: AbilityKind.damage,
         target: AbilityTarget.enemy,
         power: basicAttackPower,
+        // Explicit, not auto-derived (user 2026-09-08: "attack soll nur 2 AP
+        // kosten") — always matches the dial, whatever power/powerPerAp do.
+        apCost: kBasicAttackApCost,
       ),
     );
     useAbility(actor, attack, target);
@@ -608,7 +868,8 @@ class CombatEngine extends ChangeNotifier {
   String? useAbility(Combatant actor, AbilityDef ability, Combatant? target) {
     if (outcome != null || !actor.alive) return 'The battle is over.';
     if (!identical(actor, currentActor)) return 'Not this monster\'s turn.';
-    final cost = abilityApCost(ability);
+    final cost = scriptedApCost ?? abilityApCost(ability);
+    scriptedApCost = null; // one shot, whether or not it was actually set
     if (actor.ap < cost) return 'Not enough AP ($cost needed).';
     final targets = _resolveTargets(actor, ability, target);
     if (targets.isEmpty) return 'No valid target.';
@@ -689,92 +950,31 @@ class CombatEngine extends ChangeNotifier {
         }
       case AbilityKind.damage:
         for (final t in targets) {
-          if (!_rollAccuracy(actor)) {
-            lastEvents.add(CombatEvent(target: t, actor: actor, miss: true));
-            parts.add('misses ${t.name}');
-            continue;
-          }
-          final roll = _rollDamage(
-            actor: actor,
-            target: t,
-            power: ability.power,
-            element: ability.element,
-          );
-          final dmg = roll.dmg;
-          t.hp = math.max(t.cannotBeKoed ? 1 : 0, t.hp - dmg);
-          lastEvents.add(CombatEvent(
-            target: t,
-            actor: actor,
-            amount: dmg,
-            crit: roll.crit,
-            typeMult: roll.typeMult,
-            element: ability.element,
-          ));
-          parts.add('$dmg damage to ${t.name}${t.alive ? '' : ' (K.O.)'}');
-
-          if (ability.lifestealPct > 0) {
-            final before = actor.hp;
-            actor.hp = math.min(
-              actor.maxHp,
-              actor.hp + (dmg * ability.lifestealPct).round(),
-            );
-            if (actor.hp > before) {
-              lastEvents.add(CombatEvent(
-                target: actor,
-                actor: actor,
-                amount: actor.hp - before,
-                heal: true,
-              ));
-              parts.add('${actor.name} drains ${actor.hp - before} HP');
-            }
-          }
-          // RECOIL (user 2026-07-30, Double-Edge): a share of what it just dealt,
-          // taken by the user. After lifesteal, so a move carrying both nets out
-          // in the order the log reads — and it CAN knock the user out, which is
-          // what makes it a cost.
-          if (ability.recoilValue > 0) {
-            final back = (dmg * ability.recoilValue).round();
-            if (back > 0) {
-              actor.hp = math.max(
-                actor.cannotBeKoed ? 1 : 0,
-                actor.hp - back,
-              );
-              lastEvents.add(
-                CombatEvent(target: actor, actor: actor, amount: back),
-              );
-              parts.add('${actor.name} takes $back recoil');
-            }
-          }
-          if (t.alive) {
-            if (ability.inflictMain != null &&
-                t.mainStatus == null &&
-                rng.nextDouble() < ability.inflictMainChance) {
-              t.applyMainStatus(
-                ability.inflictMain!,
-                turns: ability.inflictMainTurns,
-                value: ability.inflictMainValue,
-              );
-              parts.add(
-                '${t.name} ${ability.inflictMain!.emoji} ${ability.inflictMain!.label}',
-              );
-            }
-            if (ability.inflictDebuff != null &&
-                rng.nextDouble() < ability.inflictDebuffChance) {
-              t.applySecondaryDebuff(
-                ability.inflictDebuff!,
-                turns: ability.inflictDebuffTurns,
-                value: ability.inflictDebuffValue,
-              );
-              parts.add(
-                '${t.name} ${ability.inflictDebuff!.emoji} ${ability.inflictDebuff!.label}',
-              );
-              // Rides alongside the damage event just added above, rather
-              // than replacing it — the hit still flashes/shakes AND the
-              // red-lines-falling cue plays over the same target (see
-              // battle_screen's _consumeCombatEvents).
-              lastEvents.add(
-                CombatEvent(target: t, actor: actor, debuff: true),
-              );
+          _resolveOneHit(actor, ability, t, parts, allowScripted: true);
+          // Extra hits (user 2026-09-08: "nicht nur 1 gegner treffen sondern
+          // 2 oder 3... mit jedem Treffer sinkt die Chance, noch einen
+          // Treffer zu landen") — only meaningful for the classic single-
+          // enemy case; allEnemies/allAllies already hit everyone. Capped at
+          // 3 total hits: each extra swing needs an independent
+          // extraHitChance roll, so the odds of reaching a 3rd hit are that
+          // chance SQUARED, always lower than reaching a 2nd.
+          if (ability.target == AbilityTarget.enemy &&
+              ability.extraHitChance > 0) {
+            final alreadyHit = {t};
+            var current = t;
+            for (var extra = 0; extra < 2; extra++) {
+              if (rng.nextDouble() >= ability.extraHitChance) break;
+              if (ability.extraHitSameTarget) {
+                if (!current.alive) break; // nothing left to hit again
+              } else {
+                final next = opponentsOf(
+                  actor,
+                ).where((e) => e.alive && !alreadyHit.contains(e)).toList();
+                if (next.isEmpty) break; // cleave: no fresh enemy left
+                current = next[rng.nextInt(next.length)];
+                alreadyHit.add(current);
+              }
+              _resolveOneHit(actor, ability, current, parts);
             }
           }
         }
@@ -782,6 +982,131 @@ class CombatEngine extends ChangeNotifier {
     lastAction = '${actor.name}: ${ability.name} — ${parts.join(', ')}';
     _afterAction(actor);
     return null;
+  }
+
+  /// ONE swing of a damage ability at [t]: the accuracy roll, the damage
+  /// roll, lifesteal, recoil, and a main-status/debuff roll — everything a
+  /// single hit does. Extracted (user 2026-09-08) so a multi-hit/cleave move
+  /// can call this more than once per `useAbility` — see the extra-hit loop
+  /// in the `AbilityKind.damage` case above, the only other caller.
+  ///
+  /// [allowScripted] lets the deterministic test hook ([scriptedNextHit])
+  /// apply — only the FIRST hit of a sequence passes true, since a test that
+  /// scripts "this hit" means one specific swing, not an entire multi-hit
+  /// run; every extra hit after it always uses real [rng].
+  void _resolveOneHit(
+    Combatant actor,
+    AbilityDef ability,
+    Combatant t,
+    List<String> parts, {
+    bool allowScripted = false,
+  }) {
+    final scripted = allowScripted ? scriptedNextHit : null;
+    if (scripted != null) {
+      scriptedNextHit = null; // one shot
+      if (scripted.miss) {
+        lastEvents.add(CombatEvent(target: t, actor: actor, miss: true));
+        parts.add('misses ${t.name}');
+      } else {
+        final dmg = scripted.damage;
+        t.hp = math.max(t.cannotBeKoed ? 1 : 0, t.hp - dmg);
+        lastEvents.add(
+          CombatEvent(
+            target: t,
+            actor: actor,
+            amount: dmg,
+            element: ability.element,
+          ),
+        );
+        parts.add('$dmg damage to ${t.name}${t.alive ? '' : ' (K.O.)'}');
+      }
+      return;
+    }
+    if (!_rollAccuracy(actor)) {
+      lastEvents.add(CombatEvent(target: t, actor: actor, miss: true));
+      parts.add('misses ${t.name}');
+      return;
+    }
+    final roll = _rollDamage(
+      actor: actor,
+      target: t,
+      power: ability.power,
+      element: ability.element,
+    );
+    final dmg = roll.dmg;
+    t.hp = math.max(t.cannotBeKoed ? 1 : 0, t.hp - dmg);
+    lastEvents.add(
+      CombatEvent(
+        target: t,
+        actor: actor,
+        amount: dmg,
+        crit: roll.crit,
+        typeMult: roll.typeMult,
+        element: ability.element,
+      ),
+    );
+    parts.add('$dmg damage to ${t.name}${t.alive ? '' : ' (K.O.)'}');
+
+    if (ability.lifestealPct > 0) {
+      final before = actor.hp;
+      actor.hp = math.min(
+        actor.maxHp,
+        actor.hp + (dmg * ability.lifestealPct).round(),
+      );
+      if (actor.hp > before) {
+        lastEvents.add(
+          CombatEvent(
+            target: actor,
+            actor: actor,
+            amount: actor.hp - before,
+            heal: true,
+          ),
+        );
+        parts.add('${actor.name} drains ${actor.hp - before} HP');
+      }
+    }
+    // RECOIL (user 2026-07-30, Double-Edge): a share of what it just dealt,
+    // taken by the user. After lifesteal, so a move carrying both nets out
+    // in the order the log reads — and it CAN knock the user out, which is
+    // what makes it a cost.
+    if (ability.recoilValue > 0) {
+      final back = (dmg * ability.recoilValue).round();
+      if (back > 0) {
+        actor.hp = math.max(actor.cannotBeKoed ? 1 : 0, actor.hp - back);
+        lastEvents.add(CombatEvent(target: actor, actor: actor, amount: back));
+        parts.add('${actor.name} takes $back recoil');
+      }
+    }
+    if (t.alive) {
+      if (ability.inflictMain != null &&
+          t.mainStatus == null &&
+          rng.nextDouble() < ability.inflictMainChance) {
+        t.applyMainStatus(
+          ability.inflictMain!,
+          turns: ability.inflictMainTurns,
+          value: ability.inflictMainValue,
+        );
+        parts.add(
+          '${t.name} ${ability.inflictMain!.emoji} ${ability.inflictMain!.label}',
+        );
+      }
+      if (ability.inflictDebuff != null &&
+          rng.nextDouble() < ability.inflictDebuffChance) {
+        t.applySecondaryDebuff(
+          ability.inflictDebuff!,
+          turns: ability.inflictDebuffTurns,
+          value: ability.inflictDebuffValue,
+        );
+        parts.add(
+          '${t.name} ${ability.inflictDebuff!.emoji} ${ability.inflictDebuff!.label}',
+        );
+        // Rides alongside the damage event just added above, rather
+        // than replacing it — the hit still flashes/shakes AND the
+        // red-lines-falling cue plays over the same target (see
+        // battle_screen's _consumeCombatEvents).
+        lastEvents.add(CombatEvent(target: t, actor: actor, debuff: true));
+      }
+    }
   }
 
   /// Called after every AP-spending action. Resolves faints, then either ends
@@ -806,9 +1131,10 @@ class CombatEngine extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    // An empty player slot pauses everything until a reserve fills it — even
-    // mid-turn, so the field is never drawn a monster short.
-    if (needsPlayerSwitch) {
+    // An empty player (or, in PvP, enemy) slot pauses everything until a
+    // reserve fills it — even mid-turn, so the field is never drawn a
+    // monster short.
+    if (needsPlayerSwitch || needsEnemySwitch) {
       notifyListeners();
       return;
     }
@@ -833,7 +1159,7 @@ class CombatEngine extends ChangeNotifier {
   /// queue for it). [endTurn] stays player-only on purpose everywhere
   /// else; this is the one legitimate reason to bypass that.
   void forceEndTurn() {
-    if (outcome != null || needsPlayerSwitch) return;
+    if (outcome != null || needsPlayerSwitch || needsEnemySwitch) return;
     _endTurn();
   }
 
@@ -864,11 +1190,11 @@ class CombatEngine extends ChangeNotifier {
       _pendingAdvance = false;
       return;
     }
-    if (needsPlayerSwitch) return; // still owed — hold the queue
+    if (needsPlayerSwitch || needsEnemySwitch) return; // still owed — hold the queue
     _pendingAdvance = false;
     _acting = _activeAlive.isEmpty ? null : _lowestNextTurn();
     _advanceToActionableActor();
-    if (outcome == null && !needsPlayerSwitch) _beginTurn();
+    if (outcome == null && !needsPlayerSwitch && !needsEnemySwitch) _beginTurn();
   }
 
   void flee() {
@@ -897,7 +1223,7 @@ class CombatEngine extends ChangeNotifier {
   }
 
   void performAutoAction() {
-    if (outcome != null || needsPlayerSwitch) return;
+    if (outcome != null || needsPlayerSwitch || needsEnemySwitch) return;
     final actor = currentActor;
     // With up to three opponents standing there is a CHOICE now — see
     // [_pickAiTarget]. The ally to look after is the one bleeding worst, which
@@ -939,7 +1265,7 @@ class CombatEngine extends ChangeNotifier {
     for (final a in actor.abilities) {
       if (a.kind != AbilityKind.damage) continue;
       final stab = a.element == actor.element ? 1.5 : 1.0;
-      final typeMult = a.element.multiplierVs(target.element);
+      final typeMult = target.incomingTypeMult(a.element);
       final score = a.power * stab * typeMult;
       if (score > bestAnyScore) {
         bestAnyScore = score;
@@ -961,8 +1287,8 @@ class CombatEngine extends ChangeNotifier {
       final cost = abilityApCost(bestAny);
       final cap = maxActionPointsForStage(actor.stage);
       final nextTurnAp = math.min(cap, actor.ap + apRegenForStage(actor.stage));
-      final beatsPlanB = bestAnyScore >
-          math.max(bestScore, basicAttackPower.toDouble()) * 1.3;
+      final beatsPlanB =
+          bestAnyScore > math.max(bestScore, basicAttackPower.toDouble()) * 1.3;
       if (cost <= cap && actor.ap < cost && nextTurnAp >= cost && beatsPlanB) {
         _endTurn();
         return;
@@ -1000,7 +1326,7 @@ class CombatEngine extends ChangeNotifier {
         if (a.kind != AbilityKind.damage) continue;
         if (actor.ap < abilityApCost(a)) continue;
         final stab = a.element == actor.element ? 1.5 : 1.0;
-        final s = a.power * stab * a.element.multiplierVs(t.element);
+        final s = a.power * stab * t.incomingTypeMult(a.element);
         if (s > score) score = s;
       }
       return score;
@@ -1014,8 +1340,10 @@ class CombatEngine extends ChangeNotifier {
       final atk = actor.effectiveAttack;
       final def = math.max(1.0, t.effectiveDefense);
       final reach =
-          (bestMoveScore(t) / basicAttackPower) * atk * (atk / (atk + def)) *
-              damageScale;
+          (bestMoveScore(t) / basicAttackPower) *
+          atk *
+          (atk / (atk + def)) *
+          damageScale;
       if (reach >= t.hp && (finisher == null || t.hp < finisher.hp)) {
         finisher = t;
       }
@@ -1043,9 +1371,9 @@ class CombatEngine extends ChangeNotifier {
       if (a.kind == AbilityKind.buff && a.selfBuff != null) {
         if (!actor.selfBuffs.containsKey(a.selfBuff)) return a;
       } else if (a.kind == AbilityKind.damage) {
-        final newStatus =
-            a.inflictMain != null && target.mainStatus == null;
-        final newDebuff = a.inflictDebuff != null &&
+        final newStatus = a.inflictMain != null && target.mainStatus == null;
+        final newDebuff =
+            a.inflictDebuff != null &&
             !target.secondaryDebuffs.containsKey(a.inflictDebuff);
         if (newStatus || newDebuff) return a;
       }
@@ -1092,11 +1420,12 @@ class CombatEngine extends ChangeNotifier {
     // first live one rather than fizzling the move.
     Combatant? valid(List<Combatant> among) =>
         picked != null && picked.alive && among.any((c) => identical(c, picked))
-            ? picked
-            : null;
+        ? picked
+        : null;
     switch (ability.target) {
       case AbilityTarget.enemy:
-        final t = valid(opponents) ?? (opponents.isEmpty ? null : opponents.first);
+        final t =
+            valid(opponents) ?? (opponents.isEmpty ? null : opponents.first);
         return t == null ? const [] : [t];
       case AbilityTarget.allEnemies:
         return opponents;
@@ -1143,14 +1472,18 @@ class CombatEngine extends ChangeNotifier {
     // Attack, most buffs) has no type identity: no STAB (a creature is never
     // neutral, so element == actor.element can't hold) and multiplierVs is 1.0.
     final stab = element == actor.element ? 1.5 : 1.0;
-    final typeMult = element.multiplierVs(target.element);
+    // EXPOSURE (user 2026-09-15): a target afflicted by a type-flavoured
+    // main status (burning/frozen/petrified/…) is weak to that element TOO,
+    // on top of its own — see Combatant.incomingTypeMult.
+    final typeMult = target.incomingTypeMult(element);
     // Crit chance scales gently with speed (spec's alternative: a flat
     // 6.25% — this is the primary, speed-scaled formula), capped ~10%.
     // Base chance, how much speed adds, the ceiling and the multiplier are
     // all dials (Monster → Kampf).
-    final critChance = (GameTuning.i.raw(Dials.critBase) +
-            actor.effectiveSpeed / GameTuning.i.raw(Dials.critSpeedDivisor))
-        .clamp(0.0, GameTuning.i.raw(Dials.critMax));
+    final critChance =
+        (GameTuning.i.raw(Dials.critBase) +
+                actor.effectiveSpeed / GameTuning.i.raw(Dials.critSpeedDivisor))
+            .clamp(0.0, GameTuning.i.raw(Dials.critMax));
     final critMult = !deterministicCombat && rng.nextDouble() < critChance
         ? GameTuning.i.raw(Dials.critMultiplier)
         : 1.0;
@@ -1167,16 +1500,15 @@ class CombatEngine extends ChangeNotifier {
     final capFraction = kMaxHitHpFraction;
     final dmg = capFraction <= 0
         ? math.max(1, raw)
-        : math.max(1, math.min(raw, math.max(1, (target.maxHp * capFraction).floor())));
-    return (
-      dmg: dmg,
-      crit: critMult > 1.0,
-      typeMult: typeMult,
-    );
+        : math.max(
+            1,
+            math.min(raw, math.max(1, (target.maxHp * capFraction).floor())),
+          );
+    return (dmg: dmg, crit: critMult > 1.0, typeMult: typeMult);
   }
 
   void _finishActorTurn(Combatant actor, {int priority = 0}) {
-    final dot = actor.tickStatusEndOfRound();
+    final dot = actor.tickStatusEndOfRound(_statusRng);
     if (dot > 0) {
       lastEvents.add(CombatEvent(target: actor, actor: actor, amount: dot));
       lastAction = '$lastAction · ${actor.name} takes $dot status damage';
@@ -1192,7 +1524,8 @@ class CombatEngine extends ChangeNotifier {
           heal: true,
         ),
       );
-      lastAction = '$lastAction · ${actor.name} regenerates '
+      lastAction =
+          '$lastAction · ${actor.name} regenerates '
           '${actor.lastRegenHeal} HP';
     }
     var increment = _turnCost / actor.effectiveSpeed;
@@ -1209,19 +1542,33 @@ class CombatEngine extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Auto-resolves any consecutive frozen/feared skip turns (rolled at the
+  /// null in deterministic-combat mode (tests) so status decay/cure stays the
+  /// exact fixed-countdown it always was — matches every other roll's own
+  /// `!deterministicCombat` guard (see _rollDamage's crit, _rollAccuracy).
+  math.Random? get _statusRng => deterministicCombat ? null : rng;
+
+  // Auto-resolves any consecutive frozen/feared/confused turns (rolled at the
   // START of each such turn) so isPlayerTurn/currentActor never point at a
-  // combatant who's about to be skipped anyway — the UI/AI only ever sees
-  // actionable turns.
+  // combatant who's about to be skipped/self-hit anyway — the UI/AI only
+  // ever sees actionable turns.
   void _advanceToActionableActor() {
     var guard = 0;
-    while (outcome == null && !needsPlayerSwitch && guard < 50) {
+    while (outcome == null && !needsPlayerSwitch && !needsEnemySwitch && guard < 50) {
       guard++;
       if (_activeAlive.isEmpty) return;
       final actor = _acting ??= _lowestNextTurn();
+      // CONFUSION (user 2026-09-15): the one main status that doesn't skip —
+      // it makes the actor hit ITSELF instead, so it needs the real damage
+      // roll rather than rollSkipTurn's plain skip.
+      if (actor.mainStatus == MainStatusKind.confusion &&
+          !deterministicCombat &&
+          rng.nextDouble() < actor.mainStatusValue) {
+        _resolveConfusionSelfHit(actor);
+        continue;
+      }
       if (!actor.rollSkipTurn(rng)) return;
       final status = actor.mainStatus!;
-      final dot = actor.tickStatusEndOfRound();
+      final dot = actor.tickStatusEndOfRound(_statusRng);
       lastEvents.clear();
       actionSeq++;
       if (dot > 0) {
@@ -1236,6 +1583,32 @@ class CombatEngine extends ChangeNotifier {
       _resolveFaints();
       _acting = _activeAlive.isEmpty ? null : _lowestNextTurn();
     }
+  }
+
+  /// A confused actor's turn: a typeless hit on itself (the classic
+  /// Pokémon-confusion self-inflicted swing), consuming the turn exactly
+  /// like a skip would.
+  void _resolveConfusionSelfHit(Combatant actor) {
+    final roll = _rollDamage(
+      actor: actor,
+      target: actor,
+      power: basicAttackPower,
+      element: CreatureElement.neutral,
+    );
+    actor.hp = math.max(actor.cannotBeKoed ? 1 : 0, actor.hp - roll.dmg);
+    final dot = actor.tickStatusEndOfRound(_statusRng);
+    lastEvents.clear();
+    actionSeq++;
+    lastEvents.add(CombatEvent(target: actor, actor: actor, amount: roll.dmg));
+    if (dot > 0) {
+      lastEvents.add(CombatEvent(target: actor, actor: actor, amount: dot));
+    }
+    lastAction =
+        '${actor.name} is confused and hurts itself for ${roll.dmg} damage!'
+        '${dot > 0 ? ' ($dot status damage)' : ''}';
+    actor.nextTurnAt += _turnCost / actor.effectiveSpeed;
+    _resolveFaints();
+    _acting = _activeAlive.isEmpty ? null : _lowestNextTurn();
   }
 
   void _checkOutcome() {

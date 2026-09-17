@@ -6,7 +6,6 @@ import '../../../core/supabase/supabase_client.dart';
 import '../../creatures/models/area.dart';
 import '../../creatures/models/path_node.dart';
 import '../data/building_definitions.dart';
-import '../data/era_definitions.dart';
 import '../data/gather_defs.dart';
 import '../data/item_definitions.dart';
 
@@ -19,11 +18,6 @@ import '../data/item_definitions.dart';
 class GameDefsService {
   Future<List<Map<String, dynamic>>> loadBuildingDefRows() async {
     final rows = await supabase.from('building_defs').select();
-    return (rows as List).cast<Map<String, dynamic>>();
-  }
-
-  Future<List<Map<String, dynamic>>> loadEraDefRows() async {
-    final rows = await supabase.from('era_defs').select();
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
@@ -55,10 +49,6 @@ class GameDefsService {
     await supabase.from('building_defs').upsert(def.toDefRow());
   }
 
-  Future<void> upsertEraDef(EraDef def) async {
-    await supabase.from('era_defs').upsert(def.toDefRow());
-  }
-
   Future<void> upsertAreaDef(AreaDef def) async {
     await supabase.from('area_defs').upsert(def.toDefRow());
   }
@@ -84,10 +74,6 @@ class GameDefsService {
 
   Future<void> deleteBuildingDef(String id) async {
     await supabase.from('building_defs').delete().eq('id', id);
-  }
-
-  Future<void> deleteEraDef(String id) async {
-    await supabase.from('era_defs').delete().eq('id', id);
   }
 
   Future<void> deleteAreaDef(String id) async {

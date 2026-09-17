@@ -105,7 +105,7 @@ void main() {
     // it in every era, so no era is a dead stretch for levelling by work.
     for (final era in [1, 2, 3, 4, 5, 6, 7, 8]) {
       final staffed = kFallbackBuildingDefs.values.where(
-        (d) => d.workshops.isNotEmpty && d.startEraOrder <= era,
+        (d) => d.workshops.isNotEmpty && d.startRegionOrder <= era,
       );
       expect(staffed, isNotEmpty, reason: 'era $era has nothing to work in');
     }

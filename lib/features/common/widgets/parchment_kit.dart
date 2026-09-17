@@ -10,6 +10,7 @@ import '../../settlement/widgets/scroll_paper.dart'
         parchmentButton,
         parchmentButtonInk;
 import 'parchment_page.dart';
+import '../../../core/ui/pressable.dart';
 
 // ── The pieces a parchment SCREEN is made of ───────────────────────────────
 //
@@ -131,37 +132,25 @@ class ParchmentInfoButton extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) => Pressable(
     onTap: () => showDialog<void>(
       context: context,
-      builder: (dctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          width: 320,
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-          // FLAT and CUT (2026-07-31, low poly): a dialog is a slab laid on
-          // the page, so it is one tone with a facet edge.
-          decoration: ShapeDecoration(
-            color: kParchmentLight,
-            shape: FoE.facet(
-              radius: 16,
-              side: BorderSide(color: kParchmentInk.withValues(alpha: 0.25)),
-            ),
-          ),
+      // The same shell every settlement popup converged on (user 2026-09-11:
+      // "den find odds screen genau so gestalten wie der Gebäude
+      // Detailscreen") — [ParchmentDialog] already IS that shape (gradient
+      // card, meander bands, title band, Close button), so this stopped
+      // needing its own flat, hand-rolled Dialog.
+      builder: (dctx) => ParchmentDialog(
+        title: title,
+        // Horizontal 32 (2026-09-11) — the dialog's own meander bands sit at
+        // x∈[14,30] from each edge (see ParchmentDialog), and this content
+        // used to start at 0, running straight under them.
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: FoE.title(size: 15).copyWith(color: kInk)),
-              const SizedBox(height: 10),
-              ...content(dctx),
-              const SizedBox(height: 14),
-              ParchmentButton(
-                label: 'Close',
-                expand: true,
-                onTap: () => Navigator.pop(dctx),
-              ),
-            ],
+            children: content(dctx),
           ),
         ),
       ),
@@ -223,7 +212,7 @@ class ParchmentCard extends StatelessWidget {
       ),
     );
     if (onTap == null) return card;
-    return GestureDetector(
+    return Pressable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: card,
@@ -267,7 +256,7 @@ class ParchmentButton extends StatelessWidget {
     final ink = danger
         ? (_enabled ? const Color(0xFF9B3B22) : kInkFaint)
         : parchmentButtonInk(active: primary && _enabled);
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Opacity(
         opacity: _enabled ? 1 : 0.5,
@@ -380,6 +369,7 @@ Future<bool> parchmentConfirm(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
         decoration: ShapeDecoration(
           color: kParchmentLight,
+          shadows: FoE.drop(), // stands off the page it interrupts
           shape: FoE.facet(
             radius: 16,
             side: BorderSide(color: kParchmentInk.withValues(alpha: 0.25)),

@@ -44,7 +44,7 @@ void main() {
       final prev = path[i - 1];
       final cur = path[i];
       if (prev.isBoss) continue; // a new region restarts the climb
-      if (eraForBattle(prev.order) != eraForBattle(cur.order)) continue;
+      if (regionForBattle(prev.order) != regionForBattle(cur.order)) continue;
       expect(
         buildUnits(cur),
         greaterThanOrEqualTo(buildUnits(prev)),
@@ -55,9 +55,9 @@ void main() {
 
   test('HARDER is more: the boss beats every fight in its region', () {
     for (final boss in path.where((n) => n.isBoss)) {
-      final era = eraForBattle(boss.order);
+      final era = regionForBattle(boss.order);
       final regulars = path.where(
-        (n) => !n.isBoss && eraForBattle(n.order) == era,
+        (n) => !n.isBoss && regionForBattle(n.order) == era,
       );
       for (final n in regulars) {
         expect(buildUnits(boss), greaterThan(buildUnits(n)),
@@ -86,8 +86,8 @@ void main() {
     }
 
     for (var era = 2; era <= 8; era++) {
-      final here = (era - 1) * kBattlesPerEra + 10; // mid-region
-      final before = (era - 2) * kBattlesPerEra + 10;
+      final here = (era - 1) * kFallbackBattlesPerRegion + 10; // mid-region
+      final before = (era - 2) * kFallbackBattlesPerRegion + 10;
       expect(unitsOf(here), greaterThan(unitsOf(before)),
           reason: 'era $era vs ${era - 1}');
     }
@@ -96,7 +96,7 @@ void main() {
   test('era I lands where the balancing doc puts it', () {
     // ~40 % of the ~5 000 wood era I spends. Loose bounds: this pins the ORDER
     // of magnitude, which is what stops a refactor from silently paying 20 000.
-    final eraOne = path.where((n) => eraForBattle(n.order) == 1);
+    final eraOne = path.where((n) => regionForBattle(n.order) == 1);
     final wood = eraOne.fold<double>(0, (sum, n) {
       for (final e in n.rewards.items.entries) {
         final p = parsePackId(e.key);

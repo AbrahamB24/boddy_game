@@ -1,4 +1,5 @@
 import '../../creatures/models/creature_enums.dart' show CreatureStat;
+import '../../creatures/models/status_effects.dart' show MainStatusKind;
 import 'goods_definitions.dart';
 
 // ── Craftable / tradeable items ─────────────────────────────
@@ -49,7 +50,27 @@ enum ItemKind {
   /// are, instead of evaporating against a cap you have not built past yet. The
   /// price is that nothing of that resource is produced while it sits above the
   /// line (SettlementController.redeemPack, ResourceModel.withProductionCapped).
-  resourcePack;
+  resourcePack,
+
+  /// A remedy for a MAIN status (user 2026-09-15: "für alle Debuffs soll es
+  /// ein Gegenmittel geben"). [ItemDef.cureMainStatus] says WHICH status —
+  /// null means "any of them" (the universal Full Heal/Full Restore line).
+  /// [ItemDef.magnitude] is the CHANCE it actually works (0..1): the "weaker
+  /// form" the user asked for is a cheap, unreliable remedy; the "stronger
+  /// form" is the same cure at `magnitude = 1.0` (always works), for more
+  /// ingredients. Battle-only — a main status is Combatant-only runtime
+  /// state, never persisted on the collection creature (see CreaturesController
+  /// .useItemOn's own default case).
+  cureStatus,
+
+  /// A remedy for every SECONDARY debuff at once (blind/slow/weakened/
+  /// exposed/regressed) — one item rather than five, since those are milder
+  /// and shorter-lived than a main status. Same weak/strong shape as
+  /// [cureStatus]: [ItemDef.magnitude] is the chance it works, and a
+  /// successful use clears ALL of them together (they already stack
+  /// independently, so there is nothing to target). Battle-only, same
+  /// reason as [cureStatus].
+  cureDebuffs;
 
   static ItemKind parse(String? s) => ItemKind.values.firstWhere(
     (k) => k.name == s,
@@ -75,6 +96,11 @@ class ItemDef {
   /// The resource a [ItemKind.resourcePack] contains — a ResourceModel key
   /// ('wood', 'stone', 'gold' or any good id). Ignored for other kinds.
   final String? resourceId;
+
+  /// `kind == cureStatus` only: which main status this cures. Null = any of
+  /// them (the universal Full Heal/Full Restore line) — see [ItemKind
+  /// .cureStatus]'s own doc.
+  final MainStatusKind? cureMainStatus;
 
   /// Whether this item can be used DURING a battle (Phase 2 combat hook). Heals,
   /// revives and buffs are the natural battle items; lures/kits are not.
@@ -106,6 +132,7 @@ class ItemDef {
     this.magnitude = 0,
     this.buffStat,
     this.resourceId,
+    this.cureMainStatus,
     this.battleUsable = false,
     this.ingredients = const {},
     this.supplyCost = 0,
@@ -137,6 +164,14 @@ class ItemDef {
     buffStat: row['buff_stat'] == null
         ? null
         : CreatureStat.fromName(row['buff_stat'] as String?),
+    // Absent on a pre-2026-09-15 row → not a targeted cure (either not a
+    // cure item at all, or the universal "any status" variant).
+    cureMainStatus: row['cure_main_status'] == null
+        ? null
+        : MainStatusKind.values.firstWhere(
+            (k) => k.name == row['cure_main_status'],
+            orElse: () => MainStatusKind.burn,
+          ),
     battleUsable: row['battle_usable'] as bool? ?? false,
     ingredients: {
       for (final e in ((row['ingredients'] as Map?) ?? const {}).entries)
@@ -157,6 +192,7 @@ class ItemDef {
     'magnitude': magnitude,
     'buff_stat': buffStat?.name,
     'resource_id': resourceId,
+    'cure_main_status': cureMainStatus?.name,
     'battle_usable': battleUsable,
     'ingredients': ingredients,
     'supply_cost': supplyCost,
@@ -230,6 +266,237 @@ const _kHandWrittenItems = <String, ItemDef>{
     sellPrice: 12,
   ),
 };
+
+// ── Status remedies (user 2026-09-15) ───────────────────────
+// "Für alle Debuffs soll es ein Gegenmittel geben. Jeweils in stärkerer und
+// schwächerer Form... sehr gut auf das Balancing schauen (Wirkung) und Kosten
+// bei der Herstellung, da alle Items herstellbar sein sollten."
+//
+// The "weaker/stronger form" for a cure isn't a bigger number the way a
+// potion's HP is — a status is either cured or it isn't. So the axis that
+// actually varies is RELIABILITY: the weak remedy is a coin-flip-ish chance,
+// cheap; the strong one always works, for more ingredients. That mirrors
+// the potion tier's own trade (worse per-ingredient value buys certainty/
+// concentration) instead of inventing a second, unrelated knob.
+//
+// SEVERITY sets the price, not just the flavour: curing something that
+// steals most of a turn (sleep/freeze/petrify) is worth more than curing a
+// stat sap (frost/soaked/dazzled) — three ingredient/time/gold tiers below,
+// keyed off how punishing status_effects.dart actually makes each one.
+enum _CureSeverity { mild, moderate, severe }
+
+const Map<MainStatusKind, _CureSeverity> _kCureSeverity = {
+  // Stat-sap only, no lost turns — frost's own skip is a minor side effect.
+  MainStatusKind.frost: _CureSeverity.mild,
+  MainStatusKind.soaked: _CureSeverity.mild,
+  MainStatusKind.dazzled: _CureSeverity.mild,
+  MainStatusKind.paralysis: _CureSeverity.mild,
+  // A real cost every round it's active (DoT, or a real chance to lose the
+  // turn/hit yourself), but not the fight-deciding kind.
+  MainStatusKind.burn: _CureSeverity.moderate,
+  MainStatusKind.poison: _CureSeverity.moderate,
+  MainStatusKind.fear: _CureSeverity.moderate,
+  MainStatusKind.confusion: _CureSeverity.moderate,
+  // Near-total turn loss — the ones a Pokémon player would panic-cure.
+  MainStatusKind.sleep: _CureSeverity.severe,
+  MainStatusKind.freeze: _CureSeverity.severe,
+  MainStatusKind.petrify: _CureSeverity.severe,
+};
+
+class _CureTier {
+  final Map<String, double> weakIngredients;
+  final double weakCraftSeconds;
+  final int weakBuy, weakSell;
+  final Map<String, double> strongIngredients;
+  final double strongCraftSeconds;
+  final int strongBuy, strongSell;
+  const _CureTier({
+    required this.weakIngredients,
+    required this.weakCraftSeconds,
+    required this.weakBuy,
+    required this.weakSell,
+    required this.strongIngredients,
+    required this.strongCraftSeconds,
+    required this.strongBuy,
+    required this.strongSell,
+  });
+}
+
+const Map<_CureSeverity, _CureTier> _kCureTiers = {
+  _CureSeverity.mild: _CureTier(
+    weakIngredients: {'fish': 1},
+    weakCraftSeconds: 900,
+    weakBuy: 14,
+    weakSell: 4,
+    strongIngredients: {'fish': 2, 'meat': 1},
+    strongCraftSeconds: 1600,
+    strongBuy: 32,
+    strongSell: 10,
+  ),
+  _CureSeverity.moderate: _CureTier(
+    weakIngredients: {'fish': 2},
+    weakCraftSeconds: 1200,
+    weakBuy: 20,
+    weakSell: 6,
+    strongIngredients: {'fish': 3, 'meat': 2},
+    strongCraftSeconds: 2200,
+    strongBuy: 46,
+    strongSell: 14,
+  ),
+  _CureSeverity.severe: _CureTier(
+    weakIngredients: {'fish': 2, 'meat': 1},
+    weakCraftSeconds: 1500,
+    weakBuy: 28,
+    weakSell: 9,
+    strongIngredients: {'fish': 4, 'meat': 3},
+    strongCraftSeconds: 2800,
+    strongBuy: 65,
+    strongSell: 20,
+  ),
+};
+
+/// Chance the WEAK remedy of each tier actually works — the strong one is
+/// always [kCureChanceStrong] (guaranteed) regardless of severity; only the
+/// weak one's odds get worse for a nastier status, on top of it already
+/// costing more (see [_kCureTiers]).
+const Map<_CureSeverity, double> _kCureChanceWeak = {
+  _CureSeverity.mild: 0.70,
+  _CureSeverity.moderate: 0.55,
+  _CureSeverity.severe: 0.40,
+};
+const double kCureChanceStrong = 1.0;
+
+const Map<MainStatusKind, String> _kCureEmoji = {
+  MainStatusKind.burn: '🩹',
+  MainStatusKind.frost: '☀️',
+  MainStatusKind.freeze: '🔥',
+  MainStatusKind.poison: '💉',
+  MainStatusKind.fear: '🕯️',
+  MainStatusKind.sleep: '⏰',
+  MainStatusKind.petrify: '🔨',
+  MainStatusKind.paralysis: '🔋',
+  MainStatusKind.soaked: '🧺',
+  MainStatusKind.dazzled: '🕶️',
+  MainStatusKind.confusion: '🎯',
+};
+
+/// The weak+strong remedy pair for ONE main status.
+List<ItemDef> _statusCurePair(MainStatusKind kind) {
+  final severity = _kCureSeverity[kind]!;
+  final tier = _kCureTiers[severity]!;
+  final emoji = _kCureEmoji[kind]!;
+  final label = kind.label;
+  final id = kind.name;
+  return [
+    ItemDef(
+      id: 'cure_${id}_weak',
+      name: '$label Remedy',
+      emoji: emoji,
+      description:
+          '${(_kCureChanceWeak[severity]! * 100).round()}% chance to cure '
+          '$label.',
+      kind: ItemKind.cureStatus,
+      cureMainStatus: kind,
+      magnitude: _kCureChanceWeak[severity]!,
+      battleUsable: true,
+      ingredients: tier.weakIngredients,
+      craftSeconds: tier.weakCraftSeconds,
+      buyPrice: tier.weakBuy,
+      sellPrice: tier.weakSell,
+    ),
+    ItemDef(
+      id: 'cure_${id}_strong',
+      name: '$label Elixir',
+      emoji: emoji,
+      description: 'Always cures $label.',
+      kind: ItemKind.cureStatus,
+      cureMainStatus: kind,
+      magnitude: kCureChanceStrong,
+      battleUsable: true,
+      ingredients: tier.strongIngredients,
+      craftSeconds: tier.strongCraftSeconds,
+      buyPrice: tier.strongBuy,
+      sellPrice: tier.strongSell,
+    ),
+  ];
+}
+
+/// Every remedy the game knows: one weak+strong pair per main status, the
+/// universal Full Heal/Full Restore pair (cures ANY main status —
+/// [ItemDef.cureMainStatus] null), and a weak+strong Cleanse pair for the
+/// secondary debuffs (blind/slow/weakened/exposed/regressed) together.
+Map<String, ItemDef> buildCureItemDefs() {
+  final out = <String, ItemDef>{};
+  for (final kind in MainStatusKind.values) {
+    for (final def in _statusCurePair(kind)) {
+      out[def.id] = def;
+    }
+  }
+  // Universal — priced above every single-status pair (it is strictly more
+  // useful than any of them, working no matter what's actually wrong), at
+  // the severe tier's own ingredients plus a bit more.
+  out['cure_any_weak'] = const ItemDef(
+    id: 'cure_any_weak',
+    name: 'Full Heal',
+    emoji: '✨',
+    description: '50% chance to cure whatever main status is active.',
+    kind: ItemKind.cureStatus,
+    magnitude: 0.50,
+    battleUsable: true,
+    ingredients: {'fish': 3, 'meat': 2},
+    craftSeconds: 2000,
+    buyPrice: 55,
+    sellPrice: 17,
+  );
+  out['cure_any_strong'] = const ItemDef(
+    id: 'cure_any_strong',
+    name: 'Full Restore',
+    emoji: '🌟',
+    description: 'Always cures whatever main status is active.',
+    kind: ItemKind.cureStatus,
+    magnitude: kCureChanceStrong,
+    battleUsable: true,
+    ingredients: {'fish': 5, 'meat': 4},
+    craftSeconds: 3400,
+    buyPrice: 90,
+    sellPrice: 28,
+  );
+  // The debuff Cleanse — cheapest tier of all: five effects, but each one
+  // milder and shorter than any main status (kSecondaryDebuffDuration vs.
+  // mainStatusDuration), and they never cost a whole turn the way the worst
+  // main statuses do.
+  out['cleanse_weak'] = const ItemDef(
+    id: 'cleanse_weak',
+    name: 'Cleansing Herb',
+    emoji: '🧽',
+    description:
+        '60% chance to clear every stacked debuff (blind/slow/weakened/'
+        'exposed/regressed) at once.',
+    kind: ItemKind.cureDebuffs,
+    magnitude: 0.60,
+    battleUsable: true,
+    ingredients: {'fish': 1},
+    craftSeconds: 800,
+    buyPrice: 12,
+    sellPrice: 4,
+  );
+  out['cleanse_strong'] = const ItemDef(
+    id: 'cleanse_strong',
+    name: 'Cleansing Charm',
+    emoji: '🪄',
+    description:
+        'Always clears every stacked debuff (blind/slow/weakened/exposed/'
+        'regressed) at once.',
+    kind: ItemKind.cureDebuffs,
+    magnitude: kCureChanceStrong,
+    battleUsable: true,
+    ingredients: {'fish': 2, 'meat': 1},
+    craftSeconds: 1400,
+    buyPrice: 26,
+    sellPrice: 8,
+  );
+  return out;
+}
 
 // ── Ressourcenpakete (user 2026-07-30) ──────────────────────
 // "Mache mir sinnvolle Paketgrössen. Diese können als Rewards bei der Kampagne
@@ -380,6 +647,7 @@ Map<String, ItemDef> buildPackDefs() {
 final Map<String, ItemDef> kFallbackItemDefs = {
   ..._kHandWrittenItems,
   ...buildPackDefs(),
+  ...buildCureItemDefs(),
 };
 
 /// Live, mutable roster (keyed by id) — same in-place pattern as kBuildingDefs,

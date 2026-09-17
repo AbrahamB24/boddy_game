@@ -13,7 +13,12 @@ import '../onboarding/intro_flow.dart';
 import '../settlement/data/gather_defs.dart';
 import '../settlement/settlement_controller.dart';
 import '../settlement/widgets/scroll_paper.dart'
-    show parchmentButton, parchmentButtonInk;
+    show
+        kActionGreen,
+        kPageShadow,
+        kParchmentInk,
+        parchmentButton,
+        parchmentButtonInk;
 import 'capture_encounter_screen.dart';
 import 'expedition_launch_sheet.dart';
 import 'models/area.dart';
@@ -21,6 +26,7 @@ import 'models/expedition.dart';
 import 'services/creatures_controller.dart';
 import 'services/expedition_controller.dart';
 import 'services/expedition_targets.dart';
+import '../../core/ui/pressable.dart';
 
 // ── The Expeditions hub (rebuilt 2026-07-25, redrawn 2026-07-29) ────────────
 //
@@ -109,39 +115,42 @@ class _ExpeditionSlotChipState extends State<ExpeditionSlotChip> {
   );
 }
 
-/// The three kinds of thing a group can be sent after — how [_categoryTabs]
-/// splits the Targets list (user 2026-08-30: "Ev. würde es sich lohnen,
-/// mehrere Reiter zu machen für Ressourcen, Luxusressourcen" — every unlocked
-/// region used to print ALL of its spots plus its hunt in one long run, so
-/// finding "is there a nearby fish spot" meant reading past every region's
-/// wood and stone on the way).
-enum _TargetCategory {
+/// The two kinds of thing a group can be sent after — how [_categoryTabs]
+/// splits the Targets list. Luxury used to be a third, separate drawer (user
+/// 2026-08-30), but merged back into Resources (user 2026-09-12, once the
+/// region ladder dropped to one luxury per region: "dann kann ich bei
+/// Management die Luxury aufheben und zu Resources nehmen, da 3 nebeneinander
+/// Platz haben, dadurch wird es auch aufgeräumter") — with only one luxury
+/// spot per region instead of two, a merged list still fits the grid without
+/// crowding, and Management goes back to three tabs instead of four.
+enum ExpeditionTargetCategory {
   resources('Resources', '🪵'),
-  luxury('Luxury', '🐟'),
   hunt('Hunt', '🪤');
 
   final String label;
   final String emoji;
-  const _TargetCategory(this.label, this.emoji);
+  const ExpeditionTargetCategory(this.label, this.emoji);
 }
 
-/// Wood, stone and gold are the settlement's own fields, never a [GoodsDef] —
-/// everything else gatherable is a supply good (fish, meat, …), and a hunt is
-/// neither. [ExpeditionTarget.spot] is only null for a hunt, so the base-set
-/// check never runs against it.
-const _kBaseResources = {'wood', 'stone', 'gold'};
-
-_TargetCategory _categoryOf(ExpeditionTarget t) {
-  if (t.isHunt) return _TargetCategory.hunt;
-  return _kBaseResources.contains(t.spot!.resource)
-      ? _TargetCategory.resources
-      : _TargetCategory.luxury;
-}
+ExpeditionTargetCategory _categoryOf(ExpeditionTarget t) =>
+    t.isHunt ? ExpeditionTargetCategory.hunt : ExpeditionTargetCategory.resources;
 
 /// What is out, and everywhere you could send a group. Hosted by
-/// [ExpeditionsScreen] as a page and by the Management hub as its Trips tab.
+/// [ExpeditionsScreen] as a full page (out-now plus a switcher between both
+/// target drawers), and by the Management hub as three separate tabs — two
+/// narrowed to one fixed [onlyCategory] each, plus one [onlyTrips]
+/// (2026-09-11: Work and Housing left Management for their own Castle-opened
+/// screens, and the room they left went to promoting these drawers to tabs
+/// in their own right instead of a switcher buried in one Trips tab).
 class ExpeditionsBody extends StatefulWidget {
-  const ExpeditionsBody({super.key});
+  /// Locks this instance to one target drawer, with no switcher and no
+  /// "out now" section.
+  final ExpeditionTargetCategory? onlyCategory;
+
+  /// Shows only what is currently away — no targets at all.
+  final bool onlyTrips;
+
+  const ExpeditionsBody({super.key, this.onlyCategory, this.onlyTrips = false});
 
   @override
   State<ExpeditionsBody> createState() => _ExpeditionsBodyState();
@@ -159,8 +168,24 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
 
   /// Which of the three target drawers is open. Resources leads — it is the
   /// everyday trip, same reasoning [targetsIn] already gives the hunt for
-  /// sorting last within one area.
-  _TargetCategory _category = _TargetCategory.resources;
+  /// sorting last within one area. Fixed for the life of the widget when
+  /// [ExpeditionsBody.onlyCategory] is set.
+  late ExpeditionTargetCategory _category =
+      widget.onlyCategory ?? ExpeditionTargetCategory.resources;
+
+  /// Whether the "out now" section shows at all.
+  bool get _showOutNow => widget.onlyCategory == null;
+
+  /// Whether the targets section shows at all.
+  bool get _showTargets => !widget.onlyTrips;
+
+  /// Whether this instance is locked to one drawer (no switcher, no "Out
+  /// now" — one of Management's Resources/Luxury/Hunt tabs).
+  bool get _targetsOnly => widget.onlyCategory != null;
+
+  /// Whether the category switcher pills show — only the full hub (neither
+  /// locked to one category nor trips-only) needs to switch between drawers.
+  bool get _switchable => widget.onlyCategory == null && !widget.onlyTrips;
 
   @override
   void initState() {
@@ -234,11 +259,20 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
 
   Widget _list(List<Expedition> running, List<AreaDef> areas) {
     final visible = _visibleAreas(areas);
+    final soleHunt = _soleHunt(visible);
     return ListView(
+      // kMonsterTilePageMargin (24), not ParchmentPage.kParchmentPagePad (36)
+      // — user 2026-09-11: "bitte 3 Boxen nebeneinander und nicht nur 2".
+      // Every [monsterTileGrid] on this page (the target tiles, and the
+      // inline hunt panel's group picker) sizes its tiles off the raw
+      // device width assuming a 24px host margin, same as the Monsters
+      // screen; hosting it at 36 left just short of room for a third tile
+      // per row, same mismatch this file's OWN comments already flagged and
+      // fixed once for the roster picker's GridView.
       padding: const EdgeInsets.fromLTRB(
-        ParchmentPage.kParchmentPagePad,
+        kMonsterTilePageMargin,
         10,
-        ParchmentPage.kParchmentPagePad,
+        kMonsterTilePageMargin,
         28,
       ),
       children: [
@@ -246,44 +280,79 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         // 2026-07-29: the base pool is 0, so a settlement with no Scout Post
         // has an empty screen and no idea it is missing a building).
         if (_ctrl.noSlots) ...[_noSlotsBanner(), const SizedBox(height: 14)],
-        // The caption counts who is still AWAY, not how many cards are listed
-        // (user 2026-07-27): a hunt that has landed keeps its card until you
-        // play its encounter, but it stopped occupying a slot and its party is
-        // home and free.
-        ParchmentSectionHeader(title: 'Out now', hint: _outHint(running)),
-        if (running.isEmpty)
-          _emptyOut()
-        else
-          for (final e in running) ...[
-            _tripCard(e),
-            const SizedBox(height: 10),
-          ],
-        const SizedBox(height: 16),
-        ParchmentSectionHeader(
-          title: 'Targets',
-          hint: '${_creatures.availableForExpedition().length} monsters free',
-        ),
-        if (areas.isEmpty)
-          Text(
-            'No region is open yet — win your first battles.',
-            style: FoE.dim(size: 12).copyWith(color: kInkFaint),
-          )
-        else ...[
-          _categoryTabs(areas),
-          if (visible.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              child: Text(
-                'Nothing in ${_category.label.toLowerCase()} yet.',
-                style: FoE.dim(size: 12).copyWith(color: kInkFaint),
-              ),
-            )
+        if (_showOutNow) ...[
+          // The caption counts who is still AWAY, not how many cards are
+          // listed (user 2026-07-27): a hunt that has landed keeps its card
+          // until you play its encounter, but it stopped occupying a slot
+          // and its party is home and free.
+          ParchmentSectionHeader(title: 'Out now', hint: _outHint(running)),
+          if (running.isEmpty)
+            _emptyOut()
           else
-            for (final (a, targets) in visible) _areaBlock(a, targets),
+            // 6, not 10 (2026-09-11) — several of these will stack once more
+            // than one hunt can run at once, so the gap between them shrank
+            // along with each card's own height.
+            for (final e in running) ...[
+              _tripCard(e),
+              const SizedBox(height: 6),
+            ],
+          if (_showTargets) const SizedBox(height: 16),
+        ],
+        if (_showTargets) ...[
+          // Skipped when the inline launch panel below is about to show
+          // (user 2026-09-11): it already carries its own "Hunt length"
+          // header, so a second title plus a free-monster count read as a
+          // stray bar sitting above it rather than a heading for anything.
+          if (soleHunt == null)
+            ParchmentSectionHeader(
+              title: _targetsOnly ? _category.label : 'Targets',
+              hint:
+                  '${_creatures.availableForExpedition().length} monsters free',
+            ),
+          if (areas.isEmpty)
+            Text(
+              'No region is open yet — win your first battles.',
+              style: FoE.dim(size: 12).copyWith(color: kInkFaint),
+            )
+          else ...[
+            if (_switchable) _categoryTabs(areas),
+            if (visible.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: Text(
+                  'Nothing in ${_category.label.toLowerCase()} yet.',
+                  style: FoE.dim(size: 12).copyWith(color: kInkFaint),
+                ),
+              )
+            else if (soleHunt case final hunt?)
+              // Exactly one hunt on offer: nothing left to pick between, so
+              // its own launch panel replaces the card-then-modal-sheet route
+              // (user 2026-09-08: "Ich möchte, dass der Inhalt von diesem
+              // Overlay auf dieser Seite angezeigt wird"). More than one hunt
+              // (a second region unlocked) still shows the card grid below —
+              // which one was meant is a real question there.
+              ExpeditionLaunchPanel(
+                key: ValueKey('hunt_inline_${hunt.area.id}'),
+                target: hunt,
+                inline: true,
+              )
+            else
+              for (final (a, targets) in visible) _areaBlock(a, targets),
+          ],
         ],
       ],
     );
   }
+
+  /// Resources this settlement can actually gather — a spot doesn't show
+  /// until something producing it has been built (user 2026-09-12: "Fish
+  /// sobald fishing hut gebaut wurde, Holz sobald Holzfäller gebaut wurde
+  /// etc."). Only COMPLETE buildings count — one still under construction
+  /// doesn't produce anything yet either.
+  Set<String> get _unlockedResources => resourcesProducedBy([
+    for (final b in _settlement.buildings)
+      if (b.isComplete) b.buildingTypeId,
+  ]);
 
   /// Each unlocked area, paired with only the targets [_category] shows —
   /// areas with none in this drawer (a region with no fish spot, say) are
@@ -291,25 +360,43 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   List<(AreaDef, List<ExpeditionTarget>)> _visibleAreas(List<AreaDef> areas) =>
       [
         for (final a in areas)
-          (a, targetsIn(a).where((t) => _categoryOf(t) == _category).toList()),
+          (
+            a,
+            targetsIn(a, unlockedResources: _unlockedResources)
+                .where((t) => _categoryOf(t) == _category)
+                .toList(),
+          ),
       ]..removeWhere((e) => e.$2.isEmpty);
 
-  /// The Resources / Luxury / Hunt drawers, in the bag's own tab style (user
+  /// The one hunt target in [visible], or null when there is more than one
+  /// (or the drawer open isn't Hunt at all — every target in it would fail
+  /// `isHunt` then, same result). [visible] is already filtered to
+  /// [_category] by [_visibleAreas], so when it IS Hunt every target here
+  /// already is one.
+  ExpeditionTarget? _soleHunt(List<(AreaDef, List<ExpeditionTarget>)> visible) {
+    if (_category != ExpeditionTargetCategory.hunt) return null;
+    final hunts = [for (final (_, targets) in visible) ...targets];
+    return hunts.length == 1 ? hunts.first : null;
+  }
+
+  /// The Resources / Hunt drawers, in the bag's own tab style (user
   /// 2026-08-30) — a row of pills, each naming what it holds and how much of
   /// it, so switching drawers is a tap instead of a long scroll past whatever
   /// this region's OTHER spots happen to be.
   Widget _categoryTabs(List<AreaDef> areas) {
-    final all = [for (final a in areas) ...targetsIn(a)];
+    final all = [
+      for (final a in areas) ...targetsIn(a, unlockedResources: _unlockedResources),
+    ];
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            for (final cat in _TargetCategory.values)
+            for (final cat in ExpeditionTargetCategory.values)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
+                child: Pressable(
                   onTap: () => setState(() => _category = cat),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -334,7 +421,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   }
 
   Widget _tripsIntroOverlay() => Positioned.fill(
-    child: GestureDetector(
+    child: Pressable(
       behavior: HitTestBehavior.opaque,
       onTap: () => setState(() => _showTripsIntro = false),
       child: Container(
@@ -419,81 +506,108 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   );
 
   // ── Out now ───────────────────────────────────────────────
+  // Redesigned compact (user 2026-09-11: "'out now' neu gestalten, damit es
+  // weniger Platz einnimmt. Es werden später mehrere Hunts parallel laufen")
+  // — several of these will stack once more than one hunt can run at once, so
+  // the per-trip footprint had to shrink: the area/region line is gone
+  // entirely ("Das Gebiet kann gelöscht werden" — a hunt already isn't tied
+  // to what it can find there, same reasoning as the launch sheet dropping
+  // its own area row), the countdown moved into the title row instead of its
+  // own two-line [ParchmentFact], the progress bar is thinner, and the
+  // detail line now shares a row with icon-sized actions instead of each
+  // getting a full [ParchmentButton] row of their own.
   Widget _tripCard(Expedition e) {
-    final area = areaById(e.areaId);
     final now = DateTime.now();
     final ready = e.isReadyToCollect(now);
     return ParchmentCard(
       highlight: ready,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(e.type.emoji, style: const TextStyle(fontSize: 20)),
-              const SizedBox(width: 10),
+              Text(e.type.emoji, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _tripTitle(e),
-                      style: FoE.title(size: 14).copyWith(color: kInk),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${area?.emoji ?? '🗺️'} ${area?.name ?? e.areaId} · '
-                      '${e.memberIds.length} 🐾',
-                      style: FoE.dim(size: 10).copyWith(color: kInkFaint),
-                    ),
-                  ],
+                child: Text(
+                  _tripTitle(e),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FoE.title(size: 13).copyWith(color: kInk),
                 ),
               ),
               const SizedBox(width: 8),
-              // The COUNTDOWN is the headline — it is what the screen is
-              // opened for, so it gets the biggest type on the card.
-              ParchmentFact(
-                label: ready ? 'back' : 'remaining',
-                value: ready ? 'Ready' : fmtTripDuration(e.remaining(now)),
-                color: ready ? kAccent : kInk,
+              // The COUNTDOWN is the headline — it is what the card is read
+              // for — right in the title row now rather than its own fact
+              // block, which cost a whole extra line for a caption ("back" /
+              // "remaining") the ready-state colour already implies.
+              Text(
+                ready ? 'Ready' : fmtTripDuration(e.remaining(now)),
+                style: FoE.value(size: 13).copyWith(
+                  color: ready ? kAccent : kInk,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           RecessBar(
             value: e.progress(now),
             color: ready ? kAccent : kParchmentGo,
-            height: 10,
+            height: 7,
           ),
-          const SizedBox(height: 8),
-          _tripDetail(e, ready),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           Row(
             children: [
-              if (e.type == ExpeditionType.capture && ready)
-                ParchmentButton(
-                  label: '▶️ Play the catch',
-                  primary: true,
-                  onTap: () => _openEncounter(e),
+              Expanded(
+                child: Text(
+                  _tripDetailText(e, ready),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FoE.label(size: 11).copyWith(color: kInkSoft),
                 ),
-              if (!ready) _skipBtn(e),
-              if (_settlement.isDev && !ready) ...[
-                const SizedBox(width: 6),
-                ParchmentButton(
-                  label: '⏩ Dev',
-                  onTap: () => _ctrl.devFinishNow(e),
-                ),
-              ],
-              const Spacer(),
-              ParchmentButton(
-                label: 'Recall',
-                danger: true,
-                onTap: () => _confirmCancel(e),
               ),
+              const SizedBox(width: 6),
+              if (e.type == ExpeditionType.capture && ready)
+                _miniAction('▶️ Play', primary: true, onTap: () => _openEncounter(e))
+              else if (!ready) ...[
+                _skipChip(e),
+                if (_settlement.isDev) ...[
+                  const SizedBox(width: 4),
+                  _miniAction('⏩', onTap: () => _ctrl.devFinishNow(e)),
+                ],
+              ],
+              const SizedBox(width: 4),
+              _miniAction('✕', danger: true, onTap: () => _confirmCancel(e)),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// One icon-sized action — the [ParchmentButton] row this replaced cost a
+  /// full extra line per trip and named actions ("Recall", "Dev") that read
+  /// just as clearly as a symbol once several of these sit stacked.
+  Widget _miniAction(
+    String label, {
+    VoidCallback? onTap,
+    bool primary = false,
+    bool danger = false,
+  }) {
+    final enabled = onTap != null;
+    final ink = danger
+        ? (enabled ? const Color(0xFF9B3B22) : kInkFaint)
+        : parchmentButtonInk(active: primary && enabled);
+    return Pressable(
+      onTap: onTap,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: parchmentButton(active: primary && enabled),
+          child: Text(label, style: FoE.label(size: 11).copyWith(color: ink)),
+        ),
       ),
     );
   }
@@ -506,32 +620,29 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
     return 'Hunting';
   }
 
-  Widget _tripDetail(Expedition e, bool ready) {
+  /// A string now, not a [Text] of its own (2026-09-11) — it shares a row
+  /// with the trip's action icons, and that row owns the single [Text] that
+  /// wraps it in `maxLines: 1` + ellipsis.
+  String _tripDetailText(Expedition e, bool ready) {
     if (e.type == ExpeditionType.gather) {
       final resource = e.payload['resource'] as String?;
       final amount = (e.payload['amount'] as num?)?.toDouble() ?? 0;
-      if (resource == null) return const SizedBox.shrink();
-      return Text(
-        ready
-            ? '${resourceEmoji(resource)} ${amount.toStringAsFixed(0)} '
-                  '$resource delivered'
-            : 'Bringing back ${resourceEmoji(resource)} '
-                  '${amount.toStringAsFixed(0)} $resource',
-        style: FoE.label(size: 12).copyWith(color: kInkSoft),
-      );
+      if (resource == null) return '';
+      return ready
+          ? '${resourceEmoji(resource)} ${amount.toStringAsFixed(0)} '
+                '$resource delivered'
+          : 'Bringing back ${resourceEmoji(resource)} '
+                '${amount.toStringAsFixed(0)} $resource';
     }
     // The finds stay hidden until the player opens the encounters.
     final total = e.captureFindSpeciesIds.length;
     final done = e.captureFindsDone;
-    return Text(
-      ready
-          ? (done > 0
-                ? '🪤 Encounter ${done + 1}/$total awaits!'
-                : '🪤 Something took the bait — '
-                      '$total encounter${total > 1 ? 's' : ''} await!')
-          : '🪤 Tracking… ($total find${total > 1 ? 's' : ''} ahead)',
-      style: FoE.label(size: 12).copyWith(color: kInkSoft),
-    );
+    return ready
+        ? (done > 0
+              ? '🪤 Encounter ${done + 1}/$total awaits!'
+              : '🪤 Something took the bait — '
+                    '$total encounter${total > 1 ? 's' : ''} await!')
+        : '🪤 Tracking… ($total find${total > 1 ? 's' : ''} ahead)';
   }
 
   // ── Targets ───────────────────────────────────────────────
@@ -556,18 +667,6 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
           _targetCard(t, busy: busy.contains(t.spot?.id)),
       ]);
 
-  /// The bottom strip's ink — white, with a soft dark shadow to hold on the
-  /// palest resource colour (gold), the same pairing [CreatureCard] uses for
-  /// exactly the same reason.
-  static const List<Shadow> _cardShadow = [
-    Shadow(color: Color(0x66000000), blurRadius: 0, offset: Offset(0, 1)),
-  ];
-
-  /// A hunt is not a resource, so it wears no resource colour — a deep
-  /// mystery purple instead, distinct from every wood/stone/gold/fish/meat
-  /// tile it sits beside.
-  static const Color _huntColor = Color(0xFF6B5B95);
-
   Widget _targetCard(ExpeditionTarget t, {required bool busy}) {
     final spot = t.spot;
     final stock = spot == null ? 0.0 : _ctrl.availableStock(spot);
@@ -587,126 +686,123 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         ? (_ctrl.noSlots ? 'Needs a Scout Post' : 'Every slot is busy')
         : null;
 
-    final color = t.isHunt ? _huntColor : resourceColor(spot!.resource);
     final title = t.isHunt ? 'Hunt' : resourceName(spot!.resource);
-    final top = Color.lerp(color, Colors.white, 0.22)!;
-    final bottom = Color.lerp(color, Colors.black, 0.30)!;
+    // Same state colour language as the Build Menu's own cards (user
+    // 2026-09-12: "die Boxen sollen so gestaltet sein, wie die Boxen im
+    // Baumenü") — a flat lawn green when you can act on it right now, a
+    // faded parchment wash when you can't, ink flipping between near-white
+    // and dimmed ink to stay readable on either. Replaces the old two-tone
+    // cream→tan gradient, which never changed with the card's own state.
+    final ink = blocked ? kParchmentInk.withValues(alpha: 0.55) : _kInkOnGreen;
 
-    return GestureDetector(
+    return Pressable(
       behavior: HitTestBehavior.opaque,
       onTap: () => _openTarget(t, busy: busy, empty: empty, full: full),
-      child: Opacity(
-        opacity: blocked ? 0.6 : 1,
-        // The SAME top reserve [CreatureCard] leaves for its sprite to pop
-        // into (user 2026-08-31: "diese Kacheln wirken aber viel länger") —
-        // without it this card's colour ran edge to edge in a box shaped for
-        // one that doesn't, and a flat-topped card in the Monster tile's own
-        // tall/narrow proportions reads as far more elongated than the
-        // Monster tile itself ever does, even at the identical footprint.
-        child: LayoutBuilder(
-          builder: (context, c) => Padding(
-            padding: EdgeInsets.only(top: c.maxHeight * 0.17),
-            child: Container(
-              clipBehavior: Clip.antiAlias,
-              // radius 22, not 18 (2026-08-31 audit) — this card's own
-              // comment above says it deliberately matches CreatureCard's
-              // shape/footprint; CreatureCard's outer radius is 22, so the
-              // corner itself hadn't actually matched what the comment
-              // claims.
-              decoration: ShapeDecoration(shape: FoE.facet(radius: 22)),
+      // The SAME top reserve [CreatureCard] leaves for its sprite to pop
+      // into (user 2026-08-31: "diese Kacheln wirken aber viel länger") —
+      // without it this card's colour ran edge to edge in a box shaped for
+      // one that doesn't, and a flat-topped card in the Monster tile's own
+      // tall/narrow proportions reads as far more elongated than the
+      // Monster tile itself ever does, even at the identical footprint.
+      child: LayoutBuilder(
+        builder: (context, c) => Padding(
+          padding: EdgeInsets.only(top: c.maxHeight * 0.17),
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: ShapeDecoration(
+              color: blocked ? kParchmentInk.withValues(alpha: 0.10) : kActionGreen,
+              // The Build Menu's own hard-edged card shadow (blurRadius 0 —
+              // it reads as a cast shadow, not a glow) — every card in the
+              // grid now "lies on the paper" the same way.
+              shadows: [
+                BoxShadow(
+                  color: kPageShadow.withValues(alpha: 0.24),
+                  blurRadius: 0,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+              // Radius 16, matching the Build Menu card — not the 22 this
+              // used to borrow from CreatureCard.
+              shape: FoE.facet(radius: 16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(9, 8, 9, 7),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // The "art" — no sprite to show, so the resource's own emoji
-                  // stands in for it, big, on the resource's own colour.
+                  // The "art" — no sprite to show, so the resource's own
+                  // emoji stands in for it, big. Dimmed exactly like a
+                  // blocked BuildingIcon (0.4 opacity) rather than the whole
+                  // card, since an emoji is a baked-colour glyph immune to
+                  // the ink swap around it.
                   Expanded(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [top, bottom],
-                        ),
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Text(t.emoji, style: const TextStyle(fontSize: 40)),
-                          // The stock — the one number worth reading at a glance,
-                          // in [CreatureCard]'s own top-right power-badge spot.
-                          if (spot != null)
-                            Positioned(
-                              top: 6,
-                              right: 8,
-                              child: Text(
-                                stock.toStringAsFixed(0),
-                                style: FoE.value(size: 14).copyWith(
-                                  color: Colors.white,
-                                  shadows: _cardShadow,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(9, 6, 9, 7),
-                    color: bottom,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Stack(
+                      alignment: Alignment.center,
                       children: [
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: FoE.label(size: 12).copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            shadows: _cardShadow,
+                        Opacity(
+                          opacity: blocked ? 0.4 : 1,
+                          child: Text(
+                            t.emoji,
+                            style: const TextStyle(fontSize: 40),
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        if (reason != null)
-                          Text(
-                            reason,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: FoE.dim(size: 9).copyWith(
-                              color: Colors.white.withValues(alpha: 0.85),
-                              shadows: _cardShadow,
-                            ),
-                          )
-                        else if (dials != null) ...[
-                          RecessBar(
-                            value: dials.spotCapacity <= 0
-                                ? 0
-                                : (stock / dials.spotCapacity).clamp(0.0, 1.0),
-                            color: kParchmentGo,
-                            height: 5,
-                            onDark: true,
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '+${dials.regenPerHour.toStringAsFixed(0)}/h',
-                            style: FoE.dim(size: 9).copyWith(
-                              color: Colors.white.withValues(alpha: 0.75),
-                              shadows: _cardShadow,
-                            ),
-                          ),
-                        ] else
-                          Text(
-                            'Caught by hand on return',
-                            maxLines: 2,
-                            style: FoE.dim(size: 9).copyWith(
-                              color: Colors.white.withValues(alpha: 0.75),
-                              shadows: _cardShadow,
+                        // The stock — the one number worth reading at a glance,
+                        // in [CreatureCard]'s own top-right power-badge spot.
+                        if (spot != null)
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: Text(
+                              stock.toStringAsFixed(0),
+                              style: FoE.value(size: 14).copyWith(color: ink),
                             ),
                           ),
                       ],
                     ),
                   ),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: FoE.label(size: 12).copyWith(
+                      color: ink,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (reason != null)
+                    Text(
+                      reason,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: FoE.dim(size: 9).copyWith(
+                        color: ink.withValues(alpha: 0.85),
+                      ),
+                    )
+                  else if (dials != null) ...[
+                    RecessBar(
+                      value: dials.spotCapacity <= 0
+                          ? 0
+                          : (stock / dials.spotCapacity).clamp(0.0, 1.0),
+                      color: kParchmentGo,
+                      height: 5,
+                      onDark: !blocked,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '+${dials.regenPerHour.toStringAsFixed(0)}/h',
+                      style: FoE.dim(size: 9).copyWith(
+                        color: ink.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ] else
+                    Text(
+                      'Caught by hand on return',
+                      maxLines: 2,
+                      style: FoE.dim(size: 9).copyWith(
+                        color: ink.withValues(alpha: 0.75),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -715,6 +811,9 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
       ),
     );
   }
+
+  /// Near-white on the green card — the Build Menu's own [_inkOnActive].
+  static const _kInkOnGreen = Color(0xFFF3F7EF);
 
   Future<void> _openTarget(
     ExpeditionTarget t, {
@@ -779,12 +878,16 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   ///
   /// It ends the TRAVEL only: a hunt still has to be played by hand afterwards.
   /// Gold buys time, never a result.
-  Widget _skipBtn(Expedition e) {
+  ///
+  /// An icon chip now, not a full [ParchmentButton] with its own "finish
+  /// now" / "not enough gold" caption line (2026-09-11 compacting) — the
+  /// dimmed opacity [_miniAction] already gives a disabled chip says
+  /// "can't afford" clearly enough at this size.
+  Widget _skipChip(Expedition e) {
     final cost = _ctrl.goldSkipCost(e);
     final canPay = _settlement.gold >= cost;
-    return ParchmentButton(
-      label: '🪙 $cost',
-      sub: canPay ? 'finish now' : 'not enough gold',
+    return _miniAction(
+      '🪙 $cost',
       onTap: canPay
           ? () async {
               final err = await _ctrl.skipWithGold(e);

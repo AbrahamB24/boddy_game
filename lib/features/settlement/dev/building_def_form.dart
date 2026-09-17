@@ -6,7 +6,7 @@ import '../../../core/theme/foe_theme.dart';
 import '../data/building_art.dart';
 import '../data/building_definitions.dart';
 import '../data/iso_grid.dart';
-import '../data/era_definitions.dart';
+import '../../creatures/models/area.dart' show kAreaDefs;
 import '../data/goods_definitions.dart';
 import '../services/game_defs_controller.dart';
 import '../services/game_defs_service.dart';
@@ -14,6 +14,7 @@ import '../settlement_controller.dart';
 import '../widgets/building_icon.dart';
 import 'dev_theme.dart';
 import 'effects_editor.dart';
+import '../../../core/ui/pressable.dart';
 
 // Create/edit form for a single BuildingDef. `existing == null` means
 // creating a new one. Three tabs — Basis, Bau, Kosten & Effekte.
@@ -31,6 +32,12 @@ import 'effects_editor.dart';
 // while hiding it means a def that has one set can never be turned back into an
 // ordinary building here, and the only symptom is its card behaving oddly in
 // the Build menu — a stone camp that painted roads is what found this.
+/// A region choice for this form's dropdowns — replaces the old EraDef
+/// lookup (user 2026-09-05: eras are gone; region content lives on AreaDef,
+/// but a building's region gate still just needs a number + display name).
+/// [id] is still the `'era_N'` id string [BuildingDef.eraIds] stores.
+typedef _RegionChoice = ({int order, String id, String name, String emoji});
+
 class BuildingDefForm extends StatefulWidget {
   final BuildingDef? existing;
   const BuildingDefForm({super.key, this.existing});
@@ -108,9 +115,28 @@ class _BuildingDefFormState extends State<BuildingDefForm>
 
   void _recomputeHours() => _constructionHours = _ch + _cm / 60 + _cs / 3600;
 
-  /// Sorted era list — reused by the "ab Ära" dropdown and max-level editor.
-  List<EraDef> get _eras =>
-      kEraDefs.values.toList()..sort((a, b) => a.order.compareTo(b.order));
+  /// Region list — reused by the "ab welcher Region baubar" dropdown and
+  /// max-level editor. Region content used to be a separate EraDef table;
+  /// now it's just the fixed 8-tier goods/building ladder (unchanged since
+  /// eras were removed, user 2026-09-05), named from whichever AreaDef
+  /// shares that region's battleStage where one is authored.
+  List<_RegionChoice> get _eras => [
+    for (var order = 1; order <= 8; order++)
+      (
+        order: order,
+        id: 'era_$order',
+        name: kAreaDefs.values
+                .where((a) => a.battleStage == order)
+                .firstOrNull
+                ?.name ??
+            'Region $order',
+        emoji: kAreaDefs.values
+                .where((a) => a.battleStage == order)
+                .firstOrNull
+                ?.emoji ??
+            '📍',
+      ),
+  ];
 
   /// Highest level to author costs / preview build time for: the highest
   /// per-era cap (that value IS the building's maximum level, user 2026-07-24),
@@ -134,9 +160,10 @@ class _BuildingDefFormState extends State<BuildingDefForm>
         id;
   }
 
-  /// The era that introduces a resource — a good's own [GoodsDef.eraOrder], and
-  /// era 1 for the base settlement resources (wood/stone/gold).
-  int _resourceEra(String id) => kGoodsDefs[id]?.eraOrder ?? 1;
+  /// The region that introduces a resource — a good's own
+  /// [GoodsDef.regionOrder], and region 1 for the base settlement resources
+  /// (wood/stone/gold).
+  int _resourceEra(String id) => kGoodsDefs[id]?.regionOrder ?? 1;
 
   @override
   void initState() {
@@ -163,9 +190,10 @@ class _BuildingDefFormState extends State<BuildingDefForm>
     _ch = totalSec ~/ 3600;
     _cm = (totalSec % 3600) ~/ 60;
     _cs = totalSec % 60;
-    // First buildable era = the lowest era order in eraIds (empty = every era).
+    // First buildable region = the lowest region order in eraIds (empty =
+    // every region). Still `'era_N'` id strings — see [_RegionChoice]'s doc.
     final orders = (d?.eraIds ?? const [])
-        .map((id) => kEraDefs[id]?.order)
+        .map((id) => int.tryParse(id.split('_').last))
         .whereType<int>();
     _startEraOrder = orders.isEmpty ? null : orders.reduce(math.min);
     _isRoad = d?.isRoad ?? false;
@@ -255,7 +283,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
       return {for (final e in d.costPerEra.entries) e.key: Map.of(e.value)};
     }
     if (d.resourceCost.isEmpty) return {};
-    return {d.startEraOrder: Map.of(d.resourceCost)};
+    return {d.startRegionOrder: Map.of(d.resourceCost)};
   }
 
   @override
@@ -699,29 +727,33 @@ class _BuildingDefFormState extends State<BuildingDefForm>
     );
   }
 
-  /// "Ab welcher Ära baubar" — a single start era (or every era). Stored as the
-  /// contiguous era-id suffix, which is what the placement gate reads.
+  /// "Ab welcher Region baubar" — a single start region (or every region).
+  /// Stored as the contiguous region-id suffix, which is what the placement
+  /// gate reads.
   Widget _eraDropdown() {
     return DropdownButtonFormField<int?>(
       initialValue: _eras.any((e) => e.order == _startEraOrder)
           ? _startEraOrder
           : null,
-      // Same reason as the category dropdown: an era named "🏺 ab Ära 1 ·
-      // Stone Age" is wider than a phone row, and the dropdown sizes to its
-      // widest item whether or not that item is the selected one.
+      // Same reason as the category dropdown: a region named "🏺 ab Region 1
+      // · Stone Age" is wider than a phone row, and the dropdown sizes to
+      // its widest item whether or not that item is the selected one.
       isExpanded: true,
       decoration: const InputDecoration(
-        labelText: 'First buildable in era',
+        labelText: 'First buildable in region',
       ),
       dropdownColor: FoE.panelDark,
       style: FoE.label(size: 15).copyWith(color: FoE.parchment),
       items: [
-        const DropdownMenuItem(value: null, child: Text('Always (every era)')),
+        const DropdownMenuItem(
+          value: null,
+          child: Text('Always (every region)'),
+        ),
         for (final e in _eras)
           DropdownMenuItem(
             value: e.order,
             child: Text(
-              '${e.emoji} from era ${e.order} · ${e.name}',
+              '${e.emoji} from region ${e.order} · ${e.name}',
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -737,7 +769,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
     final text = battle > 0
         ? 'Unlocked at node $battle. Change it in the Path editor '
             '(node reward → buildings).'
-        : 'Buildable from its era. Set it as a node reward in the Path '
+        : 'Buildable from its region. Set it as a node reward in the Path '
             'editor to unlock it later.';
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -837,7 +869,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
     return bands;
   }
 
-  EraDef? _eraByOrder(int order) {
+  _RegionChoice? _eraByOrder(int order) {
     for (final e in _eras) {
       if (e.order == order) return e;
     }
@@ -864,7 +896,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
           const SizedBox(height: 6),
           for (final good in res.keys.toList()) _costResourceRow(band, good),
           const SizedBox(height: 4),
-          GestureDetector(
+          Pressable(
             onTap: () => _addCostResource(band.era),
             child: Container(
               width: double.infinity,
@@ -1179,7 +1211,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
           ),
           for (var i = 0; i < _builders.length; i++) _builderRow(i),
           const SizedBox(height: 6),
-          GestureDetector(
+          Pressable(
             onTap: () => setState(() {
               _builders.add((count: 1, stat: 40));
               _calcGen++;
@@ -1412,7 +1444,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                     style: FoE.dim(size: 11),
                   ),
                   const SizedBox(height: 6),
-                  GestureDetector(
+                  Pressable(
                     onTap: _applyFromModel,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -1427,7 +1459,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                   ),
                   const SizedBox(height: 8),
                 ],
-                GestureDetector(
+                Pressable(
                   onTap: _uploadingImage ? null : _uploadImage,
                   child: Container(
                     padding: const EdgeInsets.symmetric(

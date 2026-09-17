@@ -71,9 +71,9 @@ void main() {
       await _openTab(tester, '🩹 Heilung');
       // The rule the list exists for.
       expect(find.textContaining("MONSTER's era"), findsOneWidget);
-      // Era 1 has exactly the two starter supplies; era 2 adds its own.
-      expect(find.textContaining('Era 1: 🐟 Fish · 🦫 Fur'), findsOneWidget);
-      expect(find.textContaining('Era 2: 🐟 Fish · 🦫 Fur · '), findsOneWidget);
+      // Region 1 has exactly its one starter supply; region 2 adds its own.
+      expect(find.textContaining('Region 1: 🐟 Fish'), findsOneWidget);
+      expect(find.textContaining('Region 2: 🐟 Fish · 🥩 Meat'), findsOneWidget);
     });
   });
 

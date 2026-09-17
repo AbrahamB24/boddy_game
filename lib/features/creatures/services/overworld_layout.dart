@@ -72,18 +72,18 @@ class OverworldNode {
   });
 }
 
-/// The area whose pool/boss/spots an [era]'s battles use. Region and era are
-/// 1:1 (an area's battleStage IS its era order), so the era's area is the one
-/// whose battleStage matches. Null when no content is authored that far.
-AreaDef? areaForEra(int era) {
+/// The area whose pool/boss/spots [region]'s battles use — the one whose
+/// battleStage matches. Null when no content is authored that far.
+AreaDef? areaForRegion(int region) {
   for (final a in areasInOrder()) {
-    if (a.battleStage == era) return a;
+    if (a.battleStage == region) return a;
   }
   return null;
 }
 
 /// The area a specific battle number belongs to.
-AreaDef? areaForBattle(int battleNumber) => areaForEra(eraForBattle(battleNumber));
+AreaDef? areaForBattle(int battleNumber) =>
+    areaForRegion(regionForBattle(battleNumber));
 
 /// The canvas the [nodes] need — width is fixed (one lane), height is the
 /// bounding box plus a margin so the trail is never clipped.
@@ -118,15 +118,15 @@ double overworldFillScale(Size screen, Size canvas) {
   return math.max(screen.width / canvas.width, screen.height / canvas.height);
 }
 
-/// The 1-based era a path node belongs to — from its authored area's
-/// battleStage, or the formula fallback on its order.
-int _eraOfNode(PathNode n) {
+/// The 1-based region a path node belongs to — from its authored area's
+/// battleStage, or [regionForBattle] on its order when no area is set.
+int _regionOfNode(PathNode n) {
   final areaId = n.areaId;
   if (areaId != null) {
     final a = kAreaDefs[areaId];
     if (a != null) return a.battleStage;
   }
-  return eraForBattle(n.order);
+  return regionForBattle(n.order);
 }
 
 /// The badge level shown for a battle node: the toughest authored enemy, or the
@@ -148,16 +148,16 @@ typedef _Stop = ({
 });
 
 /// Builds the linear overworld for a player who has cleared [battlesCleared]
-/// battles. The line runs from battle 1 up to the boss of the era they are
-/// currently working through (eras beyond that are fog — not drawn).
+/// battles. The line runs from battle 1 up to the boss of the region they
+/// are currently working through (regions beyond that are fog — not drawn).
 List<OverworldNode> buildLinearOverworld({required int battlesCleared}) {
   // Authored path (user 2026-07-25): the line is now the ORDERED list of path
-  // nodes, grouped into eras by each node's area. Eras beyond the one the player
-  // is currently working through stay fogged (not drawn).
+  // nodes, grouped into regions by each node's area. Regions beyond the one
+  // the player is currently working through stay fogged (not drawn).
   final allNodes = pathNodesInOrder();
   if (allNodes.isEmpty) return const [];
 
-  // The frontier is the next uncleared node; its era is the furthest in view.
+  // The frontier is the next uncleared node; its region is the furthest in view.
   PathNode? frontier;
   for (final n in allNodes) {
     if (n.order > battlesCleared) {
@@ -165,16 +165,17 @@ List<OverworldNode> buildLinearOverworld({required int battlesCleared}) {
       break;
     }
   }
-  final viewEra = _eraOfNode(frontier ?? allNodes.last);
+  final viewRegion = _regionOfNode(frontier ?? allNodes.last);
 
   final stops = <_Stop>[];
-  for (var era = 1; era <= viewEra; era++) {
-    final area = areaForEra(era);
-    final eraNodes = allNodes.where((n) => _eraOfNode(n) == era).toList();
+  for (var region = 1; region <= viewRegion; region++) {
+    final area = areaForRegion(region);
+    final regionNodes =
+        allNodes.where((n) => _regionOfNode(n) == region).toList();
 
-    // The era's regular fights (all but the boss), in order, then its boss.
+    // The region's regular fights (all but the boss), in order, then its boss.
     stops.addAll([
-      for (final n in eraNodes.where((n) => !n.isBoss))
+      for (final n in regionNodes.where((n) => !n.isBoss))
         (
           id: n.areaId ?? area?.id ?? '',
           areaId: n.areaId ?? area?.id ?? '',
@@ -185,7 +186,7 @@ List<OverworldNode> buildLinearOverworld({required int battlesCleared}) {
           isBoss: false,
         ),
     ]);
-    for (final n in eraNodes.where((n) => n.isBoss)) {
+    for (final n in regionNodes.where((n) => n.isBoss)) {
       stops.add((
         id: n.areaId ?? area?.id ?? '',
         areaId: n.areaId ?? area?.id ?? '',

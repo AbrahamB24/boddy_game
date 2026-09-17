@@ -27,6 +27,7 @@ import 'widgets/egg_card.dart';
 import 'widgets/egg_details.dart';
 import '../common/widgets/recess_bar.dart';
 import '../common/widgets/monster_tile_grid.dart';
+import '../../core/ui/pressable.dart';
 
 // ── The Hatchery (user 2026-07-26) ─────────────────────────────────────────
 // "Eggs müssen nicht angezeigt werden, da diese ins Inventar (Bag) gehen und
@@ -172,7 +173,7 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
     );
   }
 
-  Widget _hatchAllButton() => GestureDetector(
+  Widget _hatchAllButton() => Pressable(
     behavior: HitTestBehavior.opaque,
     onTap: _busy ? null : _hatchAll,
     child: Container(
@@ -422,7 +423,7 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
   List<Widget> _jobActions(BreedingJob job, {required bool ready}) {
     if (ready) {
       return [
-        GestureDetector(
+        Pressable(
           onTap: _busy ? null : () => _hatch(job),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
@@ -501,7 +502,7 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
   ) => Semantics(
     label: label,
     button: true,
-    child: GestureDetector(
+    child: Pressable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
@@ -630,7 +631,7 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
         : 'Hatch';
     final ink = parchmentButtonInk(active: canPlace);
 
-    return GestureDetector(
+    return Pressable(
       onTap: canPlace ? () => _place(job) : null,
       child: Opacity(
         opacity: canPlace ? 1 : 0.5,
@@ -705,7 +706,7 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
     Color color,
     VoidCallback? onTap, {
     double borderAlpha = 0.50,
-  }) => GestureDetector(
+  }) => Pressable(
     behavior: HitTestBehavior.opaque,
     onTap: onTap,
     child: Container(

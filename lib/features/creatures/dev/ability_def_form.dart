@@ -6,6 +6,7 @@ import '../models/ability_def.dart';
 import '../models/creature_enums.dart';
 import '../services/combat_engine.dart' show CombatEngine;
 import '../services/creature_defs_service.dart';
+import '../../../core/ui/pressable.dart';
 
 // Create/edit form for one AbilityDef. Same conventions as BuildingDefForm:
 // `existing == null` = new (id editable, free-typed — single trusted author).
@@ -33,6 +34,25 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
   late int _power;
   late int _priority;
   late int _apCost;
+
+  /// The evolution stage this move may be learned from (user 2026-09-05,
+  /// Combat School) — replaces the old per-species `SpeciesAbility.
+  /// unlockStage`; the gate now lives on the move itself, since what a
+  /// creature may learn is "every neutral move + every move of its own
+  /// type" rather than a curated species list. Same S1/S2/S3 picker
+  /// species_def_form.dart used to own for this.
+  late int _unlockStage;
+
+  /// Chance to land one more hit after the first (user 2026-09-08: "nicht
+  /// nur 1 gegner treffen sondern 2 oder 3"), capped at 3 total hits — see
+  /// [AbilityDef.extraHitChance]. 0 = a plain single hit.
+  late double _extraHitChance;
+
+  /// Where the extra hit(s) go: same target again (multi-hit) or a
+  /// different living enemy each time (cleave) — see
+  /// [AbilityDef.extraHitSameTarget].
+  late bool _extraHitSameTarget;
+
   /// EVERY effect this ability carries, in one editable list (user 2026-07-30:
   /// "Effekt wählen (alle effekte in einer Liste)").
   ///
@@ -58,6 +78,9 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
     _power = d?.power ?? 70;
     _priority = d?.priority ?? 0;
     _apCost = d?.apCost ?? 0;
+    _unlockStage = d?.unlockStage ?? 0;
+    _extraHitChance = d?.extraHitChance ?? 0;
+    _extraHitSameTarget = d?.extraHitSameTarget ?? false;
     _effects = [...?d?.effects];
   }
 
@@ -74,14 +97,24 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
     power: _kind == AbilityKind.damage ? _power : 0,
     priority: _priority,
     apCost: _apCost,
+    unlockStage: _unlockStage,
+    // Only meaningful for a single-enemy damage move — allEnemies/allAllies
+    // already hit everyone, and a heal/buff has no "hit" to repeat.
+    extraHitChance:
+        _kind == AbilityKind.damage && _target == AbilityTarget.enemy
+        ? _extraHitChance
+        : 0,
+    extraHitSameTarget: _extraHitSameTarget,
   ).withEffects(_allowedEffects);
 
   /// The effects this KIND can actually carry. A heal move that also burns would
   /// silently never burn (the engine only rolls infliction on a damage hit), so
   /// the form drops what cannot fire instead of saving a lie — and says so in the
   /// list, rather than in a snackbar after the fact.
-  List<AbilityEffect> get _allowedEffects =>
-      [for (final e in _effects) if (_allows(e.kind)) e];
+  List<AbilityEffect> get _allowedEffects => [
+    for (final e in _effects)
+      if (_allows(e.kind)) e,
+  ];
 
   bool _allows(AbilityEffectKind kind) => switch (kind.family) {
     // Landing something on the target needs a hit to land it with.
@@ -89,8 +122,7 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
     AbilityEffectFamily.debuff ||
     AbilityEffectFamily.lifesteal ||
     AbilityEffectFamily.recoil ||
-    AbilityEffectFamily.selfPenalty =>
-      _kind == AbilityKind.damage,
+    AbilityEffectFamily.selfPenalty => _kind == AbilityKind.damage,
     AbilityEffectFamily.heal => _kind == AbilityKind.heal,
     AbilityEffectFamily.selfBuff => _kind == AbilityKind.buff,
     // A trickle of healing is something you set up, on either kind of
@@ -209,8 +241,36 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
               (v) => setState(() => _target = v ?? _target),
             ),
             const SizedBox(height: 12),
+            _dropdownRow<int>(
+              'Learnable from stage (Combat School)',
+              _unlockStage,
+              const [
+                DropdownMenuItem(value: 0, child: Text('Stage 1 (base form)')),
+                DropdownMenuItem(value: 1, child: Text('Stage 2')),
+                DropdownMenuItem(value: 2, child: Text('Stage 3')),
+              ],
+              (v) => setState(() => _unlockStage = v ?? 0),
+            ),
+            const SizedBox(height: 12),
             if (_kind == AbilityKind.damage)
               _numRow('Power', _power, onChanged: (v) => _power = v as int),
+            if (_kind == AbilityKind.damage &&
+                _target == AbilityTarget.enemy) ...[
+              _numRow(
+                'Extra-hit chance (0 = single hit, capped at 3 total hits)',
+                _extraHitChance,
+                isDouble: true,
+                onChanged: (v) =>
+                    setState(() => _extraHitChance = (v as double).clamp(0, 1)),
+              ),
+              if (_extraHitChance > 0)
+                _checkboxRow(
+                  'Same target again (multi-hit) instead of a different '
+                  'enemy each time (cleave)',
+                  _extraHitSameTarget,
+                  (v) => setState(() => _extraHitSameTarget = v),
+                ),
+            ],
             Row(
               children: [
                 Expanded(
@@ -235,7 +295,7 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
-              child: GestureDetector(
+              child: Pressable(
                 onTap: _saving ? null : _save,
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 12),
@@ -311,6 +371,13 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
             '${effectPower >= 0 ? '+' : '−'} ${effectPower.abs().round()} from '
             '${def.effects.length} effect(s) — each card below shows its own '
             'share, chance included.',
+      if (def.extraHitChance > 0)
+        'Extra hits add '
+            '${(def.power * def.extraHitChance + def.power * def.extraHitChance * def.extraHitChance).round()} '
+            'power: a 2nd hit is worth power × '
+            '${(def.extraHitChance * 100).round()} %, a 3rd (needing that '
+            'chance to land twice) power × '
+            '${(def.extraHitChance * def.extraHitChance * 100).round()} %.',
       // WHERE POWER STOPS COUNTING, both places, with the number attached. Left
       // unsaid, these are exactly the holes the flat effect surcharges were.
       if (def.isOverPricedOut)
@@ -339,7 +406,10 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
-      decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.border))),
+      decoration: ShapeDecoration(
+        color: FoE.panelDark,
+        shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.border)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -381,7 +451,7 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
             ),
           ),
           if (_addableKinds.isNotEmpty)
-            GestureDetector(
+            Pressable(
               onTap: () => setState(
                 () => _effects.add(AbilityEffect(kind: _addableKinds.first)),
               ),
@@ -404,7 +474,7 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
         _addableKinds.isEmpty && _effects.isNotEmpty
             ? 'A ${_kind.label} move already carries every effect it can.'
             : 'Value 0 = the effect’s standard strength, duration 0 = its '
-                'standard length. Each card says what its numbers do in a fight.',
+                  'standard length. Each card says what its numbers do in a fight.',
         style: FoE.dim(size: 11),
       ),
       if (_effects.isEmpty)
@@ -414,7 +484,7 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
             _kind == AbilityKind.damage
                 ? 'No effects — this move only deals its damage.'
                 : 'No effects yet — a ${_kind.label} move does nothing without '
-                    'one.',
+                      'one.',
             style: FoE.dim(size: 12),
           ),
         ),
@@ -538,7 +608,10 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(8),
-            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.border))),
+            decoration: ShapeDecoration(
+              color: FoE.panelDark,
+              shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.border)),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -565,8 +638,8 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
                         color: !usable
                             ? Colors.redAccent
                             : e.power >= 0
-                                ? FoE.goldBright
-                                : Colors.redAccent,
+                            ? FoE.goldBright
+                            : Colors.redAccent,
                       ),
                     ),
                   ],
@@ -643,6 +716,30 @@ class _AbilityDefFormState extends State<AbilityDefForm> {
           final parsed = isDouble ? double.tryParse(v) : int.tryParse(v);
           if (parsed != null) onChanged(parsed);
         },
+      ),
+    );
+  }
+
+  Widget _checkboxRow(String label, bool value, ValueChanged<bool> onChanged) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Checkbox(
+              value: value,
+              onChanged: (v) => onChanged(v ?? false),
+              activeColor: FoE.gold,
+            ),
+            Expanded(
+              child: Text(
+                label,
+                style: FoE.label(size: 13).copyWith(color: FoE.parchment),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

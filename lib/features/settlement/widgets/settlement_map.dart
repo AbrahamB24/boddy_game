@@ -2,11 +2,12 @@ import '../../../core/ui/feel.dart';
 import 'dart:async';
 import 'dart:math' show max;
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/snack.dart';
+import '../../creatures/models/creature_enums.dart' show kHealingHutBuildingId;
 import '../../onboarding/intro_flow.dart';
+import '../../onboarding/intro_spotlight.dart';
 import '../data/building_art.dart';
 import '../data/building_definitions.dart';
 import '../data/iso_grid.dart';
@@ -16,7 +17,9 @@ import '../models/placed_building.dart';
 import '../settlement_controller.dart';
 import 'building_icon.dart';
 import 'building_life.dart';
+import 'terrain_layer.dart';
 import 'scroll_paper.dart' show kActionGreen, kParchmentDeep;
+import '../../../core/ui/pressable.dart';
 
 class SettlementMap extends StatefulWidget {
   final SettlementController ctrl;
@@ -363,6 +366,15 @@ class SettlementMapState extends State<SettlementMap>
     _closeSessionMode();
     // Edit mode deliberately STAYS on after a move (user 2026-07-20), so
     // several buildings can be rearranged in one visit.
+    // Guided tutorial (user 2026-09-06): straight from a fresh Healing Hut
+    // placement into its own detail dialog — instant-build-with-gold is one
+    // tap away there, rather than leaving the player back on the bare map to
+    // find the building again themselves.
+    if (moveId == null &&
+        type == kHealingHutBuildingId &&
+        widget.ctrl.introStep == IntroStep.buildHealingHut) {
+      openBuildingByType(type);
+    }
   }
 
   // ── Road chains ───────────────────────────────────────────
@@ -710,7 +722,15 @@ class SettlementMapState extends State<SettlementMap>
         backgroundColor: Colors.transparent,
         child: Container(
           width: 260,
-          decoration: FoE.panel(radius: 12),
+          // FoE.panel() itself, plus a drop shadow (user 2026-09-05: "bei
+          // solchen Menüs, welche überlagert angezeigt werden bitte einen
+          // Schatten hinzufügen") — this sits over the live map, same as
+          // the building detail dialog it confirms deleting FROM.
+          decoration: ShapeDecoration(
+            color: FoE.panelMid,
+            shadows: FoE.drop(),
+            shape: FoE.facet(radius: 12, side: BorderSide(color: FoE.border)),
+          ),
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -761,7 +781,7 @@ class SettlementMapState extends State<SettlementMap>
   }
 
   Widget _dialogBtn(String label, VoidCallback onTap, {bool danger = false}) =>
-      GestureDetector(
+      Pressable(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -1022,33 +1042,20 @@ class SettlementMapState extends State<SettlementMap>
                   height: mapH,
                   child: Stack(
                     children: [
+                      // Replaced the single baked map_background.png (user
+                      // 2026-09-07: "der Background muss wirklich noch
+                      // deutlich überarbeitet werden... genau gleich
+                      // aufgelöst [wie] die Gebäude") — matching the
+                      // buildings' own sharpness across the WHOLE map in one
+                      // image would need a ~117760×58880px source (measured:
+                      // ~270 px/world-unit for a building vs ~22 for the old
+                      // whole-map bake), tens of gigabytes. TerrainLayer
+                      // tiles a small, sharp ground swatch and places detail
+                      // props individually instead — see its own doc comment.
                       Positioned.fill(
                         child: RepaintBoundary(
-                          child: Image.asset(
-                            'assets/images/map_background.png',
-                            fit: BoxFit.cover,
-                            filterQuality: FilterQuality.medium,
-                            // Raised from 2048 (user 2026-08-27: "den
-                            // Hintergrund genau gleich scharf auflösen wie
-                            // die Gebäude") — kMaxMapZoom went from 0.8 to
-                            // 1.0 the same day, and at 1.0 this single image,
-                            // stretched over the WHOLE map canvas
-                            // (isoCanvasSize, several times the image's own
-                            // 4096 x 2048), is what a player is now actually
-                            // looking at up close rather than glancing past.
-                            //
-                            // 2026-08-28 (user: "der Hintergrund muss noch
-                            // deutlich besser aufgelöst sein"): the source
-                            // was re-rendered at 8192 x 4096 (terrain.py
-                            // --scale 0.8) specifically so the decode target
-                            // could move too — a bigger source file alone
-                            // changes nothing, since cacheWidth is what
-                            // actually caps the pixels a player sees. Split
-                            // by platform because the ceiling that matters is
-                            // the canvaskit web decode that OOM'd at 4096
-                            // (32 MB) last time; native has no such budget
-                            // and gets the sharper decode.
-                            cacheWidth: kIsWeb ? 3072 : 6144,
+                          child: TerrainLayer(
+                            buildableRegion: widget.ctrl.buildableRegion,
                           ),
                         ),
                       ),
@@ -1184,7 +1191,15 @@ class SettlementMapState extends State<SettlementMap>
             // Isolated raster: the whole buildings layer rebuilds on every 5s
             // tick, but a tile's art only changes when the building does, so a
             // RepaintBoundary keeps the tick from repainting all ~200 tiles.
+            // Doubles as the guided tutorial's spotlight anchor for this ONE
+            // building during assignHealer (user 2026-09-06: "lass mich das
+            // Gebäude anklicken") — see SettlementScreen._soloQuickPadAnchor.
             RepaintBoundary(
+              key:
+                  b.buildingTypeId == kHealingHutBuildingId &&
+                      widget.ctrl.introStep == IntroStep.assignHealer
+                  ? IntroSpotlightAnchors.of('map-healing-hut')
+                  : null,
               child: _BuildingTile(
                 def: def,
                 building: b,
@@ -1357,7 +1372,7 @@ class SettlementMapState extends State<SettlementMap>
     return Positioned(
       left: centre.dx - size / 2,
       top: centre.dy - size / 2,
-      child: GestureDetector(
+      child: Pressable(
         onTap: onTap,
         child: Container(
           width: size,
@@ -1392,7 +1407,7 @@ class SettlementMapState extends State<SettlementMap>
     required Color color,
     required double size,
     required VoidCallback onTap,
-  }) => GestureDetector(
+  }) => Pressable(
     onTap: onTap,
     child: Container(
       width: size,
@@ -1565,7 +1580,7 @@ class SettlementMapState extends State<SettlementMap>
   );
 
   Widget _doneButton(String label, Color colour, VoidCallback onTap) =>
-      GestureDetector(
+      Pressable(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1584,7 +1599,13 @@ class SettlementMapState extends State<SettlementMap>
     leading: BuildingIcon(imageUrl: def.imageUrl, defId: def.id, size: 16),
     colour: FoE.accentBlue,
     text: def.isRoad
-        ? 'Drag the road into place, then ✓ to keep going'
+        ? (widget.ctrl.introStep == IntroStep.buildRoad
+              // Reminds the player WHERE, not just how (user 2026-09-06) —
+              // the generic drag/confirm banner never said what the road
+              // was actually for.
+              ? 'Connect the Healing Hut to your Castle, then ✓ to keep '
+                    'going'
+              : 'Drag the road into place, then ✓ to keep going')
         : _aimMoveId != null
         ? 'Drag ${def.name} where you want it  ·  ✓ to keep, ✗ to leave it'
         : 'Drag ${def.name} where you want it  ·  ✓ to build it here',
@@ -1598,6 +1619,9 @@ class SettlementMapState extends State<SettlementMap>
     colour: _chainErase ? FoE.danger : Colors.greenAccent,
     text: _chainErase
         ? 'Tap a red arrow to pull up the next road  ·  ✗ puts them all back'
+        : widget.ctrl.introStep == IntroStep.buildRoad
+        ? 'Keep going until it reaches the Healing Hut  ·  ✗ takes the '
+              'whole run back'
         : 'Tap an arrow to lay the next road  ·  ✗ takes the whole run back',
   );
 

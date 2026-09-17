@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/ui/pressable.dart';
 import '../models/creature_enums.dart';
 import '../models/creature_instance.dart';
 import '../models/species_def.dart';
@@ -105,7 +106,7 @@ class CreatureCard extends StatelessWidget {
     final elementShadow =
         (inst?.species?.element ?? CreatureElement.fire).shadowColor;
 
-    return GestureDetector(
+    return Pressable(
       // THE WHOLE CELL TAKES THE TAP (user 2026-07-27: the Market's ✕ did not
       // remove a hauler).
       //

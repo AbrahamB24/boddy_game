@@ -4,13 +4,14 @@ import 'package:boddygame/features/settlement/data/building_definitions.dart';
 import 'package:boddygame/features/settlement/data/goods_definitions.dart';
 import 'package:boddygame/features/settlement/models/energy_model.dart';
 import 'package:boddygame/features/settlement/models/resource_model.dart';
+import 'package:boddygame/features/settlement/services/daily_tasks.dart' show dateKeyFor;
 import 'package:boddygame/features/settlement/services/game_engine.dart';
 
 // The era ladder (user 2026-07-24): every era from II on unlocks ONE fresh raw
 // AND ONE building element. The element assembles the era before's element with
-// the era before's raw — element(N) = 2 × element(N−1) + 2 × rawForEra(N−1) —
+// the era before's raw — element(N) = 2 × element(N−1) + 2 × rawForRegion(N−1) —
 // and the era's OWN fresh raw is a separate build ingredient (building(N) costs
-// element(N) + rawForEra(N)), folded into the element only next era. Two
+// element(N) + rawForRegion(N)), folded into the element only next era. Two
 // properties still have to hold or the shape is wrong: wood and stone stay
 // exactly equal forever, and each newer raw is needed in half the quantity of
 // the one before it.
@@ -29,9 +30,12 @@ void main() {
     lastUpdatedAt: DateTime.utc(2026, 7, 22),
   );
 
+  // Exactly the daily target — 100% rate, so a "one hour" tick banks exactly
+  // one hour's worth (neither the floor nor a bonus scales it).
   EnergyModel energy(DateTime at) => EnergyModel(
     settlementId: 's',
-    currentEnergy: kMaxEnergy,
+    stepsToday: kEnergyFullSteps.round(),
+    stepsDayKey: dateKeyFor(at.toLocal()),
     lastUpdatedAt: at,
   );
 
@@ -52,19 +56,19 @@ void main() {
   group('the era ladder', () {
     test('every era from II on has exactly one element', () {
       for (var order = 2; order <= 8; order++) {
-        final e = elementForEra(order);
+        final e = elementForRegion(order);
         expect(e, isNotNull, reason: 'era $order needs an element');
         expect(e!.refinedFrom, isNotEmpty);
       }
-      expect(elementForEra(1), isNull, reason: 'era I builds from raw wood');
+      expect(elementForRegion(1), isNull, reason: 'era I builds from raw wood');
     });
 
     test('each element is 2× the one below plus 2× the PREVIOUS era\'s raw', () {
       for (var order = 3; order <= 8; order++) {
-        final element = elementForEra(order)!;
-        final below = elementForEra(order - 1)!;
+        final element = elementForRegion(order)!;
+        final below = elementForRegion(order - 1)!;
         // The raw folded in is the era-BEFORE's fresh raw, not this era's.
-        final raw = rawForEra(order - 1)!;
+        final raw = rawForRegion(order - 1)!;
         expect(
           element.refinedFrom,
           {below.id: 2.0, raw.id: 2.0},
@@ -73,28 +77,28 @@ void main() {
       }
       // The first rung is the only one made of two raws: era I's wood and stone,
       // now both starting resources.
-      expect(elementForEra(2)!.refinedFrom, {'wood': 2.0, 'stone': 2.0});
+      expect(elementForRegion(2)!.refinedFrom, {'wood': 2.0, 'stone': 2.0});
     });
 
     test('eras II–VIII each unlock their own fresh raw; era I uses the fields', () {
       expect(
-        rawForEra(1),
+        rawForRegion(1),
         isNull,
         reason: 'wood AND stone are ResourceModel fields',
       );
       for (var order = 2; order <= 8; order++) {
-        final r = rawForEra(order);
+        final r = rawForRegion(order);
         expect(r, isNotNull, reason: 'era $order needs a fresh raw');
         expect(r!.refinedFrom, isEmpty, reason: 'a raw is gathered, not made');
       }
       // Era II's fresh raw (clay) and era VIII's (aether) bracket the ladder.
-      expect(rawForEra(2)!.id, 'clay');
-      expect(rawForEra(8)!.id, 'aether');
+      expect(rawForRegion(2)!.id, 'clay');
+      expect(rawForRegion(8)!.id, 'aether');
     });
 
     test('wood and stone stay exactly equal — all the way to era VIII', () {
       for (var order = 2; order <= 8; order++) {
-        final raw = rawCostOf(elementForEra(order)!.id);
+        final raw = rawCostOf(elementForRegion(order)!.id);
         expect(
           raw['wood'],
           raw['stone'],
@@ -134,12 +138,12 @@ void main() {
       });
       expect(bill.keys, isNot(contains('clay')));
       expect(bill.keys, isNot(contains('frame')));
-      for (final g in goodsForEra(8)) {
+      for (final g in goodsForRegion(8)) {
         expect(g.kind, GoodsKind.supply);
       }
-      // …but the player still HOLDS them: the header reads materialsForEra.
-      expect(materialsForEra(3).map((g) => g.id), containsAll(['frame', 'clay']));
-      expect(materialsForEra(1), isEmpty, reason: 'era I has neither');
+      // …but the player still HOLDS them: the header reads materialsForRegion.
+      expect(materialsForRegion(3).map((g) => g.id), containsAll(['frame', 'clay']));
+      expect(materialsForRegion(1), isEmpty, reason: 'era I has neither');
     });
   });
 
@@ -200,7 +204,7 @@ void main() {
   group('current-era header set', () {
     test('every era from II on has exactly one element and one raw', () {
       for (var era = 2; era <= 8; era++) {
-        final pair = buildGoodsOfEra(era);
+        final pair = buildGoodsOfRegion(era);
         expect(pair.length, 2, reason: 'era $era build pair');
         expect(pair.where((g) => g.isElement).length, 1, reason: 'era $era');
         expect(pair.where((g) => g.kind == GoodsKind.raw).length, 1,
@@ -209,19 +213,19 @@ void main() {
     });
 
     test('era I builds from wood and stone, so it has no build GOODS', () {
-      expect(buildGoodsOfEra(1), isEmpty);
+      expect(buildGoodsOfRegion(1), isEmpty);
     });
 
-    test('every era introduces exactly two luxuries', () {
+    test('every era introduces exactly one luxury (2026-09-12, down from two)', () {
       for (var era = 1; era <= 8; era++) {
-        expect(luxuriesOfEra(era).length, 2, reason: 'era $era luxuries');
-        expect(luxuriesOfEra(era).every((g) => g.isSupply), isTrue);
+        expect(luxuriesOfRegion(era).length, 1, reason: 'era $era luxuries');
+        expect(luxuriesOfRegion(era).every((g) => g.isSupply), isTrue);
       }
     });
 
-    test('the era set is NOT cumulative — that is what goodsForEra is for', () {
-      expect(luxuriesOfEra(3).map((g) => g.id), isNot(contains('fish')));
-      expect(goodsForEra(3).map((g) => g.id), contains('fish'));
+    test('the era set is NOT cumulative — that is what goodsForRegion is for', () {
+      expect(luxuriesOfRegion(3).map((g) => g.id), isNot(contains('fish')));
+      expect(goodsForRegion(3).map((g) => g.id), contains('fish'));
     });
   });
 }

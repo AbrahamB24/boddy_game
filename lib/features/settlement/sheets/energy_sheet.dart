@@ -1,24 +1,28 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../data/building_definitions.dart';
-import '../services/game_engine.dart';
 import '../services/step_tracker_service.dart';
 import '../settlement_controller.dart';
 import '../widgets/parchment_sheet.dart';
 import '../widgets/scroll_paper.dart'
     show parchmentButton, parchmentButtonInk;
-import '../../../core/ui/duration_format.dart';
 import '../../common/widgets/recess_bar.dart';
+import '../../../core/ui/pressable.dart';
 
-// Tap target for the Energy header cell — shows the drain estimate (how
-// long the current charge lasts) plus the step sync. Steps are the only way
-// to refill energy, so keeping "how long is left" and "where steps come from"
-// in the same place makes the causal link obvious. Steps now sync
-// automatically from the phone's hardware step counter (StepTrackerService,
-// user 2026-07-18); the manual entry form remains as a dev-only fallback.
+// Tap target for the Energy header cell — shows today's step progress plus
+// the step sync. Steps are the only way to raise the rate, so keeping
+// "today's progress" and "where steps come from" in the same place makes the
+// causal link obvious. Steps sync automatically from the phone's hardware
+// step counter (StepTrackerService, user 2026-07-18); the manual entry form
+// remains as a dev-only fallback.
+//
+// ENERGY IS A DAILY-STEPS RATE (user 2026-09-14, replacing the old draining
+// pool) — there is no more "how long until it runs out": [stepsToday] only
+// ever grows today, resetting at midnight, and [EnergyModel.multiplier]
+// reads it fresh every time, no live extrapolation needed (unlike the old
+// version of this sheet, which ran its own 1s ticker just to keep a drain
+// countdown moving).
 class EnergySheet extends StatefulWidget {
   final SettlementController ctrl;
   const EnergySheet({super.key, required this.ctrl});
@@ -30,49 +34,24 @@ class EnergySheet extends StatefulWidget {
 class _EnergySheetState extends State<EnergySheet> {
   final _tc = TextEditingController();
   bool _loading = false;
-  Timer? _liveTicker;
 
-  double get _preview => (int.tryParse(_tc.text) ?? 0) * kEnergyPerStep;
+  int get _typedSteps => int.tryParse(_tc.text) ?? 0;
 
-  @override
-  void initState() {
-    super.initState();
-    // Energy drains continuously in real time but the controller only
-    // resyncs on its 5s-authoritative tick — without this, the "lasts ~Xh"
-    // estimate would visibly jump in 5s steps instead of counting down
-    // smoothly. Same technique as ResearchScreen's _liveTicker: this timer
-    // only forces a repaint, _currentEnergyNow does the extrapolation.
-    _liveTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
+  /// What today's total (and rate) would become if the typed steps were
+  /// added right now — the dev form's own preview.
+  double get _previewMultiplier => energyMultiplierForSteps(
+    (widget.ctrl.energy?.stepsToday ?? 0) + _typedSteps,
+  );
 
   @override
   void dispose() {
-    _liveTicker?.cancel();
     _tc.dispose();
     super.dispose();
   }
 
-  // Mirrors GameEngine.tick()'s energy drain exactly (flat kDrainPerHour,
-  // clamped at 0 — never negative) — extrapolated from the last tick's
-  // anchor (energy.currentEnergy as of energy.lastUpdatedAt) using elapsed
-  // wall-clock time.
-  double get _currentEnergyNow {
-    final e = widget.ctrl.energy;
-    if (e == null) return 0;
-    final elapsedHours =
-        DateTime.now().toUtc().difference(e.lastUpdatedAt).inMilliseconds /
-        3.6e6;
-    return (e.currentEnergy - kDrainPerHour * elapsedHours).clamp(
-      0.0,
-      kMaxEnergy,
-    );
-  }
-
   Future<void> _submit() async {
-    final steps = int.tryParse(_tc.text.trim());
-    if (steps == null || steps <= 0) return;
+    final steps = _typedSteps;
+    if (steps <= 0) return;
     setState(() => _loading = true);
     await widget.ctrl.addSteps(steps);
     if (mounted) {
@@ -92,11 +71,13 @@ class _EnergySheetState extends State<EnergySheet> {
       trailing: AnimatedBuilder(
         animation: widget.ctrl,
         builder: (context, _) {
-          final current = _currentEnergyNow;
+          final energy = widget.ctrl.energy;
+          final pct = energy?.percent ?? kEnergyFloorMultiplier * 100;
+          final atFloor = (energy?.stepsToday ?? 0) <= 0;
           return Text(
-            '${current.toStringAsFixed(0)}/${kMaxEnergy.toStringAsFixed(0)}',
+            '${pct.round()}%',
             style: FoE.value(size: 14).copyWith(
-              color: current <= 0 ? FoE.danger : ParchmentSheet.accent,
+              color: atFloor ? FoE.danger : ParchmentSheet.accent,
             ),
           );
         },
@@ -104,15 +85,28 @@ class _EnergySheetState extends State<EnergySheet> {
       builder: (context, scrollCtrl) => AnimatedBuilder(
         animation: Listenable.merge([widget.ctrl, StepTrackerService()]),
         builder: (context, _) {
-          final current = _currentEnergyNow;
-          final isEmpty = current <= 0;
-          final hoursLeft = GameEngine.hoursUntilEmpty(current);
+          final stepsToday = widget.ctrl.energy?.stepsToday ?? 0;
+          final rate = energyMultiplierForSteps(stepsToday);
+          final atFloor = stepsToday <= 0;
+          // The bar reads as a STEP GOAL — progress toward the 100% target —
+          // rather than the rate itself, which is the more motivating framing
+          // (and the rate alone can't show "how much further to 100%" once
+          // it's already past it in the bonus range).
+          final barValue = (stepsToday / kEnergyFullSteps).clamp(0.0, 1.0);
+          final stepsToFull = (kEnergyFullSteps - stepsToday)
+              .clamp(0, kEnergyFullSteps)
+              .round();
+          final maxBoostSteps =
+              kEnergyFullSteps +
+              1000 * (kEnergyMaxBoost / kEnergyBoostPerThousandSteps);
 
           return SingleChildScrollView(
             controller: scrollCtrl,
+            // +16/+16 (2026-09-06): ParchmentSheet's own bands widened from
+            // flush-to-edge to a 14px inset/16px wide band.
             padding: EdgeInsets.only(
-              left: 30,
-              right: 30,
+              left: 46,
+              right: 46,
               top: 4,
               bottom: MediaQuery.of(context).viewInsets.bottom + 24,
             ),
@@ -121,26 +115,33 @@ class _EnergySheetState extends State<EnergySheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 RecessBar(
-                  value: (current / kMaxEnergy).clamp(0.0, 1.0),
-                  color: isEmpty ? FoE.danger : ParchmentSheet.accent,
+                  value: barValue,
+                  color: atFloor ? FoE.danger : ParchmentSheet.accent,
                   height: 12,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  // ENERGY IS A GATE AGAIN (user 2026-07-27): an empty tank
-                  // stops everything, so the line names what stops instead of
-                  // the old three-item list that predated expeditions,
-                  // healing and hatching being gated too.
-                  isEmpty
-                      ? 'Empty — nothing runs. No production, building, '
-                            'expeditions, treatment, breeding or hatching '
-                            'until you add steps.'
-                      : 'Lasts ~${fmtDuration(hoursLeft * 3600)} at the '
-                            'current drain (${kDrainPerHour.toStringAsFixed(1)}/h). '
-                            'At zero the settlement stops.',
+                  '$stepsToday / ${kEnergyFullSteps.round()} steps today · '
+                  '${rate == rate.roundToDouble() ? rate.round() : rate.toStringAsFixed(2)}'
+                  '× rate',
                   style: FoE.dim(size: 11).copyWith(
-                    color: isEmpty ? FoE.danger : ParchmentSheet.inkSoft,
+                    color: atFloor ? FoE.danger : ParchmentSheet.inkSoft,
                   ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  stepsToday >= kEnergyFullSteps
+                      ? (stepsToday >= maxBoostSteps
+                            ? 'Maximum rate reached for today.'
+                            : '${(maxBoostSteps - stepsToday).round()} more '
+                                  'steps to the max bonus '
+                                  '(+${(kEnergyMaxBoost * 100).round()}%).')
+                      : '$stepsToFull more steps to 100%. Below that, '
+                            'production and building still run — just slower, '
+                            'never stopped.',
+                  style: FoE.dim(
+                    size: 11,
+                  ).copyWith(color: ParchmentSheet.inkFaint),
                 ),
                 const SizedBox(height: 18),
                 // 15 / 4 / 11, not 14 / 2 / 10 (2026-08-31 audit) — the
@@ -156,7 +157,9 @@ class _EnergySheetState extends State<EnergySheet> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '100 steps = 1 energy · max ${kMaxEnergy.toStringAsFixed(0)}',
+                  '${kEnergyFullSteps.round()} steps = 100% · up to '
+                  '${maxBoostSteps.round()} = ${(100 + kEnergyMaxBoost * 100).round()}% '
+                  '· resets at midnight',
                   style: FoE.dim(
                     size: 11,
                   ).copyWith(color: ParchmentSheet.inkFaint),
@@ -184,7 +187,7 @@ class _EnergySheetState extends State<EnergySheet> {
                       ).copyWith(color: ParchmentSheet.ink),
                       cursorColor: ParchmentSheet.accent,
                       decoration: InputDecoration(
-                        hintText: 'e.g. 10 000',
+                        hintText: 'e.g. 5 000',
                         hintStyle: FoE.dim(
                           size: 16,
                         ).copyWith(color: ParchmentSheet.inkFaint),
@@ -211,14 +214,15 @@ class _EnergySheetState extends State<EnergySheet> {
                   if (_tc.text.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     Text(
-                      '+${_preview.toStringAsFixed(1)} energy',
+                      '→ ${(stepsToday + _typedSteps)} steps today · '
+                      '${(_previewMultiplier * 100).round()}% rate',
                       style: FoE.label(
                         size: 13,
                       ).copyWith(color: ParchmentSheet.accent),
                     ),
                   ],
                   const SizedBox(height: 16),
-                  GestureDetector(
+                  Pressable(
                     onTap: _loading ? null : _submit,
                     child: Container(
                       width: double.infinity,
@@ -302,7 +306,7 @@ class _EnergySheetState extends State<EnergySheet> {
             const SizedBox(height: 10),
             Row(
               children: [
-                GestureDetector(
+                Pressable(
                   onTap: () => tracker.start(),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -321,7 +325,7 @@ class _EnergySheetState extends State<EnergySheet> {
                 const SizedBox(width: 10),
                 // "Don't ask again" on the system dialog silently kills every
                 // in-app re-request — settings is the only way back then.
-                GestureDetector(
+                Pressable(
                   onTap: tracker.openPermissionSettings,
                   child: Text(
                     'Open settings',

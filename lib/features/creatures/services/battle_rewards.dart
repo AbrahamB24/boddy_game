@@ -69,6 +69,13 @@ List<RewardLine> battleRewardsFor(int battleNumber) {
             '${node.rewards.expansions > 1 ? 's' : ''}',
       ));
     }
+    if (node.rewards.huntOptions > 0) {
+      lines.add(RewardLine(
+        '🪤',
+        '+${node.rewards.huntOptions} longer hunt'
+            '${node.rewards.huntOptions > 1 ? 's' : ''} unlocked',
+      ));
+    }
   } else {
     // No authored node (path emptied) — fall back to the legacy unlock tables.
     for (final e in kBuildingUnlockBattle.entries) {

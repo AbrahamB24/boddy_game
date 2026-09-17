@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/ui/pressable.dart';
 
 /// An unfilled monster/egg slot — the "+" tile every picker in the game
 /// shows for a place waiting to be filled (team slots, hunt/expedition/
@@ -26,7 +27,7 @@ class EmptyMonsterSlot extends StatelessWidget {
   const EmptyMonsterSlot({super.key, required this.onTap, this.label});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) => Pressable(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: LayoutBuilder(

@@ -133,22 +133,22 @@ void main() {
   });
 
   group('what is tradeable', () {
-    test('era I trades wood, stone and its two luxuries — nothing later', () {
+    test('region 1 trades wood, stone and its one luxury — nothing later', () {
       final e1 = tradeableResources(1);
-      expect(e1, containsAll(['wood', 'stone', 'fish', 'meat']));
-      expect(e1, isNot(contains('honey'))); // era II
+      expect(e1, containsAll(['wood', 'stone', 'fish']));
+      expect(e1, isNot(contains('meat'))); // region 2
       expect(e1, isNot(contains('gold'))); // gold is the price, not the ware
     });
 
-    test('a later era adds its goods without dropping the old ones', () {
+    test('a later region adds its goods without dropping the old ones', () {
       final e3 = tradeableResources(3);
-      expect(e3, containsAll(['fish', 'honey', 'wine']));
+      expect(e3, containsAll(['fish', 'meat', 'wine']));
       expect(e3.length, greaterThan(tradeableResources(1).length));
     });
   });
 
   group('the Trade Center building', () {
-    test('exists, is era I and unlocks mid-era on the path', () {
+    test('exists, is era I and is on the path', () {
       final def = kFallbackBuildingDefs['trading_post'];
       expect(def, isNotNull, reason: 'the Market action keys on this id');
       expect(def!.eraIds, contains('era_1'));

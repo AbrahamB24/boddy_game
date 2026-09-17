@@ -14,6 +14,7 @@ import '../../settlement/services/crafting.dart';
 import '../../settlement/services/daily_tasks.dart' show DailyTaskKind;
 import '../../settlement/services/gold_economy.dart';
 import '../../settlement/settlement_controller.dart';
+import '../models/ability_def.dart';
 import '../models/combatant.dart';
 import '../models/creature_enums.dart';
 import '../models/creature_instance.dart';
@@ -21,9 +22,9 @@ import '../models/saved_team.dart';
 import '../models/species_def.dart';
 import 'creature_defs_controller.dart';
 import 'creature_service.dart';
-import 'expedition_risk.dart';
 import 'healing_cost.dart';
 import 'saved_team_service.dart';
+import 'training_cost.dart';
 
 // Singleton holding the player's creature collection, same ChangeNotifier
 // pattern as SettlementController.
@@ -363,6 +364,7 @@ class CreaturesController extends ChangeNotifier {
       creatures = await _svc.loadOwn(userId);
       _loadedOnce = true;
       await _backfillGenes();
+      await _backfillAbilities();
     } catch (e) {
       debugPrint('[CreaturesController] load failed: $e');
     }
@@ -397,6 +399,27 @@ class CreaturesController extends ChangeNotifier {
     }
   }
 
+  /// One-time legacy migration: a row saved before ability training existed
+  /// (Combat School, user 2026-09-05) is granted, as learned AND equipped,
+  /// exactly what the OLD species+stage rule already gave it — see
+  /// [CreatureInstance.backfillAbilities]. No-op once every creature is
+  /// migrated, and a safe no-op (retried next load) while species/ability
+  /// defs haven't finished loading yet.
+  Future<void> _backfillAbilities() async {
+    for (final c in creatures) {
+      if (!c.needsAbilityBackfill) continue;
+      if (c.backfillAbilities()) {
+        try {
+          await _svc.update(c);
+        } catch (e) {
+          debugPrint(
+            '[CreaturesController] ability backfill persist failed: $e',
+          );
+        }
+      }
+    }
+  }
+
   // ── Work assignment (settlement economy) ──────────────────
   /// Sets (or clears) a creature's workshop posting and persists it. Slot/
   /// functional validation lives in SettlementController.assignCreatureToWorkshop
@@ -418,6 +441,16 @@ class CreaturesController extends ChangeNotifier {
 
   /// Clears the posting of every creature stationed in [buildingId] (called
   /// when that building is demolished so nobody stays stuck pointing at it).
+  /// LOCAL first, network after (2026-09-12, same reasoning as
+  /// [SettlementController.setPaused]) — this used to await every creature's
+  /// save in a sequential loop before returning, and its one caller
+  /// ([SettlementController.deleteBuilding]) awaits it before that building
+  /// even disappears from the map. Demolishing a building staffed by three
+  /// workers meant three back-to-back network round trips between the tap
+  /// and anything visibly happening — exactly the "reaction until a button
+  /// press is executed" lag reported. The unassignment is already true and
+  /// visible the instant [notifyListeners] fires below; persisting it is a
+  /// durability concern, not something the caller needs to wait on.
   Future<void> unassignAllFrom(String buildingId) async {
     final affected =
         creatures.where((c) => c.assignedBuildingId == buildingId).toList();
@@ -427,6 +460,10 @@ class CreaturesController extends ChangeNotifier {
       c.assignedStat = null;
     }
     notifyListeners();
+    unawaited(_persistUnassigned(affected));
+  }
+
+  Future<void> _persistUnassigned(List<CreatureInstance> affected) async {
     for (final c in affected) {
       try {
         await _svc.update(c);
@@ -461,7 +498,17 @@ class CreaturesController extends ChangeNotifier {
       statBase: draft.statBase,
       statSlope: draft.statSlope,
       isStarter: true,
+      // null, not the constructor's usual `[]` default — every OTHER
+      // ordinary creation site wants a genuine blank slate, but a starter
+      // must open already knowing its innate kit (user 2026-09-05: "mein
+      // Monster kann nur Attack, aber es sollte zum Start bereits 4
+      // Fähigkeiten haben, so wie vor dem AbilitesUpdate... Dies sind
+      // Startfähigkeiten, welche bereits erlernt sind"). backfillAbilities
+      // below does the actual granting; this null is just what tells it
+      // there's nothing there yet to overwrite.
+      learnedAbilityIds: null,
     );
+    starter.backfillAbilities();
     try {
       final created = await _svc.insert(starter);
       creatures.add(created);
@@ -543,13 +590,15 @@ class CreaturesController extends ChangeNotifier {
     return null;
   }
 
-  /// The era's level cap (user 2026-07-22) — every XP grant in this controller
-  /// goes through it, so era progression has ONE seam.
+  /// The current region's level cap (user 2026-07-22) — every XP grant in
+  /// this controller goes through it, so region progression has ONE seam.
+  /// Reads `dungeonMaxStage` directly (user 2026-09-05: no paid ascension
+  /// standing between beating a region's boss and its level cap applying).
   ///
-  /// The era XP MULTIPLIER that used to sit beside it is gone (user
-  /// 2026-07-26): a source now pays exactly what it says, in every era.
+  /// The per-region XP MULTIPLIER that used to sit beside it is gone (user
+  /// 2026-07-26): a source now pays exactly what it says, in every region.
   int get eraLevelCap =>
-      creatureLevelCap(SettlementController().currentEra?.order ?? 1);
+      creatureLevelCap(SettlementController().dungeonMaxStage);
 
   /// Dev-mode helper: grant XP and persist.
   Future<void> devGainXp(CreatureInstance creature, int amount) async {
@@ -617,7 +666,11 @@ class CreaturesController extends ChangeNotifier {
       stage: wild.stage,
       statBase: Map.of(wild.wildStatBase!),
       statSlope: Map.of(wild.wildStatSlope!),
+      // Opens already knowing its innate kit, same as a starter — see
+      // adoptStarter's own doc.
+      learnedAbilityIds: null,
     );
+    caught.backfillAbilities();
     try {
       final created = await _svc.insert(caught);
       creatures.add(created);
@@ -917,13 +970,6 @@ class CreaturesController extends ChangeNotifier {
     final settlement = SettlementController();
     final intro = settlement.introStep.isActive;
 
-    // NOTHING RUNS ON AN EMPTY TANK (user 2026-07-27) — treatment included.
-    // The dev free-heal and the scripted tutorial heal are exempt: neither is
-    // the settlement working, and blocking the intro would dead-end it.
-    if (!free && !intro && !settlement.hasEnergy) {
-      return SettlementController.kNoEnergyMessage;
-    }
-
     // Concurrent-heal cap from the Healing Hut's per-level `healSlots` effect
     // (user 2026-07-25). null = no building authored one → unlimited (the old
     // behaviour). The dev free-heal and the tutorial are INSTANT, so they
@@ -966,7 +1012,12 @@ class CreaturesController extends ChangeNotifier {
       if (free || intro) {
         _finishHeal(c);
       } else {
-        c.healingUntil = now.add(healDuration(c) * speedMult);
+        // No more energy gate (user 2026-09-14, was "NOTHING RUNS ON AN
+        // EMPTY TANK" from 2026-07-27) — low energy stretches treatment
+        // instead of refusing to start it.
+        c.healingUntil = now.add(
+          healDuration(c) * (speedMult / settlement.energyMultiplier),
+        );
         // A REAL deadline (unlike crafting/construction, which accrue seconds and
         // whose finish time moves with staffing), so it can be promised (user
         // 2026-07-30).
@@ -1181,6 +1232,12 @@ class CreaturesController extends ChangeNotifier {
           GameEventKind.craft,
           '${def.emoji} ${c.displayName} revived to ${c.hp} HP',
         );
+      case ItemKind.cureStatus:
+      case ItemKind.cureDebuffs:
+        // A main/secondary status is Combatant-only runtime state — nothing
+        // on the collection creature to cure once the fight is over (see
+        // ItemKind.cureStatus's own doc).
+        return 'Only usable in battle.';
       default:
         // catchBoost / expeditionYield / breedSpeed are used in their own flows,
         // not on a single creature here.
@@ -1208,21 +1265,257 @@ class CreaturesController extends ChangeNotifier {
     return null;
   }
 
-  /// Applies expedition casualties (see expedition_risk.dart): removes the
-  /// rolled HP from each hurt member and persists it. K.O. members drop to 0
-  /// HP and must be healed (Healing Hut / dev heal) before working again.
-  Future<void> applyExpeditionCasualties(List<Casualty> casualties) async {
-    for (final cas in casualties) {
-      final c = byId(cas.creatureId);
-      if (c == null) continue;
-      c.hp = c.hp - cas.hpLost; // setter clamps to [0, maxHp]
+  // ── Combat School: ability training (user 2026-09-05) ───────
+  // Same shape as the Healing Hut's queue above — a capacity + a line, both
+  // level-scaled building effects (SettlementController.trainCapacity/
+  // trainQueueCapacity) — with one difference: starting a job needs a choice
+  // (WHICH ability), not just a monster, so the entry point takes an id.
+
+  /// Creatures with a lesson in progress right now.
+  List<CreatureInstance> get trainingCreatures =>
+      creatures.where((c) => c.isTraining).toList();
+
+  /// Who is in line for the Combat School, oldest first.
+  List<CreatureInstance> get trainQueue {
+    final list = creatures.where((c) => c.isQueuedForTraining).toList();
+    list.sort((a, b) => a.trainQueuedAt!.compareTo(b.trainQueuedAt!));
+    return list;
+  }
+
+  /// Room left in the line, or null when the school has no `trainQueue`
+  /// effect authored (an unlimited line).
+  int? get freeTrainQueueSlots {
+    final cap = SettlementController().trainQueueCapacity;
+    return cap == null ? null : cap - trainQueue.length;
+  }
+
+  int? get _freeTrainSlots {
+    final cap = SettlementController().trainCapacity;
+    return cap == null ? null : cap - trainingCreatures.length;
+  }
+
+  /// Starts [c] learning [abilityId] — straight into a lesson when a slot is
+  /// free, into the line only when there is none. Mirrors [queueForHealing]'s
+  /// own straight-in-or-queue rule.
+  Future<String?> queueForTraining(CreatureInstance c, String abilityId) async {
+    if (c.isTraining || c.isQueuedForTraining) {
+      return '${c.displayName} is already at the Combat School.';
+    }
+    if (c.learnedAbilityIds.contains(abilityId)) {
+      return '${c.displayName} already knows that.';
+    }
+    if (!c.learnableAbilities.any((a) => a.id == abilityId)) {
+      return "${c.displayName} can't learn that move.";
+    }
+    final slots = _freeTrainSlots;
+    if (slots == null || slots > 0) {
+      return _startTraining(c, abilityId);
+    }
+    final freeQueue = freeTrainQueueSlots;
+    if (freeQueue != null && freeQueue <= 0) {
+      return 'The Combat School is full — wait for a lesson to finish.';
+    }
+    c.trainingAbilityId = abilityId;
+    c.trainQueuedAt = DateTime.now();
+    await _persistQuietly(c);
+    notifyListeners();
+    return null;
+  }
+
+  /// Takes [c] out of the line. Nothing was billed, so nothing to refund.
+  Future<void> unqueueTraining(CreatureInstance c) async {
+    if (c.trainQueuedAt == null) return;
+    c.trainingAbilityId = null;
+    c.trainQueuedAt = null;
+    await _persistQuietly(c);
+    notifyListeners();
+  }
+
+  /// The one body behind a job actually starting, whether straight away
+  /// ([queueForTraining]) or pulled off the line ([_autoStartQueuedTrainings]).
+  Future<String?> _startTraining(CreatureInstance c, String abilityId) async {
+    final settlement = SettlementController();
+    final ability = kAbilityDefs[abilityId];
+    if (ability == null) return 'Unknown ability';
+    c.trainingAbilityId = abilityId;
+    c.trainQueuedAt = null;
+    // No more energy gate (user 2026-09-14, was "NOTHING RUNS ON AN EMPTY
+    // TANK") — low energy stretches the lesson instead of refusing to start
+    // it. The intro's own jumpstart-scale exemption for this system never
+    // existed as a separate check — energy's own rate already reads 100%
+    // by default, so nothing extra is needed to keep the tutorial unaffected.
+    c.trainingUntil = DateTime.now().add(
+      trainingDuration(ability) * (1.0 / settlement.energyMultiplier),
+    );
+    unawaited(GameNotifications.schedule(
+      kind: NotifyKind.training,
+      key: c.id,
+      at: c.trainingUntil!,
+      title: '🥋 Lesson complete',
+      body: '${c.displayName} finished learning ${ability.name}.',
+    ));
+    try {
+      await _svc.update(c);
+    } catch (e) {
+      debugPrint('[CreaturesController] start training persist failed: $e');
+    }
+    notifyListeners();
+    return null;
+  }
+
+  /// Pulls the queue into training as slots free — mirrors
+  /// [_autoStartQueuedHeals] exactly, minus the goods bill (training only
+  /// costs time).
+  Future<void> _autoStartQueuedTrainings() async {
+    final settlement = SettlementController();
+    if (settlement.introStep.isActive) return;
+    final waiting = trainQueue;
+    final cap = settlement.trainCapacity;
+    var free = cap == null ? waiting.length : cap - trainingCreatures.length;
+    if (waiting.isEmpty || free <= 0) {
+      await _enforceTrainQueueCap();
+      return;
+    }
+    var started = false;
+    for (final c in waiting) {
+      if (free <= 0) break;
+      // No more energy break here (user 2026-09-14) — a queued lesson
+      // always starts now, just runs longer at low energy (see
+      // _startTraining's own duration scaling).
+      final abilityId = c.trainingAbilityId;
+      final ability = abilityId == null ? null : kAbilityDefs[abilityId];
+      if (ability == null) continue;
+      c.trainingUntil = DateTime.now().add(trainingDuration(ability));
+      c.trainQueuedAt = null;
+      unawaited(GameNotifications.schedule(
+        kind: NotifyKind.training,
+        key: c.id,
+        at: c.trainingUntil!,
+        title: '🥋 Lesson complete',
+        body: '${c.displayName} finished learning ${ability.name}.',
+      ));
       try {
         await _svc.update(c);
       } catch (e) {
-        debugPrint('[CreaturesController] casualty persist failed: $e');
+        debugPrint('[CreaturesController] queued training persist failed: $e');
+      }
+      free--;
+      started = true;
+    }
+    if (started) notifyListeners();
+    await _enforceTrainQueueCap();
+  }
+
+  /// Drops anyone standing beyond the waiting room's capacity — mirrors
+  /// [_enforceHealQueueCap] exactly.
+  Future<void> _enforceTrainQueueCap() async {
+    final cap = SettlementController().trainQueueCapacity;
+    if (cap == null) return;
+    final line = trainQueue;
+    if (line.length <= cap) return;
+    var changed = false;
+    for (final c in line.skip(cap)) {
+      c.trainingAbilityId = null;
+      c.trainQueuedAt = null;
+      await _persistQuietly(c);
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Completes every lesson whose timer has elapsed — lazy, like healing:
+  /// called on load and on the settlement tick, so a lesson that finished
+  /// while the app was closed is simply done.
+  Future<void> resolveFinishedTrainings() async {
+    final due = creatures
+        .where((c) => c.trainingUntil != null && !c.isTraining)
+        .toList();
+    if (due.isEmpty) {
+      await _autoStartQueuedTrainings();
+      return;
+    }
+    for (final c in due) {
+      final abilityId = c.trainingAbilityId;
+      final finishedAt = c.trainingUntil;
+      unawaited(GameNotifications.cancel(NotifyKind.training, c.id));
+      c.trainingUntil = null;
+      c.trainingAbilityId = null;
+      if (abilityId != null && !c.learnedAbilityIds.contains(abilityId)) {
+        c.learnedAbilityIds = [...c.learnedAbilityIds, abilityId];
+        // Auto-equip only into a FREE slot — never silently bump an existing
+        // pick out just because something new finished training.
+        if (c.equippedAbilityIds.length < kMaxEquippedAbilities) {
+          c.equippedAbilityIds = [...c.equippedAbilityIds, abilityId];
+        }
+      }
+      try {
+        await _svc.update(c);
+      } catch (e) {
+        debugPrint('[CreaturesController] training resolve persist failed: $e');
+      }
+      if (abilityId != null) {
+        GameEventLog().add(
+          GameEventKind.levelUp,
+          '${c.displayName} learned ${kAbilityDefs[abilityId]?.name ?? abilityId}',
+          at: finishedAt,
+        );
       }
     }
-    if (casualties.isNotEmpty) notifyListeners();
+    notifyListeners();
+    await _autoStartQueuedTrainings();
+  }
+
+  int trainSkipCost(CreatureInstance c) => goldToSkip(c.trainingRemaining);
+
+  /// Pays gold to finish [c]'s current lesson now.
+  Future<String?> skipTrainWithGold(CreatureInstance c) async {
+    if (!c.isTraining) return 'It is not training.';
+    final cost = trainSkipCost(c);
+    final settlement = SettlementController();
+    if (!await settlement.spendResources({'gold': cost.toDouble()})) {
+      return 'Not enough gold (need $cost, have ${settlement.gold.toInt()}).';
+    }
+    final abilityId = c.trainingAbilityId;
+    unawaited(GameNotifications.cancel(NotifyKind.training, c.id));
+    c.trainingUntil = null;
+    c.trainingAbilityId = null;
+    if (abilityId != null && !c.learnedAbilityIds.contains(abilityId)) {
+      c.learnedAbilityIds = [...c.learnedAbilityIds, abilityId];
+      if (c.equippedAbilityIds.length < kMaxEquippedAbilities) {
+        c.equippedAbilityIds = [...c.equippedAbilityIds, abilityId];
+      }
+    }
+    try {
+      await _svc.update(c);
+    } catch (e) {
+      debugPrint('[CreaturesController] train skip persist failed: $e');
+    }
+    notifyListeners();
+    return null;
+  }
+
+  /// The Creature Detail screen's equip control (user 2026-09-05: "sobald
+  /// erlernt, können diese ... immer ausgewählt werden") — no building, no
+  /// wait, just picking which [kMaxEquippedAbilities] of what's already
+  /// learned are battle-usable right now.
+  Future<String?> setEquipped(
+    CreatureInstance c,
+    List<String> abilityIds,
+  ) async {
+    if (abilityIds.length > kMaxEquippedAbilities) {
+      return 'At most $kMaxEquippedAbilities abilities may be equipped.';
+    }
+    if (abilityIds.any((id) => !c.learnedAbilityIds.contains(id))) {
+      return "${c.displayName} hasn't learned all of those yet.";
+    }
+    c.equippedAbilityIds = List.of(abilityIds);
+    notifyListeners();
+    try {
+      await _svc.update(c);
+    } catch (e) {
+      debugPrint('[CreaturesController] setEquipped persist failed: $e');
+    }
+    return null;
   }
 
   /// Writes a finished battle back to the collection: the participants'

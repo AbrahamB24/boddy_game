@@ -10,6 +10,7 @@ import 'settlement_controller.dart';
 import 'sheets/building_detail_dialog.dart';
 import 'widgets/building_icon.dart';
 import 'widgets/scroll_paper.dart' show kActionGreen;
+import '../../core/ui/pressable.dart';
 
 /// "Wo kommt der Lagerplatz her" — the Resource screen's "In store" bar
 /// opens THIS now instead of a section at the bottom of that page (user
@@ -219,7 +220,7 @@ class _StorageDetailScreenState extends State<StorageDetailScreen> {
     final (b, def, amount) = s;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: GestureDetector(
+      child: Pressable(
         behavior: HitTestBehavior.opaque,
         onTap: () => showBuildingDetailDialog(context, _ctrl, b),
         child: Container(

@@ -62,31 +62,36 @@ PLOT_X = _dart_const('kInitialPlotX')
 PLOT_Y = _dart_const('kInitialPlotY')
 PLOT_SIZE = _dart_const('kInitialPlotSize')
 
+# ── Richer, to match the buildings (user 2026-09-07: "jetzt noch den
+# Hintergrund ebenfalls mit dieser neuen Farbpalette") ── same formula as
+# render_building.py's PALETTE: HSV saturation closes 25% of the gap to fully
+# saturated, exact greys left alone. See _boost_saturation.py's docstring for
+# why that beats a straight multiply (it clips already-vivid tones flat).
 TERRAIN = {
-    'grass': (0.36, 0.55, 0.26),
-    'grass_dry': (0.44, 0.57, 0.27),
-    'grass_dark': (0.31, 0.50, 0.24),
-    'water': (0.20, 0.48, 0.68),
-    'water_deep': (0.13, 0.34, 0.55),
-    'shore': (0.80, 0.74, 0.52),
-    'shore_wet': (0.68, 0.62, 0.44),
-    'trunk': (0.34, 0.24, 0.16),
-    'canopy': (0.24, 0.42, 0.20),
-    'canopy_light': (0.34, 0.51, 0.24),
-    'canopy_dark': (0.17, 0.32, 0.17),
+    'grass': (0.317, 0.550, 0.195),
+    'grass_dry': (0.411, 0.570, 0.202),
+    'grass_dark': (0.266, 0.500, 0.180),
+    'water': (0.150, 0.459, 0.680),
+    'water_deep': (0.097, 0.324, 0.550),
+    'shore': (0.800, 0.712, 0.390),
+    'shore_wet': (0.680, 0.593, 0.330),
+    'trunk': (0.340, 0.218, 0.120),
+    'canopy': (0.199, 0.420, 0.150),
+    'canopy_light': (0.302, 0.510, 0.180),
+    'canopy_dark': (0.128, 0.320, 0.128),
     # ── The detail palette (user 2026-08-09: "Bitte deutlich mehr Details") ──
     # Sized to SURVIVE: the ground ships at 4096 px for a 10240 px map, so a
     # cell is about twenty pixels and nothing under a quarter of a cell will
     # ever be seen. Every tone below is therefore attached to something at least
     # that big — a bush, a boulder, a reed bed — and not to speckle.
-    'shallow': (0.32, 0.62, 0.76),   # water over sand, the band at every shore
-    'foam': (0.80, 0.90, 0.92),      # where the water meets the beach
-    'rock': (0.52, 0.50, 0.47),
-    'rock_dark': (0.38, 0.36, 0.35),
-    'dirt': (0.46, 0.38, 0.27),      # worn ground, cart tracks, a bare bank
-    'reed': (0.44, 0.56, 0.26),
-    'heather': (0.55, 0.40, 0.52),   # the one cool flower note
-    'gorse': (0.86, 0.76, 0.26),     # and the one warm one
+    'shallow': (0.240, 0.595, 0.760),   # water over sand, the band at every shore
+    'foam': (0.600, 0.867, 0.920),      # where the water meets the beach
+    'rock': (0.520, 0.453, 0.352),
+    'rock_dark': (0.380, 0.302, 0.262),
+    'dirt': (0.460, 0.352, 0.203),      # worn ground, cart tracks, a bare bank
+    'reed': (0.414, 0.560, 0.195),
+    'heather': (0.550, 0.300, 0.500),   # the one cool flower note
+    'gorse': (0.860, 0.749, 0.195),     # and the one warm one
 }
 
 # ── The shape of the land ───────────────────────────────────
@@ -127,7 +132,13 @@ def river_spine(t):
     """
     x = 6.0 + (COLS - 6.0) * t
     y = 58.0 + 26.0 * math.sin(t * math.pi * 1.9 + 0.35) + 10.0 * t
-    w = 3.3 + 0.75 * math.sin(t * 7.0 + 0.6)
+    # Widened (user 2026-09-08: "Den Fluss etwas breiter machen (min. 2
+    # Felder überall)") — w is a HALF-width (see _river_depth: a cell counts
+    # as river within euclidean distance w of the spine), so total width is
+    # 2w. The floor here (2 * (4.2 - 1.0) = 6.4 cells) clears the 2-cell ask
+    # with plenty to spare; it was already well clear before this, so the
+    # widening is mostly about the "etwas breiter" half of the same request.
+    w = 4.2 + 1.0 * math.sin(t * 7.0 + 0.6)
     return x, y, w
 
 

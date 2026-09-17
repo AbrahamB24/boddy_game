@@ -6,7 +6,6 @@ import 'package:boddygame/features/creatures/models/creature_enums.dart';
 import 'package:boddygame/features/creatures/models/expedition.dart';
 import 'package:boddygame/features/creatures/services/capture_math.dart';
 import 'package:boddygame/features/creatures/services/combat_engine.dart';
-import 'package:boddygame/features/creatures/services/expedition_risk.dart';
 import 'package:boddygame/features/creatures/services/gather_math.dart';
 import 'package:boddygame/features/creatures/services/overworld_path.dart';
 import 'package:boddygame/features/settlement/data/building_definitions.dart';
@@ -46,12 +45,12 @@ void main() {
     });
 
     test('an untouched dial reports itself as untouched', () {
-      expect(GameTuning.i.isOverridden(Dials.energyMax), isFalse);
-      GameTuning.i.set(Dials.energyMax, 50);
-      expect(GameTuning.i.isOverridden(Dials.energyMax), isTrue);
-      GameTuning.i.reset(Dials.energyMax);
-      expect(GameTuning.i.isOverridden(Dials.energyMax), isFalse);
-      expect(kMaxEnergy, 100);
+      expect(GameTuning.i.isOverridden(Dials.energyFullSteps), isFalse);
+      GameTuning.i.set(Dials.energyFullSteps, 8000);
+      expect(GameTuning.i.isOverridden(Dials.energyFullSteps), isTrue);
+      GameTuning.i.reset(Dials.energyFullSteps);
+      expect(GameTuning.i.isOverridden(Dials.energyFullSteps), isFalse);
+      expect(kEnergyFullSteps, 5000);
     });
 
     test('the field conversions round-trip', () {
@@ -82,10 +81,10 @@ void main() {
       expect(buildTimeCut(100), closeTo(0.5, 1e-9));
       expect(kBreedingK, 60);
       expect(breedingTimeCut(60), closeTo(0.5, 1e-9));
-      expect(kMaxEnergy, 100);
-      expect(kEnergyPerStep, closeTo(0.01, 1e-9));
-      expect(kDrainPerHour, closeTo(100 / 24, 1e-9));
-      expect(kEnergyFloorRate, 0);
+      expect(kEnergyFullSteps, 5000);
+      expect(kEnergyFloorMultiplier, closeTo(0.25, 1e-9));
+      expect(kEnergyBoostPerThousandSteps, closeTo(0.05, 1e-9));
+      expect(kEnergyMaxBoost, closeTo(0.25, 1e-9));
       expect(kMaxTradeDiscount, 0.6);
       expect(kGoodsBuyMarkup, 2.5);
       expect(kBarterFee, 0.25);
@@ -93,7 +92,7 @@ void main() {
 
     test('campaign', () {
       expect(kBattlesBeforeBoss, 18);
-      expect(kBattlesPerEra, 19);
+      expect(kFallbackBattlesPerRegion, 19);
       expect(kBossLevelBonus, 3);
       expect(kMaxPartySize, 6);
       // The old ladder was [6, 15, era2Start, +6, +12] with era2Start = 20.
@@ -101,9 +100,8 @@ void main() {
       expect(partySizeForBattle(1), 1);
       expect(partySizeForBattle(6), 2);
       expect(partySizeForBattle(15), 3);
-      expect(kTravelSecondsPerDanger, 300);
+      expect(kTravelSeconds, 300);
       expect(kMaxTripSeconds, 24 * 3600);
-      expect(kThreatPerDanger, 60);
     });
 
     test('monster', () {
@@ -111,12 +109,18 @@ void main() {
       expect(kLevelsPerEra, 10);
       expect(kCreatureMaxLevel, 80);
       expect(kActionPointsByStage, [4, 6, 8]);
-      expect(kApRegenByStage, [3, 4, 5]);
+      // 2/3/4, not 3/4/5 (user 2026-09-07: "Stufe 1 regeneriert 2 AP, Stufe
+      // 2 3AP, und Stufe 3 regeneriert 4AP").
+      expect(kApRegenByStage, [2, 3, 4]);
       expect(kBaseActionPoints, 4);
       expect(kMaxActionPoints, 8);
-      expect(kBasicAttackApCost, 3);
+      // 2, not 3 (user 2026-09-08: "attack soll nur 2 AP kosten") — pinned
+      // explicitly now, no longer auto-derived from power.
+      expect(kBasicAttackApCost, 2);
       expect(kSwitchApCost, 2);
-      expect(kBuffApCost, 2);
+      // 1, not 2 (user 2026-09-08: "damit es einige [Buffs] mit nur 1 AP
+      // gibt") — a floor, so only a weak/short buff actually reaches it.
+      expect(kBuffApCost, 1);
       expect(kStartApFirst, 2);
       expect(kStartApSecond, 3);
       expect(CombatEngine.kFieldSlots, 3);
@@ -149,12 +153,18 @@ void main() {
     });
 
     test('the energy budget stays internally consistent', () {
-      GameTuning.i.set(Dials.energyMax, 200);
-      GameTuning.i.set(Dials.energyEmptyHours, 10);
-      GameTuning.i.set(Dials.energyStepsPerPoint, 50);
-      expect(kMaxEnergy, 200);
-      expect(kDrainPerHour, closeTo(20, 1e-9));
-      expect(kEnergyPerStep, closeTo(0.02, 1e-9));
+      GameTuning.i.set(Dials.energyFullSteps, 10000);
+      GameTuning.i.set(Dials.energyFloorMultiplier, 0.5);
+      GameTuning.i.set(Dials.energyBoostPerThousandSteps, 0.1);
+      GameTuning.i.set(Dials.energyMaxBoost, 0.5);
+      expect(kEnergyFullSteps, 10000);
+      expect(kEnergyFloorMultiplier, closeTo(0.5, 1e-9));
+      // Halfway to the (doubled) daily target sits halfway up the floor→100%
+      // ramp.
+      expect(energyMultiplierForSteps(5000), closeTo(0.75, 1e-9));
+      // 1000 steps past the target buys the full +0.1 boost, capped at +0.5.
+      expect(energyMultiplierForSteps(11000), closeTo(1.1, 1e-9));
+      expect(energyMultiplierForSteps(20000), closeTo(1.5, 1e-9));
     });
 
     test('the party ladder — and out-of-order entries still rise', () {
@@ -169,7 +179,7 @@ void main() {
 
     test('the boss bonus', () {
       GameTuning.i.set(Dials.bossLevelBonus, 10);
-      final boss = bossBattleForEra(1);
+      final boss = kFallbackBattlesPerRegion;
       expect(enemyLevelForBattle(boss) - enemyLevelForBattle(boss - 1),
           greaterThanOrEqualTo(10));
     });
@@ -191,16 +201,6 @@ void main() {
     test('the trade spread', () {
       GameTuning.i.set(Dials.goodsBuyMarkup, 4);
       expect(goodsBuyMarkup(0), closeTo(4, 1e-9));
-    });
-
-    test('the loot penalty ceiling', () {
-      final many = [
-        for (var i = 0; i < 20; i++)
-          Casualty(creatureId: '$i', hpLost: 1, ko: true),
-      ];
-      expect(lootPenalty(many), closeTo(0.4, 1e-9));
-      GameTuning.i.set(Dials.lootPenaltyMax, 0.9);
-      expect(lootPenalty(many), closeTo(0.9, 1e-9));
     });
   });
 }

@@ -18,7 +18,6 @@ const _area = AreaDef(
   emoji: '🌲',
   order: 1,
   battleStage: 1,
-  dangerLevel: 2,
 );
 
 const _spot = ResourceSpotDef(

@@ -15,6 +15,7 @@ import 'settlement_controller.dart';
 import 'widgets/building_icon.dart';
 import '../common/widgets/parchment_page.dart';
 import 'widgets/scroll_paper.dart';
+import '../../core/ui/pressable.dart';
 
 /// What the player picked in the Build menu, handed back through
 /// Navigator.pop. The menu itself performs nothing: what it returns is acted on
@@ -143,7 +144,11 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
   @override
   void initState() {
     super.initState();
-    _showMenuIntro = ctrl.introStep == IntroStep.buildHealingHut;
+    // Moved from buildHealingHut to buildRoad (user 2026-09-06): the road is
+    // the first target that actually needs "pick a category up top"
+    // explained — the Healing Hut's own step already lands on the right
+    // category by itself.
+    _showMenuIntro = ctrl.introStep == IntroStep.buildRoad;
   }
 
   @override
@@ -159,28 +164,53 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentEraId = ctrl.currentEra?.id ?? '';
     final stock = ctrl.resources?.asMap ?? {};
-    final available = availableBuildings(currentEraId, ctrl.battlesCleared);
+    final available =
+        availableBuildings(ctrl.dungeonMaxStage, ctrl.battlesCleared);
     final sections = _sections(available);
 
     // Guided tutorial: the step's target building is the only tappable card —
     // everything else is dimmed and dead by the spotlight overlay. Held off
-    // while the menu's own one-time intro card is still up top.
+    // while the menu's own one-time intro card is still up top. Checked
+    // against every SECTIONED def, not just `available` — a road is
+    // deliberately excluded from `available` (see _sections' own doc) but
+    // still needs to be spotlightable for buildRoad.
     final introTarget = introBuildTarget(ctrl.introStep);
     final spotlight =
         !_showMenuIntro &&
         introTarget != null &&
-        available.any((d) => d.id == introTarget);
+        sections.any((s) => s.defs.any((d) => d.id == introTarget));
 
-    // Land on a sensible category: the tutorial's, else the first non-empty.
-    final selected = _resolveSelected(sections, spotlight ? introTarget : null);
+    // buildRoad wants the player to pick its own category tab (user
+    // 2026-09-06: "oben den Reiter auswählen") rather than land on it
+    // automatically — every other build step still does.
+    final requiresManualCategory = ctrl.introStep == IntroStep.buildRoad;
+    final targetCategory = spotlight
+        ? categoryOfBuilding(kBuildingDefs[introTarget]!)
+        : null;
+
+    // Land on a sensible category: the tutorial's (unless it wants a manual
+    // pick), else the player's own, else the first non-empty.
+    final selected = _resolveSelected(
+      sections,
+      spotlight && !requiresManualCategory ? introTarget : null,
+    );
     final defs = sections
         .firstWhere(
           (s) => s.cat == selected,
           orElse: () => (cat: selected, defs: <BuildingDef>[]),
         )
         .defs;
+
+    // While a manual pick is wanted and hasn't happened yet, the category
+    // ROW is the one lit control — the target row is not even on screen
+    // until the player gets to its category themselves, so spotlighting it
+    // too (or at all) would dim-and-dead-zone the WHOLE menu with no hole
+    // anywhere (see IntroSpotlightOverlay's own doc on a not-yet-laid-out
+    // anchor).
+    final categorySpotlight =
+        spotlight && requiresManualCategory && selected != targetCategory;
+    final rowSpotlight = spotlight && !categorySpotlight;
 
     return Stack(
       children: [
@@ -201,14 +231,23 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _categoryPills(sections, selected),
+                _categoryPills(
+                  sections,
+                  selected,
+                  spotlightCategory: categorySpotlight ? targetCategory : null,
+                ),
                 Expanded(child: _cards(defs, stock, introTarget, 0)),
               ],
             ),
           ),
         ),
-        if (spotlight)
+        if (rowSpotlight)
           const IntroSpotlightOverlay(anchorName: 'build-target-row'),
+        if (categorySpotlight)
+          IntroSpotlightOverlay(
+            anchorName: 'build-category-row',
+            hint: 'Tap ${targetCategory!.label} — that\'s where the road is',
+          ),
         if (_showMenuIntro) _menuIntroOverlay(),
       ],
     );
@@ -218,7 +257,7 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
   /// (categories, workers, queue, resources, time, limits) at once — see
   /// [_showMenuIntro] for why this is one card rather than a sequence.
   Widget _menuIntroOverlay() => Positioned.fill(
-    child: GestureDetector(
+    child: Pressable(
       behavior: HitTestBehavior.opaque,
       onTap: () => setState(() => _showMenuIntro = false),
       child: Container(
@@ -269,8 +308,12 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
   /// tab only has to be as wide as its icon, not as wide as "Materials".
   Widget _categoryPills(
     List<({BuildingCategory cat, List<BuildingDef> defs})> sections,
-    BuildingCategory selected,
-  ) => Padding(
+    BuildingCategory selected, {
+    /// The one tab the guided tutorial wants tapped right now (buildRoad,
+    /// user 2026-09-06) — null the rest of the time, when landing on the
+    /// right category is done for the player instead.
+    BuildingCategory? spotlightCategory,
+  }) => Padding(
     padding: const EdgeInsets.fromLTRB(_contentInset, 4, _contentInset, 6),
     child: SizedBox(
       height: 48,
@@ -279,7 +322,14 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
           for (final s in sections) ...[
             if (s != sections.first) const SizedBox(width: 6),
             Expanded(
-              child: _categoryTab(s.cat, s.defs.length, s.cat == selected),
+              child: _categoryTab(
+                s.cat,
+                s.defs.length,
+                s.cat == selected,
+                anchorKey: s.cat == spotlightCategory
+                    ? IntroSpotlightAnchors.of('build-category-row')
+                    : null,
+              ),
             ),
           ],
         ],
@@ -287,12 +337,17 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
     ),
   );
 
-  Widget _categoryTab(BuildingCategory cat, int count, bool active) {
+  Widget _categoryTab(
+    BuildingCategory cat,
+    int count,
+    bool active, {
+    Key? anchorKey,
+  }) {
     // Same warm pill as every button (user 2026-07-23): the selected tab is the
     // gold chip, the rest faded parchment — so the tab strip, the dialog's
     // buttons and the menu's buttons all read as one language on the scroll.
     final ink = parchmentButtonInk(active: active);
-    return Material(
+    final tab = Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
@@ -333,6 +388,7 @@ class _BuildMenuScreenState extends State<BuildMenuScreen> {
         ),
       ),
     );
+    return anchorKey == null ? tab : KeyedSubtree(key: anchorKey, child: tab);
   }
 
   // ── The grid of buildings ───────────────────────────────────
@@ -574,7 +630,7 @@ class _BuildCard extends StatelessWidget {
     final poor = !def.canAfford(stock);
     final enabled = !atMax && !queueFull && !poor;
 
-    return GestureDetector(
+    return Pressable(
       onTap: enabled ? onTap : null,
       // Opaque: the art rises above the tile, so parts of the hit area are
       // empty and the default (deferToChild) would drop taps that land there.
@@ -681,7 +737,7 @@ class _BuildCard extends StatelessWidget {
             Positioned(
               left: 4,
               top: overhang + 4,
-              child: GestureDetector(
+              child: Pressable(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => showBuildingUpgradeSheet(context, def),
                 // INVERTED, not a wash (user 2026-07-26: "besser sichtbar
@@ -812,8 +868,9 @@ class _BuildCard extends StatelessWidget {
 
   // Rate/duration formulas here mirror GameEngine.tick()'s construction math
   // (same buildRatePerHour). Every active site now builds at the FULL rate
-  // (user 2026-07-24: no split). Energy only gates whether production runs at
-  // all, never a fractional slowdown, so `energy.fraction` must NOT appear.
+  // (user 2026-07-24: no split). Energy is a continuous daily-steps rate now
+  // (user 2026-09-14), not a gate — `energy.multiplier` scales this exactly
+  // the way GameEngine.tick's own effectiveHours does.
   String _buildTimeText() {
     if (def.isRoad) return 'Free · instant';
     if (def.constructionSeconds <= 0) return 'Instant';
@@ -822,11 +879,7 @@ class _BuildCard extends StatelessWidget {
     final active = ctrl.activeConstructionCount;
     // buildRatePerHour ALREADY includes buildSpeedMultiplier — multiplying
     // again squares it.
-    // Empty tank = floor rate, not zero (energy boosts, it no longer gates).
-    final rate =
-        ctrl.buildRatePerHour /
-        3600.0 *
-        (e.currentEnergy > 0 ? 1.0 : kEnergyFloorRate);
+    final rate = ctrl.buildRatePerHour / 3600.0 * e.multiplier;
     if (rate <= 0) return active >= ctrl.maxBuildSlots ? 'Queued (∞)' : '∞';
     final dur = fmtDuration(def.constructionSeconds / rate);
     return active >= ctrl.maxBuildSlots ? 'Queued ~$dur' : dur;
@@ -855,9 +908,9 @@ class _BuildCard extends StatelessWidget {
     // never sees it. Without this a building whose ENTIRE bonus is passive
     // output showed "No bonus" (user request 2026-08-27: list the level-1
     // effects under the title).
-    final era = ctrl.settlement?.eraIndex ?? 1;
+    final region = ctrl.dungeonMaxStage;
     for (final res in def.effectKeys('production')) {
-      final rate = def.effectAt('production', res, era, level: 1);
+      final rate = def.effectAt('production', res, region, level: 1);
       if (rate > 0) {
         parts.add('${resourceEmoji(res)} +${rate.toStringAsFixed(1)}/h');
       }
@@ -916,9 +969,9 @@ class _BuildCard extends StatelessWidget {
         ).copyWith(color: _ink(enabled), fontWeight: FontWeight.w700),
       );
     }
-    // Era-II costs already run to three entries (wood + stone + frame) and a
-    // later era's will run to four. Scale-down keeps them on ONE line at any
-    // count rather than overflowing the narrower grid card.
+    // Region-II costs already run to three entries (wood + stone + frame) and
+    // a later region's will run to four. Scale-down keeps them on ONE line at
+    // any count rather than overflowing the narrower grid card.
     return FittedBox(
       fit: BoxFit.scaleDown,
       child: Row(

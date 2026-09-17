@@ -12,6 +12,7 @@ import '../services/game_defs_service.dart';
 import 'dev_theme.dart';
 import 'path_node_form.dart';
 import 'path_species_sheet.dart';
+import '../../../core/ui/pressable.dart';
 
 // The Dev-Mode "Pfad" tab (user 2026-07-25): the linear overworld path as an
 // editable, REORDERABLE list of battle nodes. Drag to move a node (also between
@@ -142,7 +143,7 @@ class _PathEditorTabState extends State<PathEditorTab> {
           child: Row(
             children: [
               Expanded(
-                child: GestureDetector(
+                child: Pressable(
                   onTap: () => _open(null),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -157,7 +158,7 @@ class _PathEditorTabState extends State<PathEditorTab> {
               const SizedBox(width: 10),
               // The counterpart to the dice in the node form: what the path is
               // actually made of, across every node at once.
-              GestureDetector(
+              Pressable(
                 onTap: _showSpecies,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -226,11 +227,12 @@ class _PathEditorTabState extends State<PathEditorTab> {
       // — the node form is where the split matters.
       if (n.rewards.items.isNotEmpty) '🎁 ${n.rewards.items.length}',
       if (n.rewards.expansions > 0) '🗺 ${n.rewards.expansions}',
+      if (n.rewards.huntOptions > 0) '🪤 ${n.rewards.huntOptions}',
     ];
     return Padding(
       key: ValueKey(n.id),
       padding: const EdgeInsets.only(bottom: 6),
-      child: GestureDetector(
+      child: Pressable(
         onTap: () => _open(n),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),

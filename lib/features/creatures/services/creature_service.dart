@@ -21,6 +21,11 @@ class CreatureService {
     'healing_until',
     'heal_queued_at',
     'is_starter',
+    'learned_ability_ids',
+    'equipped_ability_ids',
+    'training_ability_id',
+    'training_until',
+    'train_queued_at',
   ];
 
   Future<List<CreatureInstance>> loadOwn(String userId) async {

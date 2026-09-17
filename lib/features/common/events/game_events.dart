@@ -26,8 +26,7 @@ enum GameEventKind {
   research('🔬'),
   building('🏕'),
   breeding('🥚'),
-  craft('🔨'),
-  casualty('💔');
+  craft('🔨');
 
   final String emoji;
   const GameEventKind(this.emoji);

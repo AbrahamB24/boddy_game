@@ -57,6 +57,10 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
   /// whether a trade is worth sending at all.
   CreatureStat _sortStat = CreatureStat.carry;
 
+  /// Filter, added alongside search+sort everywhere a monster is picked (user
+  /// 2026-09-11).
+  CreatureElement? _filterElement;
+
   @override
   void dispose() {
     _search.dispose();
@@ -72,7 +76,9 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
     final q = _query.trim().toLowerCase();
     final list = [
       for (final c in _creatures.availableForExpedition())
-        if (q.isEmpty || c.displayName.toLowerCase().contains(q)) c,
+        if ((_filterElement == null || c.species?.element == _filterElement) &&
+            (q.isEmpty || c.displayName.toLowerCase().contains(q)))
+          c,
     ];
     // Best first — a hauler is picked on one number, and scrolling for it is
     // the job the sort exists to save.
@@ -106,6 +112,8 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
                   Expanded(flex: 3, child: _searchPill()),
                   const SizedBox(width: 8),
                   Expanded(flex: 2, child: _sortPill()),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: _filterPill()),
                 ],
               ),
               const SizedBox(height: 12),
@@ -224,5 +232,23 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
     ],
     onSelected: (v) =>
         setState(() => _sortStat = CreatureStat.values.byName(v)),
+  );
+
+  /// Filter, added alongside search+sort everywhere a monster is picked
+  /// (user 2026-09-11).
+  Widget _filterPill() => MenuPill<String>(
+    palette: _pills,
+    icon: Icons.filter_alt_outlined,
+    label: _filterElement?.label ?? 'Every type',
+    engaged: _filterElement != null,
+    value: _filterElement?.name ?? '',
+    entries: [
+      const MapEntry('', 'Every type'),
+      for (final e in CreatureElement.values)
+        if (e != CreatureElement.neutral) MapEntry(e.name, '${e.emoji} ${e.label}'),
+    ],
+    onSelected: (v) => setState(
+      () => _filterElement = v.isEmpty ? null : CreatureElement.fromName(v),
+    ),
   );
 }

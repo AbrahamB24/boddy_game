@@ -151,7 +151,7 @@ void main() {
     });
     test('a region-1 monster can only be billed in era-1 supplies', () {
       final c = _monster(maxHp: 100, hp: 0, species: 'common_t1');
-      expect(creatureHealEra(c), 1);
+      expect(creatureHealRegion(c), 1);
       final bill = healCost([c], {'fish': 999, 'honey': 999});
       // honey is era 2 — off limits for this monster however much you have.
       expect(bill.keys, everyElement(anyOf('fish', 'fur')));
@@ -159,7 +159,7 @@ void main() {
 
     test('a region-3 monster reaches for the later goods', () {
       final c = _monster(maxHp: 100, hp: 0, species: 'common_t3');
-      expect(creatureHealEra(c), 3);
+      expect(creatureHealRegion(c), 3);
       final bill = healCost([c], {'fish': 1, 'wine': 999});
       expect(bill.containsKey('wine'), isTrue); // era 3 supply
     });
@@ -193,7 +193,7 @@ void main() {
 
     test('an unknown species heals as a common of era 1 — never unhealable', () {
       final orphan = _monster(maxHp: 60, hp: 30, species: 'no_such_species');
-      expect(creatureHealEra(orphan), 1);
+      expect(creatureHealRegion(orphan), 1);
       expect(healDuration(orphan).inSeconds, 30 * 25);
     });
   });

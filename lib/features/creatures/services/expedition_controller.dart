@@ -22,7 +22,6 @@ import '../models/expedition.dart';
 import '../models/spot_state.dart';
 import 'capture_math.dart';
 import 'creatures_controller.dart';
-import 'expedition_risk.dart';
 import 'expedition_service.dart';
 import 'gather_math.dart';
 
@@ -226,10 +225,22 @@ class ExpeditionController extends ChangeNotifier {
   }
 
   /// The jumpstart's trip-time multiplier while the intro chain runs (1.0
-  /// otherwise). Read at send time, so a trip already under way keeps the
-  /// duration it was promised even if the intro ends mid-flight.
+  /// otherwise), combined with energy's own (user 2026-09-14 — see
+  /// [_energyTimeScale]). Read at send time, so a trip already under way
+  /// keeps the duration it was promised even if either changes mid-flight.
   double get _timeScale =>
-      jumpstartTimeScale(SettlementController().jumpstartActive);
+      jumpstartTimeScale(SettlementController().jumpstartActive) *
+      _energyTimeScale;
+
+  /// Energy's contribution to a NEW trip's length (user 2026-09-14: "alles
+  /// läuft immer, nur langsamer oder schneller" — replacing the old hard
+  /// gate that blocked sending a trip at all below some energy). The
+  /// INVERSE of the settlement's current rate: low energy makes a trip
+  /// longer the same way it makes production slower; a boosted rate (above
+  /// 100%, from extra steps) shortens it a little instead. Baked in at send
+  /// time like the jumpstart scale above it, not re-applied live — a trip
+  /// already under way isn't punished for energy dropping after it left.
+  double get _energyTimeScale => 1.0 / SettlementController().energyMultiplier;
 
   /// Sends a gather expedition. Returns null on success or a user-facing error.
 
@@ -304,10 +315,8 @@ class ExpeditionController extends ChangeNotifier {
   }) async {
     final userId = _userId;
     if (userId == null) return 'Not logged in.';
-    // NOTHING RUNS ON AN EMPTY TANK (user 2026-07-27) — expeditions included.
-    if (!SettlementController().hasEnergy) {
-      return SettlementController.kNoEnergyMessage;
-    }
+    // No more energy gate here (user 2026-09-14) — low energy now lengthens
+    // the trip instead of blocking it, see [_energyTimeScale].
     if (slotBlockReason != null) return slotBlockReason;
     if (members.isEmpty) return 'Pick at least one creature.';
     final creatures = CreaturesController();
@@ -362,12 +371,15 @@ class ExpeditionController extends ChangeNotifier {
   /// Sends a capture expedition. [finds] picks the hunt length (see
   /// kCaptureHuntOptions) — every find is rolled NOW from the area's pool
   /// (rarity odds shift with the area's danger) and stored hidden in the
-  /// payload; the player learns them one by one as the encounters open.
+  /// payload; they're all fielded together in ONE continuous battle once the
+  /// trip lands (2026-09-11 — see CombatEngine.catchEnemy), not played back
+  /// one at a time.
+  /// Starts a hunt. [option] picks the duration/find count; the TEAM follows
+  /// the same growing cap Gather already uses (CreaturesController
+  /// .teamSizeCap, 2026-09-11) rather than a fixed count tied to the variant
+  /// — a longer/rarer hunt is gated by campaign progress (the Scout Post
+  /// check below), not by roster size.
   /// Returns null on success or a user-facing error.
-  /// Starts a hunt. [option] is the chosen variant (10 min … 24 h); the
-  /// number of [members] must match its exact hunter count — the variant IS
-  /// the team size (user design 2026-07-17), so a longer/rarer hunt is gated
-  /// by simply owning enough ready monsters, not by tech.
   Future<String?> startCapture({
     required AreaDef area,
     required List<CreatureInstance> members,
@@ -375,20 +387,20 @@ class ExpeditionController extends ChangeNotifier {
   }) async {
     final userId = _userId;
     if (userId == null) return 'Not logged in.';
-    if (!SettlementController().hasEnergy) {
-      return SettlementController.kNoEnergyMessage;
-    }
+    // No more energy gate here (user 2026-09-14) — see startGather's own
+    // comment; [_energyTimeScale] lengthens the hunt instead.
     if (slotBlockReason != null) return slotBlockReason;
-    if (members.length != option.hunters) {
-      return 'The ${option.label} hunt needs exactly ${option.hunters} '
-          'hunter${option.hunters > 1 ? 's' : ''}.';
-    }
+    if (members.isEmpty) return 'Pick at least one hunter.';
     // Scouting gate (user 2026-07-26: "jagdt an scout"): longer variants are
-    // opened by the settlement's `huntOptions` — the Scout Post and its level —
-    // on top of the hunter-count requirement.
+    // opened by the settlement's `huntOptions` — the Scout Post and its level
+    // — plus whatever the authored path itself grants (user 2026-09-14, see
+    // PathRewards.huntOptions) — on top of the hunter-count requirement.
+    final settlement = SettlementController();
     final optionIndex = kCaptureHuntOptions.indexOf(option);
     if (optionIndex >=
-        maxHuntOptionCount(SettlementController().buildingHuntOptions)) {
+        maxHuntOptionCount(
+          settlement.buildingHuntOptions + settlement.pathHuntOptions,
+        )) {
       return 'Build or upgrade a Scout Post to scout longer hunts.';
     }
     final creatures = CreaturesController();
@@ -401,19 +413,12 @@ class ExpeditionController extends ChangeNotifier {
         return '${c.displayName} is not available.';
       }
     }
-    // EVERY species is in the pool (user 2026-07-27) — the area supplies the
-    // danger the rarity odds are read from, not a guest list. Only the
-    // legendaries are gated, and only by having been beaten.
+    // EVERY species is in the pool (user 2026-07-27) — not a per-area guest
+    // list. Only the legendaries are gated, and only by having been beaten.
     final stage = SettlementController().dungeonMaxStage;
     final rolled = <String>[
       for (var i = 0; i < option.finds; i++)
-        if (rollEncounter(
-              area,
-              _rng,
-              dungeonMaxStage: stage,
-              rareBias: option.rareBias,
-            )
-            case final found?)
+        if (rollEncounter(_rng, dungeonMaxStage: stage) case final found?)
           found.id,
     ];
     if (rolled.isEmpty) {
@@ -480,9 +485,8 @@ class ExpeditionController extends ChangeNotifier {
   }) async {
     final userId = _userId;
     if (userId == null) return 'Not logged in.';
-    if (!SettlementController().hasEnergy) {
-      return SettlementController.kNoEnergyMessage;
-    }
+    // No more energy gate here (user 2026-09-14) — see startGather's own
+    // comment; [_energyTimeScale] lengthens the trade run instead.
     if (caravansFull) {
       return 'Every caravan is on the road '
           '($caravanCount/$maxCaravanSlots).';
@@ -571,93 +575,82 @@ class ExpeditionController extends ChangeNotifier {
         at: e.endsAt,
       );
     }
-    await _finishTrip(e, at: e.endsAt);
+    await _finishTrip(e);
   }
 
   // ── Capture encounter bookkeeping (multi-find hunts) ────────
-  /// Credits one caught wild immediately (housing permitting) and queues the
-  /// result line. Called per find, mid-hunt — the trip itself keeps going.
-  Future<void> recordCatch(Combatant wild) async {
-    final kept = await CreaturesController().captureWild(wild);
-    _emit(
-      GameEventKind.caught,
-      kept != null
-          ? 'Caught ${kept.displayName}! (Lv ${kept.level})'
-          : '${wild.name} was caught, but there was no room to house it.',
-    );
-    if (kept != null) {
+  /// Resolves a WHOLE hunt's battle in one call (2026-09-11 — replaces the
+  /// old per-find `advanceCaptureFind`/`recordCatch` pair): every wild in
+  /// [caught] is housed immediately if there's room; any that don't fit are
+  /// returned instead of lost, for the screen to hold and offer again once
+  /// the player frees space (housing is never checked mid-battle — every
+  /// catch always succeeds there, see CombatEngine.catchEnemy — only
+  /// afterward, same as the user asked: "wenn es gefangen wird, kommt die
+  /// Meldung nach dem Kampf"). No incremental checkpoint any more: the whole
+  /// battle is one atomic unit, same as any other fight in the game already
+  /// is — there's nothing to resume mid-fight either way.
+  ///
+  /// Queues one result line, advances the tutorial once if anything was
+  /// caught, then ends the trip exactly like [finishCaptureTrip] used to.
+  /// Returns the wilds that still need a home.
+  Future<List<Combatant>> resolveCaptureTrip(
+    Expedition e, {
+    required List<Combatant> caught,
+    required int defeatedCount,
+  }) async {
+    final creatures = CreaturesController();
+    final pending = <Combatant>[];
+    var housed = 0;
+    for (final wild in caught) {
+      final kept = await creatures.captureWild(wild);
+      if (kept != null) {
+        housed++;
+      } else {
+        pending.add(wild);
+      }
+    }
+    final parts = <String>[
+      if (housed > 0) 'caught $housed',
+      if (pending.isNotEmpty) '${pending.length} pending housing',
+      if (defeatedCount > 0) 'defeated $defeatedCount for XP',
+    ];
+    if (parts.isNotEmpty) {
+      _emit(GameEventKind.caught, 'Hunt result: ${parts.join(', ')}.');
+    }
+    if (housed > 0) {
       // Party size is now a rule of position on the linear path (the first five
       // battles are always 1v1), so there is no early "second slot" to hand out
       // on the first catch any more — the second monster arrives at battle 6.
       await SettlementController().advanceIntro(IntroStep.firstCapture);
     }
+    await finishCaptureTrip(e);
+    return pending;
   }
 
-  /// Queues a result line (escapes, defeated finds, cold trails).
+  /// Houses one wild that overflowed [resolveCaptureTrip]'s housing check,
+  /// once the player has freed a slot — the same underlying check, just
+  /// called again per still-pending wild instead of for the whole batch.
+  /// Returns null if it still doesn't fit.
+  Future<CreatureInstance?> claimPendingWild(Combatant wild) =>
+      CreaturesController().captureWild(wild);
+
+  /// Queues a result line (escapes, defeated finds, cold trails, a wipe/flee
+  /// forfeiting the rest).
   void logResult(String message) => _emit(GameEventKind.caught, message);
 
-  /// Checkpoints that one more find has been played — persisted immediately
-  /// so leaving/reopening the encounter can never replay (or double-credit)
-  /// a find. Returns the updated expedition.
-  Future<Expedition> advanceCaptureFind(Expedition e) async {
-    final idx = expeditions.indexWhere((x) => x.id == e.id);
-    final current = idx >= 0 ? expeditions[idx] : e;
-    final updated = current.copyWith(
-      payload: {...current.payload, 'done': current.captureFindsDone + 1},
-    );
-    if (idx >= 0) expeditions[idx] = updated;
-    notifyListeners();
-    try {
-      await _svc.update(updated);
-    } catch (err) {
-      debugPrint('[ExpeditionController] advance persist failed: $err');
-    }
-    return updated;
-  }
-
-  /// Ends the whole hunt once every find is played (or forfeited): rolls trip
-  /// casualties, frees the members and removes the expedition. [note] adds a
-  /// closing line (defeated group, fled, cold trail).
+  /// Ends the whole hunt once its one continuous battle is over: frees the
+  /// members and removes the expedition. [note] adds a closing line (defeated
+  /// group, fled, cold trail).
   Future<void> finishCaptureTrip(Expedition e, {String? note}) async {
     if (note != null) _emit(GameEventKind.expedition, note);
     await _finishTrip(e);
   }
 
-  /// Shared tail of every resolved trip: casualties, lock release, row delete.
-  /// [casualties] can be passed in when the caller already rolled them (gather
-  /// needs them early for the loot penalty); otherwise they're rolled here.
-  /// [at] timestamps the casualty events to the trip's finish (offline gather);
-  /// omit for a live capture finish, where "now" is correct.
-  Future<void> _finishTrip(
-    Expedition e, {
-    List<Casualty>? casualties,
-    DateTime? at,
-  }) async {
+  /// Shared tail of every resolved trip: lock release, row delete.
+  Future<void> _finishTrip(Expedition e) async {
     // The trip is over, however it got here (collected, resolved on load, or
     // hurried with gold) — so the promise about its arrival is spent.
     _cancelArrival(e);
-    final creatures = CreaturesController();
-    final area = areaById(e.areaId);
-    final members = e.memberIds
-        .map(creatures.byId)
-        .whereType<CreatureInstance>()
-        .toList();
-    casualties ??= area == null
-        ? const <Casualty>[]
-        : rollCasualties(area.dangerLevel, members, _rng);
-    if (casualties.isNotEmpty) {
-      await creatures.applyExpeditionCasualties(casualties);
-      for (final cas in casualties) {
-        final name = creatures.byId(cas.creatureId)?.displayName ?? 'A creature';
-        _emit(
-          GameEventKind.casualty,
-          cas.ko
-              ? '$name was knocked out on the expedition!'
-              : '$name came back wounded.',
-          at: at,
-        );
-      }
-    }
     expeditions.removeWhere((x) => x.id == e.id);
     _syncLocks();
     notifyListeners();
@@ -702,22 +695,11 @@ class ExpeditionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Resolves a finished GATHER trip: casualties can cost part of the haul in
-  /// transit, the spot still loses everything that was mined.
+  /// Resolves a finished GATHER trip: the spot loses everything that was
+  /// mined.
   Future<void> _resolve(Expedition e) async {
     final userId = _userId;
     if (userId == null) return;
-
-    final creatures = CreaturesController();
-    final area = areaById(e.areaId);
-    final members = e.memberIds
-        .map(creatures.byId)
-        .whereType<CreatureInstance>()
-        .toList();
-    // Rolled up front — the loot penalty needs them before granting.
-    final casualties = area == null
-        ? const <Casualty>[]
-        : rollCasualties(area.dangerLevel, members, _rng);
 
     final resource = e.payload['resource'] as String?;
     final amount = (e.payload['amount'] as num?)?.toDouble() ?? 0;
@@ -727,7 +709,7 @@ class ExpeditionController extends ChangeNotifier {
       final goodsMult = kGoodsDefs.containsKey(resource)
           ? SettlementController().expeditionBonuses.goodsMult
           : 1.0;
-      final granted = amount * goodsMult * (1 - lootPenalty(casualties));
+      final granted = amount * goodsMult;
       await SettlementController().grantResources({resource: granted});
       // Daily-task hooks: a trip came home, possibly hauling wood.
       SettlementController().reportDailyProgress(DailyTaskKind.gatherTrips);
@@ -757,7 +739,7 @@ class ExpeditionController extends ChangeNotifier {
       }
     }
 
-    await _finishTrip(e, casualties: casualties, at: e.endsAt);
+    await _finishTrip(e);
   }
 
   /// Recalls an expedition early — frees the members, no rewards.

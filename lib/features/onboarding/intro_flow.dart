@@ -134,7 +134,9 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     body:
         'That fight cost your monster some HP — and HP never comes back on '
         'its own. Healing is what the Healing Hut is for. Build one now.',
-    ctaLabel: '🏕 Build the Healing Hut',
+    // No CTA of its own (user 2026-09-06, same reasoning as firstNode): the
+    // quick menu's own Build tile is the lit target instead — see
+    // SettlementScreen._soloQuickPadAnchor.
     destination: IntroDestination.build,
   ),
   IntroStep.buildRoad => const IntroCard(
@@ -142,10 +144,16 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     body:
         'Right now every building works without one — that is only true '
         'while this tutorial runs. From here on, a building needs a road '
-        'linking it back to your Main Hall to do anything at all. Open '
-        'Build ▸ Roads and lay one from the Hall to the Healing Hut before '
-        'that rule catches you out.',
-    ctaLabel: '🛤 Build a road',
+        // "Castle", not "Main Hall" (user 2026-09-06) — that is the
+        // building's own name everywhere else in the game (see
+        // kBuildingDefs['castle']); "Main Hall" was this card's own leftover
+        // term for the same building.
+        'linking it back to your Castle to do anything at all. Open '
+        'Build, find the road among its own category, and lay one from the '
+        'Castle to the Healing Hut before that rule catches you out.',
+    // No CTA of its own (user 2026-09-06, same reasoning as buildHealingHut):
+    // the quick menu's own Build tile is the lit target instead — see
+    // SettlementScreen._soloQuickPadAnchor.
     destination: IntroDestination.build,
   ),
   IntroStep.assignHealer => const IntroCard(
@@ -154,7 +162,9 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
         'The hut works faster with someone tending it. Open the Healing Hut '
         'and post a monster to its medicine role — a stationed worker keeps '
         'the hut running even while you are away.',
-    ctaLabel: '🏥 Open the Healing Hut',
+    // No CTA of its own (user 2026-09-06, same reasoning as buildHealingHut):
+    // the Healing Hut ON THE MAP is the lit target instead — see
+    // SettlementScreen._soloQuickPadAnchor.
     destination: IntroDestination.healingHut,
   ),
   IntroStep.healStarter => const IntroCard(

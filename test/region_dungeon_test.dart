@@ -30,7 +30,6 @@ AreaDef _area({String boss = 'leg', List<String> pool = const ['mouse', 'wolf']}
       emoji: '🌲',
       order: 1,
       battleStage: 1,
-      dangerLevel: 1,
       speciesPoolIds: pool,
       bossSpeciesId: boss,
     );
@@ -63,7 +62,7 @@ void main() {
   });
 
   test('a boss battle is the lone area boss', () {
-    final bossN = bossBattleForEra(1); // area battleStage 1
+    final bossN = kFallbackBattlesPerRegion; // area battleStage 1
     final enemies = spawnPathBattle(_area(), bossN)!;
     expect(enemies.length, 1);
     expect(enemies.first.speciesId, 'leg');

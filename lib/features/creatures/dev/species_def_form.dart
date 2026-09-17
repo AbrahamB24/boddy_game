@@ -14,6 +14,7 @@ import '../services/creature_defs_service.dart';
 import '../services/stat_budget.dart';
 import '../widgets/creature_sprite.dart' show decodeWidthFor;
 import 'ability_def_form.dart';
+import '../../../core/ui/pressable.dart';
 
 // Create/edit form for one SpeciesDef: element/rarity/role, per-species
 // evolution levels, the 6 stat curves (3-stage base + one shared growth
@@ -62,6 +63,10 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
   // rebuilds the curves exactly on budget; "Roll" jitters within the same roles.
   CombatArchetype _combatArch = CombatArchetype.allrounder;
   final List<CreatureStat?> _workPriorities = [null, null, null];
+  // Early-bloomer (−1) .. late-bloomer (+1), user 2026-09-07: "slow starter,
+  // welche dafür aber mehr wachsen als andere" — shifts the archetype's own
+  // featured stat(s) between start value and growth; 0 = today's neutral roll.
+  double _maturityBias = 0.0;
 
   List<CreatureStat> get _definedPriorities =>
       [for (final s in _workPriorities) if (s != null) s];
@@ -85,6 +90,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
     for (var i = 0; i < 3; i++) {
       _workPriorities[i] = i < storedPrios.length ? storedPrios[i] : null;
     }
+    _maturityBias = d?.roleMaturityBias ?? 0.0;
     _element = d?.element ?? CreatureElement.fire;
     _rarity = d?.rarity ?? CreatureRarity.common;
     _evoLevel1 = d?.evoLevel1 ?? 25;
@@ -138,6 +144,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
             budget: _budget,
             rng: _rng,
             jitter: 0.6,
+            maturityBias: _maturityBias,
           ),
         ),
       );
@@ -198,7 +205,11 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
       name: _name.trim(),
       description: _description.trim(),
       // Persist the chosen role (archetype + priorities) so it shows on re-edit.
-      role: SpeciesDef.encodeRole(_combatArch.name, _definedPriorities),
+      role: SpeciesDef.encodeRole(
+        _combatArch.name,
+        _definedPriorities,
+        maturityBias: _maturityBias,
+      ),
       element: _element,
       rarity: _rarity,
       // Catch rate is global per rarity now (Species-dev config) — stored on the
@@ -527,39 +538,54 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
             onChanged: (v) => setState(() => _combatArch = v ?? _combatArch),
           ),
           const SizedBox(height: 8),
-          Row(
+          // One per row, full width (user 2026-09-07: "so machen, dass ich
+          // alles sehe bei den prios") — 3 side by side clipped the "(N)"
+          // count off longer stat names like "Production"/"Gathering" since
+          // each only had ~1/3 of the card's width to work with.
+          Column(
             children: [
               for (var i = 0; i < 3; i++) ...[
-                if (i > 0) const SizedBox(width: 6),
-                Expanded(
-                  child: DropdownButtonFormField<CreatureStat?>(
-                    initialValue: _workPriorities[i],
+                if (i > 0) const SizedBox(height: 6),
+                DropdownButtonFormField<CreatureStat?>(
+                  initialValue: _workPriorities[i],
+                  isDense: true,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Prio ${i + 1}',
                     isDense: true,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Prio ${i + 1}',
-                      isDense: true,
-                    ),
-                    dropdownColor: FoE.panelDark,
-                    style: FoE.label(size: 12).copyWith(color: FoE.parchment),
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('—')),
-                      for (final s in work)
-                        DropdownMenuItem(
-                          value: s,
-                          child: Text('${s.label} (${_prioCount(s)})'),
-                        ),
-                    ],
-                    onChanged: (v) => setState(() => _workPriorities[i] = v),
                   ),
+                  dropdownColor: FoE.panelDark,
+                  style: FoE.label(size: 12).copyWith(color: FoE.parchment),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('—')),
+                    for (final s in work)
+                      DropdownMenuItem(
+                        value: s,
+                        child: Text('${s.label} (${_prioCount(s)})'),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _workPriorities[i] = v),
                 ),
               ],
             ],
           ),
           const SizedBox(height: 8),
+          Text(
+            '🐣 Frühstarter  ↔  Spätzünder 🐢  ·  ${_maturityLabel(_maturityBias)}',
+            style: FoE.label(size: 12).copyWith(color: FoE.textDim),
+          ),
+          Slider(
+            value: _maturityBias,
+            min: -1,
+            max: 1,
+            divisions: 4,
+            activeColor: FoE.gold,
+            onChanged: (v) => setState(() => _maturityBias = v),
+          ),
+          const SizedBox(height: 4),
           SizedBox(
             width: double.infinity,
-            child: GestureDetector(
+            child: Pressable(
               onTap: _rollRoles,
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -573,6 +599,14 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
         ],
       ),
     );
+  }
+
+  /// A maturity bias value (−1..+1) as a short human label.
+  String _maturityLabel(double bias) {
+    if (bias == 0) return 'Neutral';
+    final word = bias < 0 ? 'Frühstarter' : 'Spätzünder';
+    final strength = bias.abs() >= 1 ? '' : ' (leicht)';
+    return '$word$strength';
   }
 
   /// A species' combat archetype — the STORED role when present (authored via a
@@ -590,21 +624,25 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
     return stored.isNotEmpty ? stored : inferWorkPriorities(d.stats);
   }
 
-  /// Species of the current rarity (excluding the one being edited) whose combat
-  /// archetype is [a].
-  int _archCount(CombatArchetype a) => kSpeciesDefs.values
-      .where((d) =>
-          d.id != _originalId && d.rarity == _rarity && _speciesArch(d) == a)
-      .length;
+  /// Species of the current rarity whose combat archetype is [a] — the one
+  /// being edited counts too (user 2026-09-07, same as _prioCount), via its
+  /// LIVE, not-yet-saved pick (_combatArch) rather than its stored role.
+  int _archCount(CombatArchetype a) {
+    final others = kSpeciesDefs.values.where((d) =>
+        d.id != _originalId && d.rarity == _rarity && _speciesArch(d) == a);
+    return others.length + (_combatArch == a ? 1 : 0);
+  }
 
-  /// Species of the current rarity (excluding the one being edited) whose work
-  /// priorities include [s].
-  int _prioCount(CreatureStat s) => kSpeciesDefs.values
-      .where((d) =>
-          d.id != _originalId &&
-          d.rarity == _rarity &&
-          _speciesPrios(d).contains(s))
-      .length;
+  /// Species of the current rarity whose work priorities include [s] — the
+  /// one being edited counts too (user 2026-09-07: "rechne das gewählte
+  /// Monster bei den Prios mit ein"), via its LIVE, not-yet-saved picks
+  /// ([_definedPriorities]) rather than its stale stored role, so ticking a
+  /// dropdown updates the count immediately without saving first.
+  int _prioCount(CreatureStat s) {
+    final others = kSpeciesDefs.values.where((d) =>
+        d.id != _originalId && d.rarity == _rarity && _speciesPrios(d).contains(s));
+    return others.length + (_definedPriorities.contains(s) ? 1 : 0);
+  }
 
   // ── Tab 4: Abilities ────────────────────────────────────────
   List<Widget> _abilitiesTab() => [
@@ -615,7 +653,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
       children: [
         // Assign an EXISTING ability (disabled when none exist yet).
         Expanded(
-          child: GestureDetector(
+          child: Pressable(
             onTap: kAbilityDefs.isEmpty
                 ? null
                 : () => setState(
@@ -637,7 +675,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
         ),
         // Create a NEW ability right here and assign it (user 2026-07-24).
         Expanded(
-          child: GestureDetector(
+          child: Pressable(
             onTap: () => _newAbility(),
             child: Container(
               margin: const EdgeInsets.only(top: 4, left: 4),
@@ -739,7 +777,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: GestureDetector(
+            child: Pressable(
               onTap: uploading ? null : onTap,
               child: Container(
                 padding:

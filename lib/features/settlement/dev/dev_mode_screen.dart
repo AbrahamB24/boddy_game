@@ -15,7 +15,6 @@ import '../../creatures/services/creature_defs_service.dart';
 import '../../creatures/services/stat_budget.dart';
 import '../data/building_art.dart';
 import '../data/building_definitions.dart';
-import '../data/era_definitions.dart';
 import '../services/game_defs_controller.dart';
 import '../settlement_controller.dart';
 import '../widgets/building_icon.dart';
@@ -23,7 +22,6 @@ import 'area_def_form.dart';
 import 'building_def_form.dart';
 import 'combat_lab_screen.dart';
 import 'dev_theme.dart';
-import 'era_def_form.dart';
 import 'item_def_form.dart';
 import 'gather_defs_tab.dart';
 import 'dev_export_sheet.dart';
@@ -31,6 +29,7 @@ import 'path_editor_tab.dart';
 import 'tuning_tab.dart';
 import '../../../core/tuning/game_tuning.dart';
 import '../data/item_definitions.dart';
+import '../../../core/ui/pressable.dart';
 
 // All tabs are fully wired: Buildings -> BuildingDefForm, Eras -> EraDefForm,
 // Species -> SpeciesDefForm, Abilities -> AbilityDefForm.
@@ -48,13 +47,6 @@ class DevModeScreen extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ItemDefForm(existing: existing)),
-    );
-  }
-
-  void _openEraForm(BuildContext context, EraDef? existing) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => EraDefForm(existing: existing)),
     );
   }
 
@@ -111,12 +103,32 @@ class DevModeScreen extends StatelessWidget {
   }
 
   /// Re-rolls the stat distribution of EVERY species for a varied roster (user
-  /// 2026-07-17). The three fire/water/plant epic STARTERS share the same
-  /// combat:work ratio (the default split) and differ only WITHIN each category
-  /// — a distinct combat archetype and work focus each, plus jitter. Every
-  /// other species rolls both a random split AND a random focus, for a good mix
-  /// of fighters and workers. Totals stay on budget; evo bumps are re-applied
-  /// so evolving still matters.
+  /// 2026-07-17). Totals stay on budget; evo bumps are re-applied so evolving
+  /// still matters.
+  ///
+  /// Role assignment re-worked 2026-09-07 (user: "die Monster stats müssen so
+  /// verteilt werden, dass alle Rollen vorhanden sind (Kampf-Archetyp und Prio
+  /// 1-3)"): the old version grouped species by (rarity, element) and cycled
+  /// the archetype/priority index WITHIN each group — with only a handful of
+  /// species per rarity×element combo, almost every group had size 1, which
+  /// meant index 0 every time: the huge majority of the roster landed on
+  /// `allrounder` with a single Prio-1 work stat, and Prio 3 was literally
+  /// never reachable (the old `picks` list only ever had 1 or 2 entries).
+  ///
+  /// Now it's a single pass over the WHOLE sorted roster: the 10 archetypes
+  /// are shuffled once and handed out round-robin (so every press still
+  /// varies who gets what, but a full cycle touches all 10), and EVERY
+  /// species gets all 3 work priorities filled — 3 freshly-shuffled, distinct
+  /// stats each time (a 0-3 cycling depth was tried first and immediately
+  /// flagged back: "die prios wurden nicht übernommen" — species that landed
+  /// on depth 0 looked broken in the editor, not intentionally generalist).
+  ///
+  /// Each species also gets a random early-bloomer/late-bloomer maturity bias
+  /// (user 2026-09-07: "gerne fände ich es schön, wenn es slow starter gibt,
+  /// welche dafür aber mehr wachsen als andere") — picked from a small,
+  /// clearly-distinguishable set rather than a smooth continuous roll, so a
+  /// re-roll produces a mix of pronounced early/late bloomers and neutral
+  /// species instead of everyone landing on a barely-noticeable middle value.
   Future<void> _rerollAllStats(BuildContext context) async {
     final total = kSpeciesDefs.length;
     final ok = await showDialog<bool>(
@@ -148,30 +160,52 @@ class DevModeScreen extends StatelessWidget {
 
     final svc = CreatureDefsService();
     final rng = math.Random();
-    final workStats = kNonCombatStats;
-    final combat = CombatArchetype.values;
+    final workStats = kNonCombatStats; // 9 stats
+    const maturityChoices = [-1.0, -0.5, 0.0, 0.5, 1.0];
 
-    // Group by (rarity, TYPE/element) and spread the combat archetype + primary
-    // work priority EVENLY within each group (user 2026-07-24) — a
-    // deterministic round-robin per bucket, so every rarity/type covers the
-    // roles uniformly instead of clumping. A second focus on odd slots plus the
-    // high roll jitter keep individuals varied.
-    final groups = <String, List<SpeciesDef>>{};
-    for (final d in (kSpeciesDefs.values.toList()
-      ..sort((a, b) => a.id.compareTo(b.id)))) {
-      groups
-          .putIfAbsent('${d.rarity.name}|${d.element.name}', () => [])
-          .add(d);
+    // Evenly WITHIN each rarity tier (user 2026-09-08: "die Kampfrollen und
+    // die Prioritäten der Monster pro Seltenheitsstufe gleichmässig
+    // verteilt werden. Aktuell gibt es noch grosse Unterschiede, da es
+    // vermutlich zufällig ist"). The old loop shuffled ONE archetype list
+    // and one fresh priority-shuffle per species across ALL 30 at once — a
+    // tier's own slice of that was whatever fell out, so one tier could get
+    // Bulwark three times while another never saw it. Grouping by rarity
+    // FIRST and giving each group its own shuffle fixes that structurally,
+    // not by chance:
+    //  * ARCHETYPE: CombatArchetype has exactly 10 values, cycling a
+    //    per-GROUP shuffle means a 10-species tier (today: common) uses
+    //    every archetype exactly once; a 6- or 2-species tier uses that
+    //    many DISTINCT archetypes with no repeat within the tier.
+    //  * PRIORITIES: workStats has exactly 9 stats = 3 species' worth of 3
+    //    picks each. Consuming one freshly-shuffled permutation of the 9
+    //    per batch of 3 species means those 3 species between them use
+    //    every work stat exactly once — evenly spread AND no species has
+    //    two of its own 3 slots be the same stat by construction (a plain
+    //    per-species reshuffle-and-take(3) can't promise either).
+    final byRarity = <CreatureRarity, List<SpeciesDef>>{
+      for (final r in CreatureRarity.values) r: [],
+    };
+    for (final d in kSpeciesDefs.values.toList()
+      ..sort((a, b) => a.id.compareTo(b.id))) {
+      byRarity[d.rarity]!.add(d);
     }
+
     var count = 0;
-    for (final group in groups.values) {
+    for (final group in byRarity.values) {
+      if (group.isEmpty) continue;
+      final shuffledArchetypes = CombatArchetype.values.toList()..shuffle(rng);
+      List<CreatureStat> priorityCycle = [];
       for (var i = 0; i < group.length; i++) {
         final d = group[i];
-        final arch = combat[i % combat.length];
-        final picks = <CreatureStat>[
-          workStats[i % workStats.length],
-          if (i.isOdd) workStats[(i + 3) % workStats.length],
-        ];
+        final arch = shuffledArchetypes[i % shuffledArchetypes.length];
+        // Refill with a fresh shuffled permutation every 3rd species — see
+        // the doc comment above for why 3 (workStats.length ÷ 3 picks).
+        if (priorityCycle.isEmpty) {
+          priorityCycle = workStats.toList()..shuffle(rng);
+        }
+        final picks = priorityCycle.take(3).toList();
+        priorityCycle = priorityCycle.skip(3).toList();
+        final maturity = maturityChoices[rng.nextInt(maturityChoices.length)];
         // Starters keep the exact default budget; everyone else a jittered one.
         final budget = isStarterSpecies(d)
             ? defaultBudget(rarity: d.rarity, tier: d.tier)
@@ -182,11 +216,13 @@ class DevModeScreen extends StatelessWidget {
           budget: budget,
           rng: rng,
           jitter: 0.6,
+          maturityBias: maturity,
         );
-        // Persist the assigned role so the editor can show it again.
+        // Persist the assigned role so the editor (and the species list) can
+        // show it again.
         await svc.upsertSpeciesDef(d.copyWithStats(
           withEvoBumps(stats),
-          role: SpeciesDef.encodeRole(arch.name, picks),
+          role: SpeciesDef.encodeRole(arch.name, picks, maturityBias: maturity),
         ));
         count++;
       }
@@ -195,8 +231,9 @@ class DevModeScreen extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '🎲 Re-rolled $count species — roles spread evenly per rarity & '
-          'Typ verteilt.',
+          '🎲 Re-rolled $count species — archetypes and work priorities are '
+          'now spread evenly WITHIN each rarity tier, every species has '
+          'Prio 1-3 set and a rolled early/late-bloomer bias.',
         ),
       ),
     );
@@ -211,9 +248,10 @@ class DevModeScreen extends StatelessWidget {
       // Resources — which meant "where do I set the party size" had no answer
       // and half the game's numbers had no tab at all. The grouping is by
       // SUBJECT now, and each subject that has loose numbers carries a
-      // "⚙️ Werte" sub-tab holding them.
+      // "⚙️ Werte" sub-tab holding them. The Eras tab itself is gone (user
+      // 2026-09-05) — region content now lives entirely on Kampagne ▸ Gebiete.
       child: DefaultTabController(
-        length: 7,
+        length: 6,
         child: Scaffold(
             appBar: AppBar(
             title: Text('Dev Mode', style: FoE.title(size: 16)),
@@ -251,7 +289,6 @@ class DevModeScreen extends StatelessWidget {
                 Tab(text: '🏠 Gebäude'),
                 Tab(text: '🎒 Items'),
                 Tab(text: '⛏ Ressourcen'),
-                Tab(text: '🏺 Äras'),
               ],
             ),
           ),
@@ -336,22 +373,6 @@ class DevModeScreen extends StatelessWidget {
               AnimatedBuilder(
                 animation: GameDefsController(),
                 builder: (context, _) => const GatherDefsTab(),
-              ),
-              // 7 · Äras.
-              _DefList(
-                items:
-                    (kEraDefs.values.toList()
-                          ..sort((a, b) => a.order.compareTo(b.order)))
-                        .map(
-                          (d) => _DefRow(
-                            emoji: d.emoji,
-                            name: '${d.order}. ${d.name}',
-                            id: d.id,
-                          ),
-                        )
-                        .toList(),
-                onNew: () => _openEraForm(context, null),
-                onTap: (id) => _openEraForm(context, kEraDefs[id]),
               ),
             ],
           ),
@@ -495,7 +516,7 @@ class _LabAndMatrixState extends State<_LabAndMatrix> {
   }
 
   Widget _toggle(String label, bool active, VoidCallback onTap) =>
-      GestureDetector(
+      Pressable(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
@@ -611,7 +632,7 @@ class _SpeciesTabState extends State<_SpeciesTab> {
   /// element/rarity/tier tags on their own muted line.
   Widget _speciesRow(SpeciesDef d) {
     final off = _offBudget(d);
-    return GestureDetector(
+    return Pressable(
       onTap: () => widget.onOpen(kSpeciesDefs[d.id]),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -668,6 +689,31 @@ class _SpeciesTabState extends State<_SpeciesTab> {
                       _tag('Tier ${d.tier}'),
                     ],
                   ),
+                  // The assigned role (user 2026-09-07: roles should be
+                  // "auch so angezeigt" after a re-roll — this list is where
+                  // the editor was silently dropping them). Empty for a
+                  // species that predates the role field or was never
+                  // re-rolled; legacy free-text roles (e.g. old "Tank")
+                  // fall through _archetypeLabel unchanged.
+                  if (d.roleArchetype.isNotEmpty ||
+                      d.roleWorkPriorities.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        if (d.roleArchetype.isNotEmpty)
+                          _tag('⚔️ ${_archetypeLabel(d.roleArchetype)}',
+                              color: FoE.parchment),
+                        if (d.roleWorkPriorities.isNotEmpty)
+                          _tag(
+                            '🛠 ${d.roleWorkPriorities.map((s) => s.label).join(' › ')}',
+                          ),
+                        if (d.roleMaturityBias != 0)
+                          _tag(_maturityLabel(d.roleMaturityBias)),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -676,6 +722,23 @@ class _SpeciesTabState extends State<_SpeciesTab> {
         ),
       ),
     );
+  }
+
+  /// [CombatArchetype]'s display label for a stored role name, falling back
+  /// to the raw string for a legacy free-text role that predates the enum.
+  String _archetypeLabel(String name) {
+    for (final a in CombatArchetype.values) {
+      if (a.name == name) return a.label;
+    }
+    return name;
+  }
+
+  /// A stored maturity bias (−1..+1) as a short tag label.
+  String _maturityLabel(double bias) {
+    final emoji = bias < 0 ? '🐣' : '🐢';
+    final word = bias < 0 ? 'Frühstarter' : 'Spätzünder';
+    final strength = bias.abs() >= 1 ? '' : ' (leicht)';
+    return '$emoji $word$strength';
   }
 
   Widget _tag(String s, {Color? color}) => Container(
@@ -693,7 +756,7 @@ class _SpeciesTabState extends State<_SpeciesTab> {
       Row(
         children: [
           Expanded(
-            child: GestureDetector(
+            child: Pressable(
               onTap: widget.onNew,
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 11),
@@ -775,7 +838,7 @@ class _SpeciesTabState extends State<_SpeciesTab> {
       Row(
         children: [
           Expanded(
-            child: GestureDetector(
+            child: Pressable(
               onTap: widget.onFix,
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -789,7 +852,7 @@ class _SpeciesTabState extends State<_SpeciesTab> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: GestureDetector(
+            child: Pressable(
               onTap: widget.onReroll,
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -836,9 +899,9 @@ class _SpeciesTabState extends State<_SpeciesTab> {
 }
 
 /// The Buildings dev tab: the same list as the other tabs, plus a search box
-/// and an ERA filter (user 2026-07-24) — WHICH ERA a building first becomes
-/// buildable in. The generated Ära 3–8 roster made the list long enough to need
-/// it.
+/// and a REGION filter (user 2026-07-24) — WHICH REGION a building first
+/// becomes buildable in. The generated region 3–8 roster made the list long
+/// enough to need it.
 class _BuildingsTab extends StatefulWidget {
   final VoidCallback onNew;
   final ValueChanged<BuildingDef?> onOpen;
@@ -852,17 +915,22 @@ class _BuildingsTabState extends State<_BuildingsTab> {
   String _search = '';
   int? _era;
 
-  /// The era ORDER a building first becomes buildable in. Empty eraIds means
-  /// "every era" (Main Hall, Road), so it is buildable from era 1 on.
+  /// The region ORDER a building first becomes buildable in. Empty eraIds
+  /// means "every region" (Main Hall, Road), so it is buildable from region
+  /// 1 on. Still `'era_N'` id strings — see building_definitions.dart's
+  /// `_regionOrderOfId` doc for why the identifier itself didn't change.
   int _firstEra(BuildingDef d) {
     if (d.eraIds.isEmpty) return 1;
-    final orders = d.eraIds.map((id) => kEraDefs[id]?.order).whereType<int>();
+    final orders = d.eraIds
+        .map((id) => int.tryParse(id.split('_').last))
+        .whereType<int>();
     return orders.isEmpty ? 1 : orders.reduce(math.min);
   }
 
-  /// Row tag: the concrete era, or "Immer" for the always-available structures.
+  /// Row tag: the concrete region, or "Always" for the always-available
+  /// structures.
   String _eraLabel(BuildingDef d) =>
-      d.eraIds.isEmpty ? 'Always' : 'Era ${_firstEra(d)}';
+      d.eraIds.isEmpty ? 'Always' : 'Region ${_firstEra(d)}';
 
   List<BuildingDef> _visible() {
     final q = _search.trim().toLowerCase();
@@ -886,8 +954,9 @@ class _BuildingsTabState extends State<_BuildingsTab> {
   @override
   Widget build(BuildContext context) {
     final visible = _visible();
-    final eras = kEraDefs.values.toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    // 1..8, the fixed region ladder the goods/building generator uses (no
+    // more EraDef table — see building_def_form.dart's `_RegionChoice`).
+    final eras = [for (var order = 1; order <= 8; order++) order];
     return _DefList(
       items: visible
           .map(
@@ -911,7 +980,7 @@ class _BuildingsTabState extends State<_BuildingsTab> {
     );
   }
 
-  Widget _filterBar(int shown, List<EraDef> eras) => Column(
+  Widget _filterBar(int shown, List<int> eras) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       const SizedBox(height: 8),
@@ -939,19 +1008,27 @@ class _BuildingsTabState extends State<_BuildingsTab> {
                 style: FoE.label(size: 13).copyWith(color: FoE.parchment),
                 icon: const Icon(Icons.arrow_drop_down, color: FoE.gold),
                 hint: Text(
-                  'First era',
+                  'First region',
                   style: FoE.label(size: 13).copyWith(color: FoE.textDim),
                 ),
                 items: [
                   const DropdownMenuItem(
                     value: null,
-                    child: Text('All eras'),
+                    child: Text('All regions'),
                   ),
-                  for (final e in eras)
-                    DropdownMenuItem(
-                      value: e.order,
-                      child: Text('${e.emoji} Era ${e.order} · ${e.name}'),
-                    ),
+                  for (final order in eras)
+                    () {
+                      final area = kAreaDefs.values
+                          .where((a) => a.battleStage == order)
+                          .firstOrNull;
+                      final label = area == null
+                          ? 'Region $order'
+                          : 'Region $order · ${area.name}';
+                      return DropdownMenuItem(
+                        value: order,
+                        child: Text('${area?.emoji ?? '📍'} $label'),
+                      );
+                    }(),
                 ],
                 onChanged: (v) => setState(() => _era = v),
               ),
@@ -994,7 +1071,7 @@ class _BuildingsTabState extends State<_BuildingsTab> {
             runSpacing: 6,
             children: [
               for (final id in ids)
-                GestureDetector(
+                Pressable(
                   onTap: () => _restore(id),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -1110,7 +1187,7 @@ class _ApplyModelsButtonState extends State<_ApplyModelsButton> {
   @override
   Widget build(BuildContext context) {
     final n = _stale().length;
-    return GestureDetector(
+    return Pressable(
       onTap: _busy || n == 0 ? null : _apply,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1159,7 +1236,7 @@ class _DefList extends StatelessWidget {
             width: double.infinity,
             child: Column(
               children: [
-                GestureDetector(
+                Pressable(
                   onTap: onNew,
                   child: Container(
                     width: double.infinity,
@@ -1190,7 +1267,7 @@ class _DefList extends StatelessWidget {
             separatorBuilder: (_, _) => const SizedBox(height: 6),
             itemBuilder: (_, i) {
               final item = items[i];
-              return GestureDetector(
+              return Pressable(
                 onTap: () => onTap(item.id),
                 child: Container(
                   padding: const EdgeInsets.symmetric(

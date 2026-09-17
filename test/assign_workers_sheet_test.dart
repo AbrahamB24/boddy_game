@@ -14,9 +14,15 @@ import 'package:boddygame/features/settlement/widgets/assign_workers_sheet.dart'
 // Monster werden dann nach ihrem entsprechenden Stat geordnet angezeigt, wobei
 // diese, welche am Arbeiten sind an einem anderen Ort speziell markiert werden."
 //
-// Four things, and each one is a test below: the crew is its own view, a +
-// opens the roster, the roster is ranked by THIS post's stat, and a monster
-// posted somewhere else says where.
+// Four things, and each one is a test below: the crew is its own section, the
+// roster (everyone else) is ranked by THIS post's stat and always on screen
+// beneath it, and a monster posted somewhere else says where.
+//
+// ONE CONTINUOUS LIST since 2026-09-06 ("sehe ich aktuell noch zu wenig,
+// welche Monster aktuell im Gebäude arbeiten, welche frei sind, welche
+// anderso arbeiten und welchen Stat sie haben") — the roster used to be its
+// own view behind an "Add" tap; it is a dense list of rows under the crew
+// grid now, with no tap needed to see it.
 
 const _camp = 'camp';
 const _mill = 'mill';
@@ -114,10 +120,15 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-// The + tiles fill any empty seat, so the first one found always opens the
-// plain "Add" roster (not a swap) as long as the post isn't already full.
-Future<void> _tapAdd(WidgetTester tester) async {
-  await tester.tap(find.byIcon(Icons.add_circle_outline).first);
+// The roster (everyone else) sits below the crew grid now, always on screen
+// — a helper for the handful of tests that still need to scroll a row into
+// view before tapping it (the sheet is a fixed-height DraggableScrollableSheet
+// in test, so a row past the crew grid + section header can start off the
+// visible viewport).
+Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
   await tester.pumpAndSettle();
 }
 
@@ -147,17 +158,7 @@ void main() {
       ..remove(_mill);
   });
 
-  group('view 1 answers "who works here"', () {
-    testWidgets('it lists ONLY the crew of this post', (tester) async {
-      await _pump(tester);
-      expect(find.text('worker'), findsOneWidget);
-      // The other three are candidates, not crew — the old sheet showed all
-      // four at once and made you hunt for the gold border.
-      for (final id in ['ace', 'rookie', 'busy']) {
-        expect(find.text(id), findsNothing, reason: id);
-      }
-    });
-
+  group('the crew section shows only who works here', () {
     testWidgets('the seat count is the headline', (tester) async {
       await _pump(tester);
       expect(find.text('1 / 3'), findsOneWidget);
@@ -195,37 +196,26 @@ void main() {
     });
   });
 
-  group('a + tile opens the roster', () {
-    testWidgets('it shows the candidates and hides the crew', (tester) async {
+  group('the roster (everyone else) is always visible', () {
+    testWidgets('it lists every other monster without any tap',
+        (tester) async {
       await _pump(tester);
-      await _tapAdd(tester);
       for (final id in ['ace', 'rookie', 'busy']) {
         expect(find.text(id), findsOneWidget, reason: id);
       }
-      expect(find.text('worker'), findsNothing, reason: 'already posted');
+      // The crew's own tile is unaffected — still on screen too.
+      expect(find.text('worker'), findsOneWidget);
     });
 
     testWidgets('it is ranked by THIS post\'s stat, best first',
         (tester) async {
       await _pump(tester);
-      await _tapAdd(tester);
-      // Tiles now, same grid as the crew's own seats (user 2026-08-30: "die
-      // genau gleichen Kacheln verwenden") — three candidates fit one row, so
-      // rank reads left to right instead of top to bottom.
-      double x(String id) => tester.getTopLeft(find.text(id)).dx;
+      // Dense ROWS now, stacked top to bottom (user 2026-09-06), not tiles
+      // in a row — rank reads top to bottom instead of left to right.
+      double y(String id) => tester.getTopLeft(find.text(id)).dy;
       // 40 > 25 > 5.
-      expect(x('ace'), lessThan(x('busy')));
-      expect(x('busy'), lessThan(x('rookie')));
-    });
-
-    testWidgets('back returns to the crew view', (tester) async {
-      await _pump(tester);
-      await _tapAdd(tester);
-      // The app's own back icon now (2026-08-31 audit), not the bespoke
-      // Icons.arrow_back this sheet used to draw by hand.
-      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
-      await tester.pumpAndSettle();
-      expect(find.text('1 / 3'), findsOneWidget);
+      expect(y('ace'), lessThan(y('busy')));
+      expect(y('busy'), lessThan(y('rookie')));
     });
   });
 
@@ -237,8 +227,12 @@ void main() {
       expect(find.text('Swap worker'), findsOneWidget);
       // The roster lists every available monster, including the one just
       // tapped off the seat (user 2026-08-30: "inkl. dem abgewählten") — it
-      // is still a real, pickable option.
-      expect(find.text('worker'), findsOneWidget);
+      // is still a real, pickable option, so "worker" shows TWICE now that
+      // the crew grid stays on screen too: the still-filled seat tile, and
+      // its own roster row (2026-09-06's merged list — the old two-view
+      // sheet hid the crew grid behind the roster, so it only ever showed
+      // once).
+      expect(find.text('worker'), findsNWidgets(2));
       expect(find.text('ace'), findsOneWidget);
     });
 
@@ -247,12 +241,12 @@ void main() {
       await _pump(tester);
       await tester.tap(find.text('worker'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ace'));
-      await tester.pumpAndSettle();
-      // Back on the crew view: still one seat filled, now by ace.
+      await _tapVisible(tester, find.text('ace'));
+      // One seat filled, now by ace — and worker is back to being a plain
+      // roster row (unposted, so exactly once, not the crew tile any more).
       expect(find.text('1 / 3'), findsOneWidget);
       expect(find.text('ace'), findsOneWidget);
-      expect(find.text('worker'), findsNothing);
+      expect(find.text('worker'), findsOneWidget);
     });
 
     testWidgets('Remove from post vacates the seat with no replacement',
@@ -260,16 +254,21 @@ void main() {
       await _pump(tester);
       await tester.tap(find.text('worker'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Remove from post'));
-      await tester.pumpAndSettle();
+      await _tapVisible(tester, find.text('Remove from post'));
       expect(find.text('0 / 3'), findsOneWidget);
-      expect(find.text('worker'), findsNothing);
+      // Unposted now, so it is a plain roster row — present once, not as a
+      // crew tile.
+      expect(find.text('worker'), findsOneWidget);
     });
 
-    testWidgets('an empty tile offers no Remove from post',
+    testWidgets('tapping an empty tile clears a pending swap instead',
         (tester) async {
       await _pump(tester);
-      await _tapAdd(tester);
+      await tester.tap(find.text('worker'));
+      await tester.pumpAndSettle();
+      expect(find.text('Remove from post'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.add_circle_outline).first);
+      await tester.pumpAndSettle();
       expect(find.text('Remove from post'), findsNothing);
     });
   });
@@ -278,7 +277,6 @@ void main() {
     testWidgets('by NAME, on a filled badge — taking it costs that building',
         (tester) async {
       await _pump(tester);
-      await _tapAdd(tester);
       expect(find.text('Works in Saw Mill'), findsOneWidget);
       // …and a free monster carries no such badge.
       expect(find.textContaining('Works in'), findsOneWidget);
@@ -288,7 +286,6 @@ void main() {
       // The green + would promise a free hire. Taking this monster empties a
       // post somewhere else, and the icon has to say so.
       await _pump(tester);
-      await _tapAdd(tester);
       expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
       // ace + rookie are free hires; busy is the transfer.
       expect(find.byIcon(Icons.add), findsNWidgets(2));
@@ -298,7 +295,6 @@ void main() {
         (tester) async {
       CreaturesController().expeditionIds.add('busy');
       await _pump(tester);
-      await _tapAdd(tester);
       expect(find.text('🎒 Away'), findsOneWidget);
       expect(find.textContaining('Works in'), findsNothing);
     });

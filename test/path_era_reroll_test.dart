@@ -37,10 +37,20 @@ void main() {
     ],
   );
 
+  // kFallbackAreaDefs is empty (user 2026-09-08: the placeholder regions are
+  // gone), so this file authors its own two regions — enough to cover the
+  // bundled path's battle range (1..kLastPathBattle spans regions 1 and 2 at
+  // the default kBattlesBeforeBoss). No species pool on either, same as the
+  // deleted bundled content: that narrowing is DB/Dev-Mode authoring.
+  const testAreas = [
+    AreaDef(id: 'region_1', name: 'Region I', emoji: '1️⃣', order: 1, battleStage: 1),
+    AreaDef(id: 'region_2', name: 'Region II', emoji: '2️⃣', order: 2, battleStage: 2),
+  ];
+
   setUp(() {
     kAreaDefs
       ..clear()
-      ..addAll({for (final a in kFallbackAreaDefs) a.id: a});
+      ..addAll({for (final a in testAreas) a.id: a});
     // The bundled areas carry NO species pool — that content lives in the
     // database — so eligibleSpecies falls back to the whole roster. Seeding the
     // roster is therefore the whole setup, and it mirrors the state the dev tool
@@ -141,7 +151,7 @@ void main() {
   test('every bundled node belongs to a region that HAS a pool', () {
     // Without this a re-roll would silently do nothing for a whole era.
     for (final n in pathNodesInOrder()) {
-      final era = eraForBattle(n.order);
+      final era = regionForBattle(n.order);
       final area = kAreaDefs.values.where((a) => a.battleStage == era);
       expect(area, isNotEmpty, reason: 'battle ${n.order} has no region');
       expect(eligibleSpecies(area.first, includeLegendary: false), isNotEmpty,

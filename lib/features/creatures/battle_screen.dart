@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
+import '../../core/supabase/supabase_client.dart';
 import '../../core/theme/foe_theme.dart';
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
@@ -19,26 +20,42 @@ import 'models/creature_enums.dart';
 import 'models/status_effects.dart';
 import 'models/creature_instance.dart';
 import 'models/species_def.dart';
+import '../social/models/pvp_match.dart';
+import '../social/services/pvp_service.dart';
 import 'services/battle_rewards.dart';
 import 'services/capture_math.dart';
 import 'services/combat_engine.dart';
 import 'services/creatures_controller.dart';
+import 'services/pvp_sync_service.dart';
 import 'widgets/battle_scene.dart';
 import 'widgets/creature_backdrop.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/creature_sprite.dart' show decodeWidthFor;
+import 'widgets/type_circle_dialog.dart';
+import 'widgets/wild_preview.dart';
 import '../common/widgets/recess_bar.dart';
 import '../common/widgets/parchment_page.dart';
 import '../common/widgets/monster_tile_grid.dart';
 import '../settlement/widgets/building_icon.dart';
+import '../../core/ui/pressable.dart';
 
-/// Result popped when the player WINS the inline catch mini-game (user
-/// 2026-07-18): the ring QTE now plays inside the battle itself, so a success
-/// pops the caught wild for the caller to record. A failed attempt does NOT pop
-/// — it just burns the turn and the fight goes on.
-class CatchSuccess {
-  final Combatant wild;
-  const CatchSuccess(this.wild);
+/// Result popped when a capture battle ends — replaces the old single-wild
+/// [CatchSuccess] (2026-09-11): a hunt now fields several wilds in ONE
+/// continuous battle instead of one battle per find, so a catch mid-fight no
+/// longer ends the screen (it just removes that one wild and the fight goes
+/// on — see CombatEngine.catchEnemy). This is what's actually popped once
+/// [outcome] is finally reached, carrying EVERY wild caught along the way.
+class HuntBattleResult {
+  final CombatOutcome outcome;
+  final List<Combatant> caught;
+
+  /// Wilds that fainted rather than being caught — earned normal kill XP.
+  /// Whatever's neither caught nor counted here (only possible if the
+  /// player fled, or a wipe left some never engaged) was simply never
+  /// resolved and is lost with the rest of the trip.
+  final int defeatedCount;
+
+  const HuntBattleResult(this.outcome, this.caught, this.defeatedCount);
 }
 
 /// Which status swept over a monster last — drives the rising white / falling
@@ -89,14 +106,40 @@ class BattleScreen extends StatefulWidget {
   /// features, boss spoils). Empty for a re-fight. See battle_rewards.dart.
   final List<RewardLine> victoryRewards;
 
-  /// Capture-encounter mode: fight the (single) wild DOWN to this HP fraction
-  /// to enable the inline Catch button. Overkill closes it for good (a dead
-  /// wild is nothing to catch).
-  final double? catchThresholdFraction;
+  /// Capture-encounter mode: fight a wild DOWN into its catchable band to
+  /// enable the inline Catch button. The threshold itself is per-wild now
+  /// (2026-09-11 — see [catchHpThreshold]/[_canCatch]), since a hunt can
+  /// field several at once and rarer ones must be brought lower; this flag
+  /// only says whether catching is possible in this battle AT ALL. Overkill
+  /// closes a given wild's own catch for good (a dead wild is nothing to
+  /// catch), same as always.
+  final bool isCapture;
 
   /// Tutorial catch: the ring QTE cannot be failed out of — a miss just restarts
   /// the ring (matches the guided intro's "the catch cannot be lost" promise).
   final bool guaranteedCatch;
+
+  /// Live PvP mode (user 2026-09-15's Lobby rework) — `enemies` here are a
+  /// real second human's monsters (reconstructed from their Lobby snapshot,
+  /// see pvp_combatant_snapshot.dart), not AI. Every `isPvp`-gated branch in
+  /// this file is additive: with the default `false` this screen behaves
+  /// byte-for-byte as it always did. See the seams: [_scheduleAutoIfNeeded]
+  /// (never calls performAutoAction for a PvP "enemy" turn), [_useAbility]/
+  /// [_endTurn]/the switch handlers (relay the local action), [_applyOutcome]
+  /// (reports to PvpService instead of granting XP), and [_endOverlay] (pops
+  /// to the app root instead of returning a CombatOutcome to a dungeon
+  /// caller).
+  final bool isPvp;
+
+  /// The shared seed both sides' CombatEngine must start on — see
+  /// test/pvp_determinism_test.dart for why an identical seed + identical
+  /// relayed action order is the whole lockstep bet. Required when [isPvp].
+  final int? pvpSeed;
+
+  /// The match row — carries `id` (for the sync channel/checkpoint) and, on
+  /// a reconnect, `actionLog` to replay before going live. Required when
+  /// [isPvp].
+  final PvpMatch? pvpMatch;
 
   const BattleScreen({
     super.key,
@@ -104,9 +147,12 @@ class BattleScreen extends StatefulWidget {
     required this.enemies,
     this.title = 'Battle',
     this.area,
-    this.catchThresholdFraction,
+    this.isCapture = false,
     this.guaranteedCatch = false,
     this.victoryRewards = const [],
+    this.isPvp = false,
+    this.pvpSeed,
+    this.pvpMatch,
   });
 
   @override
@@ -119,9 +165,9 @@ enum _ScriptBeat {
   tackle,
   enemyBigHit,
   healItem,
+  missedAttack,
+  enemyDebuffHit,
   powerAttack,
-  enemyDebuff,
-  weakAttack,
   bankEndTurn,
   enemyAlmostKill,
   finisher,
@@ -133,13 +179,15 @@ class _BattleScreenState extends State<BattleScreen>
   Timer? _autoTimer;
   bool _autoBattle = false;
   bool _outcomeApplied = false;
-  // The static type-matchup chart starts COLLAPSED (user request 2026-07-20):
-  // the ability tiles now show effectiveness inline, so the chart is an
-  // on-demand reference rather than permanent furniture that eats the field.
-  bool _typeChartOpen = false;
 
-  // Set while popping the caught wild, so PopScope lets the pop through.
-  bool _exitingToCatch = false;
+  // ── PvP (2026-09-15) ─────────────────────────────────────────
+  // Only ever touched when widget.isPvp — see that field's doc comment.
+  final PvpSyncService _pvpSync = PvpSyncService();
+  final PvpService _pvpService = PvpService();
+  // Set when a relayed 'flee' arrives — CombatEngine.flee() doesn't record
+  // WHICH side fled, so _applyOutcome needs this to award the forfeit win
+  // to the side that stayed rather than treating both sides as losers.
+  bool _pvpOpponentFled = false;
 
   // A brief inline message (rejected action etc.) shown IN the battle log line
   // instead of a bottom SnackBar — a SnackBar floats over the action menu and
@@ -280,6 +328,13 @@ class _BattleScreenState extends State<BattleScreen>
   final List<_FloatText> _floats = [];
   int _floatSeq = 0;
 
+  // ── Rising heal crosses (user 2026-09-15: "steigen grüne Kreuze auf") ──
+  // A little cluster of ✚ glyphs over the healed monster, on top of the
+  // usual "+N" number — the number says HOW MUCH, the crosses say WHAT KIND
+  // at a glance, the same way a miss already gets its own word.
+  final List<_HealCross> _healCrosses = [];
+  int _healCrossSeq = 0;
+
   // ── Inline catch mini-game (user 2026-07-18) ──────────────
   late final AnimationController _ring; // shrinking-ring timer
   final _rng = math.Random();
@@ -291,6 +346,21 @@ class _BattleScreenState extends State<BattleScreen>
   bool _catchMissed = false; // tutorial: last tap missed, retrying
   ({double lo, double hi}) _catchWindow = (lo: 0.3, hi: 0.4);
   SpeciesDef? _catchSpecies;
+
+  /// The wild being attempted and the monster attempting it, captured once
+  /// at [_startCatch] time and reused through miss/succeed — up to 3 wilds
+  /// and 3 hunters can be on the field at once (2026-09-11), so reading
+  /// [_target]/[_engine.activePlayer] fresh at resolution time would risk
+  /// resolving against whichever happens to be selected THEN, not who this
+  /// specific attempt was actually against.
+  Combatant? _catchWild;
+  Combatant? _catcher;
+
+  /// Every wild caught so far THIS battle (2026-09-11) — a catch no longer
+  /// ends the fight (see CombatEngine.catchEnemy), so this accumulates
+  /// across however many of a hunt's fielded wilds the player catches
+  /// before the battle actually ends, and rides home on [HuntBattleResult].
+  final List<Combatant> _caught = [];
 
   // ── Guided intro: turn order → AP → actions → HP (user 2026-08-24) ──
   // Only ever set on the tutorial's own first fight — every anchored widget
@@ -335,10 +405,13 @@ class _BattleScreenState extends State<BattleScreen>
     setState(() {
       _battleCallout = done ? null : i + 1;
       // The scripted fight itself starts the instant the explanatory
-      // callouts finish (user 2026-09-03).
+      // callouts finish (user 2026-09-03). No _ensureApFor here (user
+      // 2026-09-05: "ich starte mit 3 AP, sollte aber nur mit 2 starten") —
+      // tackle's own cost is scripted down to what the opener actually
+      // holds instead, see [_effectiveApCost] and [_useAbility]'s
+      // scriptedApCost, so the AP counter never jumps ahead of the tap.
       if (done && _isFirstBattleTutorial) {
         _scriptBeat = _ScriptBeat.tackle;
-        _ensureApFor(_ScriptBeat.tackle);
       }
     });
   }
@@ -358,33 +431,53 @@ class _BattleScreenState extends State<BattleScreen>
   // no anchor at all: there is nothing for the player to press while it
   // isn't their turn, same as any other fight.
   //
-  //   tackle          — player: plain Attack (unscripted outcome — the
-  //                     script names no number for this one)
-  //   enemyBigHit     — enemy: −75% of the player's max HP
-  //   healItem        — player: Items — costs 1 AP HERE ONLY (see
+  //   tackle          — player: plain Attack — enemy −25% (75% left)
+  //   enemyBigHit     — enemy: effective hit — player down to 33% of max HP
+  //   healItem        — player: Items — costs a flat kItemApCost AP (see
   //                     [_openItems]), not the whole turn, so the AP left
-  //                     over still buys the next beat's ability
-  //   powerAttack     — player: ability — enemy −33% of its max HP
-  //   enemyDebuff     — enemy: Defense down, no damage
-  //   weakAttack      — player: ability again — enemy −25% more of its max
-  //                     HP (42% left)
-  //   bankEndTurn     — player: End Turn, banking the leftover AP
-  //   enemyAlmostKill — enemy: player down to 5% of max HP (survives)
-  //   finisher        — player: ability — enemy to 0, fight over
+  //                     over still buys the same turn's second action
+  //   missedAttack    — player: ability (NOT plain Attack), same turn as
+  //                     healItem — a scripted Miss, so the enemy's HP stays
+  //                     exactly where tackle left it (user 2026-09-05:
+  //                     turned from an earlier scripted "Resisted" 0 into a
+  //                     scripted Miss — same reason, teaches a different
+  //                     concept). Priced at position 1's own tile cost, not
+  //                     plain Attack's (user 2026-09-05: "soll eine Attacke
+  //                     sein, welche 3 AP braucht... nicht Standardattacke").
+  //   enemyDebuffHit  — enemy: Defense down + a real hit — player down to
+  //                     75% of max HP
+  //   powerAttack     — player: ability — resisted ("not very effective") —
+  //                     enemy down to 33% of its max HP
+  //   bankEndTurn     — player: End Turn, same turn as powerAttack, banking
+  //                     the leftover AP
+  //   enemyAlmostKill — enemy: player forced to 1 HP (survives)
+  //   finisher        — player: the bottom-left element move (NOT plain
+  //                     Attack, user 2026-09-05), a scripted critical —
+  //                     enemy to 0, fight over
+  //
+  // Several of these beats also carry a one-line concept explainer in
+  // [_scriptInfoHint] (effectiveness, resistance, buffs, "not very
+  // effective", crit) — a SEPARATE blocking overlay layered above the
+  // beat's own spotlight, dismissed by tap, so the player reads it before
+  // whatever control lights up next (user 2026-09-04's turn-by-turn
+  // script).
   _ScriptBeat? _scriptBeat;
 
   /// The scripted fight's one lit control right now, or null outside the
-  /// tutorial, while the four explanatory callouts are still running, on an
-  /// enemy beat (nothing to press), or once the sequence is done.
+  /// tutorial, while the four explanatory callouts (or a [_scriptInfoHint])
+  /// are still running, on an enemy beat (nothing to press), or once the
+  /// sequence is done.
   String? get _scriptedBattleAnchor {
     if (!_isFirstBattleTutorial || _battleCallout != null) return null;
     return switch (_scriptBeat) {
       _ScriptBeat.tackle => 'battle-attack-btn',
       _ScriptBeat.healItem => 'battle-items-btn',
-      _ScriptBeat.powerAttack ||
-      _ScriptBeat.weakAttack ||
-      _ScriptBeat.finisher => 'battle-first-ability',
+      _ScriptBeat.missedAttack ||
+      _ScriptBeat.powerAttack => 'battle-first-ability',
       _ScriptBeat.bankEndTurn => 'battle-endturn-btn',
+      // Bottom-left, the pricier element move (user 2026-09-05: "hier immer
+      // die Attacke unten links (4 AP) wählen lassen") — not plain Attack.
+      _ScriptBeat.finisher => 'battle-second-ability',
       _ => null,
     };
   }
@@ -392,13 +485,52 @@ class _BattleScreenState extends State<BattleScreen>
   String? get _scriptedBattleHint => switch (_scriptBeat) {
     _ScriptBeat.tackle => 'Attack!',
     _ScriptBeat.healItem => 'That hurt — use your potion to heal up.',
+    _ScriptBeat.missedAttack => 'Follow up with your ability.',
     _ScriptBeat.powerAttack => 'Follow up with your ability.',
-    _ScriptBeat.weakAttack => 'Use your ability again.',
     _ScriptBeat.bankEndTurn =>
       'End Turn without acting — the AP you save carries into next turn.',
     _ScriptBeat.finisher => 'Finish it!',
     _ => null,
   };
+
+  /// Fixed AP cost for the tutorial's four ability tiles, BY POSITION —
+  /// index 0..3 in the 2-column grid (top-left, top-right, bottom-left,
+  /// bottom-right) — the same for all three starters throughout the whole
+  /// fight (user 2026-09-05: "oben links attack 2 ap / oben rechts
+  /// Elementattacke 2 ap / unten links Elementattacke 4 ap / unten rechts
+  /// Buff 2 ap. Das ist bei allen Startermonster über das gesamte Tutorial
+  /// genau so."). Supersedes the earlier beat-by-beat overrides (a
+  /// dedicated tackle cost, a dedicated finisher cost, and so on) with one
+  /// table that doesn't care which beat is live or which specific move a
+  /// starter happens to have in that slot — Attack sits at index 0 on every
+  /// combatant (user 2026-09-03), and the tutorial's backfilled starting
+  /// kit (see CreatureInstance.backfillAbilities) fills 1..3 the same way
+  /// for every starter.
+  static const List<int> _kTutorialTileApCost = [2, 2, 4, 2];
+
+  /// [_kTutorialTileApCost] for whichever position [a] occupies in [me]'s
+  /// own ability list, or null outside the tutorial / past the fourth tile
+  /// (a species with a 5th+ equipped move keeps its real price there).
+  int? _tutorialTileApCost(Combatant me, AbilityDef a) {
+    if (!_isFirstBattleTutorial) return null;
+    final i = me.abilities.indexOf(a);
+    return i >= 0 && i < _kTutorialTileApCost.length
+        ? _kTutorialTileApCost[i]
+        : null;
+  }
+
+  /// What [a] will actually cost RIGHT NOW — [CombatEngine.abilityApCost]
+  /// normally, [_tutorialTileApCost] during the tutorial. Drives both the
+  /// tile's displayed cost and its enabled check, so the two never
+  /// disagree.
+  int _effectiveApCost(AbilityDef a) {
+    final me = _engine.activePlayer;
+    if (me != null) {
+      final fixed = _tutorialTileApCost(me, a);
+      if (fixed != null) return fixed;
+    }
+    return CombatEngine.abilityApCost(a);
+  }
 
   /// The script is a fixed cutscene, not a stat check — an actor whose AP
   /// happens to fall short of what the next beat needs (regen didn't line
@@ -408,29 +540,60 @@ class _BattleScreenState extends State<BattleScreen>
     final me = _engine.activePlayer;
     if (me == null) return;
     final need = switch (beat) {
-      _ScriptBeat.tackle => kBasicAttackApCost,
-      _ScriptBeat.powerAttack ||
-      _ScriptBeat.weakAttack ||
-      _ScriptBeat.finisher => switch (_firstRealAbility(me)) {
-        null => 0,
-        final a => CombatEngine.abilityApCost(a),
-      },
+      // Position 0 (top-left: Attack) — see _kTutorialTileApCost.
+      _ScriptBeat.tackle => _kTutorialTileApCost[0],
+      // Position 2 (bottom-left: the pricier element move — user
+      // 2026-09-05: "hier immer die Attacke unten links (4 AP) wählen
+      // lassen"), not Attack any more.
+      _ScriptBeat.finisher => _kTutorialTileApCost[2],
+      // Enough that the item's own kItemApCost spend actually shows as a
+      // real deduction, leaving exactly position 1's own cost afterward
+      // (user 2026-09-05: "es bleiben noch 2 AP übrig für eine Attacke").
+      _ScriptBeat.healItem => kItemApCost + _kTutorialTileApCost[1],
+      // Position 1 (top-right: the follow-up element move).
+      _ScriptBeat.missedAttack => _kTutorialTileApCost[1],
+      // Position 1 again, PLUS a small surplus: bankEndTurn right after is
+      // scripted as "End Turn WITHOUT acting, banking the leftover AP",
+      // which needs something left to actually bank.
+      _ScriptBeat.powerAttack => _kTutorialTileApCost[1] + _kBankedApSurplus,
       _ => 0,
     };
-    if (me.ap < need) me.ap = need;
+    // FORCED to exactly `need`, not just floored up to it (user 2026-09-06:
+    // "hier sind die AP von 0 auf 3 gesprungen") — the real engine keeps
+    // accruing AP off the actor's own Speed throughout this fight same as
+    // any other, since only damage/miss/crit are scripted (deterministicCombat
+    // never touches AP). A floor left whatever that real accrual happened to
+    // produce sitting on top of `need`, so the number shown after the next
+    // scripted spend no longer matched the fixed "leaves exactly N AP" this
+    // whole beat sequence promises — same reasoning as every forced HP
+    // number in this fight.
+    me.ap = need;
   }
 
+  /// How much AP [_ScriptBeat.bankEndTurn] visibly banks — see
+  /// [_ensureApFor]'s own `powerAttack` case.
+  static const int _kBankedApSurplus = 1;
+
   /// [c]'s first ability that ISN'T the universal Attack — i.e. the actual
-  /// species-authored move the script means by "your ability" (powerAttack/
-  /// weakAttack/finisher, 'battle-first-ability'). Attack sits at abilities[0]
-  /// on every combatant now (user 2026-09-03: "attack soll eine normale
-  /// Fähigkeit sein"), so plain `.first` would grab the wrong one.
+  /// species-authored move the script means by "your ability" (powerAttack,
+  /// 'battle-first-ability'). Attack sits at abilities[0] on every combatant
+  /// now (user 2026-09-03: "attack soll eine normale Fähigkeit sein"), so
+  /// plain `.first` would grab the wrong one.
   AbilityDef? _firstRealAbility(Combatant c) {
     for (final a in c.abilities) {
       if (a.id != 'attack') return a;
     }
     return null;
   }
+
+  /// [c]'s ability at tile position 2 (bottom-left) — the second, pricier
+  /// element move the finisher beat uses (user 2026-09-05: "hier immer die
+  /// Attacke unten links (4 AP) wählen lassen. Diese ist eine
+  /// Elementattacke."). Same position-based reasoning as
+  /// [_kTutorialTileApCost]: whichever move a starter has equipped there,
+  /// not a specific move id.
+  AbilityDef? _secondRealAbility(Combatant c) =>
+      c.abilities.length > 2 ? c.abilities[2] : null;
 
   /// Runs one of the enemy's three scripted beats directly — CombatEngine's
   /// own AI (performAutoAction) picks whatever it judges best, which is
@@ -445,50 +608,109 @@ class _BattleScreenState extends State<BattleScreen>
     final me = _engine.activePlayer;
     if (me == null ||
         beat != _ScriptBeat.enemyBigHit &&
-            beat != _ScriptBeat.enemyDebuff &&
+            beat != _ScriptBeat.enemyDebuffHit &&
             beat != _ScriptBeat.enemyAlmostKill) {
-      _engine.performAutoAction();
+      if (_isFirstBattleTutorial) {
+        // A turn outside the three named beats — the enemy (battle 1's own
+        // doc: picked "at its natural stats", not scaled down) getting to
+        // act for real during the intro callouts, before [_scriptBeat] is
+        // even set, or on any other unscripted turn — must never be able to
+        // end the tutorial for real. Both fighters are forced to exactly 12
+        // HP for the script's own numbers (see initState); a genuine hit
+        // against that is a coin-flip KO. Restores the blanket protection
+        // _armAgainstOverkill used to give every real action here, lost
+        // when it was replaced by the beat-specific scriptedNextHit, which
+        // only covers the three named beats.
+        final before = {
+          for (final c in _engine.playerField)
+            if (c != null) c: c.hp,
+        };
+        for (final c in before.keys) {
+          c.hp = 999999;
+        }
+        _engine.performAutoAction();
+        for (final entry in before.entries) {
+          entry.key.hp = entry.value;
+        }
+      } else {
+        _engine.performAutoAction();
+      }
       return;
     }
     // Same reasoning as _ensureApFor: an attack beat's presentation (lunge,
     // floating number, log line) still needs basicAttack to actually FIRE,
     // which needs AP — the enemy's carried pool is real gameplay state, not
     // scripted, so top it up rather than let a low roll silently skip the
-    // animation (the HP override below would still land either way).
+    // animation ([_engine.scriptedNextHit] still lands the exact scripted
+    // number either way).
     if ((beat == _ScriptBeat.enemyBigHit ||
+            beat == _ScriptBeat.enemyDebuffHit ||
             beat == _ScriptBeat.enemyAlmostKill) &&
         foe.ap < kBasicAttackApCost) {
       foe.ap = kBasicAttackApCost;
     }
-    // Same reasoning as _armAgainstOverkill's own doc: the enemy's real
-    // stats could otherwise finish the PLAYER off for real, mid-script,
-    // before this beat's own HP target ever gets applied.
-    if (beat == _ScriptBeat.enemyBigHit || beat == _ScriptBeat.enemyAlmostKill) {
-      _armAgainstOverkill(me);
-    }
     switch (beat!) {
       case _ScriptBeat.enemyBigHit:
+        // Document's own figures (user 2026-09-04): both fighters open the
+        // fight on exactly 12 HP (forced in initState), so every beat's flat
+        // number below reproduces the document's HP column exactly.
+        _engine.scriptedNextHit = (damage: 8, miss: false);
         _engine.basicAttack(foe, me);
-        me.hp = math.max(1, (me.maxHp * 0.25).round());
+        // Hands the turn straight back — with only two combatants, a
+        // genuinely faster foe otherwise wins the real CTB race for a
+        // second (and third) turn before the player's own comes up again
+        // (user 2026-09-05: "infernoclaw attackiert weiterhin 3x
+        // nacheinander"/"greift weiterhin einfach an"). MUST run BEFORE the
+        // await below, in the same synchronous stretch as basicAttack:
+        // basicAttack's own notifyListeners already queued
+        // _consumeCombatEvents().then(_scheduleAutoIfNeeded) as a
+        // microtask, and that callback reads currentActor/_scriptBeat
+        // whenever it happens to run — which, polling _presenting on a
+        // 30ms timer, is not guaranteed to lose the race against
+        // _waitForPresentation below. Only code that runs before Dart ever
+        // yields to the microtask queue is guaranteed to land first.
+        _engine.forceActing(me);
+        // Ensures the item's own 1-AP spend actually SHOWS (user
+        // 2026-09-05: "Item Verbrauchen, verbraucht immer 1 AP... es
+        // bleiben noch 2 AP übrig für eine Attacke") — at 0 AP the subtract
+        // just clamped back to 0, so the cost never visibly landed.
+        _ensureApFor(_ScriptBeat.healItem);
         await _waitForPresentation(); // see _useAbility's own doc
-        setState(() => _scriptBeat = _ScriptBeat.healItem);
-      case _ScriptBeat.enemyDebuff:
+        setState(() {
+          _scriptBeat = _ScriptBeat.healItem;
+          _scriptInfoHint =
+              'Super effective! A type advantage deals extra '
+              'damage.';
+        });
+      case _ScriptBeat.enemyDebuffHit:
+        // A real attack for the "+ att" half, THEN the status — same order
+        // the beat is named in (user 2026-09-04's script: "Buff auf
+        // Verteidigung + att").
+        _engine.scriptedNextHit = (damage: 3, miss: false);
+        _engine.basicAttack(foe, me);
         me.secondaryDebuffs[SecondaryDebuffKind.defenseDown] = ActiveEffect(
           turnsRemaining: kSecondaryDebuffDuration,
           value: 0.30,
         );
         _flashMessage('${foe.name} lowers your Defense!');
         // NOT _engine.endTurn() — that refuses on principle while it's the
-        // ENEMY's turn (see its own doc comment). This beat applies its
-        // effect directly rather than through a real attack/ability, so
-        // nothing else advances the CTB queue past it.
+        // ENEMY's turn (see its own doc comment). basicAttack can leave AP
+        // behind that the real AI would keep spending; this beat is only
+        // authored for ONE hit, so the turn is forced closed right after.
         _engine.forceEndTurn();
+        _engine.forceActing(me); // see enemyBigHit's own doc — same race
         await _waitForPresentation(); // the "AP recharging" bank visual
-        _ensureApFor(_ScriptBeat.weakAttack);
-        setState(() => _scriptBeat = _ScriptBeat.weakAttack);
+        _ensureApFor(_ScriptBeat.powerAttack);
+        setState(() {
+          _scriptBeat = _ScriptBeat.powerAttack;
+          _scriptInfoHint =
+              'Debuff — that weakens a stat for a few turns. '
+              'Watch for the icon on the status row.';
+        });
       case _ScriptBeat.enemyAlmostKill:
+        _engine.scriptedNextHit = (damage: 8, miss: false);
         _engine.basicAttack(foe, me);
-        me.hp = math.max(1, (me.maxHp * 0.05).round());
+        _engine.forceActing(me); // see enemyBigHit's own doc — same race
         await _waitForPresentation();
         _ensureApFor(_ScriptBeat.finisher);
         setState(() => _scriptBeat = _ScriptBeat.finisher);
@@ -498,13 +720,34 @@ class _BattleScreenState extends State<BattleScreen>
   }
 
   /// The player's own deliberate End Turn press — separate from the
-  /// programmatic `_engine.endTurn()` calls elsewhere (using an item, the
-  /// catch flow, the scripted debuff beat), which don't advance the script.
+  /// programmatic `_engine.endTurn()` calls elsewhere (the catch flow, the
+  /// scripted debuff beat), which don't advance the script.
   void _endTurn() {
     if (_scriptBeat == _ScriptBeat.bankEndTurn) {
       setState(() => _scriptBeat = _ScriptBeat.enemyAlmostKill);
     }
+    // Captured BEFORE endTurn() advances the queue — by the time it
+    // returns, currentActor is already whoever's turn came next.
+    final actor = _engine.currentActor;
     _engine.endTurn();
+    _relayPvpAction(kind: 'endTurn', actor: actor);
+  }
+
+  /// A one-line concept explainer sitting ON TOP of whatever beat is live —
+  /// non-null between a beat landing and the player tapping past it (user
+  /// 2026-09-04: effectiveness/miss/buffs/"not very effective"/crit each get
+  /// their own beat). The beat underneath has already advanced by the time
+  /// this is set, so dismissing it just reveals that beat's own spotlight —
+  /// except for [_pendingVictory], which the finisher beat holds off on
+  /// exactly so the crit explainer isn't fighting the win screen for the
+  /// same pixels.
+  String? _scriptInfoHint;
+  void _dismissScriptInfo() {
+    setState(() => _scriptInfoHint = null);
+    // An enemy beat may have been waiting on exactly this (see
+    // [_scheduleAutoIfNeeded]'s own guard) — nothing else re-triggers it
+    // once the hint that blocked it is gone.
+    _scheduleAutoIfNeeded();
   }
 
   /// The tutorial's own scripted first fight — gates the intro callouts, the
@@ -531,10 +774,39 @@ class _BattleScreenState extends State<BattleScreen>
       // always shows a plain successful hit that matches the guaranteed
       // percentage, instead of a "misses!"/"Critical!" that contradicts it.
       deterministicCombat: _isFirstBattleTutorial,
+      // PvP: BOTH sides are a human, so the "enemy" field needs the same
+      // bounded-bench/voluntary-switch rights [players] already has — see
+      // CombatEngine's own `isPvp` doc. The shared seed is what makes two
+      // independently-built engines (one per device) stay in lockstep; see
+      // test/pvp_determinism_test.dart.
+      isPvp: widget.isPvp,
+      rng: widget.isPvp ? math.Random(widget.pvpSeed!) : null,
     );
+    if (_isFirstBattleTutorial) {
+      // "Beide Monster starten mit genau 12HP" (user 2026-09-04) — the
+      // script's whole HP column assumes this, and every flat number in the
+      // beats below is a subtraction from it. `stats` is a regular mutable
+      // map, so overriding the HP entry in place needs no parallel
+      // "scripted maxHp" field, and the HP ring reads it exactly like any
+      // other stat.
+      for (final c in [..._engine.players, ..._engine.enemies]) {
+        c.stats[CreatureStat.hp] = 12;
+        c.hp = 12;
+      }
+      // "tackle" is scripted as the player's OPENING move — but the enemy is
+      // picked purely for type effectiveness and fights at its own natural
+      // speed (see _launchBattle), so it can easily win the real coin flip
+      // against a slower starter (user: "wenn ich vineguard als starter
+      // nehme, dann greift mich infernoclaw direkt an"). Force the player's
+      // own combatant to open instead of leaving it to real stats.
+      if (_engine.players.isNotEmpty) {
+        _engine.forceOpeningActor(_engine.players.first);
+      }
+    }
     _prevPlayerField = List.of(_engine.playerField);
     _prevEnemyField = List.of(_engine.enemyField);
     _engine.addListener(_onEngineChanged);
+    if (widget.isPvp) _startPvpSync();
     _fx = AnimationController(
       vsync: this,
       // The ATTACKER's own lunge — windup, strike, rebound — and its sound
@@ -634,8 +906,89 @@ class _BattleScreenState extends State<BattleScreen>
     _idle.dispose();
     _engine.removeListener(_onEngineChanged);
     _engine.dispose();
+    if (widget.isPvp) _pvpSync.disconnect();
     Feel.stopBattleMusic();
     super.dispose();
+  }
+
+  // ── PvP relay (2026-09-15) ───────────────────────────────────
+  // See widget.isPvp's doc comment for the overall shape: both devices
+  // build an identical engine from the same seed + team snapshots, then
+  // apply only the small [PvpAction] messages either side sends — proven
+  // to stay in sync by test/pvp_determinism_test.dart.
+  Combatant? _findCombatant(String? id) {
+    if (id == null) return null;
+    for (final c in [..._engine.players, ..._engine.enemies]) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
+
+  /// Replays [widget.pvpMatch]'s persisted `action_log` (a reconnect
+  /// picking up mid-fight) against the freshly-built engine, then connects
+  /// live from where that leaves off.
+  void _startPvpSync() {
+    final match = widget.pvpMatch!;
+    for (final raw in match.actionLog) {
+      _applyRemoteAction(PvpAction.fromJson(raw));
+    }
+    _pvpSync.connect(
+      matchId: match.id,
+      resumeFromSeq: match.actionLog.length,
+      onRemoteAction: _applyRemoteAction,
+    );
+  }
+
+  /// Applies one relayed action (mine or the opponent's — see
+  /// pvp_sync_service.dart's own doc on why the dispatch doesn't need to
+  /// know which) directly to [_engine]. [_onEngineChanged] (already wired
+  /// via [ChangeNotifier]) picks up the resulting notify exactly like any
+  /// local action would.
+  void _applyRemoteAction(PvpAction action) {
+    final actor = _findCombatant(action.actorId);
+    if (actor == null) return;
+    switch (action.kind) {
+      case 'attack':
+        final target = _findCombatant(action.targetId);
+        if (target != null) _engine.basicAttack(actor, target);
+      case 'ability':
+        final ability = action.abilityId == null ? null : kAbilityDefs[action.abilityId];
+        if (ability != null) {
+          _engine.useAbility(actor, ability, _findCombatant(action.targetId));
+        }
+      case 'switch':
+        if (actor.isPlayerSide) {
+          _engine.switchActivePlayer(_engine.players.indexOf(actor));
+        } else {
+          _engine.switchActiveEnemy(_engine.enemies.indexOf(actor));
+        }
+      case 'endTurn':
+        _engine.forceEndTurn();
+      case 'flee':
+        _pvpOpponentFled = true;
+        _engine.flee();
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// Sends MY chosen action over [_pvpSync] — called right after the LOCAL
+  /// engine call that already applied it (never before: the local player
+  /// sees their own action instantly, the relay is a side effect, not a
+  /// gate). No-op outside [widget.isPvp].
+  void _relayPvpAction({
+    required String kind,
+    required Combatant actor,
+    String? abilityId,
+    Combatant? target,
+  }) {
+    if (!widget.isPvp) return;
+    _pvpSync.sendAction(
+      widget.pvpMatch!.id,
+      kind: kind,
+      actorId: actor.id,
+      abilityId: abilityId,
+      targetId: target?.id,
+    );
   }
 
   void _onEngineChanged() {
@@ -677,7 +1030,15 @@ class _BattleScreenState extends State<BattleScreen>
     // two happened to be a similar length, which is exactly what made an
     // enemy's next swing already landing while the last one was still
     // playing read as chaos rather than as two separate hits.
-    _consumeCombatEvents().then((_) {
+    // whenComplete, NOT .then — an exception anywhere in the presentation
+    // pipeline (float text, sound, the lunge/react animations) used to just
+    // swallow this continuation: .then()'s success callback never runs on a
+    // failed Future, so nothing ever re-armed the next auto-action and the
+    // fight froze solid with no error shown (nothing here sits inside a
+    // widget build, so Flutter never puts up its red error screen either).
+    // whenComplete runs either way and the underlying error still
+    // propagates/logs, but the fight itself can no longer wedge on it.
+    _consumeCombatEvents().whenComplete(() {
       if (mounted) _scheduleAutoIfNeeded();
     });
   }
@@ -806,7 +1167,11 @@ class _BattleScreenState extends State<BattleScreen>
 
   /// Adds a floating combat number for one event, over the struck monster.
   void _spawnFloat(CombatEvent e) {
-    if (!e.miss && !e.heal && e.amount <= 0) return;
+    // A real hit that rounds down to 0 damage still needs to render if it
+    // carries a "Resisted"/"Super effective!" tag via typeMult — that tag is
+    // the whole point of the hit. A genuine 0-damage no-op (typeMult == 1.0,
+    // nothing to say) still has nothing worth showing.
+    if (!e.miss && !e.heal && e.amount <= 0 && e.typeMult == 1.0) return;
     final id = _floatSeq++;
     final String text;
     final Color color;
@@ -848,11 +1213,34 @@ class _BattleScreenState extends State<BattleScreen>
         tag: tag,
       ),
     );
+    // The rising crosses (user 2026-09-15) ride ALONGSIDE the "+N" number,
+    // not instead of it — three, lightly staggered, so it reads as a little
+    // burst rather than one glyph.
+    if (e.heal && e.amount > 0) {
+      final alignX = _slotAlignX(e.target);
+      final onEnemy = !e.target.isPlayerSide;
+      for (var i = 0; i < 3; i++) {
+        _healCrosses.add(
+          _HealCross(
+            id: _healCrossSeq++,
+            alignX: alignX,
+            onEnemy: onEnemy,
+            xJitter: (i - 1) * 0.05,
+            delay: Duration(milliseconds: i * 130),
+          ),
+        );
+      }
+    }
   }
 
   void _removeFloat(int id) {
     if (!mounted) return;
     setState(() => _floats.removeWhere((f) => f.id == id));
+  }
+
+  void _removeHealCross(int id) {
+    if (!mounted) return;
+    setState(() => _healCrosses.removeWhere((f) => f.id == id));
   }
 
   /// The attacker's lunge, then — only once it's done — the struck monster's
@@ -944,6 +1332,14 @@ class _BattleScreenState extends State<BattleScreen>
       _applyOutcome();
       return;
     }
+    // The tutorial's own concept explainer (user 2026-09-06: the enemy's
+    // next hit must not land while its text box is still covering the
+    // screen) — held here rather than only inside the timers below because
+    // this function can fire WHILE the switch statement that sets
+    // [_scriptInfoHint] is still racing it (see [_useAbility]'s own doc on
+    // that race). Re-armed by [_dismissScriptInfo] the instant the player
+    // taps it away.
+    if (_scriptInfoHint != null) return;
     // An empty player slot pauses everything — the deck shows "Send in a
     // reserve" and nobody acts until one is. With AUTO on, that pick is one the
     // player already handed over, so it fills itself.
@@ -970,12 +1366,16 @@ class _BattleScreenState extends State<BattleScreen>
       return;
     }
     final actorIsPlayer = _engine.isPlayerTurn;
+    // PvP: the "enemy" is a real second human — their actions arrive via
+    // _applyRemoteAction (pvp_sync_service.dart), never performAutoAction.
+    // Nothing to schedule here while it's their turn; just wait.
+    if (widget.isPvp && !actorIsPlayer) return;
     if (!actorIsPlayer || _autoBattle) {
       _autoTimer = Timer(_kAutoActionPause, () {
         if (!mounted || _engine.outcome != null || _engine.needsPlayerSwitch) {
           return;
         }
-        if (_presenting) {
+        if (_presenting || _scriptInfoHint != null) {
           _scheduleAutoIfNeeded();
           return;
         }
@@ -1001,6 +1401,10 @@ class _BattleScreenState extends State<BattleScreen>
   Future<void> _applyOutcome() async {
     if (_outcomeApplied) return;
     _outcomeApplied = true;
+    if (widget.isPvp) {
+      await _applyPvpOutcome();
+      return;
+    }
     // Daily-task hook: a won battle counts, however it was fought.
     if (_engine.outcome == CombatOutcome.victory) {
       SettlementController().reportDailyProgress(DailyTaskKind.winBattles);
@@ -1016,20 +1420,22 @@ class _BattleScreenState extends State<BattleScreen>
     if (mounted) setState(() => _levelUps = ups);
   }
 
-  /// Sets [c]'s CURRENT hp (never its capacity/max stat) absurdly high right
-  /// before a real, unscripted engine action runs against it — so whatever
-  /// that action's own damage formula computes, it physically cannot bring
-  /// [c] to 0 and let the engine declare an outcome for real. Always paired
-  /// with an immediate, synchronous correction to the actual scripted
-  /// target right after, so nothing ever renders the inflated number.
-  ///
-  /// Needed everywhere a real species' real stats feed the script (user
-  /// 2026-09-03: "wenn ich mit vineguard spiele, gewinne ich zu früh. Bitte
-  /// nimm überall die genau gleichen Werte an, so dass es keinen
-  /// Unterschied macht, wer kämpft") — a strong attacker or a fragile
-  /// defender could otherwise finish the OTHER side off for real, mid
-  /// script, before the numbered beats ever got a say.
-  void _armAgainstOverkill(Combatant? c) => c?.hp = 999999;
+  /// PvP's own outcome handling — reports the result and my own rating
+  /// change (see PvpService's own doc on why a client can only ever write
+  /// its OWN `pvp_stats` row). Deliberately grants no XP and no daily-task
+  /// credit: a PvP fight's reward is the rating, not the PvE pool.
+  Future<void> _applyPvpOutcome() async {
+    final myId = supabase.auth.currentUser!.id;
+    final match = widget.pvpMatch!;
+    final winnerId = switch (_engine.outcome!) {
+      CombatOutcome.victory => myId,
+      CombatOutcome.defeat => match.otherUserId(myId),
+      CombatOutcome.fled => _pvpOpponentFled ? myId : match.otherUserId(myId),
+    };
+    await _pvpService.finishMatch(match, winnerId);
+    final finished = await _pvpService.loadMatch(match.id);
+    await _pvpService.syncMyRatingAfterMatch(finished);
+  }
 
   // Offensive actions go to the SELECTED enemy (user 2026-07-27) — [_target],
   // which the player sets by tapping a monster on the enemy half and which
@@ -1049,16 +1455,45 @@ class _BattleScreenState extends State<BattleScreen>
       AbilityTarget.enemy || AbilityTarget.allEnemies => _target,
       _ => actor,
     };
-    if (_scriptBeat == _ScriptBeat.tackle ||
-        _scriptBeat == _ScriptBeat.powerAttack ||
-        _scriptBeat == _ScriptBeat.weakAttack) {
-      _armAgainstOverkill(_engine.activeEnemy);
+    // Document's own figures (user 2026-09-04), set BEFORE the real engine
+    // call so [CombatEngine.scriptedNextHit] lands them as the actual hit —
+    // floating number and log line included — not just a value patched into
+    // HP after the fact. Both fighters open the fight on exactly 12 HP
+    // (forced in initState), so every flat number below reproduces the
+    // document's HP column exactly.
+    if (_scriptBeat == _ScriptBeat.tackle && ability.id == 'attack') {
+      _engine.scriptedNextHit = (damage: 3, miss: false);
+    } else if (_scriptBeat == _ScriptBeat.missedAttack) {
+      // Forced Miss (user 2026-09-05: was a scripted "Resisted" 0, now a
+      // scripted Miss) — same reason the 0 was flat rather than real in the
+      // first place: the enemy's HP has to stay exactly where tackle left
+      // it, same as every other player hit here, and a miss does that for
+      // free instead of needing a tagged 0-damage hit.
+      _engine.scriptedNextHit = (damage: 0, miss: true);
+    } else if (_scriptBeat == _ScriptBeat.powerAttack) {
+      _engine.scriptedNextHit = (damage: 5, miss: false);
+    } else if (_scriptBeat == _ScriptBeat.finisher &&
+        actor.abilities.indexOf(ability) == 2) {
+      _engine.scriptedNextHit = (damage: 4, miss: false);
     }
+    // Fixed by TILE POSITION, not by beat or by this starter's own real
+    // price (user 2026-09-05: "oben links attack 2 ap / oben rechts
+    // Elementattacke 2 ap / unten links Elementattacke 4 ap / unten rechts
+    // Buff 2 ap. Das ist bei allen Startermonster über das gesamte
+    // Tutorial genau so.") — see _effectiveApCost's own doc for the table.
+    final fixedCost = _tutorialTileApCost(actor, ability);
+    if (fixedCost != null) _engine.scriptedApCost = fixedCost;
     final error = _engine.useAbility(actor, ability, target);
     if (error != null) {
       _showError(error);
       return;
     }
+    _relayPvpAction(
+      kind: ability.id == 'attack' ? 'attack' : 'ability',
+      actor: actor,
+      abilityId: ability.id == 'attack' ? null : ability.id,
+      target: target,
+    );
     // Let the hit actually PLAY (lunge, reaction, floating number) before
     // the next scripted prompt appears (user 2026-09-03: "bitte alle
     // Animationen abwarten, bevor der nächste Tutorialinput kommt, sonst
@@ -1069,26 +1504,32 @@ class _BattleScreenState extends State<BattleScreen>
     if (_scriptBeat != null) await _waitForPresentation();
     switch (_scriptBeat) {
       case _ScriptBeat.tackle when ability.id == 'attack':
-        // No number is named for this opening hit in the script — it just
-        // must never be the REAL formula's number, which could vary wildly
-        // by starter. A flat, same-for-everyone dent instead.
-        final foe = _engine.activeEnemy;
-        if (foe != null) foe.hp = math.max(1, (foe.maxHp * 0.90).round());
         setState(() => _scriptBeat = _ScriptBeat.enemyBigHit);
+      case _ScriptBeat.missedAttack:
+        setState(() {
+          _scriptBeat = _ScriptBeat.enemyDebuffHit;
+          _scriptInfoHint =
+              'Miss — every attack has a small chance to '
+              'miss entirely, no matter how strong it is.';
+        });
       case _ScriptBeat.powerAttack:
-        final foe = _engine.activeEnemy;
-        if (foe != null) foe.hp = math.max(1, (foe.maxHp * 0.67).round());
-        setState(() => _scriptBeat = _ScriptBeat.enemyDebuff);
-      case _ScriptBeat.weakAttack:
-        final foe = _engine.activeEnemy;
-        if (foe != null) foe.hp = math.max(1, (foe.maxHp * 0.42).round());
-        setState(() => _scriptBeat = _ScriptBeat.bankEndTurn);
-      case _ScriptBeat.finisher:
-        final foe = _engine.activeEnemy;
-        if (foe != null) foe.hp = 0;
-        _engine.outcome = CombatOutcome.victory;
-        setState(() => _scriptBeat = null);
-        _scheduleAutoIfNeeded();
+        setState(() {
+          _scriptBeat = _ScriptBeat.bankEndTurn;
+          _scriptInfoHint =
+              'Not very effective — the wrong type deals '
+              'less damage.';
+        });
+      case _ScriptBeat.finisher when actor.abilities.indexOf(ability) == 2:
+        _flashMessage('💥 Critical Hit!');
+        // The real engine has already detected victory (enemy HP hit 0) by
+        // this point — [_endOverlay] just waits for [_scriptInfoHint] to
+        // clear before it shows (see build()).
+        setState(() {
+          _scriptBeat = null;
+          _scriptInfoHint =
+              'Critical hit! Every attack has a small chance '
+              'to land extra hard.';
+        });
       default:
         break;
     }
@@ -1110,21 +1551,25 @@ class _BattleScreenState extends State<BattleScreen>
 
   /// Wraps [ability]'s tile in the scripted fight's own anchor — Attack
   /// always gets 'battle-attack-btn' (user 2026-09-03: now just its own
-  /// entry in the same list, not a separate hardcoded tile), and whichever
+  /// entry in the same list, not a separate hardcoded tile), whichever
   /// ability [firstReal] names (see [_firstRealAbility]) gets
-  /// 'battle-first-ability'. Neither anchor does anything outside the
-  /// tutorial's first fight — [_scriptedBattleAnchor] is what actually
-  /// decides which one is lit.
+  /// 'battle-first-ability', and [secondReal] (see [_secondRealAbility])
+  /// gets 'battle-second-ability'. None of these anchors do anything
+  /// outside the tutorial's first fight — [_scriptedBattleAnchor] is what
+  /// actually decides which one is lit.
   Widget _maybeAnchoredAbilityTile(
     AbilityDef ability,
     AbilityDef? firstReal,
+    AbilityDef? secondReal,
     Widget tile,
   ) {
     final anchor = ability.id == 'attack'
         ? 'battle-attack-btn'
         : (firstReal != null && ability.id == firstReal.id
               ? 'battle-first-ability'
-              : null);
+              : (secondReal != null && ability.id == secondReal.id
+                    ? 'battle-second-ability'
+                    : null));
     return anchor == null
         ? tile
         : KeyedSubtree(key: IntroSpotlightAnchors.of(anchor), child: tile);
@@ -1159,7 +1604,7 @@ class _BattleScreenState extends State<BattleScreen>
               ),
               const SizedBox(height: 12),
               for (final c in bench)
-                GestureDetector(
+                Pressable(
                   onTap: () => Navigator.pop(context, c),
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -1201,7 +1646,11 @@ class _BattleScreenState extends State<BattleScreen>
     if (chosen == null) return;
     final idx = _engine.players.indexOf(chosen);
     final err = _engine.switchActivePlayer(idx);
-    if (err != null && mounted) _showError(err);
+    if (err != null) {
+      if (mounted) _showError(err);
+      return;
+    }
+    _relayPvpAction(kind: 'switch', actor: chosen);
   }
 
   // Shows [message] inline in the battle log line for a moment — NOT a bottom
@@ -1287,12 +1736,7 @@ class _BattleScreenState extends State<BattleScreen>
                             Column(
                               children: [
                                 const Expanded(child: SizedBox()),
-                                Expanded(
-                                  child: KeyedSubtree(
-                                    key: IntroSpotlightAnchors.of('battle-hp'),
-                                    child: _rank(isEnemy: false),
-                                  ),
-                                ),
+                                Expanded(child: _rank(isEnemy: false)),
                               ],
                             ),
                           ],
@@ -1307,7 +1751,11 @@ class _BattleScreenState extends State<BattleScreen>
           ),
           if (_floats.isNotEmpty) _floatsLayer(),
           if (_catchOpen) _catchOverlay(),
-          if (_engine.outcome != null) _endOverlay(),
+          // Held back while a [_scriptInfoHint] is still showing (user
+          // 2026-09-04: the finisher's crit explainer must not fight the win
+          // screen for the same pixels) — the real engine has usually
+          // already recorded the outcome by this point regardless.
+          if (_engine.outcome != null && _scriptInfoHint == null) _endOverlay(),
           // Undimmed (user 2026-09-03: "ich möchte aber, dass der gesamte
           // screen erhellt ist, damit ich das Kampfgeschehen verfolgen
           // kann") — the battle itself is worth watching (HP bars, hit
@@ -1319,22 +1767,40 @@ class _BattleScreenState extends State<BattleScreen>
               hint: _battleCalloutHints[_battleCallout!],
               onScrimTap: _advanceBattleCallout,
               dim: false,
+              // The HP ring is round, so its own glow frame should be too
+              // (user 2026-09-04: a facet border around the podium's own
+              // circle read as boxing in far more than just the ring).
+              circular: _battleCalloutAnchors[_battleCallout!] == 'battle-hp',
             ),
           // No onScrimTap — unlike the four explanatory callouts above,
           // each of these three is a real action the player has to actually
           // perform (user 2026-09-03's "gescriptet"), not a fact to
-          // dismiss.
-          if (_scriptedBattleAnchor case final anchor?)
+          // dismiss. Held back while a [_scriptInfoHint] is showing (the
+          // beat underneath has usually already advanced by then) so the
+          // two don't glow two different controls at once.
+          if (_scriptInfoHint == null && _scriptedBattleAnchor != null)
             IntroSpotlightOverlay(
-              anchorName: anchor,
+              anchorName: _scriptedBattleAnchor!,
               hint: _scriptedBattleHint,
+              dim: false,
+            ),
+          // The scripted fight's own concept explainers — effectiveness,
+          // miss, buffs, "not very effective", crit (user 2026-09-04) — one
+          // beat's worth of narration, dismissed by tap like the four
+          // opening callouts. Anchored to the HP ring for lack of a more
+          // specific target; what matters is the text, not the hole.
+          if (_scriptInfoHint != null)
+            IntroSpotlightOverlay(
+              anchorName: 'battle-hp',
+              hint: _scriptInfoHint,
+              onScrimTap: _dismissScriptInfo,
               dim: false,
             ),
         ],
       ),
     );
     return PopScope(
-      canPop: _engine.outcome != null || _exitingToCatch,
+      canPop: _engine.outcome != null,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _confirmFlee();
       },
@@ -1402,6 +1868,18 @@ class _BattleScreenState extends State<BattleScreen>
                 onDone: () => _removeFloat(f.id),
               ),
             ),
+          for (final c in _healCrosses)
+            Align(
+              alignment: Alignment(
+                (c.alignX + c.xJitter).clamp(-1.0, 1.0),
+                c.onEnemy ? -0.42 : 0.16,
+              ),
+              child: _RisingCross(
+                key: ValueKey(c.id),
+                data: c,
+                onDone: () => _removeHealCross(c.id),
+              ),
+            ),
         ],
       ),
     ),
@@ -1436,35 +1914,55 @@ class _BattleScreenState extends State<BattleScreen>
         ],
       ),
     );
-    if (ok == true) _engine.flee();
+    if (ok == true) {
+      final actor = _engine.currentActor;
+      _engine.flee();
+      // PvP: fleeing is a forfeit — the opponent's own engine only learns
+      // the fight is over if this is relayed like any other action (flee
+      // has no actor/target of its own; [actor] just satisfies the
+      // message's shape, [_applyRemoteAction] ignores it for this kind).
+      _relayPvpAction(kind: 'flee', actor: actor);
+    }
   }
 
   // ── Inline catch mini-game (user 2026-07-18) ──────────────
-  /// Whether the Catch button is live: a capture battle, the player's turn, the
-  /// wild alive and worn DOWN into its catchable band (fighting it lower widens
-  /// the ring). Overkilling or the wrong turn greys it out.
+  /// Whether the Catch button is live: a capture battle, the player's turn,
+  /// enough AP for the attempt, the SELECTED wild (user 2026-09-11: catch
+  /// can now target any of up to 3 fielded wilds, not just "the" one — see
+  /// [_target]) alive and worn DOWN into its catchable band (fighting it
+  /// lower widens the ring). Overkilling it, the wrong turn, or not enough
+  /// AP greys the button out.
   bool get _canCatch {
-    final t = widget.catchThresholdFraction;
-    if (t == null ||
+    // Non-null just means "this is a capture battle at all" now (2026-09-11)
+    // — the actual threshold is per-wild (rarer finds must be brought
+    // lower), read straight off whichever is SELECTED via [catchHpThreshold],
+    // since a hunt can field wilds of different rarities at once.
+    if (!widget.isCapture ||
         _catchOpen ||
         _engine.outcome != null ||
         !_engine.isPlayerTurn) {
       return false;
     }
-    final wild = _engine.activeEnemy;
+    if ((_engine.activePlayer?.ap ?? 0) < kCatchApCost) return false;
+    final wild = _target;
     if (wild == null || !wild.alive) return false;
     final frac = wild.maxHp <= 0 ? 0.0 : wild.hp / wild.maxHp;
-    return frac <= t;
+    return frac <= catchHpThreshold(wild.rarity);
   }
 
-  /// Opens the catch QTE overlay: the ring sizing (speed + golden band) comes
-  /// from the wild's rarity, how deep it was fought, and the active catcher's
-  /// catchRate (switch your catcher in to widen it).
+  /// Opens the catch QTE overlay against the currently SELECTED wild (user
+  /// 2026-09-11 — was always "the" lone enemy before hunts fielded several
+  /// at once): the ring sizing (speed + golden band) comes from the wild's
+  /// rarity, how deep it was fought, and the active catcher's catchRate
+  /// (switch your catcher in to widen it). AP for the attempt is spent once
+  /// it resolves (miss or success), not here — see [_resolveCatchAttempt].
   void _startCatch() {
-    final wild = _engine.activeEnemy;
+    final wild = _target;
     if (wild == null || !_canCatch) return;
+    _catchWild = wild;
+    _catcher = _engine.activePlayer;
     final rarity = wild.rarity;
-    final catchRate = _engine.activePlayer?.stat(CreatureStat.catchRate) ?? 0;
+    final catchRate = _catcher?.stat(CreatureStat.catchRate) ?? 0;
     final hpFraction = wild.maxHp <= 0 ? 0.0 : wild.hp / wild.maxHp;
     _catchSpecies = wild.speciesId == null
         ? null
@@ -1526,39 +2024,61 @@ class _BattleScreenState extends State<BattleScreen>
     });
   }
 
-  /// A failed attempt: the wild slips free, the overlay closes and the turn is
-  /// SPENT — the fight goes on (user 2026-07-18).
+  /// A failed attempt: the wild slips free, the overlay closes, and the AP
+  /// is spent regardless (user 2026-09-11: trying to catch now costs the
+  /// same AP whether or not it lands — see CombatEngine.attemptCatch). The
+  /// fight goes on either way — it always did for a miss, but now for a hit
+  /// too (see [_catchSucceed]).
   void _catchMiss() {
     if (_catchResolving) return;
     _catchResolving = true;
     _ring.stop();
-    final name = _engine.activeEnemy?.name ?? 'It';
+    final name = _catchWild?.name ?? 'It';
     setState(() {
       _catchOpen = false;
       _catchBetween = false;
     });
-    _flashMessage('💨 $name slipped free — your turn is spent!');
-    // Consume the action: end the turn so the fight continues.
-    if (_engine.isPlayerTurn) _engine.endTurn();
+    _flashMessage('💨 $name slipped free!');
+    _resolveCatchAttempt();
   }
 
-  /// A caught wild: persist the fight (no kill XP — the catch is the reward)
-  /// and pop it for the caller to record.
-  Future<void> _catchSucceed() async {
+  /// A caught wild: removed from the fight outright (CombatEngine.catchEnemy
+  /// — no kill XP, the catch is the reward, and it can never be targeted
+  /// again) and banked in [_caught]. The AP for the attempt is spent exactly
+  /// like a miss — a catch no longer ends the whole battle (2026-09-11):
+  /// with up to 3 wilds fielded from a hunt's find queue at once, there may
+  /// be more still to fight or catch. The battle's own outcome (and this
+  /// screen's normal end-of-fight pop) resolves on its own once every
+  /// fielded-and-benched wild is gone, via the same path every other battle
+  /// already uses.
+  void _catchSucceed() {
     if (_catchResolving) return;
     _catchResolving = true;
     _ring.stop();
-    final wild = _engine.activeEnemy;
+    final wild = _catchWild;
     setState(() {
       _catchOpen = false;
       _catchBetween = false;
     });
-    if (wild == null) return;
-    setState(() => _exitingToCatch = true);
-    _autoTimer?.cancel();
-    _outcomeApplied = true;
-    await CreaturesController().applyBattleOutcome(_engine.players, xpEach: 0);
-    if (mounted) Navigator.pop(context, CatchSuccess(wild));
+    if (wild != null) {
+      _engine.catchEnemy(wild);
+      _caught.add(wild);
+    }
+    _resolveCatchAttempt();
+  }
+
+  /// Shared tail for a miss or a success: spends the attempt's AP through
+  /// the engine's normal action economy (the turn continues if AP remains,
+  /// ends otherwise — exactly like an attack) at the same point [endTurn]
+  /// used to be called — AFTER the ring overlay has already closed, so an
+  /// enemy can never act while it's still on screen.
+  void _resolveCatchAttempt() {
+    final catcher = _catcher;
+    if (catcher != null && _engine.isPlayerTurn) {
+      _engine.attemptCatch(catcher);
+    }
+    _catchWild = null;
+    _catcher = null;
   }
 
   void _flashMessage(String message) {
@@ -1598,11 +2118,19 @@ class _BattleScreenState extends State<BattleScreen>
           ),
           const SizedBox(width: 6),
           // Same tint as the other deck buttons (user request); the ✔ marks it on.
+          // Disabled for the tutorial's scripted first fight (user: "der auto
+          // button funktioniert während des tutorials, was alles zerstört")
+          // — AUTO hands the PLAYER's own turns to performAutoAction(), the
+          // real, un-scripted AI, which the whole authored beat sequence
+          // (and its HP=12/scriptedNextHit numbers) assumes never runs here.
           _deckButton(
             icon: Icons.smart_toy,
             label: _autoBattle ? 'AUTO ✔' : 'AUTO',
             base: _kUtilTint,
-            enabled: true,
+            // Off in PvP (user 2026-09-15): AUTO hands the player's own
+            // turns to performAutoAction(), the local PvE AI — meaningless
+            // and misleading against a real second human.
+            enabled: !_isFirstBattleTutorial && !widget.isPvp,
             onTap: () {
               setState(() => _autoBattle = !_autoBattle);
               _scheduleAutoIfNeeded();
@@ -1617,70 +2145,27 @@ class _BattleScreenState extends State<BattleScreen>
   );
 
   // ── Type-matchup key ──────────────────────────────────────
-  // A compact "what beats what" chart (user request): the fire→plant→water→fire
-  // rock-paper-scissors RING on the left, and light/shadow (which counter each
-  // other) stacked on the right. Arrows point attacker → the type it's strong
-  // against.
-  Widget _typeChart() => Container(
-    color: FoE.bg,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // A slim tappable header — the whole strip toggles the chart open/shut.
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _typeChartOpen = !_typeChartOpen),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.hexagon_outlined, size: 13, color: FoE.textDim),
-                const SizedBox(width: 6),
-                Text('Type chart', style: FoE.dim(size: 11)),
-                const SizedBox(width: 4),
-                Icon(
-                  _typeChartOpen ? Icons.expand_less : Icons.expand_more,
-                  size: 16,
-                  color: FoE.textDim,
-                ),
-              ],
-            ),
-          ),
-        ),
-        // The full RPS ring + light/shadow key, revealed on demand.
-        AnimatedSize(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          child: _typeChartOpen
-              ? const Padding(
-                  padding: EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 88,
-                        height: 88,
-                        child: CustomPaint(
-                          painter: _RpsRingPainter(),
-                          child: _RpsRingLabels(),
-                        ),
-                      ),
-                      SizedBox(width: 30),
-                      SizedBox(
-                        width: 46,
-                        height: 88,
-                        child: CustomPaint(
-                          painter: _DuoArrowPainter(),
-                          child: _DuoLabels(),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : const SizedBox(width: double.infinity),
-        ),
-      ],
+  // A compact "what beats what" chart (user request). 2026-09-07: was an
+  // inline collapsible strip; now a single tap opens the full-size overlay
+  // (see showTypeCircleDialog) — "das müsste viel grösser sein... mache
+  // bitte ein Overlaymenü wie der Buildingdetailscreen". The overlay draws
+  // the live 8-type matrix (CreatureElement, since 2026-09-08).
+  Widget _typeChart() => Pressable(
+    behavior: HitTestBehavior.opaque,
+    onTap: () => showTypeCircleDialog(context),
+    child: Container(
+      color: FoE.bg,
+      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.hexagon_outlined, size: 13, color: FoE.textDim),
+          const SizedBox(width: 6),
+          Text('Type chart', style: FoE.dim(size: 11)),
+          const SizedBox(width: 4),
+          Icon(Icons.open_in_full, size: 12, color: FoE.textDim),
+        ],
+      ),
     ),
   );
 
@@ -1861,6 +2346,11 @@ class _BattleScreenState extends State<BattleScreen>
                                 isEnemy: isEnemy,
                                 width: innerW / CombatEngine.kFieldSlots,
                                 back: wedge && !_isCentreSlot(i),
+                                // The HP callout points at ONE ring, not the
+                                // whole rank (user 2026-09-04) — the leftmost
+                                // live slot on MY side, same one that is
+                                // always alone during the guided intro.
+                                hpAnchor: !isEnemy && i == live.first,
                               ),
                             ),
                           ),
@@ -1934,6 +2424,11 @@ class _BattleScreenState extends State<BattleScreen>
     // monster in slot 0 must not be drawn as if it were hanging back from
     // company that is no longer there.
     required bool back,
+    // Carries the 'battle-hp' spotlight anchor onto this slot's own HP ring
+    // (user 2026-09-04) instead of the whole rank — only ever true for one
+    // slot at a time, so it's the sole place [IntroSpotlightAnchors.of]
+    // gets attached.
+    bool hpAnchor = false,
   }) {
     // A K.O. in progress stands in for whatever is actually in this slot,
     // for the length of its own presentation (user 2026-08-29: "eine K.O
@@ -1981,10 +2476,18 @@ class _BattleScreenState extends State<BattleScreen>
     // is remembered for when the turn comes back), only the marker's
     // visibility is gated.
     final targeted = isEnemy && identical(c0, _target) && _engine.isPlayerTurn;
-    return GestureDetector(
+    return Pressable(
       behavior: HitTestBehavior.opaque,
       onTap: (isEnemy && !koing)
           ? () => setState(() => _targetId = c0.id)
+          : null,
+      // Long-press to size up a wild mid-fight (user 2026-09-14: "auch
+      // während des Kampfes, will ich bei einem wilden Monster die Werte
+      // ansehen können") — a plain tap already picks the attack target, so
+      // the stat preview needs a gesture of its own rather than fighting it
+      // for the same one.
+      onLongPress: (isEnemy && !koing)
+          ? () => openWildPreview(context, c0)
           : null,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
@@ -2018,6 +2521,9 @@ class _BattleScreenState extends State<BattleScreen>
                       // box, the slab was under the sprite's transparent margin
                       // rather than under its feet, so the monster read as
                       // floating above its own ground.
+                      key: hpAnchor
+                          ? IntroSpotlightAnchors.of('battle-hp')
+                          : null,
                       padding: EdgeInsets.only(
                         bottom: width * (back ? 0.82 : 0.92) * _kPlatformLift,
                       ),
@@ -2108,19 +2614,17 @@ class _BattleScreenState extends State<BattleScreen>
     required bool targeted,
     required double width,
   }) {
+    // One icon per ACTIVE effect (user 2026-09-08: "Buffs und Debuffs
+    // besser erklären, damit ich genau weiss, was diese machen") — every
+    // self-buff and secondary debuff now shows, not just haste/slowed's own
+    // derived arrows (which hid armor/rage/blind/weakened/exposed
+    // entirely). Tapping the strip explains each one in full — see
+    // [_showActiveEffects].
     final marks = <Widget>[
-      if (c.hasted)
-        const Icon(
-          Icons.keyboard_double_arrow_up,
-          size: 11,
-          color: FoE.positive,
-        ),
-      if (c.slowed)
-        const Icon(
-          Icons.keyboard_double_arrow_down,
-          size: 11,
-          color: FoE.accentBlue,
-        ),
+      for (final e in c.selfBuffs.keys)
+        Text(e.emoji, style: const TextStyle(fontSize: 10)),
+      for (final e in c.secondaryDebuffs.keys)
+        Text(e.emoji, style: const TextStyle(fontSize: 10)),
       if (c.mainStatus != null)
         Text(c.mainStatus!.emoji, style: const TextStyle(fontSize: 10)),
     ];
@@ -2129,14 +2633,17 @@ class _BattleScreenState extends State<BattleScreen>
       children: [
         // The status strip, only when there is something to say.
         if (marks.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(bottom: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-            decoration: ShapeDecoration(
-              color: FoE.bg.withValues(alpha: 0.65),
-              shape: FoE.facet(radius: 5),
+          Pressable(
+            onTap: () => _showActiveEffects(c),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: ShapeDecoration(
+                color: FoE.bg.withValues(alpha: 0.65),
+                shape: FoE.facet(radius: 5),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: marks),
             ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: marks),
           ),
         // No more box, and the level in place of the HP numbers (user
         // 2026-08-28: "Lösche die HP Zahlen und die Box... Anstelle der HP
@@ -2212,12 +2719,16 @@ class _BattleScreenState extends State<BattleScreen>
         _engine.outcome == null &&
         !_presenting &&
         (_engine.isPlayerTurn || _engine.needsPlayerSwitch);
-    return GestureDetector(
+    return Pressable(
       onTap: canSwitchTo
           ? () {
               final idx = _engine.players.indexOf(c);
               final err = _engine.switchActivePlayer(idx);
-              if (err != null) _showError(err);
+              if (err != null) {
+                _showError(err);
+                return;
+              }
+              _relayPvpAction(kind: 'switch', actor: c);
             }
           : null,
       child: Container(
@@ -2673,7 +3184,7 @@ class _BattleScreenState extends State<BattleScreen>
     final lines = _log.isEmpty
         ? const [_LogLine('The battle begins!', null)]
         : _log.sublist(_log.length >= 2 ? _log.length - 2 : 0);
-    return GestureDetector(
+    return Pressable(
       // Tap to see the WHOLE log (user 2026-08-28: "Kampflog aufklappbar
       // machen, damit der ganze Log angezeigt wird") — the bar itself stays
       // this fixed two-line size (it sits on the seam, with the sprites
@@ -2904,7 +3415,14 @@ class _BattleScreenState extends State<BattleScreen>
         final panelH = contentH + 22; // top 8 / bottom 10 padding + buffer
 
         Widget content;
-        if (_engine.outcome != null) {
+        // Held off exactly as long as [_endOverlay] itself is (see its own
+        // "held back while a [_scriptInfoHint] is still showing" comment) —
+        // the finisher's crit explainer can leave [_engine.outcome] set for
+        // a beat before the win screen is allowed to take over, and this
+        // panel used to collapse to nothing the instant outcome was set,
+        // leaving a dead blank strip under the still-showing hint (user
+        // 2026-09-06: "am Ende des Kampfes verschwindet das UI").
+        if (_engine.outcome != null && _scriptInfoHint == null) {
           content = const SizedBox.shrink();
         } else if (_entering) {
           // Hold input while the fighters are still sliding on.
@@ -3011,12 +3529,12 @@ class _BattleScreenState extends State<BattleScreen>
                 ),
               ),
               // Only shown when this encounter can EVER be caught — a story
-              // battle has no [catchThresholdFraction] at all and never will
-              // this turn or any other (user 2026-08-28: "Catchbutton nur
-              // dann anzeigen, wenn das Monster theoretisch gefangen werden
+              // battle isn't [isCapture] at all and never will be this turn
+              // or any other (user 2026-08-28: "Catchbutton nur dann
+              // anzeigen, wenn das Monster theoretisch gefangen werden
               // kann"). [_canCatch] still gates whether it's ENABLED right
               // now (wrong turn, not worn down enough yet).
-              if (widget.catchThresholdFraction != null) ...[
+              if (widget.isCapture) ...[
                 const SizedBox(width: _kTileGap),
                 Expanded(
                   child: _deckButton(
@@ -3068,16 +3586,18 @@ class _BattleScreenState extends State<BattleScreen>
                 // ONE loop, no more separate hardcoded tile for it.
                 final abilities = actor.abilities;
                 final firstReal = _firstRealAbility(actor);
+                final secondReal = _secondRealAbility(actor);
                 final tiles = [
                   for (final a in abilities)
                     _maybeAnchoredAbilityTile(
                       a,
                       firstReal,
+                      secondReal,
                       _abilityBtn(
                         a.name,
-                        CombatEngine.abilityApCost(a),
+                        _effectiveApCost(a),
                         element: a.element,
-                        enabled: myTurn && ap >= CombatEngine.abilityApCost(a),
+                        enabled: myTurn && ap >= _effectiveApCost(a),
                         onTap: () => _useAbility(a),
                         ability: a,
                       ),
@@ -3263,7 +3783,7 @@ class _BattleScreenState extends State<BattleScreen>
     return SizedBox(
       width: _kAbilityW,
       height: _kAbilityH,
-      child: GestureDetector(
+      child: Pressable(
         onTap: enabled ? onTap : null,
         onLongPress: () => _showAbilityPreview(name, ap, element, ability),
         child: Stack(
@@ -3345,6 +3865,77 @@ class _BattleScreenState extends State<BattleScreen>
     ),
   );
 
+  /// Tap the status strip on a combatant's plate → explain EVERY effect
+  /// currently active on it, in plain language (user 2026-09-08: "Buffs und
+  /// Debuffs besser erklären, damit ich genau weiss, was diese machen").
+  ///
+  /// Reuses [describeAbilityEffect] — the exact text an ability's own
+  /// preview already promises — built from the effect's REAL, currently
+  /// active magnitude/remaining turns rather than the catalog default, so
+  /// the numbers shown are true right now even if the move that applied
+  /// them authored its own. Drops that function's trailing "lands on a X %
+  /// roll" sentence: that line is about whether an ability WOULD apply this
+  /// — meaningless for something already sitting on the combatant.
+  Future<void> _showActiveEffects(Combatant c) async {
+    List<String> activeLines(AbilityEffect e) {
+      final all = describeAbilityEffect(e);
+      return all.length > 1 ? all.sublist(0, all.length - 1) : all;
+    }
+
+    final rows = <Widget>[
+      if (c.mainStatus != null)
+        _previewRow(
+          Icons.local_fire_department,
+          '${c.mainStatus!.emoji} ${c.mainStatus!.label}\n'
+          '${activeLines(AbilityEffect(kind: AbilityEffectKind.ofMainStatus(c.mainStatus!)!, turns: c.mainStatusTurnsRemaining, value: c.mainStatusValue)).join('\n')}',
+        ),
+      for (final e in c.selfBuffs.entries)
+        _previewRow(
+          Icons.shield,
+          '${e.key.emoji} ${e.key.label}\n'
+          '${activeLines(AbilityEffect(kind: AbilityEffectKind.ofSelfBuff(e.key), turns: e.value.turnsRemaining, value: e.value.value)).join('\n')}',
+          color: FoE.positive,
+        ),
+      for (final e in c.secondaryDebuffs.entries)
+        _previewRow(
+          Icons.visibility_off,
+          '${e.key.emoji} ${e.key.label}\n'
+          '${activeLines(AbilityEffect(kind: AbilityEffectKind.ofDebuff(e.key), turns: e.value.turnsRemaining, value: e.value.value)).join('\n')}',
+        ),
+    ];
+    if (rows.isEmpty) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: FoE.panelDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          14,
+          16,
+          16 + MediaQuery.of(ctx).viewPadding.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${c.name} — active effects',
+              style: FoE.label(
+                size: 14,
+              ).copyWith(color: FoE.parchment, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            ...rows,
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Long-press preview of an ability (or the basic Attack when [a] is null):
   /// what it does, its numbers, and its live effectiveness vs the current enemy
   /// — so the player can weigh a move before spending AP (user request).
@@ -3389,11 +3980,27 @@ class _BattleScreenState extends State<BattleScreen>
       if (a.kind == AbilityKind.damage) {
         rows.add(_previewRow(Icons.bolt, 'Power ${a.power}'));
       }
-      // ONE row per effect, in the effect's own numbers (user 2026-07-30). It
-      // used to print "Burn · 30% chance" — which said nothing about how hard or
-      // how long, and since abilities carry their own duration and magnitude now,
-      // two moves with that exact line can be wildly different fights.
-      // Same text the Dev-Mode form previews, so the card cannot drift from it.
+      // Extra hits (user 2026-09-08: "nicht nur 1 gegner treffen sondern 2
+      // oder 3... mit jedem Treffer sinkt die Chance"): the compound chance
+      // to reach each further hit, capped at 3 total.
+      if (a.extraHitChance > 0) {
+        final pct2 = (a.extraHitChance * 100).round();
+        final pct3 = (a.extraHitChance * a.extraHitChance * 100).round();
+        rows.add(
+          _previewRow(
+            Icons.blur_on,
+            a.extraHitSameTarget
+                ? 'May hit the SAME target again: 2nd hit $pct2 % chance, '
+                      '3rd $pct3 %.'
+                : 'May also hit ANOTHER enemy: 2nd hit $pct2 % chance, 3rd '
+                      '$pct3 % — does nothing extra alone.',
+          ),
+        );
+      }
+      // ONE row per effect, stated fully (user 2026-07-30: "zeige mir ganz
+      // genau, was dies im Kampf bedeutet" — the same describeAbilityEffect
+      // the Dev-Mode form uses, so this card cannot say less than the editor
+      // already promised the author it would do).
       for (final e in a.effects) {
         rows.add(
           _previewRow(
@@ -3407,7 +4014,7 @@ class _BattleScreenState extends State<BattleScreen>
               AbilityEffectFamily.lifesteal => Icons.bloodtype,
               AbilityEffectFamily.selfPenalty => Icons.warning_amber,
             },
-            summariseAbilityEffect(e),
+            describeAbilityEffect(e).join('\n'),
             color: switch (e.kind.family) {
               AbilityEffectFamily.heal ||
               AbilityEffectFamily.regen ||
@@ -3554,7 +4161,7 @@ class _BattleScreenState extends State<BattleScreen>
         child: tile,
       );
     }
-    return GestureDetector(
+    return Pressable(
       onTap: enabled ? onTap : null,
       child: SizedBox(width: width, height: height, child: tile),
     );
@@ -3573,7 +4180,7 @@ class _BattleScreenState extends State<BattleScreen>
         size: 13,
       ).copyWith(color: FoE.goldBright, fontWeight: FontWeight.w700),
     );
-    return GestureDetector(
+    return Pressable(
       onTap: enabled ? onTap : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -3600,19 +4207,24 @@ class _BattleScreenState extends State<BattleScreen>
 
   // ── Items (in-battle heal potions) ────────────────────────
   /// Opens a sheet of held heal items; using one heals the ACTIVE monster and
-  /// spends the turn (user 2026-07-18).
+  /// costs a flat [kItemApCost] AP, same as every ability's own AP spend —
+  /// NOT the whole turn (user 2026-09-05: "ein Item benutzen, kostet immer
+  /// 1 AP", replacing the older whole-turn rule from 2026-07-18).
   Future<void> _openItems() async {
     final settlement = SettlementController();
     final actor = _engine.activePlayer;
     if (actor == null) return;
-    // Battle-usable heal + buff items apply to the ACTIVE monster. (Revive is
-    // out-of-battle only — the active can't be K.O., and bench-targeting is a
-    // later slice.)
+    // Battle-usable heal/buff/cure items apply to the ACTIVE monster. (Revive
+    // is out-of-battle only — the active can't be K.O., and bench-targeting
+    // is a later slice.)
     final held = [
       for (final e in settlement.items.entries)
         if (kItemDefs[e.key] case final ItemDef d
             when d.battleUsable &&
-                (d.kind == ItemKind.heal || d.kind == ItemKind.buff))
+                (d.kind == ItemKind.heal ||
+                    d.kind == ItemKind.buff ||
+                    d.kind == ItemKind.cureStatus ||
+                    d.kind == ItemKind.cureDebuffs))
           (d, e.value),
     ];
     final chosen = await showModalBottomSheet<ItemDef>(
@@ -3632,13 +4244,16 @@ class _BattleScreenState extends State<BattleScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Use an item (spends the turn)', style: FoE.title(size: 14)),
+            Text(
+              'Use an item (costs $kItemApCost AP)',
+              style: FoE.title(size: 14),
+            ),
             const SizedBox(height: 12),
             if (held.isEmpty)
               Text('No usable items in your bag.', style: FoE.dim(size: 12))
             else
               for (final (def, count) in held)
-                GestureDetector(
+                Pressable(
                   onTap: () => Navigator.pop(context, def),
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -3650,9 +4265,7 @@ class _BattleScreenState extends State<BattleScreen>
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            def.kind == ItemKind.buff
-                                ? '${def.name} ×$count · ${_selfBuffForStat(def.buffStat).name}'
-                                : '${def.name} ×$count · +${healFromItem(def, (actor.maxHp - actor.hp).toDouble()).round()} HP',
+                            '${def.name} ×$count · ${_itemUseLabel(def, actor)}',
                             style: FoE.label(size: 13),
                           ),
                         ),
@@ -3682,6 +4295,24 @@ class _BattleScreenState extends State<BattleScreen>
         // resolves it the same way an ability's does.
         actor.applySelfBuff(buff, value: chosen.magnitude);
         _flashMessage('${chosen.emoji} ${actor.name} — ${buff.name}!');
+      case ItemKind.cureStatus:
+        // The item's own magnitude IS its reliability (user 2026-09-15's
+        // weak/strong remedies — see ItemKind.cureStatus's own doc).
+        // deterministicCombat always succeeds, matching every other roll's
+        // own convention (see CombatEngine._rollAccuracy).
+        final worked = _engine.deterministicCombat ||
+            _engine.rng.nextDouble() < chosen.magnitude;
+        final cured = worked && actor.cureMainStatus(chosen.cureMainStatus);
+        _flashMessage(cured
+            ? '${chosen.emoji} ${actor.name} is cured!'
+            : '${chosen.emoji} ${actor.name} — no effect.');
+      case ItemKind.cureDebuffs:
+        final worked = _engine.deterministicCombat ||
+            _engine.rng.nextDouble() < chosen.magnitude;
+        final cleansed = worked && actor.clearSecondaryDebuffs();
+        _flashMessage(cleansed
+            ? '${chosen.emoji} ${actor.name} is cleansed!'
+            : '${chosen.emoji} ${actor.name} — no effect.');
       default: // heal
         final heal = healFromItem(
           chosen,
@@ -3691,16 +4322,29 @@ class _BattleScreenState extends State<BattleScreen>
         _flashMessage('${chosen.emoji} ${actor.name} +$heal HP');
     }
     if (_scriptBeat == _ScriptBeat.healItem) {
-      // Scripted for THIS fight only (user 2026-09-03: "kostet immer 1 AP
-      // pro Item" — confirmed as a tutorial-only fake, not a real rule
-      // change): 1 AP, turn stays open, so the AP left over still buys the
-      // next beat's ability in the SAME turn.
-      actor.ap = math.max(0, actor.ap - 1);
-      _ensureApFor(_ScriptBeat.powerAttack);
-      setState(() => _scriptBeat = _ScriptBeat.powerAttack);
+      // Scripted for THIS fight only: the cutscene sets AP directly rather
+      // than going through _engine.useItem, so a low roll can never block
+      // the next authored beat (user 2026-09-03: "unabhängig von den
+      // tatsächlichen Werten") — it happens to spend the exact same
+      // [kItemApCost] the real rule below now also charges (user
+      // 2026-09-05), so the two no longer diverge, they just take different
+      // paths to it.
+      actor.ap = math.max(0, actor.ap - kItemApCost);
+      // "9 regeneriert" (user 2026-09-04) tops the starter right back up to
+      // full regardless of the real potion's own formula — same fakery as
+      // every other forced HP number in this fight.
+      actor.hp = actor.maxHp;
+      _ensureApFor(_ScriptBeat.missedAttack);
+      setState(() {
+        _scriptBeat = _ScriptBeat.missedAttack;
+        _scriptInfoHint =
+            'Items cost AP too — always 1, no matter which '
+            'one you use.';
+      });
     } else {
-      // Using an item spends the turn (the real rule, everywhere else).
-      if (_engine.isPlayerTurn) _engine.endTurn();
+      // Using an item always costs a flat kItemApCost AP (user 2026-09-05) —
+      // the turn stays open for whatever's left, exactly like an ability.
+      _engine.useItem(actor);
       setState(() {});
     }
   }
@@ -3712,6 +4356,29 @@ class _BattleScreenState extends State<BattleScreen>
     CreatureStat.speed => SelfBuffKind.haste,
     _ => SelfBuffKind.rage,
   };
+
+  /// What tapping [def] would do to [actor] RIGHT NOW — the "Use an item"
+  /// sheet's one-line preview, same job for every kind (user 2026-09-15
+  /// added the cure lines).
+  String _itemUseLabel(ItemDef def, Combatant actor) {
+    switch (def.kind) {
+      case ItemKind.buff:
+        return _selfBuffForStat(def.buffStat).name;
+      case ItemKind.cureStatus:
+        final pct = (def.magnitude * 100).round();
+        final target = def.cureMainStatus?.label ?? 'any status';
+        return actor.mainStatus == null
+            ? 'nothing to cure right now'
+            : 'cures $target · $pct%';
+      case ItemKind.cureDebuffs:
+        final pct = (def.magnitude * 100).round();
+        return actor.secondaryDebuffs.isEmpty
+            ? 'nothing to cleanse right now'
+            : 'cleanses all debuffs · $pct%';
+      default: // heal
+        return '+${healFromItem(def, (actor.maxHp - actor.hp).toDouble()).round()} HP';
+    }
+  }
 
   // ── End overlay ───────────────────────────────────────────
   Widget _endOverlay() {
@@ -3744,7 +4411,10 @@ class _BattleScreenState extends State<BattleScreen>
                 const SizedBox(height: 8),
                 Text(subtitle, style: FoE.label(size: 13)),
               ],
-              if (outcome == CombatOutcome.victory) ...[
+              // PvP has no XP/level-up/unlock pool — its reward is the
+              // rating change, already applied by [_applyPvpOutcome] and
+              // visible on the Ranking tab, not restated here.
+              if (outcome == CombatOutcome.victory && !widget.isPvp) ...[
                 const SizedBox(height: 16),
                 _victoryRewards(),
                 if (_levelUps.isNotEmpty) ...[
@@ -3759,8 +4429,23 @@ class _BattleScreenState extends State<BattleScreen>
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(outcome),
+                child: Pressable(
+                  // A capture battle returns every wild caught along the
+                  // way too (2026-09-11) — every other battle (dungeon,
+                  // Survival, Training) still just gets its bare outcome.
+                  // PvP has no caller waiting on a result at all — it just
+                  // goes back to the app root (the PvP tab, not mid-lobby).
+                  onTap: () => widget.isPvp
+                      ? Navigator.of(context).popUntil((r) => r.isFirst)
+                      : Navigator.of(context).pop(
+                          widget.isCapture
+                              ? HuntBattleResult(
+                                  outcome,
+                                  _caught,
+                                  widget.enemies.where((w) => !w.alive).length,
+                                )
+                              : outcome,
+                        ),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: FoE.btn(active: true),
@@ -4102,7 +4787,10 @@ class _BattleScreenState extends State<BattleScreen>
   /// crosses the golden band. Success catches it; a miss burns the turn and the
   /// fight goes on (user 2026-07-18).
   Widget _catchOverlay() {
-    final wild = _engine.activeEnemy;
+    // The wild THIS attempt is against (2026-09-11) — captured at
+    // _startCatch time, not necessarily the same as _engine.activeEnemy /
+    // fieldEnemies.first once more than one wild can be on the field.
+    final wild = _catchWild;
     final showRing = _catchOpen && !_catchBetween;
     final radius = showRing ? (1 - _ring.value) : 1.0;
     return Positioned.fill(
@@ -4233,162 +4921,6 @@ class _BattleRingPainter extends CustomPainter {
       old.zoneColor != zoneColor;
 }
 
-/// The fire→plant→water→fire rock-paper-scissors CIRCLE (user request): a faint
-/// ring with GREY arc arrows running clockwise, each pointing at the type it is
-/// strong against. Emoji sit on the ring via _RpsRingLabels.
-class _RpsRingPainter extends CustomPainter {
-  const _RpsRingPainter();
-
-  static const double _d2r = math.pi / 180;
-
-  static Offset _rot(Offset v, double a) {
-    final c = math.cos(a), s = math.sin(a);
-    return Offset(v.dx * c - v.dy * s, v.dx * s + v.dy * c);
-  }
-
-  void _arc(
-    Canvas canvas,
-    Offset c,
-    double r,
-    double startDeg,
-    double endDeg,
-    Paint stroke,
-    Paint fill,
-  ) {
-    canvas.drawArc(
-      Rect.fromCircle(center: c, radius: r),
-      startDeg * _d2r,
-      (endDeg - startDeg) * _d2r,
-      false,
-      stroke,
-    );
-    // Arrowhead at the END, pointing along the clockwise travel direction.
-    final endA = endDeg * _d2r;
-    final tip = c + Offset(math.cos(endA), math.sin(endA)) * r;
-    final back = Offset(math.sin(endA), -math.cos(endA)); // opposite of tangent
-    const head = 7.0;
-    final p1 = tip + _rot(back, 0.5) * head;
-    final p2 = tip + _rot(back, -0.5) * head;
-    canvas.drawPath(
-      Path()
-        ..moveTo(tip.dx, tip.dy)
-        ..lineTo(p1.dx, p1.dy)
-        ..lineTo(p2.dx, p2.dy)
-        ..close(),
-      fill,
-    );
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height / 2);
-    final r = size.shortestSide / 2 * 0.70;
-    // The faint circle itself.
-    canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..color = FoE.border
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
-    final stroke = Paint()
-      ..color = FoE.textDim
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round;
-    final fill = Paint()
-      ..color = FoE.textDim
-      ..style = PaintingStyle.fill;
-    // Fire(top,-90°) → Plant(30°) → Water(150°) → Fire, clockwise. Inset ~22°
-    // from each emoji so the arrows don't run under the glyphs.
-    _arc(canvas, c, r, -68, 8, stroke, fill); // fire → plant
-    _arc(canvas, c, r, 52, 128, stroke, fill); // plant → water
-    _arc(canvas, c, r, 172, 248, stroke, fill); // water → fire
-  }
-
-  @override
-  bool shouldRepaint(_RpsRingPainter old) => false;
-}
-
-class _RpsRingLabels extends StatelessWidget {
-  const _RpsRingLabels();
-  @override
-  Widget build(BuildContext context) => const Stack(
-    children: [
-      // Positions match the painter: fire top, plant lower-right, water
-      // lower-left, all on the ring (0.70 of the half-box).
-      Align(
-        alignment: Alignment(0, -0.70),
-        child: Text('🔥', style: TextStyle(fontSize: 21)),
-      ),
-      Align(
-        alignment: Alignment(0.606, 0.35),
-        child: Text('🌿', style: TextStyle(fontSize: 21)),
-      ),
-      Align(
-        alignment: Alignment(-0.606, 0.35),
-        child: Text('💧', style: TextStyle(fontSize: 21)),
-      ),
-    ],
-  );
-}
-
-/// Light and shadow counter EACH OTHER — a GREY double-headed arrow between them.
-class _DuoArrowPainter extends CustomPainter {
-  const _DuoArrowPainter();
-  @override
-  void paint(Canvas canvas, Size size) {
-    final top = Offset(size.width * 0.5, size.height * 0.33);
-    final bottom = Offset(size.width * 0.5, size.height * 0.67);
-    canvas.drawLine(
-      top,
-      bottom,
-      Paint()
-        ..color = FoE.textDim
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5
-        ..strokeCap = StrokeCap.round,
-    );
-    final headPaint = Paint()
-      ..color = FoE.textDim
-      ..style = PaintingStyle.fill;
-    void head(Offset tip, double dirY) {
-      canvas.drawPath(
-        Path()
-          ..moveTo(tip.dx, tip.dy)
-          ..lineTo(tip.dx - 4.5, tip.dy + dirY * 8)
-          ..lineTo(tip.dx + 4.5, tip.dy + dirY * 8)
-          ..close(),
-        headPaint,
-      );
-    }
-
-    head(top, 1); // arrow pointing up (light beats shadow)
-    head(bottom, -1); // arrow pointing down (shadow beats light)
-  }
-
-  @override
-  bool shouldRepaint(_DuoArrowPainter old) => false;
-}
-
-class _DuoLabels extends StatelessWidget {
-  const _DuoLabels();
-  @override
-  Widget build(BuildContext context) => const Stack(
-    children: [
-      Align(
-        alignment: Alignment(0, -0.66),
-        child: Text('✨', style: TextStyle(fontSize: 21)),
-      ),
-      Align(
-        alignment: Alignment(0, 0.66),
-        child: Text('🌑', style: TextStyle(fontSize: 21)),
-      ),
-    ],
-  );
-}
-
 /// One floating combat number's data (see _BattleScreenState._floats). Pure
 /// data — the animation lives in [_FloatingNumber].
 class _FloatText {
@@ -4492,6 +5024,107 @@ class _FloatingNumberState extends State<_FloatingNumber>
                       ).copyWith(color: d.color, fontWeight: FontWeight.w800),
                     ),
                 ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// One rising heal cross's data (see _BattleScreenState._healCrosses). Pure
+/// data, same shape as [_FloatText] — [xJitter] spreads a burst of them apart
+/// horizontally and [delay] staggers when each one starts rising, so three
+/// spawned together read as a little burst rather than one glyph tripled in
+/// place.
+class _HealCross {
+  final int id;
+  final double alignX;
+  final bool onEnemy;
+  final double xJitter;
+  final Duration delay;
+  const _HealCross({
+    required this.id,
+    required this.alignX,
+    required this.onEnemy,
+    required this.xJitter,
+    required this.delay,
+  });
+}
+
+/// A single ✚ that pops in, drifts up further and longer than a damage
+/// number (a heal is a slower, gentler beat than a hit), and fades — see
+/// [_HealCross]'s own doc for why several of these ride one heal.
+class _RisingCross extends StatefulWidget {
+  final _HealCross data;
+  final VoidCallback onDone;
+  const _RisingCross({super.key, required this.data, required this.onDone});
+
+  @override
+  State<_RisingCross> createState() => _RisingCrossState();
+}
+
+class _RisingCrossState extends State<_RisingCross>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+  bool _started = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _c =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 1400),
+        )..addStatusListener((s) {
+          if (s == AnimationStatus.completed) widget.onDone();
+        });
+    Future.delayed(widget.data.delay, () {
+      if (mounted) {
+        setState(() => _started = true);
+        _c.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_started) return const SizedBox.shrink();
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final t = _c.value;
+        final pop = t < 0.2 ? Curves.easeOutBack.transform(t / 0.2) : 1.0;
+        // Rises further than a damage number and keeps drifting for its
+        // whole life — a heal is a slow float, not a quick pop.
+        final rise = -52.0 * Curves.easeOut.transform(t);
+        final opacity = t < 0.6 ? 1.0 : (1 - (t - 0.6) / 0.4).clamp(0.0, 1.0);
+        return Transform.translate(
+          offset: Offset(0, rise),
+          child: Opacity(
+            opacity: opacity,
+            child: Transform.scale(
+              scale: pop,
+              child: Text(
+                '✚',
+                style: FoE.title(size: 16).copyWith(
+                  color: FoE.positive,
+                  fontWeight: FontWeight.w900,
+                  shadows: const [
+                    Shadow(
+                      color: Colors.black,
+                      blurRadius: 0,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

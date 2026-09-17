@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
-import '../../settlement/data/goods_definitions.dart' show goodsForEra;
+import '../../settlement/data/goods_definitions.dart' show goodsForRegion;
 import '../../settlement/dev/dev_theme.dart';
 import '../models/creature_enums.dart';
 import '../models/heal_balance.dart';
 import '../models/species_balance.dart';
 import '../services/creature_defs_service.dart';
+import '../../../core/ui/pressable.dart';
 
 /// Global species-balance config (user 2026-07-24). Per rarity: the combat/civil
 /// BASE and GROWTH point budgets, one per-category LIMIT each (base + growth,
@@ -178,28 +179,12 @@ class _SpeciesBalanceFormState extends State<SpeciesBalanceForm> {
           const SizedBox(height: 2),
           Text('Encounter weight', style: FoE.dim(size: 10)),
           const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: _numField(
-                  'ewb-${r.name}',
-                  'Gewicht (Gefahr 1)',
-                  c.encounterWeightBase,
-                  (v) => _update(r, c.copyWith(encounterWeightBase: v)),
-                  decimals: 1,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _numField(
-                  'ewp-${r.name}',
-                  '± pro Gefahrstufe',
-                  c.encounterWeightPerDanger,
-                  (v) => _update(r, c.copyWith(encounterWeightPerDanger: v)),
-                  decimals: 1,
-                ),
-              ),
-            ],
+          _numField(
+            'ewb-${r.name}',
+            'Gewicht',
+            c.encounterWeightBase,
+            (v) => _update(r, c.copyWith(encounterWeightBase: v)),
+            decimals: 1,
           ),
           const SizedBox(height: 8),
           Text('Fangschwierigkeit', style: FoE.dim(size: 10)),
@@ -795,11 +780,11 @@ class _SpeciesBalanceFormState extends State<SpeciesBalanceForm> {
                 style: FoE.dim(size: 11),
               ),
               const SizedBox(height: 6),
-              for (var era = 1; era <= kMaxEras; era++)
+              for (var region = 1; region <= kMaxEras; region++)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 2),
                   child: Text(
-                    'Era $era: ${goodsForEra(era).map((g) => '${g.emoji} ${g.name}').join(' · ')}',
+                    'Region $region: ${goodsForRegion(region).map((g) => '${g.emoji} ${g.name}').join(' · ')}',
                     style: FoE.dim(size: 10),
                   ),
                 ),
@@ -999,7 +984,7 @@ class _SpeciesBalanceFormState extends State<SpeciesBalanceForm> {
 
   Widget _saveButton() => SizedBox(
     width: double.infinity,
-    child: GestureDetector(
+    child: Pressable(
       onTap: _saving ? null : _save,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),

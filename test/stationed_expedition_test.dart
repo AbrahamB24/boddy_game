@@ -1,7 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:boddygame/features/creatures/models/area.dart';
-import 'package:boddygame/features/settlement/data/gather_defs.dart';
 import 'package:boddygame/features/creatures/models/creature_enums.dart';
 import 'package:boddygame/features/creatures/models/creature_instance.dart';
 import 'package:boddygame/features/creatures/services/creatures_controller.dart';
@@ -63,35 +61,11 @@ void main() {
     expect(ctrl.isWorkingNow(ctrl.creatures.single), isFalse);
   });
 
-  test('no region is poorer than the tutorial valley in spot count', () {
-    // The ⭐/BP spots left regions 2 and 3 when the currency was deleted. Left
-    // alone that made the later, more dangerous regions offer FEWER places to
-    // work than the starting valley — the map getting worse as you progress.
-    final byOrder = [...kFallbackAreaDefs]..sort((a, b) => a.order - b.order);
-    for (final area in byOrder.skip(1)) {
-      expect(area.spots.length, greaterThanOrEqualTo(3), reason: area.id);
-    }
-  });
-
-  test('a resource gathers the same everywhere — richness is per resource', () {
-    // Spots carried their own yield/capacity/regen until 2026-07-25, so the
-    // same wood spot was richer in one region than another. Those dials moved
-    // to Dev Mode → Resources: a region is now distinguished by WHICH resources
-    // it offers and by its danger, not by secretly better numbers.
-    for (final area in kFallbackAreaDefs) {
-      for (final spot in area.spots) {
-        final dials = gatherDefFor(spot.resource);
-        expect(dials.spotCapacity, greaterThan(0), reason: spot.id);
-        expect(dials.secondsPerUnitPerStat, greaterThan(0), reason: spot.id);
-      }
-    }
-  });
-
-  test('region 1 has a stone spot', () {
-    // Era I bills stone but region 1 offered none, so the intended ~60%
-    // actively-gathered share was unreachable and the era dragged to ~15 days.
-    final region1 = kFallbackAreaDefs.firstWhere((a) => a.order == 1);
-    expect(region1.spots.where((s) => s.resource == 'stone'), isNotEmpty,
-        reason: 'Era I cannot be finished without stone');
-  });
+  // The three tests that used to live here (spot-count parity across
+  // regions, per-resource gather dials, "region 1 has a stone spot") all
+  // asserted properties of the bundled kFallbackAreaDefs content. That list
+  // is deliberately empty now (user 2026-09-08: the placeholder regions are
+  // gone; a fresh install has no region until Dev Mode/DB defines one) — the
+  // invariants they guarded are the DB content's responsibility, not
+  // something a unit test can see.
 }

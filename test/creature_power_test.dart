@@ -114,6 +114,88 @@ void main() {
     });
   });
 
+  group('bestOwnedStatAtLevel', () {
+    test('nothing to compare against reads as null, not 0', () {
+      expect(bestOwnedStatAtLevel(const [], CreatureStat.hp, 1), isNull);
+    });
+
+    test('picks the highest, evaluated at the SAME level for everyone', () {
+      // A level-1 90-slope creature would look weaker than a level-30
+      // 10-slope one if compared at each one's own current level — the
+      // whole reason this reads every candidate at one shared [atLevel].
+      final lowRoll = CreatureInstance(
+        id: 'a',
+        userId: 'u',
+        speciesId: 's',
+        gender: CreatureGender.male,
+        level: 30,
+        statBase: {CreatureStat.hp: 10},
+        statSlope: {CreatureStat.hp: 1},
+      );
+      final highRoll = CreatureInstance(
+        id: 'b',
+        userId: 'u',
+        speciesId: 's',
+        gender: CreatureGender.male,
+        level: 1,
+        statBase: {CreatureStat.hp: 20},
+        statSlope: {CreatureStat.hp: 5},
+      );
+      expect(
+        bestOwnedStatAtLevel([lowRoll, highRoll], CreatureStat.hp, 1),
+        20, // at level 1, highRoll's base (20) beats lowRoll's base (10)
+      );
+      expect(
+        bestOwnedStatAtLevel([lowRoll, highRoll], CreatureStat.hp, 10),
+        65, // at level 10, highRoll (20+5*9=65) still beats lowRoll (10+1*9=19)
+      );
+    });
+  });
+
+  group('bestOwnedGrowth', () {
+    test('nothing to compare against reads as null, not 0', () {
+      expect(bestOwnedGrowth(const [], CreatureStat.hp), isNull);
+    });
+
+    test('needs no reference level — growth is already a flat rate', () {
+      final slowGrower = CreatureInstance(
+        id: 'a',
+        userId: 'u',
+        speciesId: 's',
+        gender: CreatureGender.male,
+        level: 40, // current level must not matter for this comparison
+        statBase: {CreatureStat.hp: 10},
+        statSlope: {CreatureStat.hp: 1},
+      );
+      final fastGrower = CreatureInstance(
+        id: 'b',
+        userId: 'u',
+        speciesId: 's',
+        gender: CreatureGender.male,
+        level: 1,
+        statBase: {CreatureStat.hp: 10},
+        statSlope: {CreatureStat.hp: 2.5},
+      );
+      expect(
+        bestOwnedGrowth([slowGrower, fastGrower], CreatureStat.hp),
+        2.5,
+      );
+    });
+
+    test('a missing gene reads as 0, matching the Stats tab\'s own display',
+        () {
+      final noGeneYet = CreatureInstance(
+        id: 'a',
+        userId: 'u',
+        speciesId: 's',
+        gender: CreatureGender.male,
+        statBase: const {},
+        statSlope: const {},
+      );
+      expect(bestOwnedGrowth([noGeneYet], CreatureStat.hp), 0);
+    });
+  });
+
   group('topStats', () {
     test('ignores the free floor — not everyone is a generalist', () {
       // statValue defaults a MISSING stat to 10, so without the floor every

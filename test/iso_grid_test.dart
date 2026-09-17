@@ -99,6 +99,25 @@ void main() {
           reason: '…but a tile genuinely in front still wins');
     });
 
+    test('a MUCH bigger footprint does not steal a neighbour that is '
+        'clearly in front of it', () {
+      // The bug a screenshot found (user 2026-09-07): a 10x10 Castle drawn
+      // in front of an adjacent small_quarry that should have covered IT.
+      // The quarry sits due south of the castle — none of its rows overlap
+      // the castle's — so it must draw later regardless of how far the
+      // castle's own far corner reaches east.
+      final castle = (25, 15, 10, 10);
+      final quarrySouth = (25, 25, 3, 3);
+      expect(order(castle, quarrySouth), lessThan(0),
+          reason: 'the castle stands in every row above the quarry');
+      expect(order(quarrySouth, castle), greaterThan(0));
+
+      // Same idea due east: a small building whose columns start only
+      // where the castle's footprint ends must still draw after it.
+      final quarryEast = (35, 15, 3, 3);
+      expect(order(castle, quarryEast), lessThan(0));
+    });
+
     test('equal depth is broken consistently, never left equal', () {
       // A total order matters: an unstable sort on ties makes two neighbours
       // swap places between frames and flicker.

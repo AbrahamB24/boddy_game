@@ -147,17 +147,26 @@ class Combatant {
   int get maxHp => stat(CreatureStat.hp);
   bool get alive => hp > 0;
 
+  /// The Regression secondary debuff's magnitude, or 0 — one number shared
+  /// by attack/defense/speed (see [SecondaryDebuffKind.regression]).
+  double get _regressionCut =>
+      secondaryDebuffs[SecondaryDebuffKind.regression]?.value ?? 0;
+
   // ── Effective (modified) stats used by combat math ─────────
   double get effectiveAttack {
     var mult = 1.0;
     // Burn's attack sap is NOT authorable per move — it is what burn is, and the
     // move's own number is the damage per turn (see AbilityEffectKind.burn).
     if (mainStatus != null) mult *= statusAttackMult(mainStatus!);
+    // Soaked's own sap IS authorable — its value field means "attack lost",
+    // unlike burn's (see AbilityEffectKind.soaked).
+    if (mainStatus == MainStatusKind.soaked) mult *= 1 - mainStatusValue;
     final rage = selfBuffs[SelfBuffKind.rage];
     if (rage != null) mult *= 1 + rage.value;
     // Growl (user 2026-07-30): stacks with burn's sap — two different sources.
     final weakened = secondaryDebuffs[SecondaryDebuffKind.attackDown];
     if (weakened != null) mult *= 1 - weakened.value;
+    mult *= 1 - _regressionCut;
     if (selfPenaltyStat == SelfPenaltyStat.defense) {
       // penalty only affects defense — attack untouched here, kept for
       // clarity that penalties are stat-specific.
@@ -175,6 +184,7 @@ class Combatant {
     // party does to this target.
     final exposed = secondaryDebuffs[SecondaryDebuffKind.defenseDown];
     if (exposed != null) mult *= 1 - exposed.value;
+    mult *= 1 - _regressionCut;
     if (selfPenaltyStat == SelfPenaltyStat.defense) mult *= selfPenaltyMult;
     return stat(CreatureStat.defense) * mult;
   }
@@ -188,13 +198,32 @@ class Combatant {
     if (slow != null) mult *= 1 - slow.value;
     final haste = selfBuffs[SelfBuffKind.haste];
     if (haste != null) mult *= 1 + haste.value;
+    mult *= 1 - _regressionCut;
     if (selfPenaltyStat == SelfPenaltyStat.speed) mult *= selfPenaltyMult;
     return math.max(1.0, stat(CreatureStat.speed) * mult);
   }
 
   double get effectiveAccuracy {
+    var mult = 1.0;
     final blind = secondaryDebuffs[SecondaryDebuffKind.blind];
-    return blind == null ? 1.0 : 1 - blind.value;
+    if (blind != null) mult *= 1 - blind.value;
+    // Dazzled's own value IS the accuracy lost (see AbilityEffectKind.dazzled).
+    if (mainStatus == MainStatusKind.dazzled) mult *= 1 - mainStatusValue;
+    return mult;
+  }
+
+  /// The REAL type multiplier an attack of [attackerElement] lands on this
+  /// combatant: its own type's weakness, OR — while afflicted by a
+  /// type-flavoured main status — that status' element's weakness, whichever
+  /// is WORSE for it (user 2026-09-15: a burning target "hat nun die
+  /// Schwächen des eigenen Typs und die Schwächen des Feuertyps"). Never
+  /// better than its own type alone: exposure only ever adds vulnerability,
+  /// it cannot grant a resistance the target doesn't already have.
+  double incomingTypeMult(CreatureElement attackerElement) {
+    final own = attackerElement.multiplierVs(element);
+    final exposedTo = mainStatus == null ? null : mainStatusExposure(mainStatus!);
+    if (exposedTo == null) return own;
+    return math.max(own, attackerElement.multiplierVs(exposedTo));
   }
 
   bool get hasted => selfBuffs.containsKey(SelfBuffKind.haste);
@@ -224,7 +253,15 @@ class Combatant {
     MainStatusKind.poison =>
       statusDotFraction(kind, 0),
     MainStatusKind.frost => 1 - statusSpeedMult(kind),
-    MainStatusKind.fear || MainStatusKind.sleep => statusSkipChance(kind),
+    MainStatusKind.soaked => 1 - statusAttackMult(kind),
+    MainStatusKind.dazzled => 1 - statusAccuracyMult(kind),
+    MainStatusKind.fear ||
+    MainStatusKind.sleep ||
+    MainStatusKind.freeze ||
+    MainStatusKind.petrify ||
+    MainStatusKind.paralysis ||
+    MainStatusKind.confusion =>
+      statusSkipChance(kind),
   };
 
   /// Re-applying a secondary debuff just refreshes its duration (no stack) —
@@ -244,6 +281,7 @@ class Combatant {
                   SecondaryDebuffKind.speedDown => secondarySpeedMult(kind),
                   SecondaryDebuffKind.attackDown => secondaryAttackMult(kind),
                   SecondaryDebuffKind.defenseDown => secondaryDefenseMult(kind),
+                  SecondaryDebuffKind.regression => secondaryRegressionMult(kind),
                 },
     );
   }
@@ -276,18 +314,53 @@ class Combatant {
   }
 
   /// Rolled once per round at the start of this combatant's turn: main
-  /// status (frost/fear) can skip the turn entirely.
+  /// status (frost/fear/…) can skip the turn entirely. Confusion is
+  /// deliberately excluded — it doesn't skip, it makes the actor hit
+  /// ITSELF instead, which needs the actual move-resolution machinery
+  /// (CombatEngine handles it before this is ever called).
   bool rollSkipTurn(math.Random rng) {
-    if (mainStatus == null) return false;
-    // FEAR is the status whose whole point is stealing turns, so its chance is
-    // the authored one. Frost's 10 % is a side effect of being frozen and stays
-    // the catalog's (its authored number is the speed loss) — see
-    // AbilityEffectKind.frost, which says both out loud in the form.
-    final chance =
-        mainStatus == MainStatusKind.fear || mainStatus == MainStatusKind.sleep
+    if (mainStatus == null || mainStatus == MainStatusKind.confusion) {
+      return false;
+    }
+    // FEAR/FREEZE/PETRIFY/PARALYSIS/SLEEP are statuses whose whole point is
+    // stealing turns, so their chance is the authored one. Frost's 10 % is a
+    // side effect of being frozen and stays the catalog's (its authored
+    // number is the speed loss) — see AbilityEffectKind.frost, which says
+    // both out loud in the form.
+    final chance = statusValueIsRollChance(mainStatus!)
         ? mainStatusValue
         : statusSkipChance(mainStatus!);
     return chance > 0 && rng.nextDouble() < chance;
+  }
+
+  void _clearMainStatus() {
+    mainStatus = null;
+    mainStatusTurnsActive = 0;
+    mainStatusTurnsRemaining = 0;
+    mainStatusValue = 0;
+  }
+
+  /// A status-remedy item's own cure (user 2026-09-15): removes the current
+  /// main status. [only] narrows it to a TARGETED remedy — one that does
+  /// nothing when the active status isn't the one it treats (an Antidote
+  /// used on a sleeping monster is wasted, same as in Pokémon). Null cures
+  /// whatever is active, whatever it is (the universal Full Heal/Full
+  /// Restore line). Returns whether anything was actually cured, so the
+  /// caller can tell a real cure from a wasted item.
+  bool cureMainStatus([MainStatusKind? only]) {
+    if (mainStatus == null) return false;
+    if (only != null && mainStatus != only) return false;
+    _clearMainStatus();
+    return true;
+  }
+
+  /// The Cleanse line's own cure: every stacked secondary debuff at once —
+  /// they have no main-status-style "one at a time" rule to target
+  /// individually. Returns whether there was anything to clear.
+  bool clearSecondaryDebuffs() {
+    if (secondaryDebuffs.isEmpty) return false;
+    secondaryDebuffs.clear();
+    return true;
   }
 
   /// End-of-round upkeep: DoT damage (returns the damage dealt, already
@@ -295,7 +368,15 @@ class Combatant {
   /// anything that's expired. Called once per round for every combatant,
   /// regardless of whose turn it was (statuses tick on a global round
   /// clock, not per-actor).
-  int tickStatusEndOfRound() {
+  ///
+  /// [rng] is optional and, when given, rolls the ESCALATING chance the main
+  /// status is cured early (user 2026-09-15: "in jeder Runde wird die
+  /// Chance grösser, dass das getroffene Monster den Effekt verliert") —
+  /// null (every pre-existing caller, including every test) keeps the exact
+  /// old fixed-countdown behaviour, so nothing that already asserts an exact
+  /// number of ticks breaks. CombatEngine passes its own `rng` unless
+  /// `deterministicCombat` is set, matching every other roll in the engine.
+  int tickStatusEndOfRound([math.Random? rng]) {
     var dot = 0;
     if (mainStatus != null) {
       // The move's own damage per turn, plus poison's escalation — which is the
@@ -312,9 +393,13 @@ class Combatant {
       mainStatusTurnsActive++;
       mainStatusTurnsRemaining--;
       if (mainStatusTurnsRemaining <= 0) {
-        mainStatus = null;
-        mainStatusTurnsActive = 0;
-        mainStatusValue = 0;
+        _clearMainStatus();
+      } else if (rng != null) {
+        final cureChance = (GameTuning.i.raw(Dials.statusCureChanceBase) +
+                GameTuning.i.raw(Dials.statusCureChanceStep) *
+                    mainStatusTurnsActive)
+            .clamp(0.0, GameTuning.i.raw(Dials.statusCureChanceCap));
+        if (rng.nextDouble() < cureChance) _clearMainStatus();
       }
     }
     // REGEN ticks in the same upkeep as the DoT, and after it: a monster on 1 HP
@@ -352,9 +437,16 @@ class Combatant {
     }
   }
 
-  /// Player-side combatant backed by a collection creature. HP starts at the
-  /// instance's persistent value (it carries over between fights).
-  factory Combatant.fromInstance(CreatureInstance c) {
+  /// Combatant backed by a collection creature. HP starts at the instance's
+  /// persistent value (it carries over between fights).
+  ///
+  /// [isPlayerSide] defaults to true (every call site — a player's own
+  /// team, including PvP's own [snapshotTeam] in pvp_combatant_snapshot.dart,
+  /// which always models the LOCAL player's picks). The opponent's side in a
+  /// PvP match is never built this way at all — it has no CreatureInstance
+  /// to read, only a frozen snapshot — see [combatantFromSnapshot] in that
+  /// same file.
+  factory Combatant.fromInstance(CreatureInstance c, {bool isPlayerSide = true}) {
     final species = c.species;
     return Combatant(
       id: 'p_${c.id}',
@@ -367,10 +459,17 @@ class Combatant {
       backImageUrl: c.backImageUrl,
       element: species?.element ?? CreatureElement.fire,
       rarity: species?.rarity ?? CreatureRarity.common,
-      isPlayerSide: true,
+      isPlayerSide: isPlayerSide,
       level: c.level,
       stats: {for (final s in CreatureStat.values) s: c.statValue(s)},
-      abilities: _resolveAbilities(species, c.stage),
+      // Trained + equipped now, not species-curated (user 2026-09-05: the
+      // Combat School) — attack is always first, everything else is exactly
+      // what the player chose to equip, each capped at what its OWN
+      // unlockStage could afford (see [_capToStage]).
+      abilities: [
+        kAbilityDefs['attack'] ?? _fallbackAttack,
+        for (final a in c.equippedAbilities) _capToStage(a),
+      ],
       hp: c.hp,
     );
   }
@@ -443,7 +542,17 @@ class Combatant {
       level: level,
       isBoss: isBoss,
       stats: stats,
-      abilities: _resolveAbilities(species, stage),
+      // No training for wilds — pick a varied moveset from everything this
+      // species/stage could ever learn (user 2026-09-05's neutral+type rule),
+      // strongest first, capped at the same [kMaxEquippedAbilities] a player
+      // may equip so a wild is never harder to read than a trained team.
+      // [random] breaks ties so two wilds of the same species+stage don't
+      // always show the identical set.
+      abilities: [
+        kAbilityDefs['attack'] ?? _fallbackAttack,
+        for (final a in _wildMoveset(species.element, stage, random))
+          _capToStage(a),
+      ],
     );
   }
 
@@ -454,30 +563,43 @@ class Combatant {
   /// content exists (a cold start, or the migration not yet applied). "An
   /// attack is always available" cannot depend on network state, so the
   /// fallback matches the DB row's intended numbers exactly: [kBasicAttackPower]
-  /// power, neutral element, auto-priced (which the balance pass calibrated
-  /// to land on [kBasicAttackApCost] for power 40 — see AbilityDef._derivedApCost).
-  static AbilityDef get _fallbackAttack => const AbilityDef(
+  /// power, neutral element, and an EXPLICIT [kBasicAttackApCost] (user
+  /// 2026-09-08: "attack soll nur 2 AP kosten") rather than auto-derived —
+  /// auto-pricing only happened to land on the dial's default by
+  /// coincidence (40 power ÷ 13 power/AP ≈ 3), and stopped matching the
+  /// moment the dial changed to 2.
+  static AbilityDef get _fallbackAttack => AbilityDef(
     id: 'attack',
     name: 'Attack',
     element: CreatureElement.neutral,
     kind: AbilityKind.damage,
     target: AbilityTarget.enemy,
     power: kBasicAttackPower,
+    apCost: kBasicAttackApCost,
   );
 
-  static List<AbilityDef> _resolveAbilities(SpeciesDef? species, int stage) {
-    final out = <AbilityDef>[kAbilityDefs['attack'] ?? _fallbackAttack];
-    if (species == null) return out;
-    for (final sa in species.abilitiesAt(stage)) {
-      final def = kAbilityDefs[sa.abilityId];
-      if (def == null) continue;
-      // A move must be affordable at the stage it UNLOCKS — otherwise the form
-      // that gets it could never pay for it. A STARTING ability (unlockStage 0)
-      // is therefore capped at the base form's 4 AP; later unlocks at 5 / 7
-      // (user request 2026-07-19).
-      final cap = maxActionPointsForStage(sa.unlockStage);
-      out.add(def.resolvedApCost > cap ? def.withApCost(cap) : def);
-    }
-    return out;
+  /// A move must be affordable at the STAGE IT UNLOCKS — otherwise the form
+  /// that gets it could never pay for it. A move learnable from stage 0 is
+  /// therefore capped at the base form's 4 AP; a stage-1/2 one at 5 / 7 (user
+  /// request 2026-07-19). Was keyed off `SpeciesAbility.unlockStage`; now
+  /// it's the move's own [AbilityDef.unlockStage] (user 2026-09-05).
+  static AbilityDef _capToStage(AbilityDef a) {
+    final cap = maxActionPointsForStage(a.unlockStage);
+    return a.resolvedApCost > cap ? a.withApCost(cap) : a;
+  }
+
+  /// A varied, capped moveset for a generated wild/enemy — see
+  /// [Combatant.fromSpecies]'s own doc. Strongest-power first, with [rng]
+  /// shuffling within same-power ties so identical species+stage wilds don't
+  /// all show the exact same list.
+  static List<AbilityDef> _wildMoveset(
+    CreatureElement element,
+    int stage,
+    math.Random rng,
+  ) {
+    final pool = learnableAbilitiesFor(element, stage)
+      ..shuffle(rng)
+      ..sort((a, b) => b.totalPower.compareTo(a.totalPower));
+    return pool.take(kMaxEquippedAbilities).toList();
   }
 }

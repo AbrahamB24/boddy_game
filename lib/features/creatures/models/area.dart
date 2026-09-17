@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 import '../../settlement/data/goods_definitions.dart';
 
 // ── Overworld areas ─────────────────────────────────────────
@@ -93,10 +91,6 @@ class AreaDef {
   /// is unlocked once SettlementController.dungeonMaxStage reaches this.
   final int battleStage;
 
-  /// 1..5 flavour+risk rating; higher areas can hurt/KO expedition members
-  /// (risk math lands in a later phase).
-  final int dangerLevel;
-
   final List<ResourceSpotDef> spots;
 
   /// Species ids catchable here (may reference species not yet defined in
@@ -114,7 +108,6 @@ class AreaDef {
     required this.order,
     this.description = '',
     required this.battleStage,
-    this.dangerLevel = 1,
     this.spots = const [],
     this.speciesPoolIds = const [],
     this.bossSpeciesId,
@@ -131,7 +124,6 @@ class AreaDef {
     order: (row['area_order'] as num?)?.toInt() ?? 1,
     description: row['description'] as String? ?? '',
     battleStage: (row['battle_stage'] as num?)?.toInt() ?? 1,
-    dangerLevel: (row['danger_level'] as num?)?.toInt() ?? 1,
     spots: ((row['spots'] as List?) ?? const [])
         .map((s) => ResourceSpotDef.fromJson((s as Map).cast<String, dynamic>()))
         .toList(),
@@ -149,7 +141,6 @@ class AreaDef {
     'area_order': order,
     'description': description,
     'battle_stage': battleStage,
-    'danger_level': dangerLevel,
     'spots': spots.map((s) => s.toJson()).toList(),
     'species_pool': speciesPoolIds,
     'boss_species_id': bossSpeciesId,
@@ -157,122 +148,14 @@ class AreaDef {
 }
 
 /// Bundled fallback areas — the starting overworld before any Dev-Mode content
-/// exists (mirrors kFallbackBuildingDefs etc.). Battle stages 1/2/3 so each
-/// area unlocks as the previous area's boss is cleared. Numbers are first-pass
-/// placeholders to be tuned once gathering is wired.
-const List<AreaDef> kFallbackAreaDefs = [
-  AreaDef(
-    id: 'verdant_hollow',
-    name: 'Verdant Hollow',
-    emoji: '🌲',
-    order: 1,
-    description:
-        'A sheltered woodland valley — the safest place to send a first '
-        'expedition. Rich in timber, light on danger.',
-    battleStage: 1,
-    dangerLevel: 1,
-    spots: [
-      ResourceSpotDef(
-        id: 'vh_grove',
-        resource: 'wood',
-      ),
-      ResourceSpotDef(
-        id: 'vh_stream',
-        resource: 'fish',
-      ),
-      // Meat in region ONE (user decision 2026-07-17): era I bills its costs
-      // in fish AND meat (goodsForEra), and the Butcher Shop is era-I content
-      // — so the era's own region must offer a meat source, or meat only
-      // arrives after the region-1 boss. Deliberately under Stone Reach's
-      // 10/h thicket, mirroring the vh_outcrop/sr_quarry split: the Reach
-      // stays THE meat region; these are snare lines on the valley edge, not
-      // a hunting ground.
-      ResourceSpotDef(
-        id: 'vh_snares',
-        resource: 'meat',
-      ),
-      // Stone in region ONE, though Stone Ridge (region 2) is THE stone
-      // region. Without this, Era I has no stone at all outside the quarry
-      // building, so its intended ~60% "actively gathered" share was
-      // unreachable and the era dragged to roughly 15 days instead of 5–7.
-      // Kept to under half of sr_quarry's 30/h so the Ridge is still the
-      // obvious place to go for stone — this is an outcrop, not a quarry.
-      ResourceSpotDef(
-        id: 'vh_outcrop',
-        resource: 'stone',
-      ),
-      // Gold from region ONE on purpose: it's the accelerator currency (sell
-      // surplus → skip a wait, see gold_economy.dart), and an accelerator you
-      // can't reach until region 3 accelerates nothing. Deliberately thin —
-      // trading a woodpile at the Trading Post is meant to be the main way to
-      // get gold, and panning it out of a creek the trickle.
-      ResourceSpotDef(
-        id: 'vh_placer',
-        resource: 'gold',
-      ),
-    ],
-  ),
-  AreaDef(
-    id: 'stone_reach',
-    name: 'Stone Reach',
-    emoji: '⛰️',
-    order: 2,
-    description:
-        'Wind-scoured foothills and open quarries. Good stone, tougher '
-        'wildlife — bring a fighter or two.',
-    battleStage: 2,
-    dangerLevel: 2,
-    spots: [
-      ResourceSpotDef(
-        id: 'sr_quarry',
-        resource: 'stone',
-      ),
-      ResourceSpotDef(
-        id: 'sr_thicket',
-        resource: 'meat',
-      ),
-      // Replaces sr_shrine, the ⭐/BP spot that left with the currency. Without
-      // a third spot this region would offer FEWER places to work than the
-      // tutorial valley next door, which reads as the map getting poorer as
-      // you push on. Upland pine: real wood, but clearly under Verdant
-      // Hollow's 30/h — the Hollow stays the place you go for timber.
-      ResourceSpotDef(
-        id: 'sr_pines',
-        resource: 'wood',
-      ),
-    ],
-  ),
-  AreaDef(
-    id: 'emberwastes',
-    name: 'Emberwastes',
-    emoji: '🌋',
-    order: 3,
-    description:
-        'Cracked volcanic flats hiding old gold veins. Dangerous — only '
-        'well-armed expeditions come back full.',
-    battleStage: 3,
-    dangerLevel: 3,
-    spots: [
-      ResourceSpotDef(
-        id: 'ew_vein',
-        resource: 'gold',
-      ),
-      ResourceSpotDef(
-        id: 'ew_ridge',
-        resource: 'stone',
-      ),
-      // Replaces ew_obelisk (the other ⭐/BP spot). Meat, and the best of it:
-      // what survives on volcanic flats is worth butchering, and this
-      // region's whole pitch is "dangerous, but you come back full"
-      // (dangerLevel 3 — expedition_risk taxes the haul here). It has to
-      // out-yield Stone Reach's thicket or the risk buys the player nothing.
-      ResourceSpotDef(
-        id: 'ew_ashlands',
-        resource: 'meat',
-      ),
-    ],
-  ),
-];
+/// exists (mirrors kFallbackBuildingDefs etc.). Emptied out (user 2026-09-08:
+/// "verdant hallow etc kann gelöscht werden" — the three placeholder regions,
+/// Verdant Hollow / Stone Reach / Emberwastes, all confirmed for removal). A
+/// fresh install now has NO region until Dev Mode ▸ Areas (or its DB rows)
+/// defines one — [_buildFallbackPath] and everything downstream already
+/// handles an empty area list (a `for` over nothing), and the Expeditions hub
+/// already has its own "No region is open yet" copy for that state.
+const List<AreaDef> kFallbackAreaDefs = [];
 
 /// Live, mutable roster (keyed by id) — same in-place pattern as kBuildingDefs.
 /// Seeded from the bundled fallback; a Dev-Mode/DB source can overwrite later.
@@ -299,12 +182,3 @@ ResourceSpotDef? findSpot(String spotId) {
   }
   return null;
 }
-
-/// Tint for an area card by danger level (green → red).
-Color dangerColor(int dangerLevel) => switch (dangerLevel.clamp(1, 5)) {
-  1 => const Color(0xFF3BAE78),
-  2 => const Color(0xFF9FB43B),
-  3 => const Color(0xFFE0A32E),
-  4 => const Color(0xFFE2661F),
-  _ => const Color(0xFF8B2020),
-};

@@ -10,6 +10,7 @@ import 'settlement_controller.dart';
 import 'sheets/building_detail_dialog.dart';
 import 'storage_detail_screen.dart';
 import 'widgets/building_icon.dart';
+import '../../core/ui/pressable.dart';
 
 /// The resource-tap breakdown, now its OWN screen (user 2026-08-31: "die
 /// Ressourcendetail screens einen eigenen Screen werden, welche ebenfalls
@@ -202,7 +203,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
   /// "In store", now the door into [StorageDetailScreen] rather than a
   /// section of this page (user 2026-08-31).
   Widget _storeButton(double stored, double capacity, bool isFull) =>
-      GestureDetector(
+      Pressable(
         behavior: HitTestBehavior.opaque,
         onTap: () => Navigator.push(
           context,
@@ -281,7 +282,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
     final (b, def, amount) = s;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: GestureDetector(
+      child: Pressable(
         behavior: HitTestBehavior.opaque,
         onTap: () => showBuildingDetailDialog(context, _ctrl, b),
         child: Container(

@@ -20,6 +20,16 @@ import '../../settlement/widgets/scroll_paper.dart' show kParchmentInk;
 /// [height] defaults to 11 rather than the 5–8 the old bars used: the walls and
 /// the bead need room to be seen at all, and a bar you have to look for is not
 /// doing its job either way.
+///
+/// The bead's WIDTH animates (user 2026-09-15: "der Balken wird sichtbar
+/// 'grösser' während dem heilen") via [AnimatedPositionedDirectional] — a
+/// value change between two builds (a heal landing, damage taken, a build
+/// finishing a tick) now visibly grows/shrinks over [animationDuration]
+/// instead of snapping straight to the new fraction. [animationDuration]
+/// defaults to a quick, snappy tick suited to combat; a screen that reads
+/// its own value from a slow ongoing process (a countdown timer already
+/// interpolating on its own) can pass [Duration.zero] to keep the old
+/// instant behaviour.
 class RecessBar extends StatelessWidget {
   /// 0–1. Values outside are clamped.
   final double value;
@@ -34,12 +44,17 @@ class RecessBar extends StatelessWidget {
   /// the material underneath is no longer pale paper.
   final bool onDark;
 
+  /// How long the bead takes to glide to a new [value]. Zero = the old
+  /// instant snap.
+  final Duration animationDuration;
+
   const RecessBar({
     super.key,
     required this.value,
     required this.color,
     this.height = 11,
     this.onDark = false,
+    this.animationDuration = const Duration(milliseconds: 350),
   });
 
   @override
@@ -109,7 +124,10 @@ class RecessBar extends StatelessWidget {
                   // Directional, not `left`: the breeding screen mirrors one of
                   // its two comparison bars with a [Directionality], and an
                   // absolute left would have pinned the bead to the wrong end.
-                  PositionedDirectional(
+                  // ANIMATED, not plain — see [animationDuration]'s own doc.
+                  AnimatedPositionedDirectional(
+                    duration: animationDuration,
+                    curve: Curves.easeOut,
                     start: 0,
                     top: 0,
                     bottom: 0,

@@ -19,10 +19,10 @@ abstract final class Dials {
   static const buildingLevelGrowth = 'buildingLevelGrowth';
   static const buildPointsForHalfTime = 'buildPointsForHalfTime';
   static const breedingK = 'breedingK';
-  static const energyMax = 'energyMax';
-  static const energyStepsPerPoint = 'energyStepsPerPoint';
-  static const energyEmptyHours = 'energyEmptyHours';
-  static const energyFloorRate = 'energyFloorRate';
+  static const energyFullSteps = 'energyFullSteps';
+  static const energyFloorMultiplier = 'energyFloorMultiplier';
+  static const energyBoostPerThousandSteps = 'energyBoostPerThousandSteps';
+  static const energyMaxBoost = 'energyMaxBoost';
   static const healMaxCut = 'healMaxCut';
   static const tradeMaxDiscount = 'tradeMaxDiscount';
   static const goodsBuyMarkup = 'goodsBuyMarkup';
@@ -41,12 +41,8 @@ abstract final class Dials {
   static const partyStep6 = 'partyStep6';
   static const travelSecondsPerDanger = 'travelSecondsPerDanger';
   static const maxTripSeconds = 'maxTripSeconds';
-  static const threatPerDanger = 'threatPerDanger';
-  static const casualtyHpMin = 'casualtyHpMin';
-  static const casualtyHpMax = 'casualtyHpMax';
-  static const lootPenaltyPerHurt = 'lootPenaltyPerHurt';
-  static const lootPenaltyPerKo = 'lootPenaltyPerKo';
-  static const lootPenaltyMax = 'lootPenaltyMax';
+  static const survivalBossEveryNFloors = 'survivalBossEveryNFloors';
+  static const survivalGoldPerFloor = 'survivalGoldPerFloor';
 
   // ── Monster ──
   static const maxEras = 'maxEras';
@@ -59,6 +55,8 @@ abstract final class Dials {
   static const apRegen3 = 'apRegen3';
   static const basicAttackApCost = 'basicAttackApCost';
   static const switchApCost = 'switchApCost';
+  static const itemApCost = 'itemApCost';
+  static const catchApCost = 'catchApCost';
   static const buffApCost = 'buffApCost';
   static const powerPerAp = 'powerPerAp';
   static const minAbilityApCost = 'minAbilityApCost';
@@ -74,6 +72,7 @@ abstract final class Dials {
   static const maxHitHpFraction = 'maxHitHpFraction';
   static const wildStatMult = 'wildStatMult';
   static const bossStatMult = 'bossStatMult';
+  static const trainSecondsPerPower = 'trainSecondsPerPower';
   static const baseSigmaPct = 'baseSigmaPct';
   static const slopeSigmaPct = 'slopeSigmaPct';
   static const sigmaClampFactor = 'sigmaClampFactor';
@@ -83,6 +82,20 @@ abstract final class Dials {
   static const qteWindowCenter = 'qteWindowCenter';
   static const qteWindowCatchK = 'qteWindowCatchK';
   static const qteMaxWidthBonus = 'qteMaxWidthBonus';
+  static const speciesMaturitySwing = 'speciesMaturitySwing';
+  static const buffArmorPct = 'buffArmorPct';
+  static const buffRagePct = 'buffRagePct';
+  static const buffHastePct = 'buffHastePct';
+  static const debuffBlindPct = 'debuffBlindPct';
+  static const debuffSlowPct = 'debuffSlowPct';
+  static const debuffWeakenPct = 'debuffWeakenPct';
+  static const debuffExposePct = 'debuffExposePct';
+  static const buffDurationTurns = 'buffDurationTurns';
+  static const debuffDurationTurns = 'debuffDurationTurns';
+  static const debuffRegressionPct = 'debuffRegressionPct';
+  static const statusCureChanceBase = 'statusCureChanceBase';
+  static const statusCureChanceStep = 'statusCureChanceStep';
+  static const statusCureChanceCap = 'statusCureChanceCap';
 }
 
 /// Compact number for the "what this means" lines: no trailing .0, one decimal.
@@ -112,7 +125,7 @@ final List<Dial> kDials = [
     kind: DialKind.count,
     felt: (v) => v <= 0
         ? 'Ohne Scout Post keine Expedition — der Scout Post ist die ganze '
-            'Quelle.'
+              'Quelle.'
         : '${_n(v)} Expedition${v == 1 ? '' : 'en'} auch ganz ohne Scout Post.',
   ),
   Dial(
@@ -143,7 +156,8 @@ final List<Dial> kDials = [
     group: TuningGroup.settlement,
     section: 'Slots ohne Gebäude',
     label: 'Bau-Warteschlange',
-    help: 'Wie viele Bauten vorgemerkt werden können, bevor ein Gebäude '
+    help:
+        'Wie viele Bauten vorgemerkt werden können, bevor ein Gebäude '
         'weitere freischaltet.',
     def: 0,
     kind: DialKind.count,
@@ -153,11 +167,13 @@ final List<Dial> kDials = [
     group: TuningGroup.settlement,
     section: 'Gebäude-Level',
     label: 'Zuwachs pro Level',
-    help: 'Gilt für JEDEN Effekt, der keinen eigenen Wachstumswert hat. '
+    help:
+        'Gilt für JEDEN Effekt, der keinen eigenen Wachstumswert hat. '
         'Der grösste Hebel der ganzen Wirtschaft.',
     def: 0.5,
     kind: DialKind.percent,
-    felt: (v) => 'Level 1 ×1 · Level 5 ×${_n(1 + v * 4)} · '
+    felt: (v) =>
+        'Level 1 ×1 · Level 5 ×${_n(1 + v * 4)} · '
         'Level 10 ×${_n(1 + v * 9)}',
   ),
   Dial(
@@ -165,7 +181,8 @@ final List<Dial> kDials = [
     group: TuningGroup.settlement,
     section: 'Bauzeit',
     label: 'Baupunkte für halbe Bauzeit',
-    help: 'Baupunkte kürzen die im Gebäude hinterlegte Bauzeit. Ohne Deckel, '
+    help:
+        'Baupunkte kürzen die im Gebäude hinterlegte Bauzeit. Ohne Deckel, '
         'aber mit abnehmendem Ertrag.',
     def: 100,
     min: 1,
@@ -176,59 +193,65 @@ final List<Dial> kDials = [
     group: TuningGroup.settlement,
     section: 'Paaren & Brüten',
     label: 'Power für halbe Dauer',
-    help: 'Wie stark die Arbeiter in Zuchthütte und Brutstätte die Dauer '
+    help:
+        'Wie stark die Arbeiter in Zuchthütte und Brutstätte die Dauer '
         'kürzen. Dieselbe Kurve wie bei der Bauzeit.',
     def: 60,
     min: 1,
     felt: _halfAtK,
   ),
   Dial(
-    id: Dials.energyMax,
+    id: Dials.energyFullSteps,
     group: TuningGroup.settlement,
     section: 'Energie',
-    label: 'Volle Leiste',
-    help: 'Wie viele Energiepunkte die Leiste fasst.',
-    def: 100,
-    min: 1,
-  ),
-  Dial(
-    id: Dials.energyStepsPerPoint,
-    group: TuningGroup.settlement,
-    section: 'Energie',
-    label: 'Schritte pro Energiepunkt',
-    help: 'Wie viele echte Schritte einen Energiepunkt geben.',
-    def: 100,
+    label: 'Schritte für 100%',
+    help: 'Wie viele Schritte seit Mitternacht für die volle Rate (100%) '
+        'nötig sind.',
+    def: 5000,
     kind: DialKind.count,
     min: 1,
-    felt: (v) => v <= 0
-        ? '—'
-        : 'Volle Leiste = ${_n(GameTuning.i.raw(Dials.energyMax) * v)} '
-            'Schritte pro Tag.',
   ),
   Dial(
-    id: Dials.energyEmptyHours,
+    id: Dials.energyFloorMultiplier,
     group: TuningGroup.settlement,
     section: 'Energie',
-    label: 'Volle Leiste hält',
-    help: 'In wie vielen Stunden sich eine volle Leiste komplett leert.',
-    def: 24,
-    kind: DialKind.hours,
-    min: 1,
-    felt: (v) => v <= 0
-        ? '—'
-        : 'Verbrauch ${_n(GameTuning.i.raw(Dials.energyMax) / v)} Energie/h.',
-  ),
-  Dial(
-    id: Dials.energyFloorRate,
-    group: TuningGroup.settlement,
-    section: 'Energie',
-    label: 'Produktion bei leerem Tank',
-    help: 'Was die Siedlung noch leistet, wenn die Energie auf 0 steht.',
-    def: 0,
+    label: 'Rate bei 0 Schritten',
+    help: 'Wie viel die Siedlung noch leistet, wenn heute noch kein Schritt '
+        'gezählt wurde.',
+    def: 0.25,
     kind: DialKind.percent,
-    felt: (v) => v <= 0
-        ? 'Leer = alles steht: keine Expedition, kein Heilen, kein Brüten.'
-        : 'Leer = die Siedlung läuft mit ${_n(v * 100)} % weiter.',
+    felt: (v) => 'Bei 0 Schritten läuft alles mit ${_n(v * 100)} %.',
+  ),
+  Dial(
+    id: Dials.energyBoostPerThousandSteps,
+    group: TuningGroup.settlement,
+    section: 'Energie',
+    label: 'Bonus pro 1000 Extraschritte',
+    help: 'Über die 100%-Schwelle hinaus: wie viel zusätzliche Rate je '
+        '1000 weitere Schritte.',
+    def: 0.05,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.energyMaxBoost,
+    group: TuningGroup.settlement,
+    section: 'Energie',
+    label: 'Bonus-Obergrenze',
+    help: 'Die maximale Extra-Rate über 100% hinaus, egal wie viele '
+        'Schritte darüber liegen.',
+    def: 0.25,
+    kind: DialKind.percent,
+    felt: (v) {
+      final full = GameTuning.i.raw(Dials.energyFullSteps);
+      final perThousand = GameTuning.i.raw(Dials.energyBoostPerThousandSteps);
+      final stepsForMax = perThousand <= 0
+          ? null
+          : full + 1000 * (v / perThousand);
+      return stepsForMax == null
+          ? 'Maximal ${_n(100 + v * 100)} % Rate.'
+          : 'Maximal ${_n(100 + v * 100)} % Rate, ab ${_n(stepsForMax)} '
+                'Schritten/Tag.';
+    },
   ),
   Dial(
     id: Dials.healMaxCut,
@@ -238,7 +261,8 @@ final List<Dial> kDials = [
     help: 'Deckel über Gebäude-Effekt UND Heilerposten zusammen.',
     def: 0.9,
     kind: DialKind.percent,
-    felt: (v) => 'Eine 10-h-Behandlung dauert bestenfalls '
+    felt: (v) =>
+        'Eine 10-h-Behandlung dauert bestenfalls '
         '${_n(10 * (1 - v))} h.',
   ),
   Dial(
@@ -255,7 +279,8 @@ final List<Dial> kDials = [
     group: TuningGroup.settlement,
     section: 'Handel',
     label: 'Kaufaufschlag',
-    help: 'Zurückkaufen kostet so viel mal das, was der Verkauf eingebracht '
+    help:
+        'Zurückkaufen kostet so viel mal das, was der Verkauf eingebracht '
         'hat. Unter 1 wäre eine Gelddruckmaschine.',
     def: 2.5,
     min: 1,
@@ -277,7 +302,8 @@ final List<Dial> kDials = [
     group: TuningGroup.settlement,
     section: 'Lager',
     label: 'Ohne Lagergebäude je Ressource',
-    help: 'Wie viel die Siedlung von JEDER Ware halten kann, bevor ein '
+    help:
+        'Wie viel die Siedlung von JEDER Ware halten kann, bevor ein '
         'Lagergebäude dazukommt. Darüber stoppt die Produktion.',
     def: 500,
     min: 1,
@@ -298,19 +324,24 @@ final List<Dial> kDials = [
     id: Dials.battlesBeforeBoss,
     group: TuningGroup.campaign,
     section: 'Pfad',
-    label: 'Kämpfe bis zum Boss',
-    help: 'Wie viele normale Kämpfe eine Ära hat, bevor der Boss kommt.',
+    label: 'Kämpfe bis zum Boss (nur Fallback-Pfad)',
+    help:
+        'Wie viele normale Kämpfe eine generierte Region hat, bevor der '
+        'Boss kommt. Gilt nur für den Fallback-Pfad — eine im Pfad-Editor '
+        'autorierte Region endet dort, wo ihr Boss-Knoten steht.',
     def: 18,
     kind: DialKind.count,
     min: 1,
-    felt: (v) => 'Eine Ära ist ${_n(v + 1)} Kämpfe lang (inkl. Boss).',
+    felt: (v) =>
+        'Eine Fallback-Region ist ${_n(v + 1)} Kämpfe lang (inkl. Boss).',
   ),
   Dial(
     id: Dials.bossLevelBonus,
     group: TuningGroup.campaign,
     section: 'Pfad',
     label: 'Boss-Levelbonus',
-    help: 'Wie viele Level ein Boss über dem normalen Gegner dieser Stelle '
+    help:
+        'Wie viele Level ein Boss über dem normalen Gegner dieser Stelle '
         'liegt.',
     def: 3,
     kind: DialKind.count,
@@ -324,6 +355,34 @@ final List<Dial> kDials = [
     def: 6,
     kind: DialKind.count,
     min: 1,
+  ),
+  // ── Survival (user 2026-09-06) ──
+  // Own endless mode: fixed 6er-Team, Kämpfe ohne Rückkehr in die Siedlung,
+  // Schwierigkeit an einem eigenen Etagen-Zähler statt an battlesCleared.
+  Dial(
+    id: Dials.survivalBossEveryNFloors,
+    group: TuningGroup.campaign,
+    section: 'Survival',
+    label: 'Boss alle N Etagen',
+    help:
+        'Jede so vielte Etage im Survival-Modus ist ein Boss (stärkere '
+        'Werte, mehr XP) statt eines normalen Gegners.',
+    def: 5,
+    kind: DialKind.count,
+    min: 1,
+  ),
+  Dial(
+    id: Dials.survivalGoldPerFloor,
+    group: TuningGroup.campaign,
+    section: 'Survival',
+    label: 'Gold pro Etage',
+    help:
+        'Die Belohnung am Ende eines Survival-Laufs ist dieser Wert mal '
+        'die Dreieckszahl der geschafften Etagen (1+2+…+N) — je tiefer der '
+        'Lauf, desto überproportional mehr.',
+    def: 15,
+    kind: DialKind.decimal,
+    min: 0,
   ),
   Dial(
     id: Dials.partyStep2,
@@ -379,12 +438,12 @@ final List<Dial> kDials = [
     id: Dials.travelSecondsPerDanger,
     group: TuningGroup.campaign,
     section: 'Reise',
-    label: 'Anreise pro Gefahrenstufe',
-    help: 'Hinweg + Rückweg zu einem Gebiet, je Gefahrenstufe. Wird durch '
-        'Scout-Post-Arbeiter gekürzt.',
+    label: 'Anreise',
+    help: 'Hinweg + Rückweg zu einem Gebiet. Wird durch Scout-Post-Arbeiter '
+        'gekürzt.',
     def: 300,
     kind: DialKind.minutes,
-    felt: (v) => 'Gefahr 3 = ${_n(v * 3 / 60)} min reine Reisezeit.',
+    felt: (v) => '${_n(v / 60)} min reine Reisezeit.',
   ),
   Dial(
     id: Dials.maxTripSeconds,
@@ -396,83 +455,25 @@ final List<Dial> kDials = [
     kind: DialKind.hours,
     min: 60,
   ),
-  Dial(
-    id: Dials.threatPerDanger,
-    group: TuningGroup.campaign,
-    section: 'Risiko',
-    label: 'Bedrohung pro Gefahrenstufe',
-    help: 'Gefahr 1 ist immer risikofrei. Die Gruppenstärke (Summe Angriff + '
-        'Verteidigung) hält dagegen.',
-    def: 60,
-    felt: (v) => 'Gefahr 3 → 50 % Risiko bei Gruppenstärke ${_n(v * 2)}.',
-  ),
-  Dial(
-    id: Dials.casualtyHpMin,
-    group: TuningGroup.campaign,
-    section: 'Risiko',
-    label: 'Verletzung mindestens',
-    help: 'Wie viel der max. HP ein Treffer mindestens kostet.',
-    def: 0.15,
-    kind: DialKind.percent,
-  ),
-  Dial(
-    id: Dials.casualtyHpMax,
-    group: TuningGroup.campaign,
-    section: 'Risiko',
-    label: 'Verletzung höchstens',
-    help: 'Wie viel der max. HP ein Treffer höchstens kostet. Reicht es über '
-        'die Rest-HP, ist es ein K.O.',
-    def: 0.50,
-    kind: DialKind.percent,
-  ),
-  Dial(
-    id: Dials.lootPenaltyPerHurt,
-    group: TuningGroup.campaign,
-    section: 'Risiko',
-    label: 'Beuteverlust je Verletztem',
-    help: 'Was ein verletztes Gruppenmitglied von der Ausbeute kostet.',
-    def: 0.10,
-    kind: DialKind.percent,
-  ),
-  Dial(
-    id: Dials.lootPenaltyPerKo,
-    group: TuningGroup.campaign,
-    section: 'Risiko',
-    label: 'Beuteverlust je K.O.',
-    help: 'Was ein ausgeknocktes Gruppenmitglied von der Ausbeute kostet.',
-    def: 0.15,
-    kind: DialKind.percent,
-  ),
-  Dial(
-    id: Dials.lootPenaltyMax,
-    group: TuningGroup.campaign,
-    section: 'Risiko',
-    label: 'Beuteverlust höchstens',
-    help: 'Deckel, damit auch eine katastrophale Reise etwas heimbringt.',
-    def: 0.40,
-    kind: DialKind.percent,
-    felt: (v) => 'Schlimmstenfalls kommen ${_n(100 * (1 - v))} % der Beute an.',
-  ),
 
   // ══ Monster ══════════════════════════════════════════════════
   Dial(
     id: Dials.maxEras,
     group: TuningGroup.monster,
     section: 'Level',
-    label: 'Anzahl Ären',
-    help: 'Zusammen mit den Leveln pro Ära ergibt das die Levelgrenze.',
+    label: 'Anzahl Regionen',
+    help: 'Zusammen mit den Leveln pro Region ergibt das die Levelgrenze.',
     def: 8,
     kind: DialKind.count,
     min: 1,
-    felt: (v) =>
-        'Max-Level ${_n(v * GameTuning.i.raw(Dials.levelsPerEra))}.',
+    felt: (v) => 'Max-Level ${_n(v * GameTuning.i.raw(Dials.levelsPerEra))}.',
   ),
   Dial(
     id: Dials.levelsPerEra,
     group: TuningGroup.monster,
     section: 'Level',
-    label: 'Level pro Ära',
-    help: 'Wie viele Level eine Ära freischaltet.',
+    label: 'Level pro Region',
+    help: 'Wie viele Level eine erreichte Region freischaltet.',
     def: 10,
     kind: DialKind.count,
     min: 1,
@@ -491,7 +492,8 @@ final List<Dial> kDials = [
     def: 4,
     kind: DialKind.count,
     min: 1,
-    felt: (v) => 'Regeneriert ${_n(GameTuning.i.raw(Dials.apRegen1))} pro Zug '
+    felt: (v) =>
+        'Regeneriert ${_n(GameTuning.i.raw(Dials.apRegen1))} pro Zug '
         '— es bleiben ${_n(v - GameTuning.i.raw(Dials.apRegen1))} zum Sparen.',
   ),
   Dial(
@@ -520,7 +522,10 @@ final List<Dial> kDials = [
     section: 'Aktionspunkte · Regeneration',
     label: '1. Form',
     help: 'AP zu Beginn jedes eigenen Zuges. Bewusst unter dem Vorrat.',
-    def: 3,
+    // 2, not 3 (user 2026-09-07: "Stufe 1 regeneriert 2 AP") — leaves 2 of
+    // the 4-AP-Vorrat to bank per turn, same headroom-under-capacity ratio
+    // every stage now keeps (see apRegen2/3 below).
+    def: 2,
     kind: DialKind.count,
   ),
   Dial(
@@ -529,7 +534,8 @@ final List<Dial> kDials = [
     section: 'Aktionspunkte · Regeneration',
     label: '2. Form',
     help: 'AP zu Beginn jedes eigenen Zuges.',
-    def: 4,
+    // 3, not 4 (user 2026-09-07: "Stufe 2 3AP").
+    def: 3,
     kind: DialKind.count,
   ),
   Dial(
@@ -538,7 +544,10 @@ final List<Dial> kDials = [
     section: 'Aktionspunkte · Regeneration',
     label: '3. Form',
     help: 'AP zu Beginn jedes eigenen Zuges.',
-    def: 5,
+    // 4, not 5 (user 2026-09-07: "Stufe 3 regeneriert 4AP" — said as "Stufe
+    // 4", but there are only 3 evolution stages; matches the same pattern
+    // apRegen1/2 set).
+    def: 4,
     kind: DialKind.count,
   ),
   Dial(
@@ -546,8 +555,11 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Aktionspunkte · Kosten',
     label: 'Standardangriff kostet',
-    help: 'Der Angriff, den jedes Monster immer hat.',
-    def: 3,
+    help:
+        'Der Angriff, den jedes Monster immer hat. Explizit gesetzt (nicht '
+        'mehr aus Power abgeleitet — user 2026-09-08), daher trifft dieser '
+        'Wert IMMER exakt zu.',
+    def: 2,
     kind: DialKind.count,
     min: 1,
   ),
@@ -561,13 +573,40 @@ final List<Dial> kDials = [
     kind: DialKind.count,
   ),
   Dial(
+    id: Dials.itemApCost,
+    group: TuningGroup.monster,
+    section: 'Aktionspunkte · Kosten',
+    label: 'Item benutzen kostet',
+    help: 'Ein Item im Kampf einsetzen (heilen/buffen).',
+    def: 1,
+    kind: DialKind.count,
+    min: 1,
+  ),
+  Dial(
+    id: Dials.catchApCost,
+    group: TuningGroup.monster,
+    section: 'Aktionspunkte · Kosten',
+    label: 'Fangversuch kostet',
+    help:
+        'Ein Fangversuch bei einem Hunt-Fund. Gleich teuer wie ein '
+        'Standardangriff (user 2026-09-11), damit Fangen eine echte '
+        'Wahl gegen Angreifen ist statt der dominanten Gratis-Aktion.',
+    def: 2,
+    kind: DialKind.count,
+    min: 1,
+  ),
+  Dial(
     id: Dials.buffApCost,
     group: TuningGroup.monster,
     section: 'Aktionspunkte · Kosten',
     label: 'Buff kostet mindestens',
-    help: 'Der günstigste Preis einer stärkenden Fähigkeit. Ein starker Buff '
-        'kostet nach seiner Power mehr — das hier ist der Boden.',
-    def: 2,
+    help:
+        'Der günstigste Preis einer stärkenden Fähigkeit. Ein starker Buff '
+        'kostet nach seiner Power mehr — das hier ist der Boden. Auf 1 '
+        'gesenkt (user 2026-09-08: "damit es einige mit nur 1 AP gibt"), '
+        'damit ein schwacher, kurzer Buff wirklich nur 1 AP kostet statt am '
+        'Boden festzukleben.',
+    def: 1,
     kind: DialKind.count,
     min: 1,
   ),
@@ -576,13 +615,15 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Aktionspunkte · Kosten',
     label: 'Power pro AP',
-    help: 'Wieviel Power ein Aktionspunkt kauft. Der Umrechnungskurs für JEDE '
+    help:
+        'Wieviel Power ein Aktionspunkt kauft. Der Umrechnungskurs für JEDE '
         'Fähigkeit: Kosten = (Power der Fähigkeit) ÷ diesem Wert. Kleiner = '
         'alles wird teurer.',
     def: 13,
     kind: DialKind.count,
     min: 1,
-    felt: (v) => 'Der teuerste bezahlbare Move hat '
+    felt: (v) =>
+        'Der teuerste bezahlbare Move hat '
         '${_n(v * GameTuning.i.raw(Dials.apCapacity3))} Power '
         '(${_n(GameTuning.i.raw(Dials.apCapacity3))} AP × ${_n(v)}).',
   ),
@@ -591,9 +632,12 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Aktionspunkte · Kosten',
     label: 'Fähigkeit kostet mindestens',
-    help: 'Der Boden für jede Fähigkeit ausser Buffs — auch eine schwache soll '
-        'einen Zug wert sein.',
-    def: 2,
+    help:
+        'Der Boden für jede Fähigkeit ausser Buffs — auch eine schwache soll '
+        'einen Zug wert sein. Auf 1 gesenkt (user 2026-09-08), damit ein '
+        'schwacher Debuff (ein Damage-Move mit wenig/keiner eigenen Power, '
+        'nur der Debuff-Chance) auch wirklich nur 1 AP kostet.',
+    def: 1,
     kind: DialKind.count,
     min: 1,
   ),
@@ -602,7 +646,8 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Aktionspunkte · Kosten',
     label: 'Power pro Prioritätsstufe',
-    help: 'Was Vorziehen im Zugfenster wert ist. Wird wie Effekt-Power auf die '
+    help:
+        'Was Vorziehen im Zugfenster wert ist. Wird wie Effekt-Power auf die '
         'Fähigkeit gerechnet und über «Power pro AP» in AP umgesetzt.',
     def: 15,
     kind: DialKind.count,
@@ -661,9 +706,8 @@ final List<Dial> kDials = [
     help: 'Je tiefer, desto stärker zahlt Tempo auf die Kritchance ein.',
     def: 5000,
     min: 1,
-    felt: (v) => v <= 0
-        ? '—'
-        : 'Tempo 200 gibt +${_n(200 / v * 100)} Prozentpunkte.',
+    felt: (v) =>
+        v <= 0 ? '—' : 'Tempo 200 gibt +${_n(200 / v * 100)} Prozentpunkte.',
   ),
   Dial(
     id: Dials.critMax,
@@ -696,9 +740,7 @@ final List<Dial> kDials = [
     // floor it actually was.
     def: 0.0,
     kind: DialKind.percent,
-    felt: (v) => v <= 0
-        ? '—'
-        : 'Mindestens ${_n(1 / v)} Treffer bis zum K.O.',
+    felt: (v) => v <= 0 ? '—' : 'Mindestens ${_n(1 / v)} Treffer bis zum K.O.',
   ),
   Dial(
     id: Dials.wildStatMult,
@@ -717,6 +759,21 @@ final List<Dial> kDials = [
     help: 'Womit die Werte eines Bosses multipliziert werden.',
     def: 1.20,
     kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.trainSecondsPerPower,
+    group: TuningGroup.monster,
+    section: 'Kampfschule',
+    label: 'Lernzeit pro Powerpunkt',
+    help:
+        'Sekunden Trainingszeit pro Powerpunkt der Fähigkeit (Damage + '
+        'Effekte).',
+    def: 40,
+    kind: DialKind.decimal,
+    min: 0,
+    felt: (v) => v <= 0
+        ? 'Jede Fähigkeit wäre sofort gelernt.'
+        : 'Eine Fähigkeit mit 40 Power dauert ${_n(40 * v / 60)} Minuten.',
   ),
   Dial(
     id: Dials.baseSigmaPct,
@@ -744,7 +801,8 @@ final List<Dial> kDials = [
     help: 'Wie viele Standardabweichungen ein Gen höchstens abweichen darf.',
     def: 2.0,
     min: 0.1,
-    felt: (v) => 'Streuung ${_n(GameTuning.i.raw(Dials.baseSigmaPct) * 100)} % '
+    felt: (v) =>
+        'Streuung ${_n(GameTuning.i.raw(Dials.baseSigmaPct) * 100)} % '
         '→ höchstens ±${_n(GameTuning.i.raw(Dials.baseSigmaPct) * v * 100)} %.',
   ),
   Dial(
@@ -752,17 +810,38 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Gene',
     label: 'Vererbung vom besseren Elternteil',
-    help: 'Chance, dass ein Gen vom stärkeren statt vom schwächeren Elternteil '
+    help:
+        'Chance, dass ein Gen vom stärkeren statt vom schwächeren Elternteil '
         'kommt.',
     def: 0.60,
     kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.speciesMaturitySwing,
+    group: TuningGroup.monster,
+    section: 'Rollen',
+    label: 'Frühstarter ↔ Spätzünder Ausschlag',
+    help:
+        'Wie stark der Frühstarter/Spätzünder-Regler eine Art\'s Signature-'
+        'Stat(s) zwischen Startwert und Wachstum verschiebt (user 2026-09-07: '
+        '"gerne fände ich es schön, wenn es slow starter gibt, welche dafür '
+        'aber mehr wachsen als andere"). 0 = Regler wirkungslos.',
+    def: 0.35,
+    kind: DialKind.percent,
+    felt: (v) => v <= 0
+        ? 'Regler wirkungslos — jede Art rollt wie ohne Frühstarter/'
+              'Spätzünder.'
+        : '${_n(v * 100)} % vom Gewichts-Überschuss des Signature-Stats '
+              'wandert bei vollem Ausschlag zwischen Start und Wachstum hin '
+              'und her.',
   ),
   Dial(
     id: Dials.captureWildStatMult,
     group: TuningGroup.monster,
     section: 'Fangen',
     label: 'Wildes Monster beim Fangen',
-    help: 'Eigener Wert für die Fangbegegnung — sie soll leichter sein als ein '
+    help:
+        'Eigener Wert für die Fangbegegnung — sie soll leichter sein als ein '
         'normaler Kampf.',
     def: 0.75,
     kind: DialKind.percent,
@@ -772,7 +851,8 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Fangen',
     label: 'Tempo pro Runde',
-    help: 'Womit die Dauer des Fangbalkens jede Runde multipliziert wird — '
+    help:
+        'Womit die Dauer des Fangbalkens jede Runde multipliziert wird — '
         'unter 100 % wird es schneller.',
     def: 0.80,
     kind: DialKind.percent,
@@ -792,7 +872,8 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Fangen',
     label: 'Fangrate für halbes Bonusfenster',
-    help: 'Je tiefer, desto schneller macht eine hohe Fangrate das Fenster '
+    help:
+        'Je tiefer, desto schneller macht eine hohe Fangrate das Fenster '
         'breit.',
     def: 100,
     min: 1,
@@ -804,5 +885,157 @@ final List<Dial> kDials = [
     label: 'Grösstes Bonusfenster',
     help: 'Wie breit das Trefferfenster bei unendlicher Fangrate maximal wird.',
     def: 1.2,
+  ),
+  // ── Effekte · Buffs & Debuffs (user 2026-09-08: "Buffs und Debuffs sollen
+  //    sich wirklich lohnen") — every magnitude/duration a buff or secondary
+  //    debuff falls back to when the ability that applied it doesn't author
+  //    its own (see status_effects.dart). Raised from the old flat 25-30 %/
+  //    2 turns baked into the code before this dial existed.
+  Dial(
+    id: Dials.buffArmorPct,
+    group: TuningGroup.monster,
+    section: 'Effekte · Buffs & Debuffs',
+    label: 'Panzerung (Armor) gibt',
+    help:
+        'Verteidigung, die "Panzerung" dem Nutzer gibt, wenn die Fähigkeit '
+        'selbst keinen eigenen Wert vorgibt.',
+    def: 0.40,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.buffRagePct,
+    group: TuningGroup.monster,
+    section: 'Effekte · Buffs & Debuffs',
+    label: 'Kampfrausch (Rage) gibt',
+    help:
+        'Angriff, den "Kampfrausch" dem Nutzer gibt, wenn die Fähigkeit '
+        'selbst keinen eigenen Wert vorgibt.',
+    def: 0.35,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.buffHastePct,
+    group: TuningGroup.monster,
+    section: 'Effekte · Buffs & Debuffs',
+    label: 'Hast (Haste) gibt',
+    help:
+        'Tempo, das "Hast" dem Nutzer gibt, wenn die Fähigkeit selbst '
+        'keinen eigenen Wert vorgibt.',
+    def: 0.40,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.debuffBlindPct,
+    group: TuningGroup.monster,
+    section: 'Effekte · Buffs & Debuffs',
+    label: 'Blenden (Blind) nimmt',
+    help:
+        'Trefferchance, die das Ziel verliert, wenn die Fähigkeit selbst '
+        'keinen eigenen Wert vorgibt.',
+    def: 0.35,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.debuffSlowPct,
+    group: TuningGroup.monster,
+    section: 'Effekte · Buffs & Debuffs',
+    label: 'Verlangsamen (Slowed) nimmt',
+    help:
+        'Tempo, das das Ziel verliert, wenn die Fähigkeit selbst keinen '
+        'eigenen Wert vorgibt.',
+    def: 0.40,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.debuffWeakenPct,
+    group: TuningGroup.monster,
+    section: 'Effekte · Buffs & Debuffs',
+    label: 'Schwächen (Weakened) nimmt',
+    help:
+        'Angriff, den das Ziel verliert, wenn die Fähigkeit selbst keinen '
+        'eigenen Wert vorgibt.',
+    def: 0.35,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.debuffExposePct,
+    group: TuningGroup.monster,
+    section: 'Effekte · Buffs & Debuffs',
+    label: 'Blossstellen (Exposed) nimmt',
+    help:
+        'Verteidigung, die das Ziel verliert, wenn die Fähigkeit selbst '
+        'keinen eigenen Wert vorgibt.',
+    def: 0.40,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.buffDurationTurns,
+    group: TuningGroup.monster,
+    section: 'Effekte · Buffs & Debuffs',
+    label: 'Eigen-Buff hält',
+    help:
+        'Wie viele eigene Runden ein Selbst-Buff (Panzerung/Kampfrausch/'
+        'Hast) hält, wenn die Fähigkeit selbst keine eigene Dauer vorgibt.',
+    def: 3,
+    kind: DialKind.count,
+    min: 1,
+  ),
+  Dial(
+    id: Dials.debuffDurationTurns,
+    group: TuningGroup.monster,
+    section: 'Effekte · Buffs & Debuffs',
+    label: 'Debuff hält',
+    help:
+        'Wie viele eigene Runden des Ziels ein Sekundär-Debuff (Blenden/'
+        'Verlangsamen/Schwächen/Blossstellen) hält, wenn die Fähigkeit '
+        'selbst keine eigene Dauer vorgibt.',
+    def: 3,
+    kind: DialKind.count,
+    min: 1,
+  ),
+  Dial(
+    id: Dials.debuffRegressionPct,
+    group: TuningGroup.monster,
+    section: 'Effekte · Buffs & Debuffs',
+    label: 'Regression nimmt (Angriff+Verteidigung+Tempo)',
+    help:
+        'Wie viel Angriff, Verteidigung UND Tempo das Ziel zugleich '
+        'verliert, wenn die Fähigkeit selbst keinen eigenen Wert vorgibt — '
+        'die "Deevolution"-Attacken.',
+    def: 0.25,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.statusCureChanceBase,
+    group: TuningGroup.monster,
+    section: 'Effekte · Status',
+    label: 'Heilchance ab der 1. Runde',
+    help:
+        'Chance am Ende jeder Runde, einen Hauptstatus (Burn/Freeze/'
+        'Poison/…) VORZEITIG zu verlieren — steigt jede Runde um die '
+        'Schritt-Chance, bis zur Obergrenze (user 2026-09-15: "in jeder '
+        'Runde wird die Chance grösser").',
+    def: 0.12,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.statusCureChanceStep,
+    group: TuningGroup.monster,
+    section: 'Effekte · Status',
+    label: 'Heilchance-Zuwachs pro Runde',
+    help: 'Wie viel die Heilchance jede weitere Runde zulegt.',
+    def: 0.12,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.statusCureChanceCap,
+    group: TuningGroup.monster,
+    section: 'Effekte · Status',
+    label: 'Heilchance-Obergrenze',
+    help:
+        'Die Heilchance wächst nie über diesen Wert hinaus, egal wie '
+        'lange der Status schon aktiv ist.',
+    def: 0.85,
+    kind: DialKind.percent,
   ),
 ];

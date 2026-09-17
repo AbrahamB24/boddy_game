@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -20,6 +21,12 @@ import 'features/settlement/settlement_screen.dart';
 /// exist over there, _LoginScreen now also registers one directly.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Building art ships at up to 960px wide (tool/pack_art.py, 2026-09-06) —
+  // ~92 MB of decoded RGBA for the current set, which leaves almost no
+  // headroom under Flutter's 100 MB default before other art (roads,
+  // creatures, UI chrome) evicts a building mid-frame. 200 MB matches the
+  // decode cost with room to spare rather than fighting eviction thrash.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 200 << 20;
   // The sound/vibration switches, before the first frame — so a player who
   // muted the game last time does not get one cue back on launch.
   await Feel.load();
@@ -50,16 +57,163 @@ class BoddyGameApp extends StatelessWidget {
 
 /// Everything in the game is keyed by user id, so it waits for a Supabase
 /// session before handing over to the settlement.
-class _AuthGate extends StatelessWidget {
+///
+/// Also the one place that sees the password-recovery link's own auth event
+/// (2026-09-15's "Passwort vergessen" — see [_LoginScreen]'s "Forgot
+/// password?" button): clicking that emailed link signs the browser into a
+/// short-lived RECOVERY session, which `onAuthStateChange` flags with
+/// [AuthChangeEvent.passwordRecovery]. A recovery session is still a
+/// non-null [Session], so without this the gate would just drop the player
+/// straight into the settlement with their OLD password still active — the
+/// one thing "forgot password" has to prevent. Once seen, `_recovering`
+/// stays true (even across subsequent events) until [_ResetPasswordScreen]
+/// reports success.
+class _AuthGate extends StatefulWidget {
   const _AuthGate();
+
+  @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  bool _recovering = false;
 
   @override
   Widget build(BuildContext context) => StreamBuilder<AuthState>(
     stream: supabase.auth.onAuthStateChange,
-    builder: (context, _) {
+    builder: (context, snapshot) {
+      if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) {
+        _recovering = true;
+      }
       final session = supabase.auth.currentSession;
-      return session == null ? const _LoginScreen() : const SettlementScreen();
+      if (session == null) return const _LoginScreen();
+      if (_recovering) {
+        return _ResetPasswordScreen(
+          onDone: () => setState(() => _recovering = false),
+        );
+      }
+      return const SettlementScreen();
     },
+  );
+}
+
+/// The far end of the "Forgot password?" email link: sets a new password on
+/// the short-lived recovery session [_AuthGate] detected, then hands back
+/// via [onDone] so the gate re-evaluates into the settlement.
+class _ResetPasswordScreen extends StatefulWidget {
+  final VoidCallback onDone;
+  const _ResetPasswordScreen({required this.onDone});
+
+  @override
+  State<_ResetPasswordScreen> createState() => _ResetPasswordScreenState();
+}
+
+class _ResetPasswordScreenState extends State<_ResetPasswordScreen> {
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_password.text.length < 6) {
+      setState(() => _error = 'Password must be at least 6 characters.');
+      return;
+    }
+    if (_password.text != _confirm.text) {
+      setState(() => _error = 'Passwords do not match.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await supabase.auth.updateUser(UserAttributes(password: _password.text));
+      widget.onDone();
+    } on AuthException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: kParchmentMid,
+    body: DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [kParchmentLight, kParchmentMid],
+        ),
+      ),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Choose a new password', style: FoE.title(size: 18), textAlign: TextAlign.center),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _password,
+                  obscureText: true,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+                  style: FoE.value(size: 14),
+                  decoration: const InputDecoration(labelText: 'New password'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _confirm,
+                  obscureText: true,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) {
+                    if (!_busy) _submit();
+                  },
+                  style: FoE.value(size: 14),
+                  decoration: const InputDecoration(labelText: 'Repeat new password'),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: FoE.dim(size: 12).copyWith(color: Colors.redAccent),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _busy ? null : _submit,
+                    child: _busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save password'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 }
 
@@ -106,6 +260,68 @@ class _LoginScreenState extends State<_LoginScreen>
   }
 
   Future<void> _submit() => _isSignUp ? _signUp() : _signIn();
+
+  /// "Forgot password?" (user 2026-09-15). Asks for the email once more in
+  /// its own small dialog (pre-filled from the form) rather than reusing
+  /// [_password]'s neighbour field inline — the request has nothing to do
+  /// with whatever half-typed password is currently in that field, and a
+  /// dialog makes the "a link is on its way" confirmation its own moment
+  /// instead of overloading the sign-in form's single `_info` line.
+  Future<void> _forgotPassword() async {
+    final emailCtrl = TextEditingController(text: _email.text.trim());
+    final sent = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reset password'),
+        content: TextField(
+          controller: emailCtrl,
+          autofocus: true,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'Email'),
+          onSubmitted: (_) => Navigator.pop(dialogContext, true),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Send link'),
+          ),
+        ],
+      ),
+    );
+    if (sent != true || emailCtrl.text.trim().isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _info = null;
+    });
+    try {
+      await supabase.auth.resetPasswordForEmail(
+        emailCtrl.text.trim(),
+        // Only meaningful on web (Netlify — see netlify.toml): the emailed
+        // link brings the browser back here with a recovery session, which
+        // _AuthGate picks up. On mobile there is no registered deep-link
+        // scheme for this yet, so redirectTo is left unset there and
+        // Supabase falls back to its own default (still emails a working
+        // link, just not one that reopens this app directly).
+        redirectTo: kIsWeb ? Uri.base.origin : null,
+      );
+      if (mounted) {
+        setState(() {
+          _info = 'If an account exists for that email, a reset link is on its way.';
+        });
+      }
+    } on AuthException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   Future<void> _signIn() async {
     setState(() {
@@ -213,7 +429,14 @@ class _LoginScreenState extends State<_LoginScreen>
                   true,
                   action: TextInputAction.done,
                 ),
-              ],
+              ] else
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _busy ? null : _forgotPassword,
+                    child: const Text('Forgot password?'),
+                  ),
+                ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(

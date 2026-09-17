@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../creatures/models/area.dart' show kResourceEmoji;
 import '../../creatures/models/creature_enums.dart' show CreatureStat;
+import '../../creatures/models/status_effects.dart' show MainStatusKind;
 import '../data/item_definitions.dart';
 import '../data/goods_definitions.dart';
 import '../data/resource_icons.dart';
 import '../services/game_defs_controller.dart';
 import 'dev_theme.dart';
+import '../../../core/ui/pressable.dart';
 
 // Create/edit one craftable/tradeable ItemDef (user 2026-07-25). Same
 // trusted-single-author dev pattern as AreaDefForm / PathNodeForm; saved to
@@ -37,6 +39,7 @@ class _ItemDefFormState extends State<ItemDefForm> {
   late double _magnitude;
   CreatureStat? _buffStat;
   String? _resourceId;
+  MainStatusKind? _cureMainStatus;
   late bool _battleUsable;
   late List<_IngredientDraft> _ingredients;
   late double _supplyCost;
@@ -58,6 +61,7 @@ class _ItemDefFormState extends State<ItemDefForm> {
     _magnitude = d?.magnitude ?? 40;
     _buffStat = d?.buffStat;
     _resourceId = d?.resourceId;
+    _cureMainStatus = d?.cureMainStatus;
     _battleUsable = d?.battleUsable ?? false;
     _ingredients = [
       for (final e in (d?.ingredients ?? const {}).entries)
@@ -86,6 +90,9 @@ class _ItemDefFormState extends State<ItemDefForm> {
       resourceId: _kind == ItemKind.resourcePack
           ? (_resourceId ?? _packResources.first)
           : null,
+      // Left null on purpose is a real, meaningful choice for cureStatus (the
+      // universal "any main status" remedy) — no fallback-to-first here.
+      cureMainStatus: _kind == ItemKind.cureStatus ? _cureMainStatus : null,
       battleUsable: _battleUsable,
       ingredients: {
         for (final i in _ingredients)
@@ -133,6 +140,8 @@ class _ItemDefFormState extends State<ItemDefForm> {
     ItemKind.expeditionYield => 'Haul bonus (0.20 = +20%)',
     ItemKind.breedSpeed => 'Time cut (0.30 = −30%)',
     ItemKind.resourcePack => 'Amount granted (units of the resource below)',
+    ItemKind.cureStatus => 'Chance it works (1.0 = always cures)',
+    ItemKind.cureDebuffs => 'Chance it works (1.0 = always cleanses)',
   };
 
   /// The resource a PACK contains. Every ResourceModel key: the three the
@@ -184,6 +193,7 @@ class _ItemDefFormState extends State<ItemDefForm> {
                 isDouble: true, onChanged: (v) => _magnitude = v.toDouble()),
             if (_kind == ItemKind.buff) _buffStatDropdown(),
             if (_kind == ItemKind.resourcePack) _packResourceDropdown(),
+            if (_kind == ItemKind.cureStatus) _cureStatusDropdown(),
             _checkboxRow('Usable in battle', _battleUsable,
                 (v) => setState(() => _battleUsable = v)),
             const SizedBox(height: 14),
@@ -261,6 +271,25 @@ class _ItemDefFormState extends State<ItemDefForm> {
     ),
   );
 
+  /// Which main status this cures — null = "any" (Full Heal/Full Restore's
+  /// own shape), represented by its own explicit menu entry rather than
+  /// falling out of a missing selection.
+  Widget _cureStatusDropdown() => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: DropdownButtonFormField<MainStatusKind?>(
+      initialValue: _cureMainStatus,
+      dropdownColor: FoE.panelMid,
+      style: FoE.label(size: 15).copyWith(color: FoE.parchment),
+      decoration: const InputDecoration(labelText: 'Cures'),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('Any main status')),
+        for (final k in MainStatusKind.values)
+          DropdownMenuItem(value: k, child: Text('${k.emoji} ${k.label}')),
+      ],
+      onChanged: (v) => setState(() => _cureMainStatus = v),
+    ),
+  );
+
   Widget _buffStatDropdown() => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: DropdownButtonFormField<CreatureStat>(
@@ -322,7 +351,7 @@ class _ItemDefFormState extends State<ItemDefForm> {
   Widget _sectionLabel(String text) =>
       Text(text, style: FoE.label(size: 14).copyWith(color: FoE.gold));
 
-  Widget _addButton(String label, VoidCallback onTap) => GestureDetector(
+  Widget _addButton(String label, VoidCallback onTap) => Pressable(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -333,7 +362,7 @@ class _ItemDefFormState extends State<ItemDefForm> {
   );
 
   Widget _checkboxRow(String label, bool value, ValueChanged<bool> onChanged) =>
-      GestureDetector(
+      Pressable(
         onTap: () => onChanged(!value),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
@@ -353,7 +382,7 @@ class _ItemDefFormState extends State<ItemDefForm> {
 
   Widget _saveButton() => SizedBox(
     width: double.infinity,
-    child: GestureDetector(
+    child: Pressable(
       onTap: _saving ? null : _save,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),

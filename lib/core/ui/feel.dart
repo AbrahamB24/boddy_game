@@ -250,8 +250,17 @@ class Feel {
   // technique as [_sound], just keyed by element instead of by FeelEvent.
   static final Map<CreatureElement, AudioPlayer> _attackPlayers = {};
 
-  static String _attackAsset(CreatureElement element) =>
-      'sfx/${element.name}_attack.mp3';
+  /// Elements whose own clip has FAILED to load at least once this session
+  /// (2026-09-14: not every element has one bundled yet — ice/lightning/
+  /// stone were missing entirely, which used to mean a silent hit for a
+  /// third of the game's types). Routed to neutral's clip from then on
+  /// instead of re-attempting — and re-failing — the same missing asset on
+  /// every single hit.
+  static final Set<CreatureElement> _missingAttackClip = {};
+
+  static String _attackAsset(CreatureElement element) => 'sfx/'
+      '${(_missingAttackClip.contains(element) ? CreatureElement.neutral : element).name}'
+      '_attack.mp3';
 
   /// Plays the element's attack clip. Called from battle_screen at the
   /// moment a struck event lands (hit or miss — the clip is the attack being
@@ -267,7 +276,16 @@ class Feel {
         _fireAndForget(p.setReleaseMode(ReleaseMode.stop), 'release mode');
         return p;
       });
-      _fireAndForget(player.play(AssetSource(asset), volume: 1.0), asset);
+      player.play(AssetSource(asset), volume: 1.0).catchError((Object e) {
+        debugPrint('[Feel] $asset unavailable: $e');
+        // First failure for this element: fall back to neutral's clip
+        // immediately rather than leaving this hit silent. `.add` returns
+        // false on a repeat, so a broken neutral clip can't recurse forever.
+        if (element != CreatureElement.neutral &&
+            _missingAttackClip.add(element)) {
+          attackSound(element);
+        }
+      });
     } catch (e) {
       debugPrint('[Feel] could not play $asset: $e');
     }

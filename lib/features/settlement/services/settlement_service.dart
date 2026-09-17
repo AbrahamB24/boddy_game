@@ -46,10 +46,10 @@ class SettlementService {
         'fish': kJumpstartGiftFish,
         'goods': {'meat': kJumpstartGiftMeat},
       }),
-      supabase.from('energy_state').insert({
-        'settlement_id': model.id,
-        'current_energy': 80.0,
-      }),
+      // steps_today/steps_day_key default to 0/'' — a fresh settlement
+      // simply hasn't walked yet today, which reads as the floor rate until
+      // it does (see EnergyModel/energyMultiplierForSteps).
+      supabase.from('energy_state').insert({'settlement_id': model.id}),
       supabase.from('placed_buildings').insert({
         'settlement_id': model.id,
         'building_type_id': 'castle',
@@ -308,11 +308,7 @@ class SettlementService {
         ),
       ),
       saveEnergy(
-        EnergyModel(
-          settlementId: settlementId,
-          currentEnergy: 80,
-          lastUpdatedAt: now,
-        ),
+        EnergyModel(settlementId: settlementId, lastUpdatedAt: now),
       ),
       _resetSettlementRow(settlementId),
       _resetProfileRow(userId),
@@ -352,6 +348,7 @@ class SettlementService {
         'dungeon_max_stage': 1,
         'expansions_unlocked': 0,
         'battles_cleared': 0,
+        'survival_best_floor': 0,
         'intro_step': IntroStep.pickStarter.index,
       });
     } catch (_) {
@@ -402,6 +399,7 @@ class SettlementService {
         'dungeon_max_stage': 1,
         'expansions_unlocked': 0,
         'battles_cleared': 0,
+        'survival_best_floor': 0,
       };
     }
     return {
@@ -421,6 +419,10 @@ class SettlementService {
       // (partySizeForBattle) and, later, map-milestone unlocks. Tolerates the
       // column not existing yet (migration 0019).
       'battles_cleared': (row['battles_cleared'] as num?)?.toInt() ?? 0,
+      // Survival Mode's own high score (user 2026-09-06). Tolerates the
+      // column not existing yet (migration 0042), same as every field above.
+      'survival_best_floor':
+          (row['survival_best_floor'] as num?)?.toInt() ?? 0,
     };
   }
 
@@ -471,6 +473,19 @@ class SettlementService {
       await supabase.from('profiles').upsert({
         'id': userId,
         'battles_cleared': count,
+      });
+    } catch (e) {
+      if (!isMissingSchema(e)) rethrow;
+    }
+  }
+
+  /// Persists Survival Mode's high score (SettlementController.
+  /// recordSurvivalRun) — same shape as [saveBattlesCleared].
+  Future<void> saveSurvivalBestFloor(String userId, int floor) async {
+    try {
+      await supabase.from('profiles').upsert({
+        'id': userId,
+        'survival_best_floor': floor,
       });
     } catch (e) {
       if (!isMissingSchema(e)) rethrow;

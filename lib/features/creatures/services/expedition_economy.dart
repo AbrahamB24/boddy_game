@@ -2,7 +2,6 @@ import '../models/area.dart';
 import '../models/creature_enums.dart';
 import '../models/creature_instance.dart';
 import 'capture_math.dart';
-import 'expedition_risk.dart';
 import '../../settlement/data/gather_defs.dart';
 import 'gather_math.dart';
 
@@ -55,15 +54,12 @@ class GatherDayEstimate {
   /// what the spot regenerates, however fast the group hauls.
   final double sustainableYield;
 
-  final double peril;
-
   const GatherDayEstimate({
     required this.tripDuration,
     required this.haulPerTrip,
     required this.tripsPerDay,
     required this.burstDayYield,
     required this.sustainableYield,
-    required this.peril,
   });
 }
 
@@ -93,7 +89,6 @@ GatherDayEstimate estimateGatherDay({
     tripsPerDay: tripsPerDay,
     burstDayYield: demandPerDay.clamp(0, dials.spotCapacity + regenPerDay),
     sustainableYield: demandPerDay.clamp(0, regenPerDay),
-    peril: perilRatio(area.dangerLevel, members),
   );
 }
 
@@ -106,20 +101,16 @@ class CaptureDayEstimate {
 
   /// findsPerDay × assumed QTE success rate.
   final double catchesPerDay;
-  final double peril;
 
   const CaptureDayEstimate({
     required this.huntDuration,
     required this.huntsPerDay,
     required this.findsPerDay,
     required this.catchesPerDay,
-    required this.peril,
   });
 }
 
 CaptureDayEstimate estimateCaptureDay({
-  required AreaDef area,
-  required List<CreatureInstance> members,
   required CaptureHuntOption option,
   double qteSuccess = 0.85,
   double reactionHours = 1,
@@ -133,6 +124,5 @@ CaptureDayEstimate estimateCaptureDay({
     huntsPerDay: huntsPerDay,
     findsPerDay: findsPerDay,
     catchesPerDay: findsPerDay * qteSuccess.clamp(0.0, 1.0),
-    peril: perilRatio(area.dangerLevel, members),
   );
 }

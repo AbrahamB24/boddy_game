@@ -135,14 +135,14 @@ List<ItemDef> shopStock() => kItemDefs.values.where(itemIsSold).toList()
 
 // ── What is tradeable at all ────────────────────────────────
 
-/// Every resource the Trade Center handles in era [eraOrder]: the bulk pair
-/// first, then the era's supplies and materials in ladder order.
+/// Every resource the Trade Center handles at region [regionOrder]: the bulk
+/// pair first, then the region's supplies and materials in ladder order.
 ///
-/// Era-scoped on purpose — listing era-VIII Aether in era I is noise the player
-/// can neither hold nor use.
-List<String> tradeableResources(int eraOrder) => [
+/// Region-scoped on purpose — listing region-VIII Aether in region I is
+/// noise the player can neither hold nor use.
+List<String> tradeableResources(int regionOrder) => [
   'wood',
   'stone',
-  for (final g in goodsForEra(eraOrder)) g.id,
-  for (final g in materialsForEra(eraOrder)) g.id,
+  for (final g in goodsForRegion(regionOrder)) g.id,
+  for (final g in materialsForRegion(regionOrder)) g.id,
 ];

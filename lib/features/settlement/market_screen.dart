@@ -24,6 +24,7 @@ import 'widgets/scroll_paper.dart' show kParchmentInk, kParchmentLight;
 import '../common/widgets/empty_monster_slot.dart';
 import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/recess_bar.dart';
+import '../../core/ui/pressable.dart';
 
 /// The Market — A SCREEN OF ITS OWN, ON THE HATCHERY'S PLAN (user 2026-07-27:
 /// "gestalte den Market genau so wie die Hatchery. D.h eigener Screen und
@@ -226,7 +227,14 @@ class _MarketScreenState extends State<MarketScreen> {
         style: FoE.value(size: 13).copyWith(color: _accent),
       ),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(ParchmentPage.kParchmentPagePad, 12, ParchmentPage.kParchmentPagePad, 20),
+        // kMonsterTilePageMargin (24), not ParchmentPage.kParchmentPagePad
+        // (36) — this page's caravan rank is a [monsterTileGrid], which
+        // sizes tiles off the raw device width assuming a 24px host margin,
+        // same as the Monsters screen (user 2026-09-11: "bitte 3 Boxen
+        // nebeneinander und nicht nur 2", caught on the hunt group picker
+        // but the same mismatch here kept the caravan's own "three across"
+        // design comment from actually holding).
+        padding: const EdgeInsets.fromLTRB(kMonsterTilePageMargin, 12, kMonsterTilePageMargin, 20),
         children: [
           // RUNNING FIRST, as on the Hatchery.
           ..._tripSection(),
@@ -403,7 +411,7 @@ class _MarketScreenState extends State<MarketScreen> {
       ),
       const Spacer(),
       if (_caravan.isNotEmpty)
-        GestureDetector(
+        Pressable(
           behavior: HitTestBehavior.opaque,
           onTap: () => setState(_caravan.clear),
           child: Text(
@@ -457,7 +465,7 @@ class _MarketScreenState extends State<MarketScreen> {
   /// A TAP TAKES IT BACK OUT, and the ✕ badge says so. Emptying a place is the
   /// exact inverse of filling it, so it is the same single tap on the same
   /// place — no picker, no rebuilding the party to drop one member.
-  Widget _memberCard(CreatureInstance c, int index) => GestureDetector(
+  Widget _memberCard(CreatureInstance c, int index) => Pressable(
     // The tap lives on the WHOLE place, not on the tile inside it: the ✕ sits
     // in the band the tile leaves empty for its artwork, so a tap aimed at the
     // badge has to be caught out here.
@@ -512,7 +520,7 @@ class _MarketScreenState extends State<MarketScreen> {
           ),
           const Spacer(),
           if (canSave)
-            GestureDetector(
+            Pressable(
               behavior: HitTestBehavior.opaque,
               onTap: _saveCaravan,
               child: Text(
@@ -557,7 +565,7 @@ class _MarketScreenState extends State<MarketScreen> {
   /// answered without opening anything.
   Widget _savedPill(SavedTeam team) {
     final loaded = _matchingSaved()?.id == team.id;
-    return GestureDetector(
+    return Pressable(
       behavior: HitTestBehavior.opaque,
       onTap: () => _loadSaved(team),
       child: Container(
@@ -577,7 +585,7 @@ class _MarketScreenState extends State<MarketScreen> {
               '${team.memberIds.length}',
               style: FoE.dim(size: 10).copyWith(color: _inkFaint),
             ),
-            GestureDetector(
+            Pressable(
               behavior: HitTestBehavior.opaque,
               onTap: () => _forgetSaved(team),
               child: Padding(
@@ -777,7 +785,7 @@ class _MarketScreenState extends State<MarketScreen> {
       children: [
         for (final t in _MarketTab.values)
           Expanded(
-            child: GestureDetector(
+            child: Pressable(
               behavior: HitTestBehavior.opaque,
               onTap: () => setState(() => _tab = t),
               child: Container(
@@ -806,8 +814,7 @@ class _MarketScreenState extends State<MarketScreen> {
         Text('Loading…', style: FoE.dim(size: 12).copyWith(color: _inkFaint)),
       ];
     }
-    final era = _ctrl.settlement?.eraIndex ?? 1;
-    final tradeable = tradeableResources(era);
+    final tradeable = tradeableResources(_ctrl.dungeonMaxStage);
     final discount = _ctrl.tradeDiscount;
     return switch (_tab) {
       _MarketTab.sell => _sellBody(tradeable, res.asMap),
@@ -1114,7 +1121,7 @@ class _MarketScreenState extends State<MarketScreen> {
     Color color,
     VoidCallback? onTap, {
     bool filled = false,
-  }) => GestureDetector(
+  }) => Pressable(
     behavior: HitTestBehavior.opaque,
     onTap: onTap,
     child: Opacity(
@@ -1175,7 +1182,7 @@ class _MarketScreenState extends State<MarketScreen> {
   /// whole point, and they need a line of their own.
   Widget _barterCard(double have, double discount) {
     const key = 'barter';
-    final tradeable = tradeableResources(_ctrl.settlement?.eraIndex ?? 1);
+    final tradeable = tradeableResources(_ctrl.dungeonMaxStage);
     // Bounded by BOTH legs: what goes out and what comes back have to fit in
     // the same cargo hold.
     final maxIn = _caravan.isEmpty

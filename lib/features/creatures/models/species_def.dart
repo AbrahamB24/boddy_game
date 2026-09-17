@@ -88,11 +88,15 @@ class SpeciesDef {
   final CreatureElement element;
   final CreatureRarity rarity;
 
-  /// The authored ROLE, stored as `archetype|prio1,prio2,…` (user
-  /// 2026-07-24) — the combat archetype name plus the prioritised work stats the
-  /// spread was rolled from. Persisted in this existing text column (no new DB
-  /// column needed); the dev editor reads it back to prefill its role menu.
-  /// Legacy free-text values (e.g. "Tank") simply decode to an empty role.
+  /// The authored ROLE, stored as `archetype|prio1,prio2,…|maturityBias`
+  /// (user 2026-07-24, maturity segment added 2026-09-07) — the combat
+  /// archetype name, the prioritised work stats, and how far the roll leaned
+  /// early-bloomer (−1) vs late-bloomer (+1) on the archetype's own featured
+  /// stat(s), see [stat_budget.dart]'s `rollCurves`. Persisted in this
+  /// existing text column (no new DB column needed); the dev editor reads it
+  /// back to prefill its role menu. Legacy free-text values (e.g. "Tank"),
+  /// and any role saved before the maturity segment existed, simply decode to
+  /// an empty/0 role for the parts they're missing.
   final String role;
 
   /// The stored combat-archetype NAME (empty if none) — the enum is resolved in
@@ -110,9 +114,23 @@ class SpeciesDef {
         .toList();
   }
 
-  /// Encodes an archetype name + work priorities into the [role] string.
-  static String encodeRole(String archetype, List<CreatureStat> priorities) =>
-      '$archetype|${priorities.map((s) => s.name).join(',')}';
+  /// The stored early-bloomer/late-bloomer bias, −1..+1 (0 if unset — a role
+  /// saved before this segment existed, or one with no bias applied).
+  double get roleMaturityBias {
+    final parts = role.split('|');
+    if (parts.length < 3 || parts[2].isEmpty) return 0.0;
+    return double.tryParse(parts[2])?.clamp(-1.0, 1.0) ?? 0.0;
+  }
+
+  /// Encodes an archetype name + work priorities + maturity bias into the
+  /// [role] string.
+  static String encodeRole(
+    String archetype,
+    List<CreatureStat> priorities, {
+    double maturityBias = 0.0,
+  }) =>
+      '$archetype|${priorities.map((s) => s.name).join(',')}|'
+      '${maturityBias == 0 ? '' : maturityBias}';
 
   /// Species-specific catch modifier on top of the rarity's QTE difficulty
   /// (1.0 = normal; below 1 = extra hard — it speeds the catch ring up, see

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../creatures/models/species_def.dart' show kSpeciesDefs;
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/theme/parchment_theme.dart';
+import '../../../core/ui/pressable.dart';
 
 // Dev Mode's plain TextFormField/DropdownButtonFormField/Checkbox widgets
 // inherit the ambient Material theme's colors, which can render
@@ -57,7 +58,7 @@ Future<bool> confirmDeleteDialog(
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                GestureDetector(
+                Pressable(
                   onTap: () => Navigator.pop(context, false),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -71,7 +72,7 @@ Future<bool> confirmDeleteDialog(
                     ),
                   ),
                 ),
-                GestureDetector(
+                Pressable(
                   onTap: () => Navigator.pop(context, true),
                   child: Container(
                     padding: const EdgeInsets.symmetric(

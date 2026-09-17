@@ -45,6 +45,7 @@ class GameNotifications {
     NotifyKind.crafting: ('crafting', 'Workshop'),
     NotifyKind.healing: ('healing', 'Healing Hut'),
     NotifyKind.building: ('building', 'Construction'),
+    NotifyKind.training: ('training', 'Combat School'),
   };
 
   static Future<void> _init() async {
@@ -176,7 +177,15 @@ class GameNotifications {
 
 /// What kind of wait finished — one Android channel each, so a player can
 /// silence the chatty ones and keep the rest.
-enum NotifyKind { expedition, caravan, breeding, crafting, healing, building }
+enum NotifyKind {
+  expedition,
+  caravan,
+  breeding,
+  crafting,
+  healing,
+  building,
+  training,
+}
 
 /// `zonedSchedule` works in a named zone, so an absolute instant has to be
 /// re-expressed in the device's own — see [GameNotifications._init].

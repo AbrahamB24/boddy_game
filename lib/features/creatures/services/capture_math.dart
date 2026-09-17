@@ -81,60 +81,28 @@ int captureTargetLevel(AreaDef area) => wildLevelForStage(area.battleStage);
 
 // ── What you find ───────────────────────────────────────────
 
-/// Encounter weight per rarity. Danger level 1 is common-heavy; every level
-/// above shifts odds toward the rare end (all weights sum to 100 at every
-/// danger, so they read directly as percentages when the pool has all tiers).
-Map<CreatureRarity, double> rarityWeights(int dangerLevel) {
-  final d = (dangerLevel - 1).clamp(0, 4).toDouble();
-  return {
-    for (final r in CreatureRarity.values)
-      r: (kSpeciesBalance.of(r).encounterWeightBase +
-              kSpeciesBalance.of(r).encounterWeightPerDanger * d)
-          .clamp(0.0, double.infinity),
-  };
-}
+/// Encounter weight per rarity (tunable per rarity in Dev Mode → Species
+/// Balance). No longer scaled by an area "danger level" (removed 2026-09-11
+/// — no area had ever actually been authored above the default, so that
+/// dimension changed nothing in the live game). Sums to 100 by default, so it
+/// reads directly as percentages before any hunt-length bias.
+Map<CreatureRarity, double> rarityWeights() => {
+  for (final r in CreatureRarity.values)
+    r: kSpeciesBalance.of(r).encounterWeightBase.clamp(0.0, double.infinity),
+};
 
-/// Shifts [base] rarity weights toward the rare end by [rareBias] (0 = no
-/// shift). A longer hunt passes a bigger bias (user design 2026-07-17: "je
-/// länger die Expedition, desto grösser die Chance für seltene Monster").
-/// Kept SEPARATE from rarityWeights so the danger-based table (and its
-/// "sums to 100" invariant) is untouched — this is a post-multiplier applied
-/// only at roll time. Higher rarities are boosted more; common is damped.
-/// [rarityWeights] for [dangerLevel], shifted toward the rare end by
-/// [rareBias]. The hunt planner shows this so a longer variant's better odds
-/// are visible before committing.
-Map<CreatureRarity, double> biasedRarityWeights(int dangerLevel, double rareBias) =>
-    _biasedWeights(rarityWeights(dangerLevel), rareBias);
-
-Map<CreatureRarity, double> _biasedWeights(
-  Map<CreatureRarity, double> base,
-  double rareBias,
-) {
-  if (rareBias <= 0) return base;
-  return {
-    CreatureRarity.common:
-        (base[CreatureRarity.common] ?? 0) / (1 + rareBias),
-    CreatureRarity.uncommon: (base[CreatureRarity.uncommon] ?? 0),
-    CreatureRarity.rare: (base[CreatureRarity.rare] ?? 0) * (1 + rareBias),
-    CreatureRarity.epic: (base[CreatureRarity.epic] ?? 0) * (1 + rareBias * 1.6),
-    CreatureRarity.legendary:
-        (base[CreatureRarity.legendary] ?? 0) * (1 + rareBias * 2.2),
-  };
-}
-
-/// Rolls what a capture expedition to [area] finds: rarity first (area-shifted
-/// weights, restricted to rarities the pool actually offers), then a uniform
-/// species within that rarity. Null when the pool is empty.
+/// Rolls what a capture expedition finds: rarity first (restricted to
+/// rarities the pool actually offers), then a uniform species within that
+/// rarity. Null when the pool is empty.
 ///
 /// The POOL is every species in the game minus the legendaries still standing
-/// ([catchableSpecies]) — the area contributes its DANGER, which is what the
-/// rarity weights are read from, not a guest list. [rareBias] shifts the odds
-/// toward the rare end (a longer hunt's reward).
+/// ([catchableSpecies]) — not a per-area guest list. Odds are the SAME
+/// regardless of hunt length (removed 2026-09-11 — a longer hunt used to bias
+/// toward rarer finds; the user wants length to only ever change the NUMBER
+/// of finds, never their odds).
 SpeciesDef? rollEncounter(
-  AreaDef area,
   math.Random rng, {
   required int dungeonMaxStage,
-  double rareBias = 0,
 }) {
   final pool = catchableSpecies(dungeonMaxStage);
   if (pool.isEmpty) return null;
@@ -143,7 +111,7 @@ SpeciesDef? rollEncounter(
   for (final s in pool) {
     byRarity.putIfAbsent(s.rarity, () => []).add(s);
   }
-  final weights = _biasedWeights(rarityWeights(area.dangerLevel), rareBias);
+  final weights = rarityWeights();
   final available = byRarity.keys.toList();
   final total = available.fold<double>(0, (sum, r) => sum + (weights[r] ?? 0));
   if (total <= 0) return pool[rng.nextInt(pool.length)];
@@ -276,70 +244,65 @@ int qteHitsRequired(CreatureRarity rarity) =>
     kSpeciesBalance.of(rarity).catchHits.clamp(1, 99);
 
 // ── Hunt variants (user design 2026-07-17) ──────────────────
-// Six fixed-duration hunts. The longer you commit the group, the more
-// HUNTERS it takes to run, the more monsters it brings home, and the better
-// the odds of a rare one. Duration is FIXED per variant (not derived from a
+// Six fixed-duration hunts. Duration is FIXED per variant (not derived from a
 // base × multiplier anymore) — the trip length still never leaks the hidden
 // finds' rarity because it's the same for everyone who picks that variant.
 //
-// Gating is by hunter count, not by tech: you can only run the 24h/6-hunter
-// hunt once you actually own six ready monsters. That's the natural gate,
-// so the old hunt-length techs no longer restrict the list.
+// Gating is by campaign progress, not by roster size (see _unlockedOptions in
+// the launch sheet) — how many hunters you send no longer decides which
+// variants are reachable at all (see the ladder's own comment below).
 
 class CaptureHuntOption {
   final String id;
 
-  /// Exactly this many hunters must be sent (not a max — the variant IS the
-  /// team size).
-  final int hunters;
-
   /// Fixed trip length in seconds.
   final int seconds;
 
-  /// How many monsters the hunt brings home (each its own battle + QTE).
+  /// How many monsters the hunt brings home. Each is a wild fielded in ONE
+  /// continuous battle, not a separate fight per find (2026-09-11 — see the
+  /// ladder's own comment).
   final int finds;
-
-  /// Shifts the rarity odds toward the rare end (0 = none) — see rollEncounter.
-  final double rareBias;
 
   /// Short human label for the duration ("10 min", "24 h").
   final String label;
 
   const CaptureHuntOption({
     required this.id,
-    required this.hunters,
     required this.seconds,
     required this.finds,
-    required this.rareBias,
     required this.label,
   });
 }
 
-// ── The hunt ladder (user 2026-07-30) ──────────────────────────────────────
-// "Pro Hunt wird immer nur ein Monster geschickt." — every variant sends ONE
-// hunter now. The trip length used to buy a bigger party as well as a bigger
-// haul, which made the long hunts unreachable for exactly the players who
-// needed them: a settlement with four free monsters could not run the 4 h hunt
-// at all, and one monster tied up six of them for a day.
+// ── The hunt ladder (user 2026-07-30, revised 2026-09-11) ──────────────────
+// A hunt's TEAM now follows the same growing cap Gather already uses
+// (CreaturesController.teamSizeCap) rather than a fixed count tied to the
+// variant — see the launch sheet's own _groupCap. That reverses the
+// 2026-07-30 "every hunt sends exactly one monster" rule, but for a
+// different reason than the one that rule fixed: a longer hunt still never
+// NEEDS more hunters to be reachable at all, it needs them to actually
+// survive fighting through all its finds. All N of a hunt's finds are now
+// fielded as ONE continuous multi-enemy battle (CombatEngine's existing
+// field-of-3-plus-bench mechanic, the same one dungeon/Survival/Training
+// battles already use) instead of N separate back-to-back 1v1s with no HP
+// reset between them — which is what made a solo hunter on a long hunt
+// nearly guaranteed to get KO'd partway through and forfeit every find after
+// that (user: "Das schaffe ich wohl mit nur einem Monster nicht"). Bringing
+// more than one hunter is now a real, useful choice again, not a
+// requirement.
 //
-// So the only thing a longer hunt costs is TIME, and the only thing it buys is
+// The only thing a longer hunt costs is TIME, and the only thing it buys is
 // finds: 1 · 2 · 3 · 5 · 8 · 12 (the last four are the user's own numbers).
 // Growth is steep but sub-linear against the clock — 24 h returns 12 finds
 // where 24 ten-minute hunts would return 24 — so sitting on a long hunt is a
 // convenience, never the efficient play.
 const List<CaptureHuntOption> kCaptureHuntOptions = [
-  CaptureHuntOption(
-      id: 'h10m', hunters: 1, seconds: 600, finds: 1, rareBias: 0.0, label: '10 min'),
-  CaptureHuntOption(
-      id: 'h30m', hunters: 1, seconds: 1800, finds: 2, rareBias: 0.2, label: '30 min'),
-  CaptureHuntOption(
-      id: 'h60m', hunters: 1, seconds: 3600, finds: 3, rareBias: 0.45, label: '60 min'),
-  CaptureHuntOption(
-      id: 'h4h', hunters: 1, seconds: 14400, finds: 5, rareBias: 0.8, label: '4 h'),
-  CaptureHuntOption(
-      id: 'h8h', hunters: 1, seconds: 28800, finds: 8, rareBias: 1.2, label: '8 h'),
-  CaptureHuntOption(
-      id: 'h24h', hunters: 1, seconds: 86400, finds: 12, rareBias: 1.8, label: '24 h'),
+  CaptureHuntOption(id: 'h10m', seconds: 600, finds: 1, label: '10 min'),
+  CaptureHuntOption(id: 'h30m', seconds: 1800, finds: 2, label: '30 min'),
+  CaptureHuntOption(id: 'h60m', seconds: 3600, finds: 3, label: '60 min'),
+  CaptureHuntOption(id: 'h4h', seconds: 14400, finds: 5, label: '4 h'),
+  CaptureHuntOption(id: 'h8h', seconds: 28800, finds: 8, label: '8 h'),
+  CaptureHuntOption(id: 'h24h', seconds: 86400, finds: 12, label: '24 h'),
 ];
 
 // kMaxHunters and huntOptionForHunters were DELETED on 2026-07-30. Both were

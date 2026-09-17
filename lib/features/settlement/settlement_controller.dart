@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../../../core/supabase/supabase_client.dart';
 import '../../core/tuning/game_tuning.dart';
@@ -11,10 +10,10 @@ import '../creatures/services/creatures_controller.dart';
 import '../creatures/services/combat_tuning.dart';
 import '../creatures/services/expedition_controller.dart';
 import '../creatures/services/overworld_path.dart';
+import '../creatures/services/survival_run.dart' show goldRewardForFloors;
 import '../common/events/game_events.dart';
 import '../onboarding/intro_flow.dart';
 import 'data/building_definitions.dart';
-import 'data/era_definitions.dart';
 import 'data/goods_definitions.dart';
 import 'data/item_definitions.dart';
 import 'data/road_tiles.dart';
@@ -35,6 +34,14 @@ import 'services/trade_center.dart';
 /// Minimum time away before the welcome-back digest shows. Shorter absences
 /// (app switch, a quick lock) accrue too little to be worth a sheet.
 const double kDigestMinAwayHours = 0.5;
+
+/// Stand-in for the deleted `eraBonusTotals` (user 2026-09-05: the paid
+/// Castle ascension — and the permanent wood/stone/food/build-speed bonuses
+/// it granted per era — is gone entirely, not folded into anything else).
+/// Kept as an all-zero constant of the exact same shape so every call site
+/// that used to add these in stays structurally unchanged.
+const ({double wood, double stone, double food, double all, double buildSpeed})
+_noEraBonus = (wood: 0, stone: 0, food: 0, all: 0, buildSpeed: 0);
 
 /// What happened while the player was away — resources the offline tick and
 /// offline expedition resolution brought in. Built once during [SettlementController.load],
@@ -68,31 +75,12 @@ class SettlementController extends ChangeNotifier {
   List<PlacedBuilding> buildings = [];
 
   /// Energy RIGHT NOW, drained forward from the last tick's anchor.
-  ///
-  /// [energy] is only rewritten every few seconds, so reading `currentEnergy`
-  /// straight would let an action through for a moment after the tank ran dry.
-  /// Same extrapolation the Energy sheet's countdown uses.
-  double get energyNow {
-    final e = energy;
-    if (e == null) return 0;
-    final hours =
-        DateTime.now().difference(e.lastUpdatedAt).inMicroseconds / 3.6e9;
-    return (e.currentEnergy - kDrainPerHour * hours).clamp(0.0, kMaxEnergy);
-  }
-
-  /// WHETHER THE SETTLEMENT RUNS AT ALL (user 2026-07-27: "wenn ich keine
-  /// Energie habe, dann läuft nichts, keine Expedition, kein Heilen,
-  /// Produzieren, Hatchen etc.").
-  ///
-  /// The passive tick already reads this through [kEnergyFloorRate]; every
-  /// player-triggered action asks here first. One getter so "empty" means the
-  /// same thing everywhere — and so the day it becomes a soft gate again, it
-  /// changes in one place.
-  bool get hasEnergy => energyNow > 0;
-
-  /// What to tell the player when [hasEnergy] refuses. Names the only cure.
-  static const String kNoEnergyMessage =
-      'No energy — walk to recharge before your settlement can work again.';
+  /// THE rate multiplier every action/production figure reads (user
+  /// 2026-09-14, replacing the old hard energy gate) — a pure function of
+  /// today's step count, so unlike the old draining pool this needs no
+  /// live time-extrapolation: [EnergyModel.multiplier] is already exactly
+  /// as current as [energy] itself is.
+  double get energyMultiplier => energy?.multiplier ?? kEnergyFloorMultiplier;
   bool isDev = false;
 
   /// How far the new-player intro chain has got. Defaults to [IntroStep.done]
@@ -105,6 +93,31 @@ class SettlementController extends ChangeNotifier {
   /// wall-clock, so quitting after ten minutes costs the player nothing.
   bool get jumpstartActive => introStep.isActive;
 
+  /// The Healing Hut, while it is the CURRENT build step, is excluded from
+  /// this tick's construction progress entirely (user 2026-09-06: "Es soll
+  /// gar kein Timer laufen" — only [skipBuildWithGold] may finish it, and
+  /// that already ignores construction progress altogether). Every other
+  /// site's rate is untouched by this — see [_applyTick]'s own
+  /// `frozenBuildingIds`. A set rather than a bool because [GameEngine.tick]
+  /// works over the whole buildings list at once, one rate for everyone;
+  /// this is the one place that still needs a single building singled out.
+  Set<String> get _frozenBuildingIds {
+    if (introStep != IntroStep.buildHealingHut) return const {};
+    return {
+      for (final b in buildings)
+        if (b.buildingTypeId == kHealingHutBuildingId && !b.isComplete) b.id,
+    };
+  }
+
+  /// [_frozenBuildingIds], queryable by id — the building detail dialog's
+  /// own live countdown (see _BuildCountdown in building_detail_dialog.dart)
+  /// extrapolates progress from [buildRatePerHour] independently of any real
+  /// tick, and needs to know NOT to for a frozen site; otherwise it shows a
+  /// countdown visibly moving even though nothing behind it ever will (user
+  /// 2026-09-06: "es läuft noch immer ein Timer beim Healing Hut").
+  bool isConstructionFrozen(String buildingId) =>
+      _frozenBuildingIds.contains(buildingId);
+
   /// Highest dungeon stage unlocked so far (permanent progression — see
   /// kMaxDungeonStage in dungeon.dart). Clearing stage N's boss unlocks N+1.
   int dungeonMaxStage = 1;
@@ -115,6 +128,14 @@ class SettlementController extends ChangeNotifier {
   /// rebuild, map-milestone unlocks. Advanced by [advanceBattlesCleared] on a
   /// won battle. Persisted (profiles.battles_cleared, migration 0019).
   int battlesCleared = 0;
+
+  /// Deepest Survival Mode run ever banked (user 2026-09-06) — a high score,
+  /// not a gate: unlike [battlesCleared] nothing reads this to unlock
+  /// anything, it only ever gets bigger. Persisted
+  /// (profiles.survival_best_floor, migration 0042). Set by
+  /// [recordSurvivalRun], never by the running screen itself — the same
+  /// "only the controller writes state" split [advanceBattlesCleared] uses.
+  int survivalBestFloor = 0;
 
   /// Max party the player may currently field — for standing teams and
   /// expedition groups (things not tied to one specific battle node). It's the
@@ -260,6 +281,7 @@ class SettlementController extends ChangeNotifier {
       dungeonMaxStage = profile['dungeon_max_stage'] ?? 1;
       expansionsUnlocked = profile['expansions_unlocked'] ?? 0;
       battlesCleared = profile['battles_cleared'] ?? 0;
+      survivalBestFloor = profile['survival_best_floor'] ?? 0;
       introStep = IntroStep.fromIndex(await introF);
       // Tutorial master switch: coerce to done in memory WITHOUT persisting,
       // so re-enabling kIntroEnabled resumes the account where the DB says.
@@ -288,7 +310,7 @@ class SettlementController extends ChangeNotifier {
       debugPrint(
         '[LOAD] From DB — '
         'lastUpdatedAt=${energy!.lastUpdatedAt.toIso8601String()} '
-        'energy=${energy!.currentEnergy.toStringAsFixed(1)} '
+        'steps=${energy!.stepsToday} (${(energy!.multiplier * 100).toStringAsFixed(0)}%) '
         'wood=${resources!.wood.toStringAsFixed(0)} '
         'stone=${resources!.stone.toStringAsFixed(0)} '
         'buildings=${buildings.length}',
@@ -323,7 +345,7 @@ class SettlementController extends ChangeNotifier {
         '[LOAD] After tick — '
         'hoursDelta=${hoursDelta.toStringAsFixed(4)}h '
         'stone: ${beforeStone.toStringAsFixed(0)} → ${resources!.stone.toStringAsFixed(0)} '
-        'energy=${energy!.currentEnergy.toStringAsFixed(1)}',
+        'steps=${energy!.stepsToday} (${(energy!.multiplier * 100).toStringAsFixed(0)}%)',
       );
 
       await _persist();
@@ -397,7 +419,16 @@ class SettlementController extends ChangeNotifier {
         if (restored.dateKey == dateKeyFor(now)) dailyTasks = restored;
       }
 
-      _tickTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      // 10s, not 5 (2026-09-12, chasing Chrome-debug responsiveness) — every
+      // firing does real work three times over: GameEngine.tick sums
+      // production across every building, notifyListeners rebuilds the
+      // whole settlement screen (the map included), and _persist writes
+      // resources/energy/settlement to Supabase. Halving how often that
+      // fires halves all three costs at once. Still comfortably granular —
+      // EnergySheet's own countdown only shows minute resolution at this
+      // drain rate, and every number here reads as "a few seconds behind",
+      // never as stalled.
+      _tickTimer = Timer.periodic(const Duration(seconds: 10), (_) {
         _applyTick(DateTime.now().toUtc());
         _rolloverDailyTasks(DateTime.now().toUtc());
         notifyListeners();
@@ -447,7 +478,7 @@ class SettlementController extends ChangeNotifier {
       ? 0
       : GameEngine.housingCapacity(
           buildings,
-          eraOrder: settlement?.eraIndex ?? 1,
+          eraOrder: dungeonMaxStage,
         );
 
   int get housingUsed => CreaturesController().creatures.length;
@@ -475,7 +506,7 @@ class SettlementController extends ChangeNotifier {
   ({double carryMult, double travelMult, double goodsMult})
   get expeditionBonuses {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     double carry = 0, travel = 0, goods = 0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
@@ -507,7 +538,7 @@ class SettlementController extends ChangeNotifier {
   /// that silently opened +50% of a hunt variant per level would be nonsense.
   int _countEffectTotal(String type) {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     int total = 0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
@@ -582,7 +613,7 @@ class SettlementController extends ChangeNotifier {
   /// gets somewhere to sit, exactly as it always has.
   double storageCapacity(String resource) {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     var total = 0.0;
     var anyBuildingStoresIt = false;
     for (final b in buildings) {
@@ -635,7 +666,7 @@ class SettlementController extends ChangeNotifier {
     String resource,
   ) {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     final out = <(PlacedBuilding, BuildingDef, double)>[];
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
@@ -676,7 +707,7 @@ class SettlementController extends ChangeNotifier {
   /// ignored or let the settlement renegotiate mid-road.
   ({double carryMult, double travelMult}) get caravanBonuses {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     double carry = 0, travel = 0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
@@ -701,11 +732,18 @@ class SettlementController extends ChangeNotifier {
   /// exists; each point here adds the next entry of kCaptureHuntOptions.
   int get buildingHuntOptions => _countEffectTotal('huntOptions');
 
+  /// The same, from the authored path instead of a building (user
+  /// 2026-09-14: "ich muss beim Pfad die längeren Hunts als Belohnung
+  /// einstellen können") — a node's PathRewards.huntOptions, summed. Adds
+  /// to [buildingHuntOptions] at every call site rather than replacing it,
+  /// so a Scout Post upgrade and a path reward both count.
+  int get pathHuntOptions => pathHuntOptionsGranted(battlesCleared);
+
   /// Fractional reduction to heal [target] ('speed' | 'cost') from functional
   /// buildings' per-era `heal` effects, summed and capped at 90%.
   double healReduction(String target) {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     double total = 0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
@@ -731,7 +769,7 @@ class SettlementController extends ChangeNotifier {
   /// returned the moment any building defines the effect.
   int? get healCapacity {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     int total = 0;
     var authored = false;
     for (final b in buildings) {
@@ -762,7 +800,7 @@ class SettlementController extends ChangeNotifier {
   /// stopping because a new effect has not been authored onto its building yet.
   int get craftCapacity {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     var total = 0;
     var authored = false;
     for (final b in buildings) {
@@ -780,7 +818,7 @@ class SettlementController extends ChangeNotifier {
   /// healing queue follows.
   int? get craftQueueCapacity {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     var total = 0;
     var authored = false;
     for (final b in buildings) {
@@ -818,7 +856,7 @@ class SettlementController extends ChangeNotifier {
   /// putting the tank in line is choosing it over somebody else.
   int? get healQueueCapacity {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     int total = 0;
     var authored = false;
     for (final b in buildings) {
@@ -831,6 +869,45 @@ class SettlementController extends ChangeNotifier {
     return authored ? total : null;
   }
 
+  /// How many creatures the Combat School can teach AT ONCE (user 2026-09-05)
+  /// — summed from the functional buildings' per-level `trainSlots` effects.
+  /// Null = no building authored one, meaning unlimited (same "unauthored
+  /// means unlimited" rule [healCapacity] follows). Unlike the Healing Hut
+  /// there is no workshop role staffing this — see building_effects.dart's
+  /// `combat_school` entry for why — so an authored building always
+  /// contributes, whether or not anyone works there.
+  int? get trainCapacity {
+    final connected = connectedBuildingIds;
+    final era = dungeonMaxStage;
+    var total = 0;
+    var authored = false;
+    for (final b in buildings) {
+      if (!b.isComplete || !connected.contains(b.id)) continue;
+      final def = kBuildingDefs[b.buildingTypeId];
+      if (def == null || !def.hasEffect('trainSlots', era)) continue;
+      authored = true;
+      total += def.trainSlotsAt(b.level, eraOrder: era);
+    }
+    return authored ? total : null;
+  }
+
+  /// How many creatures may WAIT for a lesson — from `trainQueue` effects,
+  /// exactly as [trainCapacity] sums `trainSlots`. Null = unlimited line.
+  int? get trainQueueCapacity {
+    final connected = connectedBuildingIds;
+    final era = dungeonMaxStage;
+    var total = 0;
+    var authored = false;
+    for (final b in buildings) {
+      if (!b.isComplete || !connected.contains(b.id)) continue;
+      final def = kBuildingDefs[b.buildingTypeId];
+      if (def == null || !def.hasEffect('trainQueue', era)) continue;
+      authored = true;
+      total += def.trainQueueAt(b.level, eraOrder: era);
+    }
+    return authored ? total : null;
+  }
+
   /// How much better this settlement's trade rates are than the base spread
   /// (user 2026-07-25) — the summed `trade` effect of every functional building
   /// (the Trade Center), as a 0..[kMaxTradeDiscount] fraction.
@@ -839,7 +916,7 @@ class SettlementController extends ChangeNotifier {
   /// reachable through the building, and levelling it is what narrows the spread.
   double get tradeDiscount {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     var percent = 0.0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
@@ -965,7 +1042,7 @@ class SettlementController extends ChangeNotifier {
   int hatchingCapacity(String buildingTypeId) {
     final def = kBuildingDefs[buildingTypeId];
     if (def == null) return 0;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     final type = def.hasEffect('hatching', era) ? 'hatching' : 'breeding';
     return _jobCapacity(buildingTypeId, type);
   }
@@ -973,7 +1050,7 @@ class SettlementController extends ChangeNotifier {
   int _jobCapacity(String buildingTypeId, String effectType) {
     final def = kBuildingDefs[buildingTypeId];
     if (def == null) return 0;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     final connected = connectedBuildingIds;
     var cap = 0;
     for (final b in buildings) {
@@ -1044,7 +1121,7 @@ class SettlementController extends ChangeNotifier {
     // A store's post amplifies what that store HOLDS. Without this the fallback
     // dial would happily make room for a good the building has no shelf for —
     // and every caller would have to remember to ask first.
-    if (def.effectEntry('storage', resource, settlement?.eraIndex ?? 1) ==
+    if (def.effectEntry('storage', resource, dungeonMaxStage) ==
         null) {
       return 0;
     }
@@ -1125,7 +1202,7 @@ class SettlementController extends ChangeNotifier {
     // points — was invisible in Dev Mode: the effects editor showed one set of
     // numbers and the economy ran on another. A building now produces exactly
     // what its effect list says, and nothing at all when that list is empty.
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     for (final b in buildings) {
       if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
       final def = kBuildingDefs[b.buildingTypeId];
@@ -1160,17 +1237,6 @@ class SettlementController extends ChangeNotifier {
     return power;
   }
 
-  // The settlement's current era, looked up by order (== settlement.eraIndex,
-  // 1-based, no translation needed). Null only if defs haven't loaded yet or
-  // the current order has no matching EraDef (shouldn't happen once seeded).
-  EraDef? get currentEra {
-    final order = settlement?.eraIndex;
-    if (order == null) return null;
-    for (final era in kEraDefs.values) {
-      if (era.order == order) return era;
-    }
-    return null;
-  }
 
   // Buildings currently reachable from the Main Hall via an unbroken road
   // network (edge-adjacent only) — only these actually produce/count.
@@ -1291,7 +1357,7 @@ class SettlementController extends ChangeNotifier {
     return kBaseBuildSlots +
         GameEngine.buildingsBuildSlotsBonusTotal(
           buildings,
-          eraOrder: settlement?.eraIndex ?? 1,
+          eraOrder: dungeonMaxStage,
         );
   }
 
@@ -1299,7 +1365,7 @@ class SettlementController extends ChangeNotifier {
     return kBaseQueueSlots +
         GameEngine.buildingsQueueSlotsBonusTotal(
           buildings,
-          eraOrder: settlement?.eraIndex ?? 1,
+          eraOrder: dungeonMaxStage,
         );
   }
 
@@ -1307,7 +1373,7 @@ class SettlementController extends ChangeNotifier {
   // construction power (era + build-speed buildings) — the same multiplier
   // tick() applies. 1.0 = no bonus.
   double get buildSpeedMultiplier {
-    final eb = eraBonusTotals(settlement?.eraIndex ?? 1);
+    final eb = _noEraBonus;
     final base =
         1.0 +
         eb.buildSpeed +
@@ -1315,7 +1381,11 @@ class SettlementController extends ChangeNotifier {
     // Jumpstart: a time scale of 0.2 means 5x the build speed. Applied here
     // rather than to constructionSeconds so it rides on the multiplier tick()
     // already uses — and so it simply stops applying when the intro ends,
-    // with no half-built building stuck on a stale requirement.
+    // with no half-built building stuck on a stale requirement. This is the
+    // settlement-wide RATE, used for every site's ETA/skip-cost math — the
+    // Healing Hut's own freeze during its build step (see
+    // [_frozenBuildingIds]) works by excluding it from progress entirely,
+    // not by changing the rate everyone else's estimate is still priced on.
     return base / jumpstartTimeScale(jumpstartActive);
   }
 
@@ -1395,7 +1465,7 @@ class SettlementController extends ChangeNotifier {
   /// in the tick, so a gold `resource` effect is currently inert.)
   double _buildingResourceBonus(String target) {
     final connected = connectedBuildingIds;
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     double total = 0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
@@ -1413,7 +1483,7 @@ class SettlementController extends ChangeNotifier {
   // tick (see GameEngine.tick and _persist).
   void _applyTick(DateTime now) {
     if (energy == null || resources == null || settlement == null) return;
-    final eb = eraBonusTotals(settlement!.eraIndex);
+    final eb = _noEraBonus;
     final power = workshopPower();
     // Snapshot to spot what FINISHED during this tick. Diffed here rather than
     // reported by GameEngine so the engine stays a pure function with no idea
@@ -1440,6 +1510,7 @@ class SettlementController extends ChangeNotifier {
       techAll: eb.all + _buildingResourceBonus('all'),
       techBuildSpeed: eb.buildSpeed,
       buildSpeedScale: 1.0 / jumpstartTimeScale(jumpstartActive),
+      frozenBuildingIds: _frozenBuildingIds,
     );
     energy = result.energy;
     // Production stops AT the ceiling, but what is already above it stays there
@@ -1544,7 +1615,7 @@ class SettlementController extends ChangeNotifier {
       // The cost is paid ON COMPLETION, not when the recipe is queued.
       // Charging up front would mean a player who cancels — or whose crafters
       // get sent on an expedition — silently loses what they paid.
-      final cost = craftCost(def, currentEra?.order ?? 1, stock.asMap);
+      final cost = craftCost(def, dungeonMaxStage, stock.asMap);
       final canPay = cost.entries.every(
         (e) => (stock.asMap[e.key] ?? 0) >= e.value,
       );
@@ -1752,6 +1823,7 @@ class SettlementController extends ChangeNotifier {
           _svc.saveBattlesCleared(userId, battlesCleared),
           _svc.saveDungeonMaxStage(userId, dungeonMaxStage),
           _svc.saveExpansionsUnlocked(userId, expansionsUnlocked),
+          _svc.saveSurvivalBestFloor(userId, survivalBestFloor),
         ],
       ]);
       _buildingsDirty = false;
@@ -1778,7 +1850,7 @@ class SettlementController extends ChangeNotifier {
   Future<void> addSteps(int steps) async {
     if (energy == null) return;
     _applyTick(DateTime.now().toUtc());
-    energy = GameEngine.addSteps(energy!, steps);
+    energy = GameEngine.addSteps(energy!, steps, DateTime.now());
     // NB: step logging removed — the `step_logs` table was append-only and
     // never read anywhere, so it only ever grew and ate Supabase storage.
     notifyListeners();
@@ -1934,7 +2006,7 @@ class SettlementController extends ChangeNotifier {
     // sure a non-snapped (x,y) can never slip in.
     (x, y) = snapPlacement(typeId, x, y);
 
-    if (def.eraIds.isNotEmpty && !def.eraIds.contains(currentEra?.id)) {
+    if (def.eraIds.isNotEmpty && !def.eraIds.contains('era_$dungeonMaxStage')) {
       return 'Not available in this region';
     }
     // Map-progress gate (user 2026-07-24): buildings unlock as battles are won
@@ -1942,11 +2014,14 @@ class SettlementController extends ChangeNotifier {
     // this guards the write path too.
     //
     // A Building Plot is exempt (governed by expansionsUnlocked/
-    // buildPlotLimit instead — see the check below); every other building
-    // additionally needs a REAL node reward now, not just an era it happens
-    // to belong to (user 2026-08-31: "diejenigen, welche ich noch gar
-    // keinem Knoten zugeordnet habe, sollen noch nicht baubar sein").
-    if (!def.isBuildPlot && !buildingHasPathReward(typeId)) {
+    // buildPlotLimit instead — see the check below), and so is a road — like
+    // availableBuildings' own `!b.isRoad` (see there), a road is never handed
+    // out as a node reward, so this gate could never pass one through
+    // otherwise. Every other building additionally needs a REAL node reward
+    // now, not just an era it happens to belong to (user 2026-08-31:
+    // "diejenigen, welche ich noch gar keinem Knoten zugeordnet habe, sollen
+    // noch nicht baubar sein").
+    if (!def.isBuildPlot && !def.isRoad && !buildingHasPathReward(typeId)) {
       return 'Not yet unlocked by the campaign';
     }
     final unlockBattle = buildingUnlockBattle(typeId);
@@ -2040,8 +2115,20 @@ class SettlementController extends ChangeNotifier {
     // it that way.
     lastPlacedId = placed.id;
 
-    await _svc.saveResources(resources!);
+    // notifyListeners BEFORE the resources save, not after (2026-09-12) — a
+    // road drawn tile-by-tile calls this once per tap (see settlement_map
+    // .dart's _chainStep), and this second, sequential network write used to
+    // sit between "the insert above resolved" and "the tile actually
+    // appears", doubling the round trip every single tap. The 5s ticker
+    // re-saves resources regardless, so nothing here needs the caller to
+    // wait on it.
     notifyListeners();
+    unawaited(
+      _svc.saveResources(resources!).catchError((e) {
+        debugPrint('[SettlementController] placeBuilding resources save failed: $e');
+        _flagSaveFailed();
+      }),
+    );
     return null;
   }
 
@@ -2067,7 +2154,7 @@ class SettlementController extends ChangeNotifier {
     if (def == null) return 'Unknown building type';
     if (!isUpgradable(def)) return 'This building cannot be upgraded';
     if (!b.isComplete) return 'Finish building it first';
-    final maxLevel = maxBuildingLevelFor(def, settlement?.eraIndex ?? 1);
+    final maxLevel = maxBuildingLevelFor(def, dungeonMaxStage);
     if (b.level >= maxLevel) {
       return 'Already at the maximum level ($maxLevel) for this region';
     }
@@ -2105,119 +2192,31 @@ class SettlementController extends ChangeNotifier {
     buildings = [...buildings]..[idx] = upgraded;
     _buildingsDirty = true;
 
-    await _svc.saveBuildings([upgraded]);
-    await _svc.saveResources(resources!);
+    // LOCAL first, network in the BACKGROUND (2026-09-12, same reasoning as
+    // [setPaused]) — this used to await two SEQUENTIAL network writes before
+    // notifyListeners, so every upgrade tap sat there for two round trips
+    // before the building even looked upgraded, AND [building_detail_dialog
+    // .dart]'s own caller keeps the sheet open until this returns — so the
+    // whole dialog hung there too. Nothing past this point can still fail
+    // this call (every validation already returned above), so there is
+    // nothing left for the caller to usefully wait on: the periodic 5s
+    // ticker re-saves resources regardless, and saveBuildings retries next
+    // cycle too since _buildingsDirty stays true on a failed write.
     notifyListeners();
+    unawaited(_persistUpgrade(upgraded));
     return null;
   }
 
-  /// Era advance via a REGION BOSS victory (region-progression redesign: the
-  /// boss IS the era gate — no resource cost, no full-tree requirement).
-  /// Only fires when the beaten region matches the current era
-  /// ([clearedStage] == eraIndex), so re-running an old dungeon is a no-op.
-  /// One-time grants of the reached era still apply.
-  // ── Era ascension (user redesign 2026-07-22) ──────────────
-  // Beating the region boss UNLOCKS the ascension; performing it — and paying
-  // for it — happens at the Castle. Ascending raises the creature level
-  // cap (+10), the XP multiplier, and auto-levels the hall.
-
-  /// The era the settlement could ascend into right now, or null when the
-  /// current era's boss hasn't fallen yet / no further era content exists.
-  EraDef? get ascendableEra {
-    if (settlement == null) return null;
-    final current = settlement!.eraIndex;
-    // Boss of region N cleared ⇒ dungeonMaxStage > N.
-    if (dungeonMaxStage <= current) return null;
-    for (final era in kEraDefs.values) {
-      if (era.order == current + 1) return era;
-    }
-    return null;
-  }
-
-  /// What ascending to era [order] costs: build resources plus the current
-  /// era's goods (billed from stock, richest-first — goodsCost's no-soft-lock
-  /// rule). Formula-based like the rest of the era system.
-  Map<String, double> eraAscensionCost(int order) {
-    final scale = math.pow(1.8, order - 2).toDouble();
-    final cost = <String, double>{
-      'wood': (400 * scale).roundToDouble(),
-      'stone': (300 * scale).roundToDouble(),
-    };
-    cost.addAll(
-      goodsCost(
-        (30 * scale).roundToDouble(),
-        settlement?.eraIndex ?? 1,
-        resources?.asMap ?? const {},
-      ),
-    );
-    // The CURRENT era's building element is part of the toll (user
-    // 2026-07-22): you may not skip past an era whose economy you never built.
-    // Era I has no element, so the first ascension is unaffected. The count
-    // FALLS per era — each element is worth ~2.2× the previous one in raw, so
-    // a flat count would compound into the absurd.
-    final element = elementForEra(order - 1);
-    if (element != null) {
-      cost[element.id] = math.max(
-        10,
-        (60 * math.pow(0.85, order - 3)).roundToDouble(),
-      );
-    }
-    return cost;
-  }
-
-  /// Performs the ascension at the Castle. Returns null on success,
-  /// else a user-facing reason.
-  Future<String?> ascendEra() async {
-    if (settlement == null || resources == null) return 'Not loaded';
-    final nextEra = ascendableEra;
-    if (nextEra == null) {
-      return 'Defeat this region\'s boss first.';
-    }
-    _applyTick(DateTime.now().toUtc());
-    final cost = eraAscensionCost(nextEra.order);
-    if (!await spendResources(cost)) {
-      return 'Not enough resources for the ascension.';
-    }
-    final grants = Map<String, double>.of(nextEra.grantResources)..remove('bp');
-    if (grants.isNotEmpty) {
-      resources = resources!.grant(grants).capped(storageCaps);
-    }
-    settlement = settlement!.copyWith(
-      eraIndex: nextEra.order,
-      mainBuildingLevel: settlement!.mainBuildingLevel + 1,
-    );
-    // The hall auto-levels with the era (user 2026-07-22): its level IS the
-    // era number. Unique + permanent, so it is exempt from the normal
-    // upgrade flow and the successor model alike.
-    final hallIdx = buildings.indexWhere(
-      (b) => kBuildingDefs[b.buildingTypeId]?.isMainBuilding ?? false,
-    );
-    if (hallIdx >= 0 && buildings[hallIdx].level < nextEra.order) {
-      buildings = [
-        for (final b in buildings)
-          if (b.id == buildings[hallIdx].id)
-            b.copyWith(level: nextEra.order)
-          else
-            b,
-      ];
-      _buildingsDirty = true;
-    }
+  Future<void> _persistUpgrade(PlacedBuilding upgraded) async {
     try {
       await Future.wait([
+        _svc.saveBuildings([upgraded]),
         _svc.saveResources(resources!),
-        _svc.saveSettlement(settlement!),
       ]);
     } catch (e) {
-      debugPrint('[SettlementController] ascendEra persist failed: $e');
+      debugPrint('[SettlementController] upgradeBuilding save failed: $e');
+      _flagSaveFailed();
     }
-    GameEventLog().add(
-      GameEventKind.research,
-      '${nextEra.displayEmoji} You reach ${nextEra.displayName}! '
-      'Monsters can now reach '
-      'Lv ${creatureLevelCap(nextEra.order)}.',
-    );
-    notifyListeners();
-    return null;
   }
 
   Future<String?> deleteBuilding(String buildingId) async {
@@ -2256,7 +2255,7 @@ class SettlementController extends ChangeNotifier {
           ? 0
           : GameEngine.housingCapacity(
               remaining,
-              eraOrder: settlement?.eraIndex ?? 1,
+              eraOrder: dungeonMaxStage,
             );
       if (remainingCapacity < housingUsed) {
         return 'Not enough housing left for your creatures — release or '
@@ -2372,7 +2371,7 @@ class SettlementController extends ChangeNotifier {
   // ── Hourly display rates ──────────────────────────────────
   Map<String, double> get hourlyRates {
     if (energy == null) return {};
-    final eb = eraBonusTotals(settlement?.eraIndex ?? 1);
+    final eb = _noEraBonus;
     return GameEngine.hourlyRates(
       energy!,
       workshopPower(),
@@ -2394,7 +2393,7 @@ class SettlementController extends ChangeNotifier {
     String resourceId,
   ) {
     final connected = connectedBuildingIds;
-    final eb = eraBonusTotals(settlement?.eraIndex ?? 1);
+    final eb = _noEraBonus;
     double bonusMult;
     if (resourceId == 'wood' || resourceId == 'stone' || resourceId == 'gold') {
       final pct = resourceId == 'wood'
@@ -2407,7 +2406,7 @@ class SettlementController extends ChangeNotifier {
       bonusMult = 1 + eb.food;
     }
     final creatures = CreaturesController();
-    final era = settlement?.eraIndex ?? 1;
+    final era = dungeonMaxStage;
     final out = <(PlacedBuilding, BuildingDef, double)>[];
     for (final b in buildings) {
       if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
@@ -2450,7 +2449,7 @@ class SettlementController extends ChangeNotifier {
   // up to the header rate. For goods (fish/meat) it appends a consumption row.
   List<ProductionSource> productionSources(String resourceId) {
     final connected = connectedBuildingIds;
-    final eb = eraBonusTotals(settlement?.eraIndex ?? 1);
+    final eb = _noEraBonus;
 
     // Bonus multiplier matching hourlyRates for this resource.
     double bonusMult = 1.0;
@@ -2494,7 +2493,7 @@ class SettlementController extends ChangeNotifier {
       // the tick apply, so this breakdown's rows sum to exactly the rate the
       // header shows. (There is no code-side base to scale any more.)
       out *= buildingYieldFactor(b.level);
-      final era = settlement?.eraIndex ?? 1;
+      final era = dungeonMaxStage;
       // Dev-authored `production` effects (e.g. a house's own gold effect, the
       // special buildings) — they carry their own level scaling, added AFTER
       // the global factor, matching workshopPower so the rows sum to the header.
@@ -2570,7 +2569,7 @@ class SettlementController extends ChangeNotifier {
   }
 
   List<ProductionSource> get housingSources =>
-      GameEngine.housingSources(buildings, eraOrder: settlement?.eraIndex ?? 1);
+      GameEngine.housingSources(buildings, eraOrder: dungeonMaxStage);
 
   // ── Spending ──────────────────────────────────────────────
   /// Pays a cost map (dungeon entry, healing, gold speed-ups).
@@ -2625,13 +2624,38 @@ class SettlementController extends ChangeNotifier {
 
   /// Called when a dungeon run clears [stage]'s boss — permanently unlocks
   /// stage+1 if it isn't already. No-op (and no write) if already unlocked.
+  ///
+  /// FULLY AUTOMATIC (user 2026-09-05: eras removed, no paid Castle
+  /// ascension) — everything that used to happen at the manual ascension
+  /// step (the main hall auto-leveling to match, the new level cap
+  /// announcement) now happens right here, the instant the boss falls. No
+  /// resource cost and no permanent bonus grant survive from that mechanic;
+  /// only the path's own reward system (items/buildings/expansions) pays
+  /// out any more.
   Future<void> unlockDungeonStage(int stage) async {
     final next = stage + 1;
     if (next <= dungeonMaxStage) return;
     dungeonMaxStage = next;
+    // The hall's level IS the region reached — unique + permanent, so it's
+    // exempt from the normal upgrade flow and the successor model alike.
+    final hallIdx = buildings.indexWhere(
+      (b) => kBuildingDefs[b.buildingTypeId]?.isMainBuilding ?? false,
+    );
+    if (hallIdx >= 0 && buildings[hallIdx].level < next) {
+      buildings = [
+        for (final b in buildings)
+          if (b.id == buildings[hallIdx].id) b.copyWith(level: next) else b,
+      ];
+      _buildingsDirty = true;
+    }
     _progressDirty = true;
     notifyListeners();
     await _persist();
+    GameEventLog().add(
+      GameEventKind.research,
+      'Region $next reached! Monsters can now reach '
+      'Lv ${creatureLevelCap(next)}.',
+    );
   }
 
   /// Advances the linear-path progress by one won battle (user 2026-07-24), up
@@ -2667,6 +2691,21 @@ class SettlementController extends ChangeNotifier {
         '${partyCap > 1 ? 's' : ''}!',
       );
     }
+    _progressDirty = true;
+    notifyListeners();
+    await _persist();
+  }
+
+  /// Banks a finished Survival Mode run (user 2026-09-06): grants gold via
+  /// the same [grantResources] every other instant reward uses (daily-task
+  /// claims included), and bumps [survivalBestFloor] if this run beat it.
+  /// Called once, when the run ends (defeat or a voluntary retreat) — never
+  /// per floor, since the reward is "only at the end, scaled by how far you
+  /// got" by design.
+  Future<void> recordSurvivalRun(int floorsCleared) async {
+    if (floorsCleared > survivalBestFloor) survivalBestFloor = floorsCleared;
+    final gold = goldRewardForFloors(floorsCleared);
+    if (gold > 0) await grantResources({'gold': gold});
     _progressDirty = true;
     notifyListeners();
     await _persist();
@@ -2801,6 +2840,13 @@ class SettlementController extends ChangeNotifier {
           x,
     ];
     _promoteQueuedBuildings();
+    // The tutorial's build steps normally advance from _applyTick's own
+    // completion sweep (see there) — which this skips entirely, since it
+    // flips isComplete directly rather than through a tick. Without this a
+    // gold-skipped building left the step exactly where it was, still
+    // asking to build the thing that was just finished (user 2026-09-06).
+    final introBuildStep = kIntroBuildSteps[b.buildingTypeId];
+    if (introBuildStep != null) unawaited(advanceIntro(introBuildStep));
     notifyListeners();
     await _persist();
     return null;

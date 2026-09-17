@@ -81,6 +81,7 @@ void main() {
         engine.dispose();
         return b.maxHp - b.hp;
       }
+
       expect(hit(1.2), greaterThan(hit(0.3)));
     });
 
@@ -98,6 +99,7 @@ void main() {
         engine.dispose();
         return b.maxHp - b.hp;
       }
+
       // w=0 → defense ignored (attack dominates) → more damage than w=3.
       expect(hit(0.0), greaterThan(hit(3.0)));
     });
@@ -249,8 +251,11 @@ void main() {
       }
       expect(p[0].alive, isFalse);
       expect(engine.outcome, isNull);
-      expect(engine.needsPlayerSwitch, isTrue,
-          reason: 'the slot is empty and p4 can fill it');
+      expect(
+        engine.needsPlayerSwitch,
+        isTrue,
+        reason: 'the slot is empty and p4 can fill it',
+      );
       expect(engine.switchActivePlayer(3), isNull);
       expect(engine.needsPlayerSwitch, isFalse);
       // It took the FALLEN monster's slot, not somebody else's.
@@ -288,7 +293,12 @@ void main() {
       final e = make(id: 'e', player: false, speed: 1);
       // Three on the field, so `bench` really is a reserve.
       final engine = armedEngine(
-        players: [p1, make(id: 'p2', speed: 1), make(id: 'p3', speed: 1), bench],
+        players: [
+          p1,
+          make(id: 'p2', speed: 1),
+          make(id: 'p3', speed: 1),
+          bench,
+        ],
         enemies: [e],
       );
       expect(engine.isPlayerTurn, isTrue);
@@ -306,8 +316,11 @@ void main() {
       final p2 = make(id: 'p2', speed: 5);
       final e = make(id: 'e', player: false, speed: 1);
       final engine = armedEngine(players: [p1, p2], enemies: [e]);
-      expect(engine.switchActivePlayer(1), isNotNull,
-          reason: 'p2 is standing right there');
+      expect(
+        engine.switchActivePlayer(1),
+        isNotNull,
+        reason: 'p2 is standing right there',
+      );
     });
   });
 
@@ -378,6 +391,187 @@ void main() {
     });
   });
 
+  group('multi-hit and cleave (user 2026-09-08)', () {
+    test('same-target multi-hit lands at most 3 times, and can reach 3', () {
+      final triple = AbilityDef(
+        id: 'triple',
+        name: 'Triple Strike',
+        element: CreatureElement.shadow,
+        kind: AbilityKind.damage,
+        target: AbilityTarget.enemy,
+        power: 20,
+        extraHitChance: 1.0,
+        extraHitSameTarget: true,
+      );
+      var maxHits = 0;
+      for (var seed = 0; seed < 30; seed++) {
+        final p = make(id: 'p', abilities: [triple], stage: 2, speed: 99);
+        final e = make(id: 'e', player: false, hp: 5000, speed: 1);
+        final engine = armedEngine(
+          players: [p],
+          enemies: [e],
+          rng: math.Random(seed),
+        );
+        expect(engine.useAbility(p, triple, e), isNull);
+        final hits = engine.lastEvents
+            .where((ev) => ev.target == e && !ev.debuff)
+            .length;
+        expect(
+          hits,
+          lessThanOrEqualTo(3),
+          reason: 'capped at 3 total hits regardless of chance',
+        );
+        if (hits > maxHits) maxHits = hits;
+      }
+      expect(
+        maxHits,
+        3,
+        reason:
+            'a certain (100 %) extra-hit chance must reach the 3-hit '
+            'cap at least once in 30 tries',
+      );
+    });
+
+    test('same-target multi-hit never spills onto another enemy', () {
+      final triple = AbilityDef(
+        id: 'triple2',
+        name: 'Triple Strike',
+        element: CreatureElement.shadow,
+        kind: AbilityKind.damage,
+        target: AbilityTarget.enemy,
+        power: 20,
+        extraHitChance: 1.0,
+        extraHitSameTarget: true,
+      );
+      final p = make(id: 'p', abilities: [triple], stage: 2, speed: 99);
+      final e = [
+        make(id: 'e0', player: false, hp: 5000, speed: 1),
+        make(id: 'e1', player: false, hp: 5000, speed: 1),
+      ];
+      final engine = armedEngine(players: [p], enemies: e, rng: math.Random(5));
+      expect(engine.useAbility(p, triple, e[0]), isNull);
+      expect(
+        e[1].hp,
+        e[1].maxHp,
+        reason: 'a same-target move never touches a different enemy',
+      );
+    });
+
+    test('cleave stops early with only one enemy on the field', () {
+      final cleave = AbilityDef(
+        id: 'cleave_solo',
+        name: 'Cleave',
+        element: CreatureElement.shadow,
+        kind: AbilityKind.damage,
+        target: AbilityTarget.enemy,
+        power: 20,
+        extraHitChance: 1.0,
+      );
+      final p = make(id: 'p', abilities: [cleave], stage: 2, speed: 99);
+      final solo = make(id: 'solo', player: false, hp: 5000, speed: 1);
+      final engine = armedEngine(
+        players: [p],
+        enemies: [solo],
+        rng: math.Random(9),
+      );
+      expect(engine.useAbility(p, cleave, solo), isNull);
+      expect(
+        engine.lastEvents.where((ev) => !ev.debuff).length,
+        1,
+        reason:
+            'no OTHER enemy exists to cleave onto, so it stops at 1 hit '
+            'even at a certain extra-hit chance',
+      );
+    });
+
+    test('cleave never hits the same enemy twice, and can reach 3 distinct '
+        'enemies', () {
+      final cleave = AbilityDef(
+        id: 'cleave_field',
+        name: 'Cleave',
+        element: CreatureElement.shadow,
+        kind: AbilityKind.damage,
+        target: AbilityTarget.enemy,
+        power: 20,
+        extraHitChance: 1.0,
+      );
+      var maxDistinct = 0;
+      for (var seed = 0; seed < 30; seed++) {
+        final p = make(id: 'p', abilities: [cleave], stage: 2, speed: 99);
+        final e = [
+          for (var i = 0; i < 3; i++)
+            make(id: 'e$i', player: false, hp: 5000, speed: 1),
+        ];
+        final engine = armedEngine(
+          players: [p],
+          enemies: e,
+          rng: math.Random(seed),
+        );
+        expect(engine.useAbility(p, cleave, e[0]), isNull);
+        final hitEvents = engine.lastEvents.where(
+          (ev) => !ev.debuff && ev.target != p,
+        );
+        final distinctTargets = hitEvents.map((ev) => ev.target).toSet();
+        expect(
+          distinctTargets.length,
+          hitEvents.length,
+          reason: 'cleave must never land twice on the same enemy',
+        );
+        if (distinctTargets.length > maxDistinct) {
+          maxDistinct = distinctTargets.length;
+        }
+      }
+      expect(
+        maxDistinct,
+        3,
+        reason:
+            'a certain (100 %) extra-hit chance must reach 3 distinct '
+            'enemies at least once in 30 tries with 3 up',
+      );
+    });
+  });
+
+  group('extra-hit pricing (user 2026-09-08)', () {
+    test('totalPower prices extra hits by their compounding chance', () {
+      final move = AbilityDef(
+        id: 'x',
+        name: 'X',
+        element: CreatureElement.fire,
+        kind: AbilityKind.damage,
+        target: AbilityTarget.enemy,
+        power: 40,
+        extraHitChance: 0.5,
+      );
+      // 40 (hit 1) + 40×0.5 (expected hit 2) + 40×0.5×0.5 (expected hit 3).
+      expect(move.totalPower, closeTo(40 + 20 + 10, 0.001));
+    });
+
+    test('a chance to hit again costs more AP than a plain hit of the same '
+        'power', () {
+      final plain = AbilityDef(
+        id: 'plain',
+        name: 'Plain',
+        element: CreatureElement.fire,
+        kind: AbilityKind.damage,
+        target: AbilityTarget.enemy,
+        power: 80,
+      );
+      final withExtra = AbilityDef(
+        id: 'extra',
+        name: 'Extra',
+        element: CreatureElement.fire,
+        kind: AbilityKind.damage,
+        target: AbilityTarget.enemy,
+        power: 80,
+        extraHitChance: 0.6,
+      );
+      expect(
+        CombatEngine.abilityApCost(withExtra),
+        greaterThan(CombatEngine.abilityApCost(plain)),
+      );
+    });
+  });
+
   test('faster combatant acts first and more often', () {
     final fast = make(id: 'fast', speed: 20);
     final slow = make(id: 'slow', player: false, speed: 10);
@@ -392,9 +586,12 @@ void main() {
   });
 
   test('basic attack damages and spends AP', () {
-    // The battle opens LEAN (user 2026-07-20): the first actor holds
-    // kStartApFirst (2), which is below an attack's cost — so it banks a turn
-    // first. That opening tempo is the design, not a bug.
+    // The battle opens LEAN (user 2026-07-20): the first actor holds only
+    // kStartApFirst (2) AP. Since 2026-09-08 ("attack soll nur 2 AP
+    // kosten") that is now enough to attack immediately — the asymmetric
+    // opening (2 AP vs. 3 for whoever goes second) still favours the second
+    // actor, it just no longer locks the FIRST one out of acting at all,
+    // which is what "so dass man diese auch benutzt" asked for.
     final a = make(id: 'a');
     final b = make(id: 'b', player: false);
     final engine = CombatEngine(
@@ -403,16 +600,14 @@ void main() {
       rng: math.Random(42),
     );
     expect(engine.turnAp, kStartApFirst);
-    engine.basicAttack(a, b);
-    expect(b.hp, b.maxHp, reason: '2 AP cannot pay for a 3 AP attack');
-
-    engine.endTurn(); // bank it — b takes its opening turn
-    engine.basicAttack(b, a); // b spends its 3 and hands the turn back
-    expect(engine.currentActor, a);
-    // a regenerated ONTO its banked 2: 2 + 3 = 4 (its stage-0 cap).
-    expect(engine.turnAp, maxActionPointsForStage(0));
+    expect(
+      kStartApFirst,
+      greaterThanOrEqualTo(kBasicAttackApCost),
+      reason: 'the opener can now afford an attack on turn 1',
+    );
     engine.basicAttack(a, b);
     expect(b.hp, lessThan(b.maxHp));
+    expect(a.ap, kStartApFirst - kBasicAttackApCost);
     expect(engine.outcome, isNull);
   });
 
@@ -422,15 +617,19 @@ void main() {
       expect(maxActionPointsForStage(1), 6); // 2nd form
       expect(maxActionPointsForStage(2), 8); // 3rd form
       expect(maxActionPointsForStage(9), 8); // clamped past the final stage
-      expect(apRegenForStage(0), 3);
-      expect(apRegenForStage(1), 4);
-      expect(apRegenForStage(2), 5);
-      expect(apRegenForStage(9), 5);
+      // 2/3/4, not 3/4/5 (user 2026-09-07).
+      expect(apRegenForStage(0), 2);
+      expect(apRegenForStage(1), 3);
+      expect(apRegenForStage(2), 4);
+      expect(apRegenForStage(9), 4);
       // THE rule the whole redesign rests on: regen sits strictly BELOW
       // capacity, so a full pool can only ever come from holding back.
       for (var s = 0; s < 3; s++) {
-        expect(apRegenForStage(s), lessThan(maxActionPointsForStage(s)),
-            reason: 'stage $s would refill itself every turn');
+        expect(
+          apRegenForStage(s),
+          lessThan(maxActionPointsForStage(s)),
+          reason: 'stage $s would refill itself every turn',
+        );
       }
     });
 
@@ -458,8 +657,11 @@ void main() {
       engine.endTurn(); // bank the 2
       engine.basicAttack(b, a); // enemy swings, turn comes back
       expect(engine.currentActor, a);
-      expect(a.ap, kStartApFirst + apRegenForStage(2),
-          reason: 'a refill would have handed it the full 8');
+      expect(
+        a.ap,
+        kStartApFirst + apRegenForStage(2),
+        reason: 'a refill would have handed it the full 8',
+      );
     });
 
     test('regen stops at the capacity', () {
@@ -487,8 +689,11 @@ void main() {
       final a = make(id: 'a', abilities: [big]);
       final b = make(id: 'b', player: false, hp: 5000);
       final engine = CombatEngine(players: [a], enemies: [b]);
-      expect(engine.useAbility(a, big, b), isNotNull,
-          reason: '2 AP on the opening turn cannot pay 4');
+      expect(
+        engine.useAbility(a, big, b),
+        isNotNull,
+        reason: '2 AP on the opening turn cannot pay 4',
+      );
       engine.endTurn();
       engine.basicAttack(b, a);
       expect(a.ap, 4); // 2 banked + 3 regen, capped at 4
@@ -525,12 +730,22 @@ void main() {
         power: 90,
       );
       // A buff is a flat cheap cost; a debuff move is capped mid; a big pure
-      // attack is expensive.
-      expect(CombatEngine.abilityApCost(buff), kBuffApCost);
-      expect(CombatEngine.abilityApCost(debuffMove), lessThanOrEqualTo(4));
+      // attack is expensive. The buff floor is kBuffApCost, but a buff/debuff
+      // at catalog-default magnitude/duration (raised 2026-09-08, "Buffs und
+      // Debuffs sollen sich wirklich lohnen") now prices a bit ABOVE that
+      // floor — still clearly cheaper than a heavy pure attack, just no
+      // longer pinned to an exact digit here.
       expect(
-        CombatEngine.abilityApCost(bigHit),
-        greaterThan(CombatEngine.abilityApCost(debuffMove)),
+        CombatEngine.abilityApCost(buff),
+        greaterThanOrEqualTo(kBuffApCost),
+      );
+      expect(
+        CombatEngine.abilityApCost(buff),
+        lessThan(CombatEngine.abilityApCost(bigHit)),
+      );
+      expect(
+        CombatEngine.abilityApCost(debuffMove),
+        lessThan(CombatEngine.abilityApCost(bigHit)),
       );
     });
 
@@ -560,62 +775,81 @@ void main() {
       expect(a.ap, before, reason: 'unspent AP are kept, not lost');
     });
 
-    test('a switch is paid by the monster leaving; the reserve keeps its own',
-        () {
-      final a = make(id: 'a', stage: 2, speed: 50);
-      // Three on the field, so `b` is a genuine reserve (the field holds 3 a
-      // side since 2026-07-27).
-      final filler1 = make(id: 'f1', speed: 1);
-      final filler2 = make(id: 'f2', speed: 1);
-      final b = make(id: 'b', stage: 2);
-      final e = make(id: 'e', player: false, speed: 1);
-      final engine = CombatEngine(players: [a, filler1, filler2, b], enemies: [e]);
-      expect(engine.currentActor, a);
-      expect(a.ap, kStartApFirst);
-      final ok = engine.switchActivePlayer(3);
-      expect(ok, isNull);
-      expect(engine.playerField[0], b);
-      expect(a.ap, kStartApFirst - kSwitchApCost,
-          reason: 'the outgoing monster pays out of its own pool');
-      expect(b.ap, kStartApSecond,
-          reason: 'the reserve arrives on its own AP — nothing is handed over');
-    });
-  });
-
-  test('type matrix: 1.5 super-effective beats 0.5 resisted (STAB held equal)', () {
-    final fireMove = AbilityDef(
-      id: 'fire_move',
-      name: 'Fire Move',
-      element: CreatureElement.fire,
-      kind: AbilityKind.damage,
-      target: AbilityTarget.enemy,
-      power: 80,
+    test(
+      'a switch is paid by the monster leaving; the reserve keeps its own',
+      () {
+        final a = make(id: 'a', stage: 2, speed: 50);
+        // Three on the field, so `b` is a genuine reserve (the field holds 3 a
+        // side since 2026-07-27).
+        final filler1 = make(id: 'f1', speed: 1);
+        final filler2 = make(id: 'f2', speed: 1);
+        final b = make(id: 'b', stage: 2);
+        final e = make(id: 'e', player: false, speed: 1);
+        final engine = CombatEngine(
+          players: [a, filler1, filler2, b],
+          enemies: [e],
+        );
+        expect(engine.currentActor, a);
+        expect(a.ap, kStartApFirst);
+        final ok = engine.switchActivePlayer(3);
+        expect(ok, isNull);
+        expect(engine.playerField[0], b);
+        expect(
+          a.ap,
+          kStartApFirst - kSwitchApCost,
+          reason: 'the outgoing monster pays out of its own pool',
+        );
+        expect(
+          b.ap,
+          kStartApSecond,
+          reason: 'the reserve arrives on its own AP — nothing is handed over',
+        );
+      },
     );
-
-    int damageAgainst(CreatureElement targetElement) {
-      // Attacker is ALSO fire, so STAB (1.5x) applies identically in both
-      // calls — only the target's element (and thus the type multiplier)
-      // differs between the two measurements.
-      // Stage 2 → 7 AP, enough for the power-80 move (6 AP).
-      final attacker = make(id: 'atk', abilities: [fireMove], stage: 2);
-      final target = make(id: 'tgt', player: false, element: targetElement, hp: 5000);
-      final engine = armedEngine(
-        players: [attacker],
-        enemies: [target],
-        rng: math.Random(7), // same seed -> same variance/crit both runs
-      );
-      final error = engine.useAbility(attacker, fireMove, target);
-      expect(error, isNull);
-      return 5000 - target.hp;
-    }
-
-    final vsPlant = damageAgainst(CreatureElement.plant); // 1.5x
-    final vsWater = damageAgainst(CreatureElement.water); // 0.5x
-    expect(vsPlant, greaterThan(vsWater));
-    // 1.5x vs 0.5x with identical variance/crit -> factor 3 up to floor
-    // rounding (user lowered advantage from 2.0 to 1.5, 2026-07-17).
-    expect(vsPlant, closeTo(vsWater * 3, 2.99));
   });
+
+  test(
+    'type matrix: 1.5 super-effective beats 0.5 resisted (STAB held equal)',
+    () {
+      final fireMove = AbilityDef(
+        id: 'fire_move',
+        name: 'Fire Move',
+        element: CreatureElement.fire,
+        kind: AbilityKind.damage,
+        target: AbilityTarget.enemy,
+        power: 80,
+      );
+
+      int damageAgainst(CreatureElement targetElement) {
+        // Attacker is ALSO fire, so STAB (1.5x) applies identically in both
+        // calls — only the target's element (and thus the type multiplier)
+        // differs between the two measurements.
+        // Stage 2 → 7 AP, enough for the power-80 move (6 AP).
+        final attacker = make(id: 'atk', abilities: [fireMove], stage: 2);
+        final target = make(
+          id: 'tgt',
+          player: false,
+          element: targetElement,
+          hp: 5000,
+        );
+        final engine = armedEngine(
+          players: [attacker],
+          enemies: [target],
+          rng: math.Random(7), // same seed -> same variance/crit both runs
+        );
+        final error = engine.useAbility(attacker, fireMove, target);
+        expect(error, isNull);
+        return 5000 - target.hp;
+      }
+
+      final vsPlant = damageAgainst(CreatureElement.plant); // 1.5x
+      final vsWater = damageAgainst(CreatureElement.water); // 0.5x
+      expect(vsPlant, greaterThan(vsWater));
+      // 1.5x vs 0.5x with identical variance/crit -> factor 3 up to floor
+      // rounding (user lowered advantage from 2.0 to 1.5, 2026-07-17).
+      expect(vsPlant, closeTo(vsWater * 3, 2.99));
+    },
+  );
 
   test('Licht and Schatten both hit each other hard and resist themselves', () {
     // Advantage is 1.5 (not 2.0) since 2026-07-17; self-resist stays 0.5.
@@ -626,25 +860,29 @@ void main() {
   });
 
   group('ability AP cost (user 2026-07-19)', () {
-    test('an explicit apCost overrides the derived cost (clamped to the cap)',
-        () {
-      const powerful = AbilityDef(
-        id: 'x',
-        name: 'X',
-        element: CreatureElement.shadow,
-        kind: AbilityKind.damage,
-        target: AbilityTarget.enemy,
-        power: 200,
-      );
-      // Auto (apCost 0): power 200 derives the ceiling, which the 2026-07-20
-      // AP redesign raised to the final form's capacity.
-      expect(CombatEngine.abilityApCost(powerful), kMaxActionPoints);
-      // Explicit wins.
-      expect(CombatEngine.abilityApCost(powerful.withApCost(3)), 3);
-      // Explicit is clamped into 1..kMaxActionPoints.
-      expect(CombatEngine.abilityApCost(powerful.withApCost(99)),
-          kMaxActionPoints);
-    });
+    test(
+      'an explicit apCost overrides the derived cost (clamped to the cap)',
+      () {
+        const powerful = AbilityDef(
+          id: 'x',
+          name: 'X',
+          element: CreatureElement.shadow,
+          kind: AbilityKind.damage,
+          target: AbilityTarget.enemy,
+          power: 200,
+        );
+        // Auto (apCost 0): power 200 derives the ceiling, which the 2026-07-20
+        // AP redesign raised to the final form's capacity.
+        expect(CombatEngine.abilityApCost(powerful), kMaxActionPoints);
+        // Explicit wins.
+        expect(CombatEngine.abilityApCost(powerful.withApCost(3)), 3);
+        // Explicit is clamped into 1..kMaxActionPoints.
+        expect(
+          CombatEngine.abilityApCost(powerful.withApCost(99)),
+          kMaxActionPoints,
+        );
+      },
+    );
 
     test('a starting ability (unlockStage 0) is capped at 4 AP', () {
       kAbilityDefs['nuke'] = const AbilityDef(
@@ -806,7 +1044,10 @@ void main() {
 
     engine.useAbility(attacker, burnMove, target);
     expect(target.mainStatus, MainStatusKind.burn);
-    expect(target.effectiveAttack, closeTo(target.stat(CreatureStat.attack) * 0.80, 0.01));
+    expect(
+      target.effectiveAttack,
+      closeTo(target.stat(CreatureStat.attack) * 0.80, 0.01),
+    );
 
     // Advance until the burned target has taken its own turn (and thus its
     // end-of-turn DoT tick) at least once.
@@ -826,11 +1067,7 @@ void main() {
   test('auto action fights until someone wins', () {
     final a = make(id: 'a', speed: 12);
     final b = make(id: 'b', player: false, speed: 10);
-    final engine = armedEngine(
-      players: [a],
-      enemies: [b],
-      rng: math.Random(3),
-    );
+    final engine = armedEngine(players: [a], enemies: [b], rng: math.Random(3));
 
     var guard = 0;
     while (engine.outcome == null && guard < 200) {
@@ -840,5 +1077,4 @@ void main() {
     expect(engine.outcome, isNotNull);
     expect(guard, lessThan(200));
   });
-
 }

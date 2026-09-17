@@ -36,7 +36,7 @@ void main() {
   });
 
   test('an era boss lists the legendary + next region', () {
-    final r = battleRewardsFor(bossBattleForEra(1));
+    final r = battleRewardsFor(kFallbackBattlesPerRegion);
     expect(r.any((l) => l.emoji == '👑'), isTrue);
   });
 

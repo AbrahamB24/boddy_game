@@ -103,7 +103,11 @@ void main() {
 
   group('paying it', () {
     test('spends the good you have MOST of', () {
-      final (m, f) = _pair(_species('starter'));
+      // Tier 2, not 1 (2026-09-12): meat moved to region 2, down to one
+      // luxury per region — a tier-1 (region 1) species only ever bills
+      // fish, so there is no second good left to demonstrate richest-first
+      // between at tier 1 any more.
+      final (m, f) = _pair(_species('era2', tier: 2));
       final cost = breedCost(m, f, {'fish': 4, 'meat': 999});
       expect(cost['meat'], isNotNull);
       expect(cost['fish'], isNull);
@@ -111,8 +115,9 @@ void main() {
 
     test('a store that cannot cover it still names the shortfall', () {
       // goodsCost demands the remainder rather than silently shrinking the
-      // bill, so the refusal can quote a real number.
-      final (m, f) = _pair(_species('starter'));
+      // bill, so the refusal can quote a real number. Tier 2 for the same
+      // reason as above.
+      final (m, f) = _pair(_species('era2', tier: 2));
       final stock = {'fish': 1.0, 'meat': 1.0};
       final cost = breedCost(m, f, stock);
       expect(canAffordBreed(cost, stock), isFalse);
@@ -136,7 +141,7 @@ void main() {
       // The cheapest, always-available bill. Era 0 would have no goods at all,
       // which would make the pair impossible to pay for.
       final orphan = _mob('nowhere', CreatureGender.male);
-      expect(breedEra(orphan.species), 1);
+      expect(breedRegion(orphan.species), 1);
       final cost = breedCost(orphan, orphan, {'fish': 999});
       expect(cost['fish'], isNotNull);
     });

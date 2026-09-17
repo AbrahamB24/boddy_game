@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
 import '../common/widgets/empty_monster_slot.dart';
+import '../common/widgets/filter_pills.dart';
 import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/parchment_kit.dart';
 import '../common/widgets/parchment_page.dart';
@@ -18,8 +19,10 @@ import 'widgets/creature_backdrop.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/creature_sprite.dart';
 import 'services/battle_rewards.dart';
+import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import '../common/widgets/recess_bar.dart';
+import '../../core/ui/pressable.dart';
 
 // ── Pre-battle briefing (user 2026-07-24) ───────────────────
 // Before a fight starts you see WHO you're fighting, WHAT clearing it unlocks,
@@ -32,6 +35,13 @@ class BattlePrepScreen extends StatefulWidget {
   final List<RewardLine> rewards;
   final bool isBoss;
 
+  /// Whether to show the "You face" headline + enemy lineup above the team
+  /// picker. Off for Survival Mode (user 2026-09-08: "beim survival mode
+  /// brauche ich 'you face' nicht") — floor 1's squad is a random preview of
+  /// nothing durable (every later floor rerolls its own), so previewing it
+  /// here said less than it cost in screen space.
+  final bool showEnemyPreview;
+
   const BattlePrepScreen({
     super.key,
     required this.title,
@@ -39,6 +49,7 @@ class BattlePrepScreen extends StatefulWidget {
     required this.partySize,
     required this.rewards,
     this.isBoss = false,
+    this.showEnemyPreview = true,
   });
 
   @override
@@ -51,6 +62,21 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
   /// Selected creature ids, kept in the order they were picked (first = the
   /// monster that leads the fight).
   final List<String> _selected = [];
+
+  /// The roster picker's own search box — a FIELD tied to this State's own
+  /// lifecycle, not a local variable created and disposed per [_openPicker]
+  /// call. Disposing it right after that call's `await` fired the sheet's
+  /// CLOSING animation, not its removal from the tree: the sheet keeps
+  /// rebuilding (and the SearchPill's TextField keeps reading the
+  /// controller) for the rest of that animation, so an immediate dispose
+  /// crashed it with "TextEditingController was used after being disposed".
+  final _pickerSearch = TextEditingController();
+
+  @override
+  void dispose() {
+    _pickerSearch.dispose();
+    super.dispose();
+  }
 
   // Tutorial's first fight (user 2026-09-02: "Lass den User das Monster
   // selbst einfügen. Daher zum Start noch kein Monster aktiv") — no default
@@ -149,7 +175,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
   }
 
   Widget _prepIntroOverlay() => Positioned.fill(
-    child: GestureDetector(
+    child: Pressable(
       behavior: HitTestBehavior.opaque,
       onTap: () => setState(() => _showPrepIntro = false),
       child: Container(
@@ -209,17 +235,23 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
       children: [
         Expanded(
           child: SingleChildScrollView(
+            // kMonsterTilePageMargin (24), matching "Your team" below it —
+            // both sections share this screen's left/right margin, so one
+            // of them silently drifting from the other reads as misaligned
+            // text rather than a deliberate two-column layout.
             padding: const EdgeInsets.fromLTRB(
-              ParchmentPage.kParchmentPagePad,
+              kMonsterTilePageMargin,
               12,
-              ParchmentPage.kParchmentPagePad,
+              kMonsterTilePageMargin,
               8,
             ),
             child: Column(
               children: [
-                _faceTitle('You face'),
-                const SizedBox(height: _kGap),
-                _enemyRow(),
+                if (widget.showEnemyPreview) ...[
+                  _faceTitle('You face'),
+                  const SizedBox(height: _kGap),
+                  _enemyRow(),
+                ],
                 if (widget.rewards.isNotEmpty) ...[
                   const SizedBox(height: _kGap),
                   _rewardList(),
@@ -239,10 +271,16 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
         Transform.translate(
           offset: const Offset(0, -20),
           child: Padding(
+            // kMonsterTilePageMargin (24), not ParchmentPage.kParchmentPagePad
+            // (36) — this hosts [_slotsGrid]'s own [monsterTileGrid], which
+            // sizes tiles off the raw device width assuming a 24px host
+            // margin (user 2026-09-11: "bitte 3 Boxen nebeneinander und
+            // nicht nur 2", caught on the hunt group picker but the same
+            // mismatch as here).
             padding: const EdgeInsets.fromLTRB(
-              ParchmentPage.kParchmentPagePad,
+              kMonsterTilePageMargin,
               _kGap,
-              ParchmentPage.kParchmentPagePad,
+              kMonsterTilePageMargin,
               0,
             ),
             child: Column(
@@ -632,7 +670,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
                   : _plainRewardRow(r),
             ),
           if (hasMore)
-            GestureDetector(
+            Pressable(
               behavior: HitTestBehavior.opaque,
               onTap: () => setState(() => _rewardsExpanded = !_rewardsExpanded),
               child: Padding(
@@ -749,7 +787,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
         if (readyIds.contains(id)) id,
     ].take(widget.partySize).toList();
     final active = usable.isNotEmpty && _sameSelection(_selected, usable);
-    return GestureDetector(
+    return Pressable(
       onTap: usable.isEmpty
           ? null
           : () => setState(() {
@@ -848,6 +886,38 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
     List<CreatureInstance> ready, {
     int? slotIndex,
   }) async {
+    // Sort/filter/search, added everywhere a monster or a group is picked
+    // (user 2026-09-11: "überall, wo ich ein Monster oder eine Gruppe
+    // auswähle, sollen diese nach dem entsprechenden Wert geordnet sein und
+    // eine Sortier, Filter- und Suchfunktion haben"). The controller is
+    // [_pickerSearch], a State field — NOT created and disposed here per
+    // open (see that field's own comment for why that crashed).
+    _pickerSearch.clear();
+    String query = '';
+    CreatureElement? filterElement;
+    String? sortKey; // null = combat power — what a battle team is judged on
+    bool descending = true;
+
+    List<CreatureInstance> filtered() {
+      final q = query.trim().toLowerCase();
+      final list = [
+        for (final c in ready)
+          if ((filterElement == null || c.species?.element == filterElement) &&
+              (q.isEmpty || c.displayName.toLowerCase().contains(q)))
+            c,
+      ];
+      int cmp(CreatureInstance a, CreatureInstance b) {
+        final r = switch (sortKey) {
+          'level' => a.level.compareTo(b.level),
+          'name' => a.displayName.compareTo(b.displayName),
+          _ => combatPower(a).compareTo(combatPower(b)),
+        };
+        return descending ? -r : r;
+      }
+      list.sort(cmp);
+      return list;
+    }
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -868,22 +938,106 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
           // to need lazy building (user 2026-08-31: "genau gleich gross sein
           // wie die Kacheln beim Monstersscreen").
           //
-          // The 26px itself is now actually 24 too (2026-08-31 audit,
-          // ParchmentPage.kParchmentPagePad) — the comment above already
-          // flagged the mismatch, but only the tile-width math got fixed
-          // at the time; the padding constant here never did.
-          builder: (sheetCtx, setSheetState) => SingleChildScrollView(
-            controller: scrollCtrl,
-            padding: const EdgeInsets.fromLTRB(
-              ParchmentPage.kParchmentPagePad,
-              4,
-              ParchmentPage.kParchmentPagePad,
-              20,
-            ),
-            child: monsterTileGrid([
-              for (final c in ready)
-                _pickerTile(c, sheetCtx, setSheetState, slotIndex),
-            ]),
+          // The padding constant itself finally fixed too (2026-09-11, user:
+          // "bitte 3 Boxen nebeneinander und nicht nur 2") — this comment
+          // flagged the mismatch back in 2026-08-31 ("now actually 24 too")
+          // but ParchmentPage.kParchmentPagePad is actually 36, not 24; only
+          // the tile-WIDTH math got fixed at the time, this padding kept
+          // using the wrong constant and cost the grid its third column.
+          builder: (sheetCtx, setSheetState) => Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  kMonsterTilePageMargin,
+                  4,
+                  kMonsterTilePageMargin,
+                  8,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: SearchPill(
+                        controller: _pickerSearch,
+                        palette: PillPalette.parchment,
+                        onChanged: (v) => setSheetState(() => query = v),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: MenuPill<String>(
+                        palette: PillPalette.parchment,
+                        icon: Icons.swap_vert,
+                        label: switch (sortKey) {
+                          'level' => 'Level',
+                          'name' => 'Name',
+                          _ => 'Power',
+                        },
+                        engaged: sortKey != null || !descending,
+                        value: sortKey ?? '',
+                        entries: const [
+                          MapEntry('', 'Power'),
+                          MapEntry('level', 'Level'),
+                          MapEntry('name', 'Name'),
+                        ],
+                        trailing: Icon(
+                          descending ? Icons.arrow_downward : Icons.arrow_upward,
+                          size: 14,
+                          color: FoE.goldBright,
+                        ),
+                        selectedTrailing: descending ? '↓' : '↑',
+                        onSelected: (v) => setSheetState(() {
+                          final picked = v.isEmpty ? null : v;
+                          if (picked == sortKey) {
+                            descending = !descending;
+                          } else {
+                            sortKey = picked;
+                            descending = true;
+                          }
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: MenuPill<String>(
+                        palette: PillPalette.parchment,
+                        icon: Icons.filter_alt_outlined,
+                        label: filterElement?.label ?? 'Every type',
+                        engaged: filterElement != null,
+                        value: filterElement?.name ?? '',
+                        entries: [
+                          const MapEntry('', 'Every type'),
+                          for (final e in CreatureElement.values)
+                            if (e != CreatureElement.neutral)
+                              MapEntry(e.name, '${e.emoji} ${e.label}'),
+                        ],
+                        onSelected: (v) => setSheetState(
+                          () => filterElement =
+                              v.isEmpty ? null : CreatureElement.fromName(v),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.fromLTRB(
+                    kMonsterTilePageMargin,
+                    0,
+                    kMonsterTilePageMargin,
+                    20,
+                  ),
+                  child: monsterTileGrid([
+                    for (final c in filtered())
+                      _pickerTile(c, sheetCtx, setSheetState, slotIndex),
+                  ]),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -963,7 +1117,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
         color: FoE.panelDark,
         border: Border(top: BorderSide(color: FoE.border)),
       ),
-      child: GestureDetector(
+      child: Pressable(
         onTap: canFight ? () => Navigator.of(context).pop(_team) : null,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),

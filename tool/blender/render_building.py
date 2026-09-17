@@ -72,28 +72,39 @@ ELEVATION = math.degrees(math.asin(0.5))  # 30 — see the header
 # outsiders, kept to a few square pixels each. That is what makes a building
 # stand next to a monster and look like it came from the same world, and it
 # costs nothing but a retune.
+#
+# ── Richer still (user 2026-09-07: "kräftigere Farben, damit sie zum UI
+# passen") ── every tone below had its HSV saturation nudged a further 25% of
+# the way to fully saturated, THEN another 15% (user 2026-09-08: "die Farben
+# der Gebäude dürfen noch ein bisschen mehr Sättigung vertragen") — both via
+# tool/blender/_boost_saturation.py's formula — see that file for why it
+# closes the gap to 1.0 rather than multiplying S, which clips an
+# already-vivid tone like 'tile' to a flat, undertone-less hue). The
+# already-saved Houses/*.blend files got the identical two boosts applied
+# directly to their materials; this dict only matters for a FRESH build()
+# from the recipe, so the two stay in sync.
 PALETTE = {
-    'tile': (0.80, 0.30, 0.13),        # terracotta pantile — the loudest note
-    'tile_dark': (0.56, 0.18, 0.09),   # its shadow side and the ridge
-    'stucco': (0.96, 0.87, 0.69),      # lime render, the wall default
+    'tile': (0.800, 0.265, 0.082),        # terracotta pantile — the loudest note
+    'tile_dark': (0.560, 0.154, 0.058),   # its shadow side and the ridge
+    'stucco': (0.960, 0.786, 0.439),      # lime render, the wall default
     # Cut stone: ochre, NOT grey. Called travertine until 2026-08-12,
     # which is a Roman quarry and the wrong century for a name that
     # thirty builders reach for.
-    'limestone': (0.88, 0.71, 0.47),
-    'ashlar': (0.62, 0.46, 0.29),      # the plinth and any heavy masonry
-    'oak': (0.44, 0.24, 0.12),         # beams, doors, shutters
-    'oak_light': (0.63, 0.38, 0.18),   # posts catching the sun
-    'iron': (0.31, 0.22, 0.19),        # fittings — warm dark, not blue-black
-    'gold': (0.98, 0.77, 0.22),        # finials and lamp-light
+    'limestone': (0.880, 0.639, 0.299),
+    'ashlar': (0.620, 0.409, 0.184),      # the plinth and any heavy masonry
+    'oak': (0.440, 0.213, 0.077),         # beams, doors, shutters
+    'oak_light': (0.630, 0.344, 0.115),   # posts catching the sun
+    'iron': (0.310, 0.168, 0.122),        # fittings — warm dark, not blue-black
+    'gold': (0.980, 0.748, 0.140),        # finials and lamp-light
     # A single controlled cold note, same exception class as water/foam —
     # the other half of a treasure pile that isn't coin (user 2026-08-24).
-    'gem': (0.52, 0.24, 0.62),
-    'dark': (0.15, 0.07, 0.04),        # an opening, read as depth
-    'banner': (0.74, 0.13, 0.18),      # the one saturated cloth per building
-    'sand': (0.90, 0.77, 0.52),        # trodden ground inside a court
-    'straw': (0.94, 0.77, 0.30),       # bedding, thatch, nests
-    'leaf': (0.37, 0.53, 0.22),        # the only green; use it sparingly
-    'moss': (0.44, 0.50, 0.26),        # duller and yellower — it is on a roof
+    'gem': (0.497, 0.153, 0.620),
+    'dark': (0.150, 0.060, 0.025),        # an opening, read as depth
+    'banner': (0.740, 0.083, 0.136),      # the one saturated cloth per building
+    'sand': (0.900, 0.706, 0.332),        # trodden ground inside a court
+    'straw': (0.940, 0.741, 0.191),       # bedding, thatch, nests
+    'leaf': (0.329, 0.530, 0.140),        # the only green; use it sparingly
+    'moss': (0.417, 0.500, 0.166),        # duller and yellower — it is on a roof
     # Mid-steps. The monsters get four to six tones out of one hue; three is
     # what a box gives you from lighting alone, so the rest has to be painted.
     # Use these for coursing, joints and mouldings — never for a whole surface.
@@ -103,15 +114,15 @@ PALETTE = {
     # spore-light. Cold is the right accent because everything else in the
     # building is warm and damp; one teal glow reads instantly and cannot be
     # mistaken for part of the flesh.
-    'cap': (0.80, 0.26, 0.21),         # the great cap: the whole silhouette
-    'cap_dark': (0.55, 0.15, 0.13),    # its underside and shaded facets
-    'cap_spot': (0.98, 0.92, 0.82),    # pale warts — THE fungus signal
+    'cap': (0.800, 0.190, 0.133),         # the great cap: the whole silhouette
+    'cap_dark': (0.550, 0.105, 0.082),    # its underside and shaded facets
+    'cap_spot': (0.980, 0.808, 0.523),    # pale warts — THE fungus signal
     # A BOLETE, not a fly agaric (user 2026-08-09). Scarlet is the only
     # saturated red the whole map has, and the habitat is the building a player
     # puts down most often — a settlement of scarlet toadstools drowns
     # everything around it. The dome on a stalk is what reads as a mushroom at
     # map size; the colour never had to carry any of it.
-    'cap_wood': (0.60, 0.41, 0.25),
+    'cap_wood': (0.600, 0.361, 0.160),
     # ── Props (user 2026-08-09) ──
     # "gib den Gebäuden noch mehr Individualität, so dass es sofort erkennbar
     #  ist, was es ist … Fish Hut braucht ein Boot und Wasser. Treasury braucht
@@ -121,48 +132,48 @@ PALETTE = {
     # at map size the props win. These are the tones the props needed and the
     # architecture never did.
     # ── Life (user 2026-08-09) ──
-    'smoke': (0.86, 0.86, 0.84),       # goes up, and says somebody is in
-    'critter': (0.72, 0.56, 0.32),     # the small beasts underfoot
-    'critter_dark': (0.48, 0.35, 0.20),
-    'critter_alt': (0.58, 0.62, 0.70),
-    'linen': (0.92, 0.90, 0.84),       # washing, bandages, sailcloth
+    'smoke': (0.860, 0.860, 0.536),       # goes up, and says somebody is in
+    'critter': (0.720, 0.514, 0.204),     # the small beasts underfoot
+    'critter_dark': (0.480, 0.317, 0.128),
+    'critter_alt': (0.370, 0.479, 0.700),
+    'linen': (0.920, 0.825, 0.535),       # washing, bandages, sailcloth
     # ── Accents (user 2026-08-09) ──
     # One saturated note per building, so six half-timbered houses stop
     # being the same house. Deliberately DEEP rather than bright: the
     # ground is a mid green and the walls are warm stone, so a pastel
     # vanishes into both and a primary tears a hole in the picture.
-    'cloth_red': (0.71, 0.24, 0.22),
-    'cloth_teal': (0.22, 0.50, 0.49),
-    'cloth_plum': (0.47, 0.28, 0.45),
-    'cloth_gold': (0.85, 0.66, 0.24),
-    'cloth_blue': (0.28, 0.40, 0.62),
-    'bloom_red': (0.80, 0.29, 0.26),
-    'bloom_white': (0.94, 0.93, 0.88),
-    'bloom_blue': (0.44, 0.52, 0.78),
-    'bloom_pink': (0.87, 0.55, 0.62),
-    'herb': (0.44, 0.60, 0.28),
-    'dirt': (0.42, 0.32, 0.21),        # the soil a planting sits in
+    'cloth_red': (0.710, 0.163, 0.140),
+    'cloth_teal': (0.140, 0.500, 0.487),
+    'cloth_plum': (0.470, 0.178, 0.440),
+    'cloth_gold': (0.850, 0.633, 0.153),
+    'cloth_blue': (0.178, 0.335, 0.620),
+    'bloom_red': (0.800, 0.201, 0.166),
+    'bloom_white': (0.940, 0.876, 0.561),
+    'bloom_blue': (0.281, 0.398, 0.780),
+    'bloom_pink': (0.870, 0.351, 0.465),
+    'herb': (0.389, 0.600, 0.178),
+    'dirt': (0.420, 0.284, 0.134),        # the soil a planting sits in
     # A straw roof is the loudest ROOF the palette can make, which is why
     # the store gets it: a granary you can find from across the map.
-    'thatch': (0.85, 0.65, 0.24),
-    'thatch_dark': (0.63, 0.44, 0.15),
-    'slate': (0.42, 0.45, 0.50),       # the cold roof, for the fish dock
-    'slate_dark': (0.30, 0.33, 0.38),
-    'water': (0.22, 0.50, 0.70),       # a dock, a pond, a trough worth seeing
-    'water_deep': (0.14, 0.36, 0.56),
-    'foam': (0.80, 0.90, 0.92),
-    'hide': (0.49, 0.33, 0.19),        # a pack beast, a stretched pelt
-    'hide_dark': (0.33, 0.21, 0.13),
-    'cloth': (0.86, 0.80, 0.66),       # awnings, sacks, sailcloth
-    'cloth_stripe': (0.72, 0.36, 0.30),
-    'stalk': (0.94, 0.88, 0.75),       # flesh, standing in for a wall
-    'stalk_shade': (0.82, 0.73, 0.58),
+    'thatch': (0.850, 0.621, 0.153),
+    'thatch_dark': (0.630, 0.418, 0.096),
+    'slate': (0.268, 0.354, 0.500),       # the cold roof, for the fish dock
+    'slate_dark': (0.191, 0.262, 0.380),
+    'water': (0.140, 0.467, 0.700),       # a dock, a pond, a trough worth seeing
+    'water_deep': (0.089, 0.335, 0.560),
+    'foam': (0.510, 0.852, 0.920),
+    'hide': (0.490, 0.294, 0.122),        # a pack beast, a stretched pelt
+    'hide_dark': (0.330, 0.181, 0.082),
+    'cloth': (0.860, 0.729, 0.421),       # awnings, sacks, sailcloth
+    'cloth_stripe': (0.720, 0.267, 0.191),
+    'stalk': (0.940, 0.794, 0.478),       # flesh, standing in for a wall
+    'stalk_shade': (0.820, 0.652, 0.370),
     # ── The medieval set (user 2026-08-04) ──
     # Shingles instead of pantiles, and the beams of a timber frame. Still one
     # warm family: the frame is the DARK end of the same brown the shingles
     # are, so half-timbering is a value contrast rather than a second hue.
-    'shingle': (0.47, 0.28, 0.18),
-    'shingle_dark': (0.33, 0.19, 0.12),
+    'shingle': (0.470, 0.238, 0.115),
+    'shingle_dark': (0.330, 0.161, 0.076),
     # ── The egg colours are the APP's (user 2026-08-04) ──
     # CreatureRarity's own values, so a nest on the map and an egg in the
     # Hatchery screen are the same object. They are the one place the single
@@ -170,18 +181,18 @@ PALETTE = {
     # carries, and a message has to be allowed to be the loudest thing on it.
     # Lifted a little towards the shell so they read as eggs rather than as
     # billiard balls — the app's chips sit on dark UI, these sit in straw.
-    'egg_common': (0.78, 0.78, 0.76),
-    'egg_uncommon': (0.47, 0.78, 0.47),
-    'egg_rare': (0.36, 0.68, 0.95),
-    'egg_epic': (0.70, 0.36, 0.78),
-    'egg_legendary': (1.00, 0.78, 0.28),
-    'root': (0.50, 0.34, 0.22),        # buttress roots, withies, fences
-    'root_dark': (0.36, 0.23, 0.15),
-    'glow': (0.42, 0.93, 0.84),        # the one cold thing in the building
-    'tile_mid': (0.69, 0.24, 0.11),
-    'stucco_shade': (0.86, 0.75, 0.57),
-    'limestone_shade': (0.76, 0.59, 0.37),
-    'ashlar_dark': (0.50, 0.36, 0.22),
+    'egg_common': (0.780, 0.780, 0.484),
+    'egg_uncommon': (0.299, 0.780, 0.299),
+    'egg_rare': (0.229, 0.620, 0.950),
+    'egg_epic': (0.675, 0.229, 0.780),
+    'egg_legendary': (1.000, 0.749, 0.178),
+    'root': (0.500, 0.295, 0.140),        # buttress roots, withies, fences
+    'root_dark': (0.360, 0.197, 0.095),
+    'glow': (0.268, 0.930, 0.813),        # the one cold thing in the building
+    'tile_mid': (0.690, 0.209, 0.071),
+    'stucco_shade': (0.860, 0.672, 0.363),
+    'limestone_shade': (0.760, 0.532, 0.235),
+    'ashlar_dark': (0.500, 0.321, 0.140),
     # ROAD STONE — greyer and cooler than the walls on purpose. A road paved in
     # the same ochre the buildings are built from reads as a courtyard spreading
     # between them rather than as something you travel along; it is the one
@@ -190,10 +201,10 @@ PALETTE = {
     # One roof material per building means five more of them, and the
     # three metals below are the ones a medieval roof could actually be:
     # copper gone green, gold leaf, and lead-black iron.
-    'verdigris': (0.36, 0.56, 0.48),   # the minster's copper, weathered
-    'verdigris_dark': (0.24, 0.40, 0.35),
-    'gold_dark': (0.72, 0.52, 0.14),   # gilt in shadow, for the treasury
-    'copper': (0.74, 0.44, 0.22),      # the still, and nothing else
+    'verdigris': (0.230, 0.560, 0.428),   # the minster's copper, weathered
+    'verdigris_dark': (0.153, 0.400, 0.323),
+    'gold_dark': (0.720, 0.503, 0.089),   # gilt in shadow, for the treasury
+    'copper': (0.740, 0.394, 0.140),      # the still, and nothing else
     # ── QUARRY ROCK (user 2026-08-12, from a reference) ──
     # The palette note above says "No greys anywhere", and it was right about
     # the settlement: a village of houses in one warm family is what makes it
@@ -207,14 +218,14 @@ PALETTE = {
     # Pitched a step and a half down from the first attempt: at 0.60 under a
     # 2.5 sun the lit face renders near-white and the seam has nothing to be
     # darker than, which is where the whole painted look lives.
-    'rock': (0.45, 0.45, 0.45),          # the face the sun is on
-    'rock_light': (0.58, 0.58, 0.56),    # the top, catching sky
-    'rock_shade': (0.31, 0.32, 0.35),    # the turned face
-    'rock_deep': (0.15, 0.16, 0.19),     # THE tone that does the work
-    'rock_warm': (0.49, 0.45, 0.39),     # every fourth block, weathered
-    'steel': (0.40, 0.45, 0.52),         # the cool metal of the gear
-    'steel_dark': (0.24, 0.28, 0.34),
-    'cobble': (0.55, 0.46, 0.38),
+    'rock': (0.450, 0.450, 0.450),          # the face the sun is on
+    'rock_light': (0.580, 0.580, 0.357),    # the top, catching sky
+    'rock_shade': (0.198, 0.236, 0.350),    # the turned face
+    'rock_deep': (0.095, 0.120, 0.190),     # THE tone that does the work
+    'rock_warm': (0.490, 0.393, 0.249),     # every fourth block, weathered
+    'steel': (0.255, 0.366, 0.520),         # the cool metal of the gear
+    'steel_dark': (0.153, 0.228, 0.340),
+    'cobble': (0.550, 0.387, 0.242),
 }
 
 # How hard every edge is cut back. This is the OTHER half of matching the
@@ -279,6 +290,19 @@ FINISH = {
     'tile': (0.72, 0.0, 30, 0.08, 0.24, 2.0),
     'sand': (0.94, 0.0, 40, 0.09, 0.3, 1.0),
     'dirt': (0.95, 0.0, 34, 0.12, 0.36, 1.0),
+    # ── terrain.py's ground (user 2026-09-07: "der Boden... sollte mehr
+    # Struktur bekommen wie Gras und Dreck") ── none of these had a FINISH
+    # entry before, which meant terrain.py's tmat() (same flat()/grain
+    # machinery buildings use) silently fell back to DEFAULT_FINISH — grain
+    # scale 0, so the whole ground rendered as flat, ungrained colour no
+    # matter how rich the palette got. 'rock'/'water'/'dirt' above already
+    # covered the map's rock/water/dirt keys via prefix match; this adds the
+    # ones that didn't: the grass the map is mostly made of, the beach, the
+    # tree canopy mass, and the trunks.
+    'grass': (0.90, 0.0, 22, 0.11, 0.22, 1.0),
+    'shore': (0.88, 0.0, 30, 0.08, 0.18, 1.0),
+    'canopy': (0.82, 0.0, 20, 0.10, 0.22, 1.0),
+    'trunk': (0.85, 0.0, 24, 0.08, 0.20, 4.0),
 }
 DEFAULT_FINISH = (0.92, 0.0, 0, 0.0, 0.0, 1.0)   # chalk, as before
 
@@ -8088,8 +8112,13 @@ PRESETS = {
     'trading_post': (trade_center, 4, 3),
     'caravanserai': (caravanserai, 4, 3),
     'hatchery': (hatchery, 4, 3),
-    'lux_fish': (fish_hut, 3, 3),
-    'lux_fur': (fur_lodge, 3, 3),
+    # Renamed lux_fish/lux_fur -> fish_shop/butcher_shop (app-wide "fur ->
+    # meat" rename) — these two never got their PRESETS keys updated to
+    # match, which meant render_from_houses.py silently couldn't find a
+    # frame size for either and skipped them (user 2026-09-07: found while
+    # chasing why their bundled art stayed the old, un-boosted colours).
+    'fish_shop': (fish_hut, 3, 3),
+    'butcher_shop': (fur_lodge, 3, 3),
     'church': (church, 3, 5),
     'marketplace': (marketplace, 4, 4),
     'refinery_e2': (clay_refinery, 4, 4),
@@ -8300,7 +8329,13 @@ def light(azimuth=0.0):
     # the buildings only ran from pale to slightly less pale. Down to 0.18, and
     # tinted warm rather than sky-blue, so the shadows stay in the family
     # instead of turning grey.
-    bg.inputs['Color'].default_value = (0.56, 0.54, 0.60, 1)
+    #
+    # Saturation nudged the same 25%-of-the-way-to-1.0 as PALETTE (user
+    # 2026-09-07: "kräftigere Farben... den Hintergrund anpassen") — this is
+    # the ambient tint every building's shadow side picks up, so it needed
+    # the same richness pass or the shadows would have stayed the old, flatter
+    # lavender-grey next to now-richer lit faces.
+    bg.inputs['Color'].default_value = (0.470, 0.405, 0.600, 1)
     bg.inputs['Strength'].default_value = 0.30
 
 

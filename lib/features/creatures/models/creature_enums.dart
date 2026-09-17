@@ -15,25 +15,43 @@ export 'xp_balance.dart' show XpConfig, kXpBalance;
 // effect layer. Numbers here are the single source of truth for the whole
 // feature — balancing changes happen HERE, not scattered across screens.
 
-/// The 5 combat elements. Explicit 5x5 matrix (not a simple beats/loses
-/// pair) since Licht/Schatten mutually hit each other hard (1.5 both ways)
-/// while also strongly resisting themselves (0.5) — asymmetric vs. the
-/// Feuer→Pflanze→Wasser→Feuer cycle's clean 1.5/0.5/1.0 triangle.
+/// The 8 combat elements (expanded from 5, user 2026-09-08): a 6-type RING
+/// — Feuer→Eis→Pflanze→Blitz→Wasser→Stein→Feuer — plus Licht/Schatten as two
+/// HUB types tied to every ring type individually, first sketched as a pure
+/// design draft in type_circle_dialog.dart and now the live matrix. Explicit
+/// 8x8 matrix (not a simple beats/loses pair):
 ///
-/// Type ADVANTAGE is +50% (×1.5), not double (user decision 2026-07-17:
-/// "doppelt ist sehr viel"). This also shrinks the multiplier stack that
-/// drives extreme hits: STAB 1.5 × type 1.5 × crit 1.5 = 3.4× now (was
-/// 4.5×). The DISADVANTAGE stays at ×0.5 (half damage) unless changed.
+///  * RING vs RING: one step clockwise is a mild advantage (×1.25), two steps
+///    is a strong one (×1.5, e.g. Feuer→Pflanze — exactly the old Feuer/
+///    Wasser/Pflanze triangle, which is this ring's own even-index
+///    sub-cycle), three steps (opposite) is neutral (×1.0). The reverse of
+///    every advantage is its clean inverse (1.25↔0.75, 1.5↔0.5) so the
+///    matrix is fully reciprocal there.
+///  * HUB vs RING: each hub has its own bespoke tie to every ring type
+///    (see type_circle_dialog.dart's `_kEdges` for the exact draft this
+///    encodes), same reciprocal-inverse rule for the un-drawn reverse
+///    direction.
+///  * HUB vs HUB: Licht/Schatten mutually hit each other hard (×1.5 BOTH
+///    ways, not reciprocal) while also strongly resisting themselves
+///    (×0.5) — ring types don't resist themselves (×1.0).
+///
+/// Type ADVANTAGE tops out at +50% (×1.5), not double (user decision
+/// 2026-07-17: "doppelt ist sehr viel"). This also shrinks the multiplier
+/// stack that drives extreme hits: STAB 1.5 × type 1.5 × crit 1.5 = 3.4×
+/// (was 4.5× at double advantage).
 enum CreatureElement {
   fire('Fire', '🔥', Color(0xFFE25822)),
-  water('Water', '💧', Color(0xFF018ABE)),
+  ice('Ice', '🧊', Color(0xFF8ED8F0)),
   plant('Plant', '🌿', Color(0xFF3BAE78)),
+  lightning('Lightning', '⚡', Color(0xFF6C63FF)),
+  water('Water', '💧', Color(0xFF018ABE)),
+  stone('Stone', '🪨', Color(0xFF9B8365)),
   light('Light', '✨', Color(0xFFE9B44C)),
   shadow('Shadow', '🌑', Color(0xFF6B5B95)),
   // A typeless option for abilities that have no elemental identity — most
   // buffs and the normal Attack (user request). Neutral never lands or takes
   // bonus damage (multiplierVs is always 1.0), and it is NOT a creature type
-  // (kept out of the species editor). Placed LAST so the 5 real types keep
+  // (kept out of the species editor). Placed LAST so the 8 real types keep
   // their indices for the effectiveness matrix below.
   neutral('Neutral', '⚪', Color(0xFF8B95A5));
 
@@ -49,19 +67,24 @@ enum CreatureElement {
   /// creature_backdrop.dart — both read this getter.
   Color get shadowColor => Color.lerp(color, Colors.black, 0.32)!;
 
-  // Row = attacker, column = defender. Matches the spec's matrix exactly:
-  // Fire/Water/Plant/Light/Shadow order both ways.
+  // Row = attacker, column = defender, order Fire/Ice/Plant/Lightning/Water/
+  // Stone/Light/Shadow both ways — matches type_circle_dialog.dart's _kEdges
+  // exactly (every value here is either a drawn edge or that edge's clean
+  // reciprocal inverse; see the class doc above for the derivation).
   static const List<List<double>> _matrix = [
-    // vs   Fire Water Plant Light Shadow  (advantage 1.5, disadvantage 0.5)
-    [1.0, 0.5, 1.5, 1.0, 1.0], // Fire attacks
-    [1.5, 1.0, 0.5, 1.0, 1.0], // Water attacks
-    [0.5, 1.5, 1.0, 1.0, 1.0], // Plant attacks
-    [1.0, 1.0, 1.0, 0.5, 1.5], // Light attacks
-    [1.0, 1.0, 1.0, 1.5, 0.5], // Shadow attacks
+    // vs     Fire  Ice  Plant  Lght  Watr Stone Light Shdw
+    [1.00, 1.25, 1.50, 1.00, 0.50, 0.75, 1.00, 1.25], // Fire attacks
+    [0.75, 1.00, 1.25, 1.50, 1.00, 0.50, 0.75, 1.00], // Ice attacks
+    [0.50, 0.75, 1.00, 1.25, 1.50, 1.00, 0.50, 1.25], // Plant attacks
+    [1.00, 0.50, 0.75, 1.00, 1.25, 1.50, 1.25, 0.75], // Lightning attacks
+    [1.50, 1.00, 0.50, 0.75, 1.00, 1.25, 1.25, 0.75], // Water attacks
+    [1.25, 1.50, 1.00, 0.50, 0.75, 1.00, 1.50, 0.50], // Stone attacks
+    [1.00, 1.25, 1.50, 0.75, 0.75, 0.50, 0.50, 1.50], // Light attacks
+    [0.75, 1.00, 0.75, 1.25, 1.25, 1.50, 1.50, 0.50], // Shadow attacks
   ];
 
   /// Damage multiplier when [this] attacks [defender]. Neutral on either side
-  /// is always 1.0 — no advantage, no resistance — and it also keeps the 5×5
+  /// is always 1.0 — no advantage, no resistance — and it also keeps the 8×8
   /// matrix from being indexed with neutral's out-of-range index.
   double multiplierVs(CreatureElement defender) =>
       (this == neutral || defender == neutral)
@@ -193,6 +216,29 @@ enum CreatureStat {
   final String label;
   const CreatureStat(this.label);
 
+  /// One line on what this stat actually does — shown in the tap-tooltip
+  /// over its name on the creature detail screen's stat rows (user
+  /// 2026-09-06: "wenn ich auf die Namen der Stats klicke, soll eine kleine
+  /// Box erscheinen, welche zeigt, für was der Stat gebraucht wird"). Kept in
+  /// sync with this enum's own doc comment above, which is the source of
+  /// truth for what each stat is for.
+  String get description => switch (this) {
+    CreatureStat.hp => 'How much damage this monster can take before it goes down.',
+    CreatureStat.attack => 'How much damage this monster deals.',
+    CreatureStat.defense => 'How much damage this monster shrugs off.',
+    CreatureStat.speed => 'Turn order in battle — also what a Scout Post reads to speed up expeditions.',
+    CreatureStat.catchRate => 'This monster\'s odds of catching a wild one.',
+    CreatureStat.gathering => 'Out on the map, filling a load — every expedition spot, every era.',
+    CreatureStat.production => 'Inside a production building, making build goods or luxury goods.',
+    CreatureStat.construction => 'On a building site — speeds construction.',
+    CreatureStat.crafting => 'At the workbench, making items.',
+    CreatureStat.breeding => 'In the Breeding Hut or the Hatchery.',
+    CreatureStat.medicine => 'In the Healing Hut — cuts the heal timer.',
+    CreatureStat.trade => 'In the Trade Center.',
+    CreatureStat.logistics => 'Inside a store, making room — Storehouse and Gold Vault capacity.',
+    CreatureStat.carry => 'How much loot an expedition hauls back, or a trade caravan carries.',
+  };
+
   /// The key this stat was stored under before it was renamed, or null.
   ///
   /// Genes are persisted BY NAME (`stat_base: {"mining": 42, …}`) on both
@@ -300,12 +346,15 @@ const List<CreatureStat> kPostableStats = [
 ];
 
 // ── Progression constants ───────────────────────────────────
-// ── Era-gated progression (user redesign 2026-07-22) ────────
-// Eras are the game's spine now: each era raises the creature level cap by
-// [kLevelsPerEra] (era 1 → Lv 10, era 2 → Lv 20 …), XP gain scales up per era
-// so fresh catches reach the new band quickly, and the hard ceiling is
-// kMaxEras × kLevelsPerEra. Everything is FORMULA-based (user request) so
-// adding a 9th era is a constant bump, not a table edit.
+// ── Region-gated progression (user redesign 2026-07-22, eras removed
+//    2026-09-05) ────────
+// Regions are the game's spine now: each region reached raises the creature
+// level cap by [kLevelsPerEra] (region 1 → Lv 10, region 2 → Lv 20 …), and
+// the hard ceiling is kMaxEras × kLevelsPerEra. Everything is FORMULA-based
+// (user request) so adding a 9th region is a constant bump, not a table
+// edit. "Region reached" is `SettlementController.dungeonMaxStage` — bumped
+// automatically and for free the instant a region's boss falls, not a paid
+// step.
 
 // Dials since 2026-07-29 (Monster → Level). Everything here is FORMULA-based
 // (user request), which is exactly what lets the two numbers be turned rather
@@ -313,15 +362,16 @@ const List<CreatureStat> kPostableStats = [
 int get kMaxEras => GameTuning.i.count(Dials.maxEras);
 int get kLevelsPerEra => GameTuning.i.count(Dials.levelsPerEra);
 
-/// The level cap while the settlement is in era [eraOrder] (1-based). Global:
-/// it caps EVERY monster, old and new alike — XP past it is forfeited.
-int creatureLevelCap(int eraOrder) =>
-    eraOrder.clamp(1, kMaxEras) * kLevelsPerEra;
+/// The level cap once the settlement has reached region [regionOrder]
+/// (1-based, `dungeonMaxStage`). Global: it caps EVERY monster, old and new
+/// alike — XP past it is forfeited.
+int creatureLevelCap(int regionOrder) =>
+    regionOrder.clamp(1, kMaxEras) * kLevelsPerEra;
 
-// The per-era XP catch-up multiplier is GONE (user 2026-07-26: "Ära-
+// The per-region XP catch-up multiplier is GONE (user 2026-07-26: "Ära-
 // Aufholfaktor löschen, das braucht es nicht"). Every XP source now pays what
-// it says it pays, in every era; the enemies' own levels are what scale the
-// battle reward — see XpConfig.killXp.
+// it says it pays, in every region; the enemies' own levels are what scale
+// the battle reward — see XpConfig.killXp.
 
 int get kCreatureMaxLevel => kMaxEras * kLevelsPerEra; // 80 at the defaults
 
@@ -365,6 +415,15 @@ const int kBasicAttackPower = 40;
 
 /// AP a monster switch costs (spent from the OUTGOING monster's pool).
 int get kSwitchApCost => GameTuning.i.count(Dials.switchApCost);
+
+/// AP using a battle item (heal/buff) costs — always this, regardless of
+/// the item (user 2026-09-05: "ein Item benutzen, kostet immer 1 AP").
+int get kItemApCost => GameTuning.i.count(Dials.itemApCost);
+
+/// AP a hunt catch attempt costs (user 2026-09-11) — same weight as a basic
+/// attack by default, so trying to catch a fielded wild is a real choice
+/// against just attacking it, not a free side action.
+int get kCatchApCost => GameTuning.i.count(Dials.catchApCost);
 
 /// The CHEAPEST a buff/debuff-focused ability can be — deliberately low (user
 /// request 2026-07-17: make buffs/debuffs something you WANT to play), and
@@ -575,6 +634,12 @@ const String kDungeonPortalBuildingId = 'dungeon_portal';
 const String kBreedingHutBuildingId = 'breeding_hut';
 const String kHatcheryBuildingId = 'hatchery';
 const String kHealingHutBuildingId = 'healing_hut';
+
+/// Opens the Combat School (user 2026-09-05) — where a creature actually
+/// learns a move (see ability_def.dart's learnableAbilitiesFor). Distinct
+/// from [kTrainingGroundsBuildingId]'s sparring battle: that's practice with
+/// what a creature already knows, this is where it learns something new.
+const String kCombatSchoolBuildingId = 'combat_school';
 
 /// Opens the market (sell surplus for gold — see market_screen.dart).
 /// It's also the building that PRODUCES gold, so the place you mint it and the

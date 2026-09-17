@@ -8,9 +8,10 @@ import '../../creatures/models/path_node.dart';
 import '../../creatures/models/species_def.dart' show SpeciesDef, kSpeciesDefs;
 import '../../creatures/services/capture_math.dart' show eligibleSpecies;
 import '../../creatures/services/overworld_path.dart'
-    show enemyCountForBattle, enemyLevelForBattle, eraForBattle;
+    show enemyCountForBattle, enemyLevelForBattle;
 import '../services/game_defs_controller.dart';
 import 'dev_theme.dart';
+import '../../../core/ui/pressable.dart';
 
 // ── Welche Monster stehen im Pfad? (user 2026-07-30) ────────
 // "Monster im Pfad, bitte nach ära unterteilen in Tabs oben. Zudem will ich dort
@@ -40,14 +41,14 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
   /// truncated path (kLastPathBattle) shows only what exists.
   List<int> get _eras {
     final out = <int>{
-      for (final n in pathNodesInOrder()) eraForBattle(n.order),
+      for (final n in pathNodesInOrder()) regionForBattle(n.order),
     }.toList()
       ..sort();
     return out;
   }
 
   List<PathNode> _nodesOf(int era) =>
-      [for (final n in pathNodesInOrder()) if (eraForBattle(n.order) == era) n];
+      [for (final n in pathNodesInOrder()) if (regionForBattle(n.order) == era) n];
 
   AreaDef? _areaOf(int era) {
     for (final a in kAreaDefs.values) {
@@ -188,7 +189,7 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
             labelColor: FoE.gold,
             unselectedLabelColor: FoE.textDim,
             indicatorColor: FoE.gold,
-            tabs: [for (final e in eras) Tab(text: 'Ära ${_roman(e)}')],
+            tabs: [for (final e in eras) Tab(text: 'Region ${_roman(e)}')],
           ),
           if (_note != null)
             Padding(
@@ -233,7 +234,7 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
           style: FoE.dim(size: 11),
         ),
         const SizedBox(height: 10),
-        GestureDetector(
+        Pressable(
           onTap: _busy ? null : () => _reroll(era),
           child: Container(
             width: double.infinity,

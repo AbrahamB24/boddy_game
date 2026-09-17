@@ -27,7 +27,21 @@ class CreatureDefsController extends ChangeNotifier {
     if (_loading) return;
     _loading = true;
     try {
-      final abilityRows = await _svc.loadAbilityDefRows();
+      // PARALLEL, not sequential (found 2026-09-12 auditing "loading feels
+      // slow") — five independent rows/tables used to await one after
+      // another, each its own network round trip. Starting every fetch
+      // BEFORE awaiting any of them (an async call runs up to its own first
+      // await the moment it's invoked) turns that into the time of the
+      // slowest one instead of the sum of all five — this is one of the
+      // branches [SettlementController.load] itself awaits, so that sum
+      // landed directly on the loading screen's own duration.
+      final abilityRowsF = _svc.loadAbilityDefRows();
+      final speciesRowsF = _svc.loadSpeciesDefRows();
+      final balanceF = _svc.loadSpeciesBalance();
+      final xpF = _svc.loadXpBalance();
+      final healF = _svc.loadHealBalance();
+
+      final abilityRows = await abilityRowsF;
       kAbilityDefs
         ..clear()
         ..addAll({
@@ -35,7 +49,7 @@ class CreatureDefsController extends ChangeNotifier {
             row['id'] as String: AbilityDef.fromDefRow(row),
         });
 
-      final speciesRows = await _svc.loadSpeciesDefRows();
+      final speciesRows = await speciesRowsF;
       kSpeciesDefs
         ..clear()
         ..addAll({
@@ -44,15 +58,15 @@ class CreatureDefsController extends ChangeNotifier {
         });
 
       // Global species-balance config (per-rarity budgets + attribute caps).
-      final balance = await _svc.loadSpeciesBalance();
+      final balance = await balanceF;
       if (balance != null) kSpeciesBalance = balance;
 
       // Global XP config (curve + passive/training rates + era multiplier).
-      final xp = await _svc.loadXpBalance();
+      final xp = await xpF;
       if (xp != null) kXpBalance = xp;
 
       // Global healing config (treatment time + goods per HP + K.O. factor).
-      final heal = await _svc.loadHealBalance();
+      final heal = await healF;
       if (heal != null) kHealBalance = heal;
     } catch (e) {
       // Tables not migrated yet / offline: keep whatever is in the maps.

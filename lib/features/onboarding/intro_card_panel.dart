@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
+import '../../core/ui/pressable.dart';
 import '../creatures/models/expedition.dart';
 import '../creatures/services/expedition_controller.dart';
 import '../settlement/settlement_controller.dart';
@@ -143,7 +144,7 @@ class IntroCardPanel extends StatelessWidget {
     ),
   );
 
-  Widget _skipButton(BuildContext context) => GestureDetector(
+  Widget _skipButton(BuildContext context) => Pressable(
     onTap: () async {
       final confirmed = await showDialog<bool>(
         context: context,

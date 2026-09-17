@@ -55,8 +55,8 @@ const Set<String> kBundledBuildingArt = {
   'trading_post',
   'caravanserai',
   'hatchery',
-  'lux_fish',
-  'lux_meat',
+  'fish_shop',
+  'butcher_shop',
   'church',
   'marketplace',
 };

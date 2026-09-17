@@ -4,6 +4,7 @@ import 'package:boddygame/features/settlement/data/building_definitions.dart';
 import 'package:boddygame/features/settlement/models/energy_model.dart';
 import 'package:boddygame/features/settlement/models/placed_building.dart';
 import 'package:boddygame/features/settlement/models/resource_model.dart';
+import 'package:boddygame/features/settlement/services/daily_tasks.dart' show dateKeyFor;
 import 'package:boddygame/features/settlement/services/game_engine.dart';
 
 // The construction model reworked on 2026-07-26 (user: "jeder Construction
@@ -52,7 +53,10 @@ void main() {
       return GameEngine.tick(
         EnergyModel(
           settlementId: 's',
-          currentEnergy: 100000, // never dips into the energy floor
+          // Exactly the daily target — 100% rate, neither the floor nor a
+          // bonus, so this test's exact-hour assertions hold.
+          stepsToday: kEnergyFullSteps.round(),
+          stepsDayKey: dateKeyFor(start.toLocal()),
           lastUpdatedAt: start,
         ),
         ResourceModel(settlementId: 's', wood: 0, stone: 0, lastUpdatedAt: start),

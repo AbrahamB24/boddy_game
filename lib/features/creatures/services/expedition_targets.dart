@@ -1,3 +1,6 @@
+import '../../settlement/data/building_definitions.dart' show WorkshopRole;
+import '../../settlement/data/building_effects.dart' show kBuildingEffects;
+import '../../settlement/data/goods_definitions.dart' show kGoodsDefs;
 import '../models/area.dart';
 
 // ── What the Expeditions screen can send a group to ─────────
@@ -48,18 +51,55 @@ class ExpeditionTarget {
 List<AreaDef> unlockedAreas(int dungeonMaxStage) =>
     areasInOrder().where((a) => a.isUnlocked(dungeonMaxStage)).toList();
 
+/// Every resource id at least one of [builtTypeIds] actually produces — the
+/// SAME workshop lookup the settlement's own production reads
+/// ([BuildingEffects.workshops]), so "can this settlement gather X" and "does
+/// X actually produce anything" can never drift apart. Only REAL resource ids
+/// count (wood/stone/gold or a [kGoodsDefs] good) — a workshop's pseudo-output
+/// (construction, crafting, breeding boosts, …) never collides with an actual
+/// [ResourceSpotDef.resource], so no explicit exclusion list is needed.
+Set<String> resourcesProducedBy(Iterable<String> builtTypeIds) => {
+  for (final typeId in builtTypeIds)
+    for (final role in kBuildingEffects[typeId]?.workshops ?? const <WorkshopRole>[])
+      if (role.resource == 'wood' ||
+          role.resource == 'stone' ||
+          role.resource == 'gold' ||
+          kGoodsDefs.containsKey(role.resource))
+        role.resource,
+};
+
 /// Every target in [area]: one per resource spot, then its hunt.
 ///
 /// The hunt comes LAST on purpose — gathering is the everyday trip, hunting the
 /// occasional one, and a list that leads with the rare choice reads as if the
 /// rare one were the default.
-List<ExpeditionTarget> targetsIn(AreaDef area) => [
+///
+/// GOLD IS NEVER A SPOT (user 2026-09-12: "Gold soll nicht mehr abbaubar
+/// sein, sondern nur durch Gebäude farmbar") — filtered here rather than left
+/// to whichever areas happen to have a gold [ResourceSpotDef] in Dev Mode, so
+/// this holds even for area data that already has one, or gets one added
+/// later. The Gold Vault and the era-scoped treasury buildings are the only
+/// source now.
+///
+/// [unlockedResources] (user 2026-09-12: "Die Resources zum sammeln sollen
+/// erst dann hier auftauchen, wenn das entsprechende Gebäude gebaut wurde")
+/// hides a spot until the settlement has built something that produces its
+/// resource — see [resourcesProducedBy]. Null (the default, and every
+/// existing caller/test) means unfiltered, so this stays additive rather
+/// than a breaking change to callers that don't care about this dimension.
+List<ExpeditionTarget> targetsIn(AreaDef area, {Set<String>? unlockedResources}) => [
   for (final s in area.spots)
-    ExpeditionTarget(kind: ExpeditionTargetKind.gather, area: area, spot: s),
+    if (s.resource != 'gold' &&
+        (unlockedResources == null || unlockedResources.contains(s.resource)))
+      ExpeditionTarget(kind: ExpeditionTargetKind.gather, area: area, spot: s),
   ExpeditionTarget(kind: ExpeditionTargetKind.hunt, area: area),
 ];
 
 /// Every target across every unlocked area, in map order.
-List<ExpeditionTarget> expeditionTargets(int dungeonMaxStage) => [
-  for (final a in unlockedAreas(dungeonMaxStage)) ...targetsIn(a),
+List<ExpeditionTarget> expeditionTargets(
+  int dungeonMaxStage, {
+  Set<String>? unlockedResources,
+}) => [
+  for (final a in unlockedAreas(dungeonMaxStage))
+    ...targetsIn(a, unlockedResources: unlockedResources),
 ];

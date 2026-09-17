@@ -9,6 +9,7 @@ import '../../creatures/models/creature_enums.dart';
 import '../../creatures/models/species_def.dart';
 import '../../creatures/services/combat_engine.dart';
 import '../../creatures/services/combat_tuning.dart';
+import '../../../core/ui/pressable.dart';
 
 // Dev Mode ▸ Combat Lab (user request 2026-07-17): tune the attack-vs-defense
 // damage formula with live sliders, and simulate a fight between two monsters
@@ -316,7 +317,7 @@ class _CombatLabScreenState extends State<CombatLabScreen> {
       children: [
         Text(label, style: FoE.label(size: 12).copyWith(color: FoE.gold)),
         const SizedBox(height: 8),
-        GestureDetector(
+        Pressable(
           onTap: () => _pickSpecies(isA),
           child: Container(
             width: double.infinity,
@@ -399,7 +400,7 @@ class _CombatLabScreenState extends State<CombatLabScreen> {
                 separatorBuilder: (_, _) => const SizedBox(height: 6),
                 itemBuilder: (_, i) {
                   final s = all[i];
-                  return GestureDetector(
+                  return Pressable(
                     onTap: () => Navigator.pop(context, s),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -632,7 +633,7 @@ class _CombatLabScreenState extends State<CombatLabScreen> {
         ],
       );
 
-  Widget _stepBtn(String label, VoidCallback onTap) => GestureDetector(
+  Widget _stepBtn(String label, VoidCallback onTap) => Pressable(
     onTap: onTap,
     child: Container(
       width: 38,
@@ -644,7 +645,7 @@ class _CombatLabScreenState extends State<CombatLabScreen> {
   );
 
   Widget _actionBtn(String label, {required bool active, VoidCallback? onTap}) =>
-      GestureDetector(
+      Pressable(
         onTap: onTap,
         child: Opacity(
           opacity: onTap == null ? 0.4 : 1,

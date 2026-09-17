@@ -64,13 +64,23 @@ class PathRewards {
   /// How many territory-expansion points this node unlocks.
   final int expansions;
 
+  /// How many additional hunt-length variants (kCaptureHuntOptions) this
+  /// node unlocks, on top of whatever the Scout Post already grants
+  /// (SettlementController.buildingHuntOptions) — user 2026-09-14: "ich
+  /// muss beim Pfad die längeren Hunts als Belohnung einstellen können".
+  /// Additive across every cleared node, same shape as [expansions] — see
+  /// pathHuntOptionsGranted.
+  final int huntOptions;
+
   const PathRewards({
     this.items = const {},
     this.buildings = const [],
     this.expansions = 0,
+    this.huntOptions = 0,
   });
 
-  bool get isEmpty => items.isEmpty && buildings.isEmpty && expansions == 0;
+  bool get isEmpty =>
+      items.isEmpty && buildings.isEmpty && expansions == 0 && huntOptions == 0;
 
   factory PathRewards.fromJson(Map<String, dynamic> j) => PathRewards(
     // `resources` is deliberately NOT read (see above) — an old row keeps it,
@@ -86,12 +96,14 @@ class PathRewards {
         .map((e) => e as String)
         .toList(),
     expansions: (j['expansions'] as num?)?.toInt() ?? 0,
+    huntOptions: (j['huntOptions'] as num?)?.toInt() ?? 0,
   );
 
   Map<String, dynamic> toJson() => {
     if (items.isNotEmpty) 'items': items,
     if (buildings.isNotEmpty) 'buildings': buildings,
     if (expansions != 0) 'expansions': expansions,
+    if (huntOptions != 0) 'huntOptions': huntOptions,
   };
 }
 
@@ -104,11 +116,15 @@ class PathNode {
   final String name;
 
   /// The region this node belongs to (species pool / danger / boss legendary).
-  /// Null = derive from the era the [order] falls in.
+  /// Null = derive from [regionForBattle].
   final String? areaId;
 
-  /// A boss node clears the region: advances the era and captures the area's
-  /// legendary on first clear.
+  /// A boss node clears the region: unlocks the next one (buildings, costs,
+  /// level cap — all keyed off `SettlementController.dungeonMaxStage`, bumped
+  /// automatically and for free right here) and captures the area's legendary
+  /// on first clear. No manual/paid step follows (user 2026-09-05: eras and
+  /// the paid Castle ascension are gone — clearing the boss is the whole
+  /// thing).
   final bool isBoss;
 
   /// Concrete enemies (species + level). EMPTY = fall back to the old formula
@@ -167,8 +183,8 @@ class PathNode {
 }
 
 /// Item loot the bundled path hands out, keyed by battle number (user
-/// 2026-07-25, item Phase 3). Era-I only and deliberately thin: a handful of
-/// potions and lures spread over the first region, so the bag is never the
+/// 2026-07-25, item Phase 3). Region-I only and deliberately thin: a handful
+/// of potions and lures spread over the first region, so the bag is never the
 /// reason a fight is lost, but the Healing Hut and the Workshop are still what
 /// supply it. Tunable per node in Dev Mode → Path; this is only the seed.
 ///
@@ -181,7 +197,7 @@ const Map<int, Map<String, int>> kNodeItemRewards = {
   10: {'potion': 1},
   13: {'revive_charm': 1}, // the party is 3 by now — one can fall
   16: {'minor_potion': 2, 'catch_lure': 1},
-  19: {'potion': 2, 'revive_charm': 1}, // the era boss: stock up for the wall
+  19: {'potion': 2, 'revive_charm': 1}, // the region boss: stock up for the wall
 };
 
 // ── Was ein Knoten abwirft (user 2026-07-30) ────────────────
@@ -189,46 +205,47 @@ const Map<int, Map<String, int>> kNodeItemRewards = {
 // später der Knoten, desto mehr Ressourcen gibt es."
 //
 // Generated rather than typed out, for the same reason the packages themselves
-// are: there are five eras × 19 battles today and eight eras' worth of content
-// authored, so a hand-written table would be wrong the day an era is added and
-// nobody would notice. Every node can still be overridden in Dev Mode ▸ Path —
-// this is the seed, exactly like the enemies and the building unlocks.
+// are: there are five regions × 19 battles today and eight regions' worth of
+// content authored, so a hand-written table would be wrong the day a region is
+// added and nobody would notice. Every node can still be overridden in Dev
+// Mode ▸ Path — this is the seed, exactly like the enemies and the building
+// unlocks.
 //
 // ── The curve, and what it is anchored to ──
 //
 // TWO axes, because the request has two: "später" and "schwieriger".
 //
-//   WITHIN an era the share rises linearly with the battle number, so the last
-//   regular fight of a region is worth about eighteen times the first. That is
-//   the "later" axis, and it is steep on purpose: a region should feel like it
-//   is paying out more as you get deeper into it.
+//   WITHIN a region the share rises linearly with the battle number, so the
+//   last regular fight of a region is worth about eighteen times the first.
+//   That is the "later" axis, and it is steep on purpose: a region should
+//   feel like it is paying out more as you get deeper into it.
 //
-//   ACROSS eras everything is multiplied by 1.4^(era-1) — the SAME factor the
-//   building roster's costs grow by (_rosterCost in building_definitions). A
-//   reward therefore keeps its purchasing power instead of quietly becoming
-//   pocket change by era IV.
+//   ACROSS regions everything is multiplied by 1.4^(region-1) — the SAME
+//   factor the building roster's costs grow by (_rosterCost in
+//   building_definitions). A reward therefore keeps its purchasing power
+//   instead of quietly becoming pocket change by region IV.
 //
-// The absolute level comes from the balancing doc (§2): era I spends roughly
-// 5 000 wood on buildings and the ascension. The path through an era hands out
-// about 40 % of that — a real supplement, never the main supply, which stays
-// the settlement's own production plus gathering trips.
+// The absolute level comes from the balancing doc (§2): region I spends
+// roughly 5 000 wood on buildings. The path through a region hands out about
+// 40 % of that — a real supplement, never the main supply, which stays the
+// settlement's own production plus gathering trips.
 //
 // THE BOSS is weighted like 2.2 regular fights and is the only node that pays
-// GOLD, plus (from era II) the era's building ELEMENT: the thing you are short
-// of the moment you walk into the next region.
+// GOLD, plus (from region II) the region's building ELEMENT: the thing you
+// are short of the moment you walk into the next region.
 
 /// Weight of the boss fight relative to a regular node's position weight.
 const double _kBossWeight = 40;
 
-/// Wood a weight-1 node pays in era I. Everything else is derived from it:
-/// stone is 0.7 of it, and each era multiplies by [_kEraGrowth].
+/// Wood a weight-1 node pays in region I. Everything else is derived from it:
+/// stone is 0.7 of it, and each region multiplies by [_kRegionGrowth].
 ///
-/// 9.5 × (the 171 weight of era I's regular fights + 40 for the boss) ≈ 2 000
-/// wood over a region — about 40 % of what era I spends.
+/// 9.5 × (the 171 weight of region I's regular fights + 40 for the boss) ≈
+/// 2 000 wood over a region — about 40 % of what region I spends.
 const double _kWoodPerWeight = 9.5;
 
-/// The growth per era, matching _rosterCost's own 1.4.
-const double _kEraGrowth = 1.4;
+/// The growth per region, matching _rosterCost's own 1.4.
+const double _kRegionGrowth = 1.4;
 
 /// Rounds [units] onto the resource's package ladder: the largest rung that
 /// fits, repeated as often as needed.
@@ -254,13 +271,21 @@ MapEntry<String, int>? _asPackage(String resourceId, double units) {
 ///
 /// Everything material a node gives is a package since 2026-07-30 — see
 /// [PathRewards].
+///
+/// Uses the FALLBACK fixed-length region estimate
+/// ([kFallbackBattlesPerRegion]), not the real boss-count-based
+/// [regionForBattle] — this generates a SUGGESTED reward curve (a rough
+/// "how far along the path is this" scale), not an authoritative fact about
+/// the live path, so it doesn't need the live node list to already exist
+/// (it's also called while bootstrapping [kFallbackPathNodes], before that
+/// list exists at all).
 Map<String, int> nodePackRewards(int battle) {
-  final era = eraForBattle(battle);
-  final perEra = kBattlesPerEra;
-  final posInEra = battle - (era - 1) * perEra; // 1..perEra
+  final perRegion = kFallbackBattlesPerRegion;
+  final region = (battle - 1) ~/ perRegion + 1;
+  final posInRegion = battle - (region - 1) * perRegion; // 1..perRegion
   final boss = isBossBattle(battle);
-  final weight = boss ? _kBossWeight : posInEra.toDouble();
-  final scale = math.pow(_kEraGrowth, era - 1).toDouble();
+  final weight = boss ? _kBossWeight : posInRegion.toDouble();
+  final scale = math.pow(_kRegionGrowth, region - 1).toDouble();
 
   final out = <String, int>{};
   void add(MapEntry<String, int>? e) {
@@ -268,13 +293,13 @@ Map<String, int> nodePackRewards(int battle) {
     out[e.key] = (out[e.key] ?? 0) + e.value;
   }
 
-  // The universal build pair: every era's buildings are still paid in these.
+  // The universal build pair: every region's buildings are still paid in these.
   add(_asPackage('wood', _kWoodPerWeight * weight * scale));
   add(_asPackage('stone', _kWoodPerWeight * 0.7 * weight * scale));
 
-  // From era II the region's own RAW is what you are short of — it is gathered
-  // on this era's map spots and eaten by every building here.
-  final raw = rawForEra(era);
+  // From region II the region's own RAW is what you are short of — it is
+  // gathered on this region's map spots and eaten by every building here.
+  final raw = rawForRegion(region);
   if (raw != null) {
     // An order of magnitude below wood: a building needs ~10 of it, not ~120.
     add(_asPackage(raw.id, _kWoodPerWeight * 0.09 * weight * scale));
@@ -282,8 +307,8 @@ Map<String, int> nodePackRewards(int battle) {
 
   // A LUXURY every fifth fight — healing and breeding bill in these, and the
   // rhythm keeps them from becoming the reward you stop reading.
-  if (posInEra % 5 == 0 || boss) {
-    final pool = luxuriesOfEra(era);
+  if (posInRegion % 5 == 0 || boss) {
+    final pool = luxuriesOfRegion(region);
     final luxury = pool.isEmpty
         ? kGoodsDefs['fish']
         : pool[(battle ~/ 5) % pool.length];
@@ -296,10 +321,10 @@ Map<String, int> nodePackRewards(int battle) {
   }
 
   if (boss) {
-    // The only gold on the path, and the era's ELEMENT: the two things a fresh
-    // region asks for before it gives you anything back.
-    add(_asPackage('gold', 60.0 * math.pow(1.8, era - 1).toDouble()));
-    final element = elementForEra(era);
+    // The only gold on the path, and the region's ELEMENT: the two things a
+    // fresh region asks for before it gives you anything back.
+    add(_asPackage('gold', 60.0 * math.pow(1.8, region - 1).toDouble()));
+    final element = elementForRegion(region);
     if (element != null) {
       add(
         _asPackage(element.id, _kWoodPerWeight * 0.12 * _kBossWeight * scale),
@@ -308,6 +333,16 @@ Map<String, int> nodePackRewards(int battle) {
   }
   return out;
 }
+
+/// 1-based: how many boss nodes sit strictly before [order], plus one — the
+/// REAL, authoritative region number once path content exists (user
+/// 2026-09-05: a region is "the stretch between two authored bosses",
+/// however long the path editor made it, not a fixed battle count). Use
+/// this everywhere except while bootstrapping [kFallbackPathNodes] itself
+/// (which can't read [kPathNodes] before it exists — see [nodePackRewards]'s
+/// own doc for why that one stays on the fallback estimate).
+int regionForBattle(int order) =>
+    1 + kPathNodes.values.where((n) => n.order < order && n.isBoss).length;
 
 /// The last battle the bundled path defines (user 2026-07-30: "bitte lösche alle
 /// knoten ab Battle 21").
@@ -323,45 +358,55 @@ Map<String, int> nodePackRewards(int battle) {
 /// bundled content ends, not where the path may.
 const int kLastPathBattle = 20;
 
-/// The bundled fallback path — one node per battle across every defined area
-/// (era), seeded FROM the old formula (overworld_path.dart) + the current unlock
+/// The bundled fallback path — one node per battle up to [kLastPathBattle],
+/// seeded FROM the old formula (overworld_path.dart) + the current unlock
 /// tables so a fresh DB plays exactly like before. Enemies are left empty on
-/// purpose: Phase 2's spawn falls back to the formula for a node with no
-/// authored enemies, so gameplay is identical until the author fills them in.
+/// purpose: the spawn falls back to the formula for a node with no authored
+/// enemies, so gameplay is identical until the author fills them in.
+///
+/// Battle-number-only (user 2026-09-08 emptied [kFallbackAreaDefs] — "verdant
+/// hollow etc kann gelöscht werden" — leaving no area content to segment the
+/// path by). [regionForBattle]-style math ([isBossBattle],
+/// [kFallbackBattlesPerRegion]) already answers "which region/is this a
+/// boss" from the battle number alone, so the campaign no longer needs an
+/// AreaDef to exist at all; [PathNode.areaId] is filled in only when Dev
+/// Mode/DB content happens to define an area at that region's battleStage,
+/// and stays null otherwise (every reader already treats it as optional).
 List<PathNode> _buildFallbackPath() {
   final nodes = <PathNode>[];
-  // One era-segment per defined area, ordered by its battleStage.
-  final areas = kFallbackAreaDefs.toList()
-    ..sort((a, b) => a.battleStage.compareTo(b.battleStage));
-  for (final area in areas) {
-    final era = area.battleStage;
-    final first = (era - 1) * kBattlesPerEra + 1;
-    final last = era * kBattlesPerEra;
-    for (var battle = first; battle <= last; battle++) {
-      if (battle > kLastPathBattle) break;
-      final boss = isBossBattle(battle);
-      nodes.add(
-        PathNode(
-          id: 'node_$battle',
-          order: battle,
-          name: boss ? '${area.name} Boss' : 'Battle $battle',
-          areaId: area.id,
-          isBoss: boss,
-          rewards: PathRewards(
-            items: {
-              // The consumables (potions, lures) and the RESOURCE PACKAGES that
-              // replaced raw loot — both are items, so they travel together.
-              ...?kNodeItemRewards[battle],
-              ...nodePackRewards(battle),
-            },
-            buildings: [
-              for (final e in kBuildingUnlockBattle.entries)
-                if (e.value == battle) e.key,
-            ],
-          ),
-        ),
-      );
+  for (var battle = 1; battle <= kLastPathBattle; battle++) {
+    final region = (battle - 1) ~/ kFallbackBattlesPerRegion + 1;
+    final boss = isBossBattle(battle);
+    AreaDef? area;
+    for (final a in kFallbackAreaDefs) {
+      if (a.battleStage == region) {
+        area = a;
+        break;
+      }
     }
+    nodes.add(
+      PathNode(
+        id: 'node_$battle',
+        order: battle,
+        name: boss
+            ? (area != null ? '${area.name} Boss' : 'Region $region Boss')
+            : 'Battle $battle',
+        areaId: area?.id,
+        isBoss: boss,
+        rewards: PathRewards(
+          items: {
+            // The consumables (potions, lures) and the RESOURCE PACKAGES that
+            // replaced raw loot — both are items, so they travel together.
+            ...?kNodeItemRewards[battle],
+            ...nodePackRewards(battle),
+          },
+          buildings: [
+            for (final e in kBuildingUnlockBattle.entries)
+              if (e.value == battle) e.key,
+          ],
+        ),
+      ),
+    );
   }
   return nodes;
 }
@@ -398,7 +443,7 @@ PathNode? pathNodeAtOrder(int order) {
 /// while the game still locked it behind battle 11. That table is a SEED for
 /// [_buildFallbackPath] now — the live path is the only authority.
 ///
-/// 0 = "as soon as its era is reached", which stays the answer for a building
+/// 0 = "as soon as its region is reached", which stays the answer for a building
 /// no node hands out. A building that is not a reward is simply not gated by
 /// the path; it is never made unreachable.
 int pathBuildingUnlockBattle(String buildingId) {
@@ -451,6 +496,21 @@ int pathExpansionsGranted(int battlesCleared) {
     if (n.order > battlesCleared) continue;
     total += n.rewards.expansions;
     if (n.rewards.buildings.contains('building_plot')) total++;
+  }
+  return total;
+}
+
+/// Total extra hunt-length variants granted by all cleared path nodes — the
+/// path's own contribution to maxHuntOptionCount, on top of whatever the
+/// Scout Post grants (SettlementController.buildingHuntOptions). Same shape
+/// as [pathExpansionsGranted]: a live sum over rewards, not a persisted
+/// counter, since (unlike expansion points) nothing ever spends a hunt-length
+/// unlock.
+int pathHuntOptionsGranted(int battlesCleared) {
+  var total = 0;
+  for (final n in kPathNodes.values) {
+    if (n.order > battlesCleared) continue;
+    total += n.rewards.huntOptions;
   }
   return total;
 }

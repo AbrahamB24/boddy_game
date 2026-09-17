@@ -24,36 +24,42 @@ void main() {
     test('an era deals in everything introduced up to it, cumulatively', () {
       // Cumulative on purpose: a new era ADDS to the economy, it doesn't
       // replace it — fish still matter in era III.
-      expect(goodsForEra(1).map((g) => g.id), ['fish', 'meat']);
-      expect(goodsForEra(5).map((g) => g.id), containsAll(['fish', 'meat']));
+      //
+      // meat moved to region 2 (2026-09-12, down to one luxury per region —
+      // region 1 keeps fish alone, the Butcher Shop becomes region 2's).
+      expect(goodsForRegion(1).map((g) => g.id), ['fish']);
+      expect(goodsForRegion(2).map((g) => g.id), containsAll(['fish', 'meat']));
+      expect(goodsForRegion(5).map((g) => g.id), containsAll(['fish', 'meat']));
     });
 
     test('a settlement earlier than any good still has currency', () {
       // Defensive: era 0 shouldn't leave the sinks with nothing to charge.
-      expect(goodsForEra(0), isNotEmpty);
+      expect(goodsForRegion(0), isNotEmpty);
     });
 
     test('a bill is paid from the goods you HAVE, richest first', () {
       // Spends the surplus, protects the scarce good — what a player would do.
-      expect(goodsCost(10, 1, {'fish': 50, 'meat': 3}), {'fish': 10.0});
-      expect(goodsCost(0, 1, {'fish': 50}), isEmpty);
+      // Region 2, not 1 (2026-09-12): meat moved there, down to one luxury
+      // per region — region 1 alone only ever has fish to bill.
+      expect(goodsCost(10, 2, {'fish': 50, 'meat': 3}), {'fish': 10.0});
+      expect(goodsCost(0, 2, {'fish': 50}), isEmpty);
     });
 
     test('THE deadlock: one missing good must never block a cost', () {
       // The bug this replaced: costs were split evenly and ceiled per good, so
-      // EVERY bill demanded at least 1 of EVERY era good. Era I's goods are
-      // fish AND meat, region 1 has no meat spot, and meat first appears behind
-      // the region-1 boss — so running out of meat stopped healing entirely,
-      // with no way to get more. Exactly the trap the Healing Hut was ungated
-      // to avoid (docs/balancing.md §4b).
-      final cost = goodsCost(10, 1, {'fish': 50, 'meat': 0});
+      // EVERY bill demanded at least 1 of EVERY era good. Region 2's goods are
+      // fish AND meat (2026-09-12: meat moved here), and meat first appears
+      // behind the region-1 boss — so running out of meat stopped healing
+      // entirely, with no way to get more. Exactly the trap the Healing Hut
+      // was ungated to avoid (docs/balancing.md §4b).
+      final cost = goodsCost(10, 2, {'fish': 50, 'meat': 0});
       expect(cost['meat'], isNull, reason: 'must not demand a good you lack');
       expect(cost['fish'], 10.0);
     });
 
     test('it spills onto the next good when the richest runs out', () {
-      expect(goodsCost(10, 1, {'fish': 4, 'meat': 30}), {'meat': 10.0});
-      expect(goodsCost(10, 1, {'fish': 6, 'meat': 4}), {'fish': 6.0, 'meat': 4.0});
+      expect(goodsCost(10, 2, {'fish': 4, 'meat': 30}), {'meat': 10.0});
+      expect(goodsCost(10, 2, {'fish': 6, 'meat': 4}), {'fish': 6.0, 'meat': 4.0});
     });
 
     test('an unaffordable bill still names the shortfall', () {
