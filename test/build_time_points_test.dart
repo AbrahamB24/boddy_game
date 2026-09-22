@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:boddygame/core/tuning/game_tuning.dart';
 import 'package:boddygame/features/settlement/data/building_definitions.dart';
 import 'package:boddygame/features/settlement/models/energy_model.dart';
 import 'package:boddygame/features/settlement/models/placed_building.dart';
 import 'package:boddygame/features/settlement/models/resource_model.dart';
-import 'package:boddygame/features/settlement/services/daily_tasks.dart' show dateKeyFor;
 import 'package:boddygame/features/settlement/services/game_engine.dart';
 
 // The construction model reworked on 2026-07-26 (user: "jeder Construction
@@ -15,6 +15,10 @@ import 'package:boddygame/features/settlement/services/game_engine.dart';
 // build-SECONDS that has to reach an anchor before a building finishes in its
 // authored time. They are a plain count that buys a PERCENTAGE off that time.
 void main() {
+  // The pool drains while a tick runs; these tests want a constant 100 % rate.
+  setUp(() => GameTuning.i.set(Dials.energyFullHours, 1e15));
+  tearDown(() => GameTuning.i.debugClear());
+
   group('buildTimeCut', () {
     test('zero points take nothing off — the authored time IS the time', () {
       expect(buildTimeCut(0), 0);
@@ -53,13 +57,17 @@ void main() {
       return GameEngine.tick(
         EnergyModel(
           settlementId: 's',
-          // Exactly the daily target — 100% rate, neither the floor nor a
-          // bonus, so this test's exact-hour assertions hold.
-          stepsToday: kEnergyFullSteps.round(),
-          stepsDayKey: dateKeyFor(start.toLocal()),
+          // A full pool — 100% rate, neither the floor nor a bonus. (The drain
+          // is switched off in setUp, so the exact-hour assertions hold.)
+          energyPct: 100,
           lastUpdatedAt: start,
         ),
-        ResourceModel(settlementId: 's', wood: 0, stone: 0, lastUpdatedAt: start),
+        ResourceModel(
+          settlementId: 's',
+          wood: 0,
+          stone: 0,
+          lastUpdatedAt: start,
+        ),
         [
           PlacedBuilding(
             id: 'b',
@@ -82,19 +90,18 @@ void main() {
     double builtAfterAnHour(double points) =>
         tickOneHour(points).buildings.single.constructionSecondsBuilt;
 
-    test('an unstaffed site still builds — one build-second per real second',
-        () {
-      // This is the rule that replaced "zero builders = nothing builds", and
-      // it is why the tutorial no longer needs a free build-power handout.
-      expect(builtAfterAnHour(0), closeTo(3600, 1e-6));
-    });
+    test(
+      'an unstaffed site still builds — one build-second per real second',
+      () {
+        // This is the rule that replaced "zero builders = nothing builds", and
+        // it is why the tutorial no longer needs a free build-power handout.
+        expect(builtAfterAnHour(0), closeTo(3600, 1e-6));
+      },
+    );
 
     test('points shorten the wait by exactly the cut they promise', () {
       // −50 % of the time means twice the progress per hour.
-      expect(
-        builtAfterAnHour(kBuildPointsForHalfTime),
-        closeTo(7200, 1e-6),
-      );
+      expect(builtAfterAnHour(kBuildPointsForHalfTime), closeTo(7200, 1e-6));
       expect(
         builtAfterAnHour(kBuildPointsForHalfTime * 4), // −80 % → ×5
         closeTo(18000, 1e-6),

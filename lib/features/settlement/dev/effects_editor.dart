@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
-import '../../../core/theme/foe_theme.dart';
+import 'dev_foe.dart';
 import '../../creatures/models/creature_enums.dart';
 import '../../creatures/models/species_balance.dart';
 import '../../creatures/models/area.dart' show kAreaDefs;
@@ -124,7 +124,12 @@ class _EffectsEditorState extends State<EffectsEditor> {
       'value': 0.0,
     },
     'slots' => {'type': 'slots', 'target': 'build', 'amount': 0},
-    'production' => {'type': 'production', 'key': 'wood', 'value': 0.0, 'era': 1},
+    'production' => {
+      'type': 'production',
+      'key': 'wood',
+      'value': 0.0,
+      'era': 1,
+    },
     'resource' => {'type': 'resource', 'key': 'all', 'value': 0.0, 'era': 1},
     'expedition' => {
       'type': 'expedition',
@@ -213,7 +218,7 @@ class _EffectsEditorState extends State<EffectsEditor> {
             child: Text(
               _fixedShape
                   ? 'Dieses Gebäude hat keine Effekte. Neue kommen in '
-                      'data/building_effects.dart dazu.'
+                        'data/building_effects.dart dazu.'
                   : 'Noch keine Effekte.',
               style: FoE.dim(size: 11),
             ),
@@ -446,11 +451,11 @@ class _EffectRow extends StatelessWidget {
     WorkshopRole.kTradeRate => 'Spread cut per stat point (0.01 = 1 %)',
     WorkshopRole.kExpTravel => 'Travel-time cut per stat point (0.01 = 1 %)',
     WorkshopRole.kExpCarry ||
-    WorkshopRole.kExpGoods =>
-      'Bonus per stat point (0.01 = +1 %)',
+    WorkshopRole.kExpGoods => 'Bonus per stat point (0.01 = +1 %)',
     WorkshopRole.kCrafting => 'Craft seconds per stat point /h',
-    WorkshopRole.kConstruction => 'Build points per stat point (10 = 1 stat → '
-        '10 points)',
+    WorkshopRole.kConstruction =>
+      'Build points per stat point (10 = 1 stat → '
+          '10 points)',
     WorkshopRole.kTraining =>
       'no effect — XP rate lives in Species budget → XP',
     WorkshopRole.kLegendaryBoost =>
@@ -477,7 +482,9 @@ class _EffectRow extends StatelessWidget {
     if (type == 'workshop') {
       final res = (effect['resource'] as String?) ?? '';
       final stat = CreatureStat.fromName(effect['stat'] as String?);
-      final what = workshopRoleName(res) ?? kGoodsDefs[res]?.name ??
+      final what =
+          workshopRoleName(res) ??
+          kGoodsDefs[res]?.name ??
           (res.isEmpty ? 'Resource' : res[0].toUpperCase() + res.substring(1));
       return '👷 $what · ${stat.label}';
     }
@@ -584,14 +591,18 @@ class _EffectRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _numField('Monster slots (level 1)', 'slots',
-                      isInt: true),
+                  child: _numField(
+                    'Monster slots (level 1)',
+                    'slots',
+                    isInt: true,
+                  ),
                 ),
               ],
             ),
           _levelStepsBlock(
             title: 'Monsters per level (extra slots)',
-            help: 'How many work slots this LEVEL adds. Empty/0 = no growth. '
+            help:
+                'How many work slots this LEVEL adds. Empty/0 = no growth. '
                 'Slots = the level-1 count + every step up to this level.',
             mapKey: 'slotSteps',
           ),
@@ -609,12 +620,10 @@ class _EffectRow extends StatelessWidget {
         ];
       case 'slots':
         return [
-          _dropdown(
-            'Target',
-            (effect['target'] as String?) ?? 'build',
-            const ['build', 'queue'],
-            (v) => onChanged({...effect, 'target': v}),
-          ),
+          _dropdown('Target', (effect['target'] as String?) ?? 'build', const [
+            'build',
+            'queue',
+          ], (v) => onChanged({...effect, 'target': v})),
           _numField('Amount', 'amount', isInt: true),
         ];
       case 'production':
@@ -651,12 +660,11 @@ class _EffectRow extends StatelessWidget {
         ];
       case 'expedition':
         return [
-          _shapeDropdown(
-            'Ziel',
-            (effect['key'] as String?) ?? 'carry',
-            const ['carry', 'travel', 'goods'],
-            (v) => onChanged({...effect, 'key': v}),
-          ),
+          _shapeDropdown('Ziel', (effect['key'] as String?) ?? 'carry', const [
+            'carry',
+            'travel',
+            'goods',
+          ], (v) => onChanged({...effect, 'key': v})),
           _numField('Bonus (0.10 = +10 %; travel = Reisezeit-Cut)', 'value'),
           _levelFactorField(),
           _eraField(),
@@ -677,7 +685,8 @@ class _EffectRow extends StatelessWidget {
           // nowhere else.
           _levelStepsBlock(
             title: 'Growth per level (extra expeditions)',
-            help: 'How many more expeditions may run at once FROM this level. '
+            help:
+                'How many more expeditions may run at once FROM this level. '
                 'Empty/0 = no growth. Slots = the start value + every step up '
                 'to this level. Any step at all overrides the factor below.',
           ),
@@ -691,12 +700,10 @@ class _EffectRow extends StatelessWidget {
       // widen a caravan's hold.
       case 'caravan':
         return [
-          _shapeDropdown(
-            'Ziel',
-            (effect['key'] as String?) ?? 'carry',
-            const ['carry', 'travel'],
-            (v) => onChanged({...effect, 'key': v}),
-          ),
+          _shapeDropdown('Ziel', (effect['key'] as String?) ?? 'carry', const [
+            'carry',
+            'travel',
+          ], (v) => onChanged({...effect, 'key': v})),
           _numField('Bonus (0.10 = +10 %; travel = Reisezeit-Cut)', 'value'),
           _levelFactorField(),
           _eraField(),
@@ -710,7 +717,8 @@ class _EffectRow extends StatelessWidget {
           ),
           _levelStepsBlock(
             title: 'Growth per level (extra caravans)',
-            help: 'How many more caravans may be on the road FROM this level. '
+            help:
+                'How many more caravans may be on the road FROM this level. '
                 'Empty/0 = no growth. Slots = the start value + every step up '
                 'to this level. Any step at all overrides the factor below.',
           ),
@@ -727,7 +735,8 @@ class _EffectRow extends StatelessWidget {
           ),
           _levelStepsBlock(
             title: 'Growth per level (extra hunt lengths)',
-            help: 'How many more hunt variants open FROM this level, in order. '
+            help:
+                'How many more hunt variants open FROM this level, in order. '
                 'Empty/0 = no growth. Any step at all overrides the factor '
                 'below.',
           ),
@@ -736,12 +745,10 @@ class _EffectRow extends StatelessWidget {
         ];
       case 'heal':
         return [
-          _shapeDropdown(
-            'Ziel',
-            (effect['key'] as String?) ?? 'speed',
-            const ['speed', 'cost'],
-            (v) => onChanged({...effect, 'key': v}),
-          ),
+          _shapeDropdown('Ziel', (effect['key'] as String?) ?? 'speed', const [
+            'speed',
+            'cost',
+          ], (v) => onChanged({...effect, 'key': v})),
           _numField('Reduktion (0.30 = −30 %, max 90 %)', 'value'),
           _levelFactorField(),
           _eraField(),
@@ -751,7 +758,8 @@ class _EffectRow extends StatelessWidget {
           _numField('Start capacity (seats at level 1)', 'value', isInt: true),
           _levelStepsBlock(
             title: 'Growth per level (extra seats)',
-            help: 'How many seats this LEVEL adds. Empty/0 = no growth. '
+            help:
+                'How many seats this LEVEL adds. Empty/0 = no growth. '
                 'Capacity = the start value + every step up to this level.',
           ),
           _eraField(),
@@ -761,7 +769,8 @@ class _EffectRow extends StatelessWidget {
           _numField('Simultaneous healings (level 1)', 'value', isInt: true),
           _levelStepsBlock(
             title: 'Growth per level (extra healing slots)',
-            help: 'How many more monsters this LEVEL can treat at once. '
+            help:
+                'How many more monsters this LEVEL can treat at once. '
                 'Empty = unlimited everywhere. '
                 'Slots = the start value + every step up to this level.',
           ),
@@ -772,7 +781,8 @@ class _EffectRow extends StatelessWidget {
           _numField('Waiting room (level 1)', 'value', isInt: true),
           _levelStepsBlock(
             title: 'Growth per level (extra waiting places)',
-            help: 'How many more monsters this LEVEL can keep in line for a '
+            help:
+                'How many more monsters this LEVEL can keep in line for a '
                 'treatment. This is NOT the number treated at once (see '
                 'healSlots) — it is how many may wait for one. '
                 'No healQueue effect anywhere = an unlimited line.',
@@ -785,14 +795,11 @@ class _EffectRow extends StatelessWidget {
       case 'hatching':
         final what = type == 'breeding' ? 'matings' : 'incubations';
         return [
-          _numField(
-            'Simultaneous $what (level 1)',
-            'value',
-            isInt: true,
-          ),
+          _numField('Simultaneous $what (level 1)', 'value', isInt: true),
           _levelStepsBlock(
             title: 'Growth per level (extra jobs)',
-            help: 'How many more simultaneous $what this LEVEL adds. '
+            help:
+                'How many more simultaneous $what this LEVEL adds. '
                 'Empty/0 = no growth. '
                 'Capacity = the start value + every step up to this level.',
           ),
@@ -803,7 +810,8 @@ class _EffectRow extends StatelessWidget {
           _numField('Build queue slots (level 1)', 'value', isInt: true),
           _levelStepsBlock(
             title: 'Growth per level (extra queue slots)',
-            help: 'How many queue slots this LEVEL adds. Empty/0 = no growth. '
+            help:
+                'How many queue slots this LEVEL adds. Empty/0 = no growth. '
                 'Slots = the start value + every step up to this level.',
           ),
           _eraField(),
@@ -813,7 +821,8 @@ class _EffectRow extends StatelessWidget {
           _numField('Simultaneous build sites (level 1)', 'value', isInt: true),
           _levelStepsBlock(
             title: 'Growth per level (extra build sites)',
-            help: 'How many build sites this LEVEL adds. Empty/0 = no growth. '
+            help:
+                'How many build sites this LEVEL adds. Empty/0 = no growth. '
                 'Sites = the start value + every step up to this level.',
           ),
           // The settlement's OWN slot is easy to forget and turns every number
@@ -827,7 +836,8 @@ class _EffectRow extends StatelessWidget {
           _numField('Simultaneous crafts (level 1)', 'value', isInt: true),
           _levelStepsBlock(
             title: 'Growth per level (extra benches)',
-            help: 'How many more items this LEVEL can be making at once. '
+            help:
+                'How many more items this LEVEL can be making at once. '
                 'Empty/0 = no growth. '
                 'Benches = the start value + every step up to this level.',
           ),
@@ -838,7 +848,8 @@ class _EffectRow extends StatelessWidget {
           _numField('Waiting room (level 1)', 'value', isInt: true),
           _levelStepsBlock(
             title: 'Growth per level (extra waiting places)',
-            help: 'How many more items may QUEUE for a free bench. This is NOT '
+            help:
+                'How many more items may QUEUE for a free bench. This is NOT '
                 'how many are made at once (see craftSlots) — it is how many '
                 'may line up. No craftQueue effect anywhere = an endless line.',
           ),
@@ -870,7 +881,10 @@ class _EffectRow extends StatelessWidget {
         ];
       case 'trade':
         return [
-          _numField('Better trade rates (percentage points at level 1)', 'value'),
+          _numField(
+            'Better trade rates (percentage points at level 1)',
+            'value',
+          ),
           _levelFactorField(),
           _eraField(),
         ];
@@ -949,10 +963,10 @@ class _EffectRow extends StatelessWidget {
     child: Text(
       base == 0
           ? 'The settlement has no $noun of its own — this effect is the '
-              'whole supply.'
+                'whole supply.'
           : 'ON TOP of the settlement\'s own $base $noun'
-              '${base == 1 ? '' : 's'}: a level granting 1 here means '
-              '${base + 1} in play.',
+                '${base == 1 ? '' : 's'}: a level granting 1 here means '
+                '${base + 1} in play.',
       style: FoE.dim(size: 11).copyWith(color: FoE.gold),
     ),
   );
@@ -1008,12 +1022,15 @@ class _EffectRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8),
       child: TextFormField(
         initialValue: pct,
-        keyboardType:
-            const TextInputType.numberWithOptions(decimal: true, signed: true),
+        keyboardType: const TextInputType.numberWithOptions(
+          decimal: true,
+          signed: true,
+        ),
         style: FoE.label(size: 14).copyWith(color: FoE.parchment),
         decoration: const InputDecoration(
           labelText: 'Growth per level (%)',
-          helperText: 'e.g. 30 = +30 %/level · 0 = stays flat · '
+          helperText:
+              'e.g. 30 = +30 %/level · 0 = stays flat · '
               'empty = the default +50 %',
           helperMaxLines: 2,
           isDense: true,
@@ -1229,8 +1246,9 @@ void debugSetPreviewStat(double v) => _LevelPreview.refStat = v;
 void debugSetPreviewRarity(CreatureRarity r) => _LevelPreview.previewRarity = r;
 
 class _LevelPreviewState extends State<_LevelPreview> {
-  late final TextEditingController _statCtrl =
-      TextEditingController(text: _fmt(_LevelPreview.refStat));
+  late final TextEditingController _statCtrl = TextEditingController(
+    text: _fmt(_LevelPreview.refStat),
+  );
 
   Map<String, dynamic> get effect => widget.effect;
   int get maxLevel => widget.maxLevel;
@@ -1254,62 +1272,78 @@ class _LevelPreviewState extends State<_LevelPreview> {
     final rows = <Widget>[];
     if (type == 'workshop') {
       final role = WorkshopRole.fromJson(effect);
-      rows.add(_chipRow(
-        'Monster-Slots',
-        levels,
-        (l) => '${effectiveSlots(role, l)}',
-      ));
+      rows.add(
+        _chipRow('Monster-Slots', levels, (l) => '${effectiveSlots(role, l)}'),
+      );
       rows.addAll(_workshopRows(role, levels));
       // A post pays XP just for being held, at the settlement-wide work rate
       // (user 2026-07-30) — stated here because this is where the author asks
       // "what does a monster get out of this post?", and the rate itself is not
       // editable on this screen any more. Training says its own rate above.
       if (role.resource != WorkshopRole.kTraining) {
-        rows.add(_chipRow(
-          'XP je Monster (Arbeit)',
-          levels,
-          (l) => '${_fmt(workXpPerHourAt(l))} XP/h',
-        ));
-        rows.add(_note('The same in EVERY building with a work post — one rate '
-            'in Species budget → XP → "Arbeit", not a per-building number.'));
+        rows.add(
+          _chipRow(
+            'XP je Monster (Arbeit)',
+            levels,
+            (l) => '${_fmt(workXpPerHourAt(l))} XP/h',
+          ),
+        );
+        rows.add(
+          _note(
+            'The same in EVERY building with a work post — one rate '
+            'in Species budget → XP → "Arbeit", not a per-building number.',
+          ),
+        );
       }
     } else if (type == 'bonus') {
-      rows.add(_note('Level-independent — this bonus is the same size whatever '
-          'level the building is on.'));
+      rows.add(
+        _note(
+          'Level-independent — this bonus is the same size whatever '
+          'level the building is on.',
+        ),
+      );
     } else if (BuildingEffect.paletteTypes.contains(type)) {
       final e = BuildingEffect.fromJson(effect);
       final scaled = _isLevelScaled(type);
-      rows.add(_chipRow(
-        buildingEffectLabel(type),
-        levels,
-        // EXACTLY the runtime's own reader (buildingEffectValueAt): a flat
-        // type still honours an explicit ladder, and a preview that ignored
-        // one would have shown a Scout Post granting its level-1 slot at every
-        // level (user 2026-07-29).
-        (l) => formatBuildingEffect(
-          type,
-          e.key,
-          scaled || e.levelSteps.isNotEmpty
-              ? e.valueAtLevel(l)
-              : e.value * e.levelScaleExplicit(l),
+      rows.add(
+        _chipRow(
+          buildingEffectLabel(type),
+          levels,
+          // EXACTLY the runtime's own reader (buildingEffectValueAt): a flat
+          // type still honours an explicit ladder, and a preview that ignored
+          // one would have shown a Scout Post granting its level-1 slot at every
+          // level (user 2026-07-29).
+          (l) => formatBuildingEffect(
+            type,
+            e.key,
+            scaled || e.levelSteps.isNotEmpty
+                ? e.valueAtLevel(l)
+                : e.value * e.levelScaleExplicit(l),
+          ),
         ),
-      ));
+      );
       // Passive construction is points, like a builder's stat — so it gets the
       // same "what does that DO" line the staffed role has (user 2026-07-26).
       if (type == 'production' && e.key == WorkshopRole.kConstruction) {
-        rows.add(_chipRow(
-          'Build time',
-          levels,
-          (l) => _timeCut(e.valueAtLevel(l)),
-        ));
+        rows.add(
+          _chipRow('Build time', levels, (l) => _timeCut(e.valueAtLevel(l))),
+        );
         rows.add(_note(_buildCutNote));
       }
       if (!scaled && e.levelFactor == null && e.levelSteps.isEmpty) {
-        rows.add(_note('The game does NOT scale this type per level on its own. '
-            'Enter a "Growth per level (%)" if it should grow.'));
+        rows.add(
+          _note(
+            'The game does NOT scale this type per level on its own. '
+            'Enter a "Growth per level (%)" if it should grow.',
+          ),
+        );
       } else if (scaled && e.levelSteps.isEmpty && e.levelFactor == null) {
-        rows.add(_note('Default curve +50 % per level (level L = value × '
-            '(1 + 0.5·(L−1))) — override with "Growth per level (%)".'));
+        rows.add(
+          _note(
+            'Default curve +50 % per level (level L = value × '
+            '(1 + 0.5·(L−1))) — override with "Growth per level (%)".',
+          ),
+        );
       }
     } else {
       return const SizedBox.shrink();
@@ -1320,12 +1354,17 @@ class _LevelPreviewState extends State<_LevelPreview> {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-        decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.border))),
+        decoration: ShapeDecoration(
+          color: FoE.panelDark,
+          shape: FoE.facet(radius: 8, side: BorderSide(color: FoE.border)),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Effect per level',
-                style: FoE.label(size: 12).copyWith(color: FoE.gold)),
+            Text(
+              'Effect per level',
+              style: FoE.label(size: 12).copyWith(color: FoE.gold),
+            ),
             const SizedBox(height: 6),
             ...rows,
           ],
@@ -1359,22 +1398,29 @@ class _LevelPreviewState extends State<_LevelPreview> {
       levels,
       (l) => '×${_fmt(role.levelScale(l))}',
     );
-    final calc = _note('Maths: slots × ${_fmt(role.mult)} × level factor × '
-        'stat ${_fmt(_refStat)}'
-        '${role.levelFactor == null ? ' · level factor = the default '
-            '+50 %/level, changeable via "Growth per level (%)" '
-            '(0 = flat)' : ''}'
-        ' — adjust the stat above to run your real monsters through it.');
+    final calc = _note(
+      'Maths: slots × ${_fmt(role.mult)} × level factor × '
+      'stat ${_fmt(_refStat)}'
+      '${role.levelFactor == null ? ' · level factor = the default '
+                '+50 %/level, changeable via "Growth per level (%)" '
+                '(0 = flat)' : ''}'
+      ' — adjust the stat above to run your real monsters through it.',
+    );
 
     switch (role.resource) {
       case WorkshopRole.kTraining:
         return [
-          _chipRow('XP per monster', levels,
-              (l) => '${_fmt(kTrainingXpPerHour)} XP/h'),
-          _note('Training slots produce nothing — every stationed monster '
-              'earns XP, whatever its stat and level. That is '
-              '${_fmtHours(xpToNextLevel(10) / kTrainingXpPerHour)} per level '
-              'at Lv 10 (era 1). Rate in Species budget → XP.'),
+          _chipRow(
+            'XP per monster',
+            levels,
+            (l) => '${_fmt(kTrainingXpPerHour)} XP/h',
+          ),
+          _note(
+            'Training slots produce nothing — every stationed monster '
+            'earns XP, whatever its stat and level. That is '
+            '${_fmtHours(xpToNextLevel(10) / kTrainingXpPerHour)} per level '
+            'at Lv 10 (era 1). Rate in Species budget → XP.',
+          ),
         ];
 
       case WorkshopRole.kConstruction:
@@ -1404,21 +1450,30 @@ class _LevelPreviewState extends State<_LevelPreview> {
         final base = mating ? cfg.breedHours : cfg.hatchHours;
         return [
           scale,
-          _chipRow('${mating ? 'Paarungs' : 'Brüt'}-Power (voll besetzt)',
-              levels, (l) => _fmt(power(l)), trailing: _statField(role)),
-          _chipRow('Time saved', levels,
-              (l) => workshopRoleEffect(role.resource, power(l))),
+          _chipRow(
+            '${mating ? 'Paarungs' : 'Brüt'}-Power (voll besetzt)',
+            levels,
+            (l) => _fmt(power(l)),
+            trailing: _statField(role),
+          ),
+          _chipRow(
+            'Time saved',
+            levels,
+            (l) => workshopRoleEffect(role.resource, power(l)),
+          ),
           _chipRow(
             mating ? '💞 Mating time' : '🐣 Incubation time',
             levels,
             (l) => _fmtHours(breedingHours(base, power(l))),
             trailing: _rarityField(),
           ),
-          _note('Base ${_fmtHours(base)} for '
-              '${_LevelPreview.previewRarity.label} — change it in '
-              'Species budget → Breeding. No ceiling, but it flattens: '
-              '−50 % at power ${_fmt(kBreedingK)}, −80 % at '
-              '${_fmt(kBreedingK * 4)}, −90 % at ${_fmt(kBreedingK * 9)}.'),
+          _note(
+            'Base ${_fmtHours(base)} for '
+            '${_LevelPreview.previewRarity.label} — change it in '
+            'Species budget → Breeding. No ceiling, but it flattens: '
+            '−50 % at power ${_fmt(kBreedingK)}, −80 % at '
+            '${_fmt(kBreedingK * 4)}, −90 % at ${_fmt(kBreedingK * 9)}.',
+          ),
           calc,
         ];
 
@@ -1446,12 +1501,16 @@ class _LevelPreviewState extends State<_LevelPreview> {
               // for all of them, which is exactly what the note below says.
               trailing: i == 0 ? _statField(role) : null,
             ),
-          _note('Travel has no cap — each point helps less than the last, and '
-              'a trip never reaches zero. Carry and goods add up plainly.'),
-          _note('Maths per part: slots × ITS dial × level factor × the stat '
-              'above. The preview runs every part at the same reference stat; '
-              'in play each reads its own, so one monster can be strong on one '
-              'count and weak on another.'),
+          _note(
+            'Travel has no cap — each point helps less than the last, and '
+            'a trip never reaches zero. Carry and goods add up plainly.',
+          ),
+          _note(
+            'Maths per part: slots × ITS dial × level factor × the stat '
+            'above. The preview runs every part at the same reference stat; '
+            'in play each reads its own, so one monster can be strong on one '
+            'count and weak on another.',
+          ),
         ];
 
       // The civil-service posts all read the same way: one percentage, its own
@@ -1469,9 +1528,12 @@ class _LevelPreviewState extends State<_LevelPreview> {
         return [
           scale,
           if (storageKeys.isEmpty)
-            _chipRow(workshopRoleName(role.resource)!, levels,
-                (l) => workshopRoleEffect(role.resource, power(l)),
-                trailing: _statField(role))
+            _chipRow(
+              workshopRoleName(role.resource)!,
+              levels,
+              (l) => workshopRoleEffect(role.resource, power(l)),
+              trailing: _statField(role),
+            )
           else
             for (final res in storageKeys)
               _chipRow(
@@ -1480,15 +1542,19 @@ class _LevelPreviewState extends State<_LevelPreview> {
                 (l) => workshopRoleEffect(role.resource, roomFor(res, l)),
                 trailing: res == storageKeys.first ? _statField(role) : null,
               ),
-          _note(storageKeys.isEmpty
-              ? 'This building stores nothing, so the post has no ceiling to '
-                  'raise. Add a storage effect and a dial per resource appears.'
-              : 'Room a FULL house of logisticians adds, on top of each '
-                  'resource\'s own ceiling. Each line has its own dial above.'),
+          _note(
+            storageKeys.isEmpty
+                ? 'This building stores nothing, so the post has no ceiling to '
+                      'raise. Add a storage effect and a dial per resource appears.'
+                : 'Room a FULL house of logisticians adds, on top of each '
+                      'resource\'s own ceiling. Each line has its own dial above.',
+          ),
           // NOT the shared `calc` note: it prints the flat `mult`, which here is
           // only the fallback for a resource without its own dial.
-          _note('Maths per line: slots × that resource\'s dial × level factor × '
-              'stat ${_fmt(_refStat)}.'),
+          _note(
+            'Maths per line: slots × that resource\'s dial × level factor × '
+            'stat ${_fmt(_refStat)}.',
+          ),
         ];
 
       case WorkshopRole.kHealSpeed:
@@ -1498,52 +1564,76 @@ class _LevelPreviewState extends State<_LevelPreview> {
       case WorkshopRole.kExpTravel:
         return [
           scale,
-          _chipRow(workshopRoleName(role.resource)!, levels,
-              (l) => workshopRoleEffect(role.resource, power(l)),
-              trailing: _statField(role)),
+          _chipRow(
+            workshopRoleName(role.resource)!,
+            levels,
+            (l) => workshopRoleEffect(role.resource, power(l)),
+            trailing: _statField(role),
+          ),
           if (role.resource == WorkshopRole.kHealSpeed)
             _note('Capped at −90 %, together with the building\'s heal effect.')
           else if (role.resource == WorkshopRole.kTradeRate)
-            _note('Capped at −${(kMaxTradeDiscount * 100).round()} %, together '
-                'with the building\'s trade effect.')
+            _note(
+              'Capped at −${(kMaxTradeDiscount * 100).round()} %, together '
+              'with the building\'s trade effect.',
+            )
           else if (role.resource == WorkshopRole.kExpTravel ||
               role.resource == WorkshopRole.kCarTravel)
             // No ceiling since 2026-07-29 (user: "expeditions soll kein cap bei
             // 60% haben") — the hyperbola approaches an instant trip without
             // ever arriving, so the note describes the shape, not a wall.
-            _note('No cap — each point helps less than the last, and a trip '
-                'never reaches zero.'),
+            _note(
+              'No cap — each point helps less than the last, and a trip '
+              'never reaches zero.',
+            ),
           calc,
         ];
 
       case WorkshopRole.kCrafting:
         return [
           scale,
-          _chipRow('Craft seconds', levels, (l) => '${_fmt(power(l))}/h',
-              trailing: _statField(role)),
+          _chipRow(
+            'Craft seconds',
+            levels,
+            (l) => '${_fmt(power(l))}/h',
+            trailing: _statField(role),
+          ),
           _chipRow('Craft time', levels, (l) => _timeCut(power(l) / 3600)),
-          _note('−0 % = an item takes exactly the time it is authored with; '
-              'that costs 3600 craft seconds/h.'),
+          _note(
+            '−0 % = an item takes exactly the time it is authored with; '
+            'that costs 3600 craft seconds/h.',
+          ),
           calc,
         ];
 
       case WorkshopRole.kLegendaryBoost:
         return [
-          _chipRow('Produktions-Bonus (voll besetzt)', levels,
-              (l) => '+${_fmt(role.slots * role.mult * 100)} %'),
-          _note('Only LEGENDARIES count, and their stats do not — the bonus '
-              'does NOT grow with the building level (only the slots do). '
-              'It multiplies the building\'s worker-free production.'),
+          _chipRow(
+            'Produktions-Bonus (voll besetzt)',
+            levels,
+            (l) => '+${_fmt(role.slots * role.mult * 100)} %',
+          ),
+          _note(
+            'Only LEGENDARIES count, and their stats do not — the bonus '
+            'does NOT grow with the building level (only the slots do). '
+            'It multiplies the building\'s worker-free production.',
+          ),
         ];
 
       default:
         return [
           scale,
-          _chipRow('Per stat point', levels,
-              (l) => '${_fmt(role.mult * role.levelScale(l))}/h'),
-          _chipRow('Fully staffed at stat', levels,
-              (l) => '${_fmt(power(l))} ${role.resource}/h',
-              trailing: _statField(role)),
+          _chipRow(
+            'Per stat point',
+            levels,
+            (l) => '${_fmt(role.mult * role.levelScale(l))}/h',
+          ),
+          _chipRow(
+            'Fully staffed at stat',
+            levels,
+            (l) => '${_fmt(power(l))} ${role.resource}/h',
+            trailing: _statField(role),
+          ),
           calc,
         ];
     }
@@ -1637,35 +1727,37 @@ class _LevelPreviewState extends State<_LevelPreview> {
     List<int> levels,
     String Function(int) value, {
     Widget? trailing,
-  }) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (trailing == null)
-              Text(label, style: FoE.dim(size: 10))
-            else
-              Row(
-                children: [
-                  Text(label, style: FoE.dim(size: 10)),
-                  const SizedBox(width: 6),
-                  trailing,
-                ],
-              ),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [for (final l in levels) _chip(l, value(l))],
-            ),
-          ],
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (trailing == null)
+          Text(label, style: FoE.dim(size: 10))
+        else
+          Row(
+            children: [
+              Text(label, style: FoE.dim(size: 10)),
+              const SizedBox(width: 6),
+              trailing,
+            ],
+          ),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [for (final l in levels) _chip(l, value(l))],
         ),
-      );
+      ],
+    ),
+  );
 
   Widget _chip(int level, String value) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-    decoration: ShapeDecoration(color: FoE.panelMid, shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.border))),
+    decoration: ShapeDecoration(
+      color: FoE.panelMid,
+      shape: FoE.facet(radius: 6, side: BorderSide(color: FoE.border)),
+    ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [

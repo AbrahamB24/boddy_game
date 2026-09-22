@@ -57,23 +57,25 @@ class FoE {
   // interpolated between them, same spacing the old graphite ramp used. The
   // creature ELEMENT colours (fire/water/plant/…) are NOT part of this and
   // stay as they are: they encode game meaning, not chrome.
-  static const bg = Color(0xFF11395D); // the page
+  // BLUE IS GONE (user 2026-09-22: "Alle blauen Reste im UI ersetzen. Bsp HP
+  // Balken"). The navy/teal surfaces and the cyan accent are now the kit's own
+  // wood browns, gold and green, so any screen still painted from these tokens
+  // (battle chrome, the dev tools) matches the cream kit around it. Names and
+  // roles are unchanged; only the values moved. Element colours (water, ice) and
+  // the energy bar's 100–125 % cyan stay: they carry meaning.
+  static const bg = Color(0xFF2A1A0C); // the page
 
-  /// Backdrops for a TILE, in the two states it has — kept as image assets for
-  /// the few places that still paint a tile; most surfaces use the parchment
-  /// steps below now.
-  static const tileActive = 'assets/images/tile_active.jpg';
-  static const tileInactive = 'assets/images/tile_inactive.jpg';
   static const panelDark = Color(
-    0xFF0D476A,
+    0xFF3A2513,
   ); // recessed / bars — bg→panelMid, closer to bg
-  static const panelMid = Color(0xFF036989); // the card surface
-  static const panelLight = Color(0xFF5999AF); // raised / active
+  static const panelMid = Color(0xFF5C3B22); // the card surface
+
+  static const panelLight = Color(0xFF8A5C33); // raised / active
   static const border = Color(0x33EDE3CB); // hairline
 
   /// Dim accent hairline — the accent taken down, so an accented edge belongs
   /// to the accent rather than becoming a new colour.
-  static const borderGold = Color(0x664CC9F0);
+  static const borderGold = Color(0x66F5B83A);
 
   // Cyan-blue (2026-09-05, third pass) — coral turned out to be the wrong
   // call too: it read fine as a swatch but clashed as an actual highlight
@@ -85,9 +87,9 @@ class FoE {
   // hue family instead of a warm one, but distinct in saturation/lightness
   // rather than in hue. [danger] is unaffected either time — still its own
   // red-orange, for alerts only.
-  static const gold = Color(0xFF4CC9F0);
-  static const goldBright = Color(0xFF70D4F3); // lit version of gold
-  static const accentBlue = Color(0xFF4CC9F0); // cyan-blue — secondary/actions
+  static const gold = Color(0xFFF5B83A); // the kit's gold (was cyan-blue)
+  static const goldBright = Color(0xFFFFD46B); // lit version of gold
+  static const accentBlue = Color(0xFFF5B83A); // name kept; it is gold now
 
   /// Primary body text. Named `parchment` from the old fantasy palette, then the
   /// ink of the light theme, and now the cream that ink was written on — the
@@ -97,8 +99,8 @@ class FoE {
   static const textDim = Color(0xFFA79B82); // faded — secondary text
   static const textMuted = Color(0xFF7A7263); // dimmer — disabled
 
-  static const mapBase = Color(0xFF0D476A); // == panelDark
-  static const mapAlt = Color(0xFF08587A); // panelDark→panelMid midpoint
+  static const mapBase = Color(0xFF3A2513); // == panelDark
+  static const mapAlt = Color(0xFF4A2F1A); // panelDark→panelMid midpoint
   static const mapGrid = Color(0x14FFFFFF);
   // Coral now (user 2026-09-06: "alle Warnhinweise sollen in der Farbe
   // Koralle sein"), not its own red-orange — every alert in the app reads
@@ -108,8 +110,9 @@ class FoE {
   // can't forward-reference.
   static const danger = Color(0xFFFD9B6C);
 
-  /// "Good" — full HP, gains, ready states: the accent's own cyan-blue.
-  static const positive = Color(0xFF4CC9F0);
+  /// "Good" — full HP, gains, ready states: green (was the accent's cyan-blue).
+  /// The same green the type chart's bonus arrows use.
+  static const positive = Color(0xFF3BAE78);
 
   /// A resource sitting AT or OVER its storage cap — not [positive]/[gold] (a
   /// ready/active state): a full store is neither, it is a ceiling worth
@@ -203,9 +206,10 @@ class FoE {
   /// the old layout had 20-24px emoji buttons that are a coin flip on glass.
   static const double tapTarget = 48;
 
-  /// The design viewport. Phone-first: on a wide screen the app is framed to
-  /// this width rather than stretched (see PhoneFrame in main.dart), so what
-  /// you see while testing in a browser is what ships.
+  /// The design viewport's SHORT axis — a landscape phone's height (2026-09-18:
+  /// the app-wide switch to landscape). On a bigger screen the app is framed
+  /// to this instead of stretched (see PhoneFrame), so what you see while
+  /// testing in a browser is what ships.
   static const double phoneMaxWidth = 430;
 
   // ── Gradients ─────────────────────────────────────────────
@@ -290,36 +294,44 @@ class FoE {
   // survive the merge into Text's actual style. Setting it here, once, wins
   // that merge everywhere these are used instead of it being one more thing
   // every call site has to remember to override for itself.
-  static TextStyle title({double size = 14}) => GoogleFonts.outfit(
-    color: parchment,
-    fontSize: size + 2,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -0.2,
-    height: 1.2,
-    decoration: TextDecoration.none,
-  );
+  static final Map<double, TextStyle> _titleCache = {};
+  static TextStyle title({double size = 14}) =>
+      _titleCache[size] ??= GoogleFonts.outfit(
+        color: parchment,
+        fontSize: size + 2,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
+        height: 1.2,
+        decoration: TextDecoration.none,
+      );
 
-  static TextStyle value({double size = 13}) => GoogleFonts.outfit(
-    color: parchment, // ink on the parchment (was white on the dark theme)
-    fontSize: size + 1,
-    fontWeight: FontWeight.w600,
-    height: 1.25,
-    decoration: TextDecoration.none,
-  );
+  static final Map<double, TextStyle> _valueCache = {};
+  static TextStyle value({double size = 13}) =>
+      _valueCache[size] ??= GoogleFonts.outfit(
+        color: parchment, // ink on the parchment (was white on the dark theme)
+        fontSize: size + 1,
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+        decoration: TextDecoration.none,
+      );
 
-  static TextStyle label({double size = 11}) => GoogleFonts.outfit(
-    color: parchment,
-    fontSize: size + 1,
-    fontWeight: FontWeight.w400,
-    height: 1.4,
-    decoration: TextDecoration.none,
-  );
+  static final Map<double, TextStyle> _labelCache = {};
+  static TextStyle label({double size = 11}) =>
+      _labelCache[size] ??= GoogleFonts.outfit(
+        color: parchment,
+        fontSize: size + 1,
+        fontWeight: FontWeight.w400,
+        height: 1.4,
+        decoration: TextDecoration.none,
+      );
 
-  static TextStyle dim({double size = 10}) => GoogleFonts.outfit(
-    color: textDim,
-    fontSize: size + 1,
-    fontWeight: FontWeight.w400,
-    height: 1.35,
-    decoration: TextDecoration.none,
-  );
+  static final Map<double, TextStyle> _dimCache = {};
+  static TextStyle dim({double size = 10}) =>
+      _dimCache[size] ??= GoogleFonts.outfit(
+        color: textDim,
+        fontSize: size + 1,
+        fontWeight: FontWeight.w400,
+        height: 1.35,
+        decoration: TextDecoration.none,
+      );
 }

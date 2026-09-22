@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
-import '../common/widgets/app_back_button.dart';
-import '../common/widgets/parchment_kit.dart';
-import '../settlement/widgets/scroll_paper.dart'
-    show kParchmentLight, kParchmentMid;
+import '../../core/ui/pressable.dart';
 import '../onboarding/intro_flow.dart';
 import '../settlement/settlement_controller.dart';
+import '../social/widgets/social_kit.dart';
 import 'battle_screen.dart';
 import 'collection_screen.dart';
 import 'models/combatant.dart';
@@ -18,9 +17,9 @@ import 'services/capture_math.dart';
 import 'services/combat_engine.dart';
 import 'services/expedition_controller.dart';
 import 'services/creatures_controller.dart';
-import 'widgets/creature_sprite.dart' show decodeWidthFor;
+import 'widgets/creature_card.dart';
+import 'widgets/versus_kit.dart';
 import 'widgets/wild_preview.dart';
-import '../../core/ui/pressable.dart';
 
 // The catch moment (user design, 2026-07-15; QTE moved INTO the battle
 // 2026-07-18; hunts rebuilt as ONE continuous multi-wild battle 2026-09-11):
@@ -80,18 +79,18 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
       if (species == null) continue;
       wilds.add(
         Combatant.fromSpecies(
-          species,
-          level: _level,
-          id: 'wild$i',
-          // Jumpstart: the intro's first battle is fought by a lone starter,
-          // so every wild is weakened while the chain runs. The inline QTE
-          // is NOT eased — but a missed tap during the tutorial restarts the
-          // ring instead of burning the attempt (BattleScreen.guaranteedCatch),
-          // so the catch stays a skill check the player cannot fail out of.
-          statScale: SettlementController().jumpstartActive
-              ? kJumpstartEnemyStatMult
-              : kCaptureWildStatMult,
-        )
+            species,
+            level: _level,
+            id: 'wild$i',
+            // Jumpstart: the intro's first battle is fought by a lone starter,
+            // so every wild is weakened while the chain runs. The inline QTE
+            // is NOT eased — but a missed tap during the tutorial restarts the
+            // ring instead of burning the attempt (BattleScreen.guaranteedCatch),
+            // so the catch stays a skill check the player cannot fail out of.
+            statScale: SettlementController().jumpstartActive
+                ? kJumpstartEnemyStatMult
+                : kCaptureWildStatMult,
+          )
           // Tutorial promise: "it cannot faint" — overkill (which normally
           // forfeits that wild's own catch) is impossible, it floors at 1 HP.
           ..cannotBeKoed = _introRun,
@@ -206,148 +205,119 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
   /// battle can catch more than housing has room for in one go), so this
   /// retries all of them, not just one.
   Future<void> _goReleaseAndReturn() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const CollectionScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const CollectionScreen()));
     if (!mounted) return;
     final ctrl = ExpeditionController();
     final stillPending = <Combatant>[];
     for (final wild in _pendingWilds) {
-      final kept =
-          CreaturesController().housingFull ? null : await ctrl.claimPendingWild(wild);
+      final kept = CreaturesController().housingFull
+          ? null
+          : await ctrl.claimPendingWild(wild);
       if (kept == null) stillPending.add(wild);
     }
     if (mounted) setState(() => _pendingWilds = stillPending);
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    // The same sheet as everything else (user 2026-07-27) — the encounter is
-    // a page you are taken to, not a place of its own.
-    backgroundColor: kParchmentMid,
-    body: DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [kParchmentLight, kParchmentMid],
-        ),
-      ),
-      child: SafeArea(
-        // A back button was simply missing (user 2026-09-14) — nothing
-        // stopped a player who wanted to leave the fight for later (the
-        // hunt already landed; the encounter is deferrable, see the class
-        // doc above) without going through it right now. Positioned over
-        // everything rather than folded into [_body]'s own Column so it
-        // reads the same regardless of phase, same as every other screen's
-        // corner back arrow.
-        child: Stack(
-          children: [
-            _wilds.isEmpty ? _goneView() : _body(),
-            Positioned(
-              top: 8,
-              left: 8,
-              child: AppBackButton(onTap: () => Navigator.of(context).pop()),
+  Widget build(BuildContext context) => MenuScaffold(
+    title: 'Encounter',
+    child: _wilds.isEmpty ? _goneView() : _body(),
+  );
+
+  /// The encounter as one cream card (user 2026-09-20, laid out like the other
+  /// duel pages): what you found as a FAN of monster cards — a tap on one shows
+  /// it in full — then what to do about it, or how it went.
+  Widget _body() => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: creamCard(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+      child: Column(
+        children: [
+          Text(
+            _wilds.length == 1 ? 'A wild encounter!' : 'A wild hunt!',
+            style: FoE.title(size: 17).copyWith(color: kBoxInk),
+          ),
+          Text(
+            _wilds.length == 1
+                ? '1 find, Lv $_level'
+                : '${_wilds.length} finds, Lv $_level',
+            style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+          ),
+          Expanded(child: Center(child: _finds())),
+          Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: _footer(),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     ),
   );
 
-  Widget _body() => Column(
-    children: [
-      const SizedBox(height: 18),
-      Text(
-        _wilds.length == 1 ? 'A wild encounter!' : 'A wild hunt!',
-        style: FoE.title(size: 16),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        _wilds.length == 1
-            ? '1 find, Lv $_level'
-            : '${_wilds.length} finds, Lv $_level',
-        style: FoE.dim(size: 11),
-      ),
-      Expanded(child: Center(child: _preview())),
-      Padding(
-        padding: const EdgeInsets.all(16),
-        child: _footer(),
-      ),
-    ],
-  );
-
-  /// A row of small sprites standing in for "what this hunt has fielded" —
-  /// there's no single "the" find any more once a hunt can bring back
-  /// several at once (2026-09-11), so this replaces the old one big
-  /// species portrait.
-  Widget _preview() {
-    final shown = _wilds.take(9).toList();
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 10,
-      runSpacing: 10,
+  Widget _finds() {
+    final shown = _wilds.take(6).toList();
+    final more = _wilds.length - shown.length;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        for (final w in shown) _thumb(w),
-        if (_wilds.length > shown.length)
-          SizedBox(
-            width: 56,
-            height: 56,
-            child: Center(
-              child: Text(
-                '+${_wilds.length - shown.length}',
-                style: FoE.dim(size: 13),
-              ),
+        VersusFan(
+          cards: [for (final w in shown) _card(w)],
+          tileW: shown.length <= 4 ? 78 : 66,
+          tileH: shown.length <= 4 ? 130 : 110,
+        ),
+        if (more > 0)
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Text(
+              '+$more more',
+              style: FoE.dim(size: 13).copyWith(color: kBoxInkSoft),
             ),
           ),
       ],
     );
   }
 
-  Widget _thumb(Combatant c) {
-    final species = c.speciesId == null ? null : kSpeciesDefs[c.speciesId];
-    final url = species?.stageAt(0).imageUrl;
-    // Never caught before (user 2026-09-14) — same "discovered" test the
-    // Bestiary and the detail screen's own preview badge use, shown right
-    // here too so a new species stands out before you even open the
-    // preview to check.
+  /// One find: its monster card, with a NEW flag when no monster of that species
+  /// is owned yet.
+  Widget _card(Combatant c) {
     final isNew =
         c.speciesId != null &&
         !CreaturesController().creatures.any(
           (owned) => owned.speciesId == c.speciesId,
         );
-    final art = Stack(
+    final card = Stack(
       clipBehavior: Clip.none,
       children: [
-        SizedBox(
-          width: 56,
-          height: 56,
-          child: url == null
-              ? Icon(Icons.pets, color: species?.rarity.color ?? kAccent, size: 32)
-              : Image.network(
-                  url,
-                  filterQuality: FilterQuality.none,
-                  fit: BoxFit.contain,
-                  cacheWidth: decodeWidthFor(context, 56),
-                  errorBuilder: (_, _, _) =>
-                      Icon(Icons.pets, color: species?.rarity.color, size: 32),
-                ),
+        Positioned.fill(
+          child: CreatureCard(
+            creature: enemyInstanceOf(c),
+            showHp: false,
+            onTap: _phase == _Phase.intro
+                ? () => openWildPreview(context, c)
+                : null,
+          ),
         ),
         if (isNew)
           Positioned(
-            top: -4,
-            right: -4,
+            top: 2,
+            right: -2,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: ShapeDecoration(
-                color: FoE.goldBright,
-                shape: FoE.facet(radius: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: CreamPalette.gold,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: CreamPalette.goldDeep),
               ),
-              child: Text(
+              child: const Text(
                 'NEW',
-                style: FoE.dim(size: 7).copyWith(
-                  color: kInk,
+                style: TextStyle(
+                  fontSize: 8.5,
                   fontWeight: FontWeight.w800,
+                  color: kBoxInk,
                   letterSpacing: 0.3,
                 ),
               ),
@@ -355,18 +325,7 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
           ),
       ],
     );
-    // Tap to preview THIS find's own stats before deciding whether it's
-    // worth fighting for (user 2026-09-14: "ich will den Monsterdetailscreen
-    // über den Catchmodus öffnen können für genau dieses noch nicht
-    // gefangene Monster") — only while the battle hasn't started yet; once
-    // it's over these thumbnails show what was caught/lost, not a find still
-    // worth sizing up.
-    if (_phase != _Phase.intro) return art;
-    return Pressable(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => openWildPreview(context, c),
-      child: art,
-    );
+    return card;
   }
 
   Widget _footer() {
@@ -382,9 +341,9 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
               'goes on, same as attacking. Catch what you want, fight the '
               'rest down for XP.',
               textAlign: TextAlign.center,
-              style: FoE.dim(size: 12),
+              style: FoE.dim(size: 11.5).copyWith(color: kBoxInkSoft),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             _bigBtn('⚔️ Face them!', _startBattle),
           ],
         );
@@ -394,7 +353,7 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _summaryLine(),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 '🏠 ${_pendingWilds.length} caught, but your settlement is '
                 'full. Release monsters to make room and keep '
@@ -402,17 +361,17 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
                 '${_pendingWilds.length > 1 ? 'they stay' : 'it stays'} '
                 'behind.',
                 textAlign: TextAlign.center,
-                style: FoE.dim(size: 12).copyWith(color: kAccent),
+                style: FoE.dim(size: 11.5).copyWith(color: CreamPalette.warn),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               _bigBtn('🐾 Free a slot (Monsters)', _goReleaseAndReturn),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Pressable(
                 onTap: () => Navigator.of(context).pop(),
                 child: Text(
                   'Leave ${_pendingWilds.length > 1 ? 'them' : 'it'} behind '
                   '· Head home',
-                  style: FoE.dim(size: 12).copyWith(color: kInkFaint),
+                  style: FoE.dim(size: 12).copyWith(color: kBoxInkFaint),
                 ),
               ),
             ],
@@ -422,21 +381,19 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _summaryLine(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             _bigBtn('Head home', () => Navigator.of(context).pop()),
           ],
         );
     }
   }
 
-  /// The done-phase headline: caught / defeated / lost, plainly (user
-  /// 2026-09-11 — no special framing needed for a "good" kill).
   Widget _summaryLine() {
     if (_doneNote != null) {
       return Text(
         _doneNote!,
         textAlign: TextAlign.center,
-        style: FoE.title(size: 15).copyWith(color: const Color(0xFF9B3B22)),
+        style: FoE.title(size: 15).copyWith(color: CreamPalette.warn),
       );
     }
     final parts = <String>[
@@ -449,33 +406,41 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
       textAlign: TextAlign.center,
       style: FoE.title(
         size: 15,
-      ).copyWith(color: _caughtCount > 0 ? kParchmentGo : kInk),
+      ).copyWith(color: _caughtCount > 0 ? CreamPalette.better : kBoxInk),
     );
   }
 
-  /// Shown only when NONE of the hunt's finds resolve to a real species any
-  /// more (every one removed from Dev Mode) — the whole trip is forfeited
-  /// immediately rather than opening onto an empty fight.
   Widget _goneView() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('The trail went cold…', style: FoE.title(size: 15)),
-          const SizedBox(height: 8),
-          Text(
-            'Whatever left these tracks is gone (species removed).',
-            textAlign: TextAlign.center,
-            style: FoE.dim(size: 12),
-          ),
-          const SizedBox(height: 14),
-          _bigBtn('Head home', () => Navigator.of(context).pop()),
-        ],
+    child: SizedBox(
+      width: 380,
+      child: creamCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'The trail went cold…',
+              style: FoE.title(size: 15).copyWith(color: kBoxInk),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Whatever left these tracks is gone (species removed).',
+              textAlign: TextAlign.center,
+              style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+            ),
+            const SizedBox(height: 14),
+            _bigBtn('Head home', () => Navigator.of(context).pop()),
+          ],
+        ),
       ),
     ),
   );
 
-  Widget _bigBtn(String label, VoidCallback onTap) =>
-      ParchmentButton(label: label, primary: true, onTap: onTap);
+  Widget _bigBtn(String label, VoidCallback onTap) => SocialGoldButton(
+    label,
+    height: 40,
+    fontSize: 14,
+    padding: const EdgeInsets.symmetric(horizontal: 32),
+    onTap: onTap,
+  );
 }

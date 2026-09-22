@@ -40,10 +40,7 @@ class TapButton extends StatelessWidget {
         ? CircleBorder(side: side)
         : FoE.facet(radius: radius ?? FoE.radius, side: side);
     return DecoratedBox(
-      decoration: ShapeDecoration(
-        color: background,
-        shape: shape,
-      ),
+      decoration: ShapeDecoration(color: background, shape: shape),
       child: Material(
         color: Colors.transparent,
         shape: shape,
@@ -53,7 +50,10 @@ class TapButton extends StatelessWidget {
           child: SizedBox(
             width: width,
             height: height,
-            child: Padding(padding: padding, child: Center(child: child)),
+            child: Padding(
+              padding: padding,
+              child: Center(child: child),
+            ),
           ),
         ),
       ),

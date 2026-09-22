@@ -84,10 +84,9 @@ const double kMaxMapZoom = 1.0;
 ///     schieben, zoomt es hinein").
 ///
 /// A uniform scale reports itself, whatever it is.
-Matrix4 mapTransform(double scale, double tx, double ty) =>
-    Matrix4.identity()
-      ..translateByDouble(tx, ty, 0, 1)
-      ..scaleByDouble(scale, scale, scale, 1);
+Matrix4 mapTransform(double scale, double tx, double ty) => Matrix4.identity()
+  ..translateByDouble(tx, ty, 0, 1)
+  ..scaleByDouble(scale, scale, scale, 1);
 
 /// The furthest the map may be zoomed OUT in a [viewport]: the scale at which
 /// the map already covers it (user 2026-08-09: "Es darf niemals aus dem
@@ -146,10 +145,8 @@ Size get isoCanvasSize => Size(
 );
 
 /// Grid CORNER (gx, gy) → its point on screen.
-Offset gridToScreen(double gx, double gy) => Offset(
-  (gx - gy) * kIsoTileW / 2 + isoOriginX,
-  (gx + gy) * kIsoTileH / 2,
-);
+Offset gridToScreen(double gx, double gy) =>
+    Offset((gx - gy) * kIsoTileW / 2 + isoOriginX, (gx + gy) * kIsoTileH / 2);
 
 /// Screen point → the CELL under it, clamped to the map.
 ///
@@ -238,8 +235,7 @@ Path footprintPathLocal(int w, int h) {
 List<(Offset, Offset)> footprintSeams(int w, int h) {
   final a = kIsoTileW / 2;
   final b = kIsoTileH / 2;
-  Offset corner(int gx, int gy) =>
-      Offset((h + gx - gy) * a, (gx + gy) * b);
+  Offset corner(int gx, int gy) => Offset((h + gx - gy) * a, (gx + gy) * b);
   return [
     for (var i = 1; i < w; i++) (corner(i, 0), corner(i, h)),
     for (var j = 1; j < h; j++) (corner(0, j), corner(w, j)),
@@ -395,8 +391,16 @@ Rect isoArtBounds(
 ///
 /// Ties go to the one further east, so the order is total and therefore stable:
 /// an unstable sort makes two neighbours swap between frames and flicker.
-int isoDrawOrder(int ax, int ay, int aw, int ah, int bx, int by, int bw,
-    int bh) {
+int isoDrawOrder(
+  int ax,
+  int ay,
+  int aw,
+  int ah,
+  int bx,
+  int by,
+  int bw,
+  int bh,
+) {
   final aBehind = ax + aw <= bx || ay + ah <= by;
   final bBehind = bx + bw <= ax || by + bh <= ay;
   if (aBehind && !bBehind) return -1;

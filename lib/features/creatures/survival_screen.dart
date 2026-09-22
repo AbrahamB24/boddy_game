@@ -2,18 +2,20 @@ import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
-import '../common/widgets/parchment_kit.dart';
+import '../../core/ui/pressable.dart';
+import '../common/widgets/recess_bar.dart';
+import '../social/widgets/social_kit.dart';
 import '../settlement/bag_screen.dart' show openBag;
 import '../settlement/settlement_controller.dart';
-import '../settlement/widgets/scroll_paper.dart'
-    show kParchmentLight, kParchmentMid;
 import 'battle_prep_screen.dart';
 import 'battle_screen.dart';
 import 'models/creature_instance.dart';
 import 'services/combat_engine.dart' show CombatOutcome;
 import 'services/overworld_path.dart' show kMaxPartySize;
 import 'services/survival_run.dart';
+import 'widgets/creature_family.dart' show CreatureAvatar;
 
 // ── Survival Mode (user 2026-09-06) ─────────────────────────────────────────
 // "ich hätte gerne den survival modus, aber mit 6 Monster" — pick a full
@@ -82,6 +84,7 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
           // floor rerolls its own, so it promised more than it told (user
           // 2026-09-08: "beim survival mode brauche ich 'you face' nicht").
           showEnemyPreview: false,
+          confirmLabel: 'Start run',
         ),
       ),
     );
@@ -152,107 +155,231 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    // Same sheet every other full-screen encounter stands on (user
-    // 2026-07-27) — see capture_encounter_screen.dart's own doc comment.
-    backgroundColor: kParchmentMid,
-    body: DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [kParchmentLight, kParchmentMid],
+  Widget build(BuildContext context) => MenuScaffold(
+    title: 'Survival',
+    trailing: Text(
+      'Floor $_floor · best ${SettlementController().survivalBestFloor}',
+      style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
+    ),
+    child: switch (_phase) {
+      _Phase.loading => const SizedBox.shrink(),
+      _Phase.betweenFloors => _betweenFloorsView(),
+      _Phase.over => _resultsView(),
+    },
+  );
+
+  /// Between two floors (user 2026-09-20, laid out like the other duel pages): the
+  /// team's health on the left as two columns of rows — a K.O. faded — and on the
+  /// right what you can do: open the Bag (items ARE allowed between floors),
+  /// go on, or retreat and bank what the run has earned.
+  Widget _betweenFloorsView() {
+    final next = _floor + 1;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: creamCard(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    isSurvivalBossFloor(_floor)
+                        ? '👑 Floor $_floor cleared — a boss fell!'
+                        : 'Floor $_floor cleared',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: CreamPalette.better,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 6,
+                        children: [for (final c in _team) _memberRow(c)],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 282,
+            child: creamCard(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'FLOOR $next NEXT',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.9,
+                      color: kBoxAccent,
+                    ),
+                  ),
+                  if (isSurvivalBossFloor(next))
+                    Text(
+                      'The next floor holds a boss.',
+                      textAlign: TextAlign.center,
+                      style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+                    ),
+                  const SizedBox(height: 12),
+                  SocialTileButton(
+                    'Bag',
+                    icon: Icons.backpack,
+                    height: 38,
+                    onTap: _openBag,
+                  ),
+                  const SizedBox(height: 10),
+                  SocialGoldButton(
+                    'Continue → Floor $next',
+                    height: 44,
+                    fontSize: 14,
+                    onTap: _continueRun,
+                  ),
+                  const SizedBox(height: 10),
+                  Pressable(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _endRun,
+                    child: Container(
+                      height: 38,
+                      alignment: Alignment.center,
+                      decoration: raisedTile(radius: 11),
+                      child: const Text(
+                        'Retreat & bank rewards',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: CreamPalette.warn,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One member of the team: portrait, name, HP bar and figure.
+  Widget _memberRow(CreatureInstance c) {
+    final frac = c.maxHp <= 0 ? 0.0 : (c.hp / c.maxHp).clamp(0.0, 1.0);
+    return Opacity(
+      opacity: c.isKo ? 0.55 : 1,
+      child: Container(
+        width: 250,
+        height: 46,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: raisedTile(radius: 12),
+        child: Row(
+          children: [
+            CreatureAvatar.of(c, size: 30),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                c.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: kBoxInk,
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 70,
+              child: RecessBar(
+                value: frac,
+                color: frac < 0.3 ? CreamPalette.warn : CreamPalette.better,
+                height: 8,
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 44,
+              child: Text(
+                c.isKo ? 'K.O.' : '${c.hp}/${c.maxHp}',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: c.isKo ? CreamPalette.warn : kBoxInkSoft,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: switch (_phase) {
-            // The team picker (BattlePrepScreen) is already covering this
-            // screen by the time a frame with content would show — this is
-            // only ever visible for an instant, if at all.
-            _Phase.loading => const SizedBox.shrink(),
-            _Phase.betweenFloors => _betweenFloorsView(),
-            _Phase.over => _resultsView(),
-          },
+    );
+  }
+
+  Widget _resultsView() => Center(
+    child: SizedBox(
+      width: 380,
+      child: creamCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _resultFloors > 0 ? 'Run over' : 'No floor cleared',
+              style: FoE.title(size: 18).copyWith(color: kBoxInk),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Floors cleared: $_resultFloors',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: kBoxInk,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '🪙 +${_resultGold.toStringAsFixed(0)} gold',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: CreamPalette.goldDeep,
+              ),
+            ),
+            if (_isNewBest) ...[
+              const SizedBox(height: 8),
+              const Text(
+                '🏆 New best run!',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: CreamPalette.better,
+                ),
+              ),
+            ],
+            const SizedBox(height: 18),
+            SocialGoldButton(
+              'Back to Overworld',
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 36),
+              onTap: () => Navigator.of(context).pop(),
+            ),
+          ],
         ),
       ),
     ),
   );
-
-  Widget _betweenFloorsView() => Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      Text(
-        isSurvivalBossFloor(_floor)
-            ? '👑 Floor $_floor cleared — a boss fell!'
-            : '✅ Floor $_floor cleared',
-        style: FoE.title(size: 16).copyWith(color: kParchmentGo),
-      ),
-      const SizedBox(height: 14),
-      ..._team.map(
-        (c) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                c.isKo ? '💀' : '❤️',
-                style: const TextStyle(fontSize: 13),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '${c.displayName}  ${c.hp}/${c.maxHp}',
-                style: FoE.dim(size: 12).copyWith(
-                  color: c.isKo ? kAccent : null,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      const SizedBox(height: 16),
-      ParchmentButton(label: '🎒 Bag', onTap: _openBag),
-      const SizedBox(height: 8),
-      ParchmentButton(
-        label: 'Continue → Floor ${_floor + 1}',
-        primary: true,
-        onTap: _continueRun,
-      ),
-      const SizedBox(height: 8),
-      ParchmentButton(
-        label: 'Retreat & bank rewards',
-        danger: true,
-        onTap: _endRun,
-      ),
-    ],
-  );
-
-  Widget _resultsView() => Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      Text(
-        _resultFloors > 0 ? '💀 Run over' : '💨 No floor cleared',
-        style: FoE.title(size: 18),
-      ),
-      const SizedBox(height: 10),
-      Text('Floors cleared: $_resultFloors', style: FoE.label(size: 14)),
-      const SizedBox(height: 4),
-      Text(
-        '🪙 +${_resultGold.toStringAsFixed(0)} gold',
-        style: FoE.label(size: 14).copyWith(color: FoE.gold),
-      ),
-      if (_isNewBest) ...[
-        const SizedBox(height: 8),
-        Text('🏆 New best run!', style: FoE.label(size: 13).copyWith(color: kParchmentGo)),
-      ],
-      const SizedBox(height: 20),
-      ParchmentButton(
-        label: 'Back to Overworld',
-        primary: true,
-        onTap: () => Navigator.of(context).pop(),
-      ),
-    ],
-  );
 }
-

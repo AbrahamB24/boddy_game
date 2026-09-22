@@ -13,6 +13,12 @@ dependencies:
   supabase_flutter: ^2.8.4
   google_fonts: ^6.2.1
   cached_network_image: ^3.4.1
+  # The store cached_network_image already writes to, named directly so the
+  # background art warm-up can pull BYTES without decoding a picture
+  # (settlement_screen._warmNetworkArtInBackground). Precaching through
+  # ImageProviders decoded ~300 pictures nothing ever read and evicted the
+  # ones the map was drawing.
+  flutter_cache_manager: ^3.4.0
   file_picker: ^11.0.2
   pedometer: ^4.2.0
   permission_handler: ^12.0.3
@@ -39,12 +45,24 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/
+    # Listed file by file (2026-09-20): a bare `assets/images/` entry ships
+    # everything directly inside that folder. The retired 48 MB baked
+    # map_background.png that made that matter is gone from the repo now
+    # (2026-09-21) — TerrainLayer replaced it long ago — but the explicit
+    # list stays, because it is what keeps a stray file from silently
+    # shipping again. tile_active/tile_inactive went the same way: the two
+    # FoE constants naming them were the only mention left anywhere.
+    - assets/images/overworld_grass.png
     # Its own line, because a directory entry is NOT recursive — the sixteen
     # road tiles would simply not ship.
     - assets/images/roads/
     - assets/images/buildings/
-    - assets/images/resources/
     - assets/images/terrain/
     - assets/sfx/
     - assets/music/
+    # Outfit, the app's one typeface, bundled so google_fonts finds it in the
+    # asset manifest instead of downloading it on first launch (2026-09-20) —
+    # text used to render in the fallback face until the fetch finished, and
+    # not at all offline on a fresh install. Only the weights the app asks
+    # for; the licence (SIL OFL) travels with them.
+    - assets/fonts/

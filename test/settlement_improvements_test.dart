@@ -24,10 +24,10 @@ void main() {
   });
   tearDown(kBuildingDefs.clear);
 
-  // ENERGY IS A DAILY-STEPS RATE (user 2026-09-14, replacing the 2026-07-27
-  // hard gate this section used to pin): [stepsToday] never gates anything
-  // any more, it only scales a continuous rate from a floor (0 steps) up to
-  // a capped bonus (10 000 steps), reset each local day.
+  // ENERGY IS A POOL (user 2026-09-20, replacing the 2026-09-14 daily-steps
+  // formula): steps fill it, time empties it, and it scales — never stops — the
+  // settlement. The fill/drain arithmetic itself is pinned in
+  // energy_pool_test.dart; this group is about what the ENGINE does with it.
   group('energy scales the settlement, never stops it', () {
     final res = ResourceModel(
       settlementId: 's',
@@ -36,9 +36,10 @@ void main() {
       lastUpdatedAt: DateTime.utc(2026, 1, 1),
     );
 
-    test('0 steps runs at the floor rate, never zero', () {
+    test('an empty pool runs at the floor rate, never zero', () {
       final energy = EnergyModel(
         settlementId: 's',
+        energyPct: 0,
         lastUpdatedAt: DateTime.utc(2026, 1, 1),
       );
       final r = GameEngine.tick(
@@ -51,46 +52,50 @@ void main() {
       expect(
         r.effectiveHours,
         closeTo(10 * kEnergyFloorMultiplier, 0.001),
-        reason: 'no steps today, but still a working floor rate — never 0',
+        reason: 'nothing in the pool, but still a working floor rate',
       );
       expect(r.resources.wood, closeTo(100 * kEnergyFloorMultiplier, 0.1));
+      expect(r.energy.energyPct, 0);
     });
 
-    test('the daily step target runs at exactly 100%', () {
+    test(
+      'a tick drains the pool and prices the window at the falling rate',
+      () {
+        final energy = EnergyModel(
+          settlementId: 's',
+          lastUpdatedAt: DateTime.utc(2026, 1, 1),
+        ); // starts full: 100 %
+        final r = GameEngine.tick(
+          energy,
+          res,
+          const [],
+          DateTime.utc(2026, 1, 1, 12), // half a day later
+          workshopPower: {'wood': 10},
+        );
+        // 100 % lasts 24 h: after 12 h it is at 50 %, and the 12 h averaged
+        // (100 % + 50 %) / 2 = 75 % — not the 100 % it started with.
+        expect(r.energy.energyPct, closeTo(50, 1e-6));
+        expect(r.effectiveHours, closeTo(12 * 0.75, 1e-6));
+      },
+    );
+
+    test('steps credited to the engine fill the pool right away', () {
       final energy = EnergyModel(
         settlementId: 's',
-        stepsToday: kEnergyFullSteps.round(),
-        stepsDayKey: dateKeyFor(DateTime.utc(2026, 1, 1).toLocal()),
+        energyPct: 20,
         lastUpdatedAt: DateTime.utc(2026, 1, 1),
       );
-      final r = GameEngine.tick(
+      final after = GameEngine.addSteps(
         energy,
-        res,
-        const [],
-        DateTime.utc(2026, 1, 1, 2),
-        workshopPower: {'wood': 10},
+        1000,
+        DateTime.utc(2026, 1, 1, 8),
       );
-      expect(r.effectiveHours, closeTo(2, 0.001));
+      // 5000 steps = 100 %, so 1000 steps = +20 %.
+      expect(after.energyPct, closeTo(40, 1e-6));
+      expect(after.stepsToday, 1000);
     });
 
-    test('steps past the target buy a capped bonus rate', () {
-      final maxBoostSteps =
-          kEnergyFullSteps +
-          1000 * (kEnergyMaxBoost / kEnergyBoostPerThousandSteps);
-      expect(
-        energyMultiplierForSteps(maxBoostSteps.round()),
-        closeTo(1.0 + kEnergyMaxBoost, 0.001),
-      );
-      // Well past the cap still reads the SAME max — it never keeps climbing.
-      expect(
-        energyMultiplierForSteps(maxBoostSteps.round() + 5000),
-        closeTo(1.0 + kEnergyMaxBoost, 0.001),
-      );
-    });
-
-    test('a tick spanning midnight resets to the floor, not yesterday\'s rate', () {
-      // Yesterday's steps must not silently keep boosting a NEW day that
-      // hasn't walked yet.
+    test('a tick spanning midnight resets the day\'s step count only', () {
       final energy = EnergyModel(
         settlementId: 's',
         stepsToday: kEnergyFullSteps.round(),
@@ -105,33 +110,61 @@ void main() {
         workshopPower: {'wood': 10},
       );
       expect(r.energy.stepsToday, 0);
-      expect(r.energy.stepsDayKey, dateKeyFor(DateTime.utc(2026, 1, 2).toLocal()));
+      expect(
+        r.energy.stepsDayKey,
+        dateKeyFor(DateTime.utc(2026, 1, 2).toLocal()),
+      );
+      // The pool is not a daily thing: it carried on draining through midnight.
+      expect(r.energy.energyPct, lessThan(100));
+      expect(r.energy.energyPct, greaterThan(0));
     });
 
-    test('the rate the top bar shows matches the tick\'s own', () {
-      final empty = EnergyModel(settlementId: 's', lastUpdatedAt: DateTime.utc(2026));
+    test('the rate the top bar shows matches the pool', () {
+      final empty = EnergyModel(
+        settlementId: 's',
+        energyPct: 0,
+        lastUpdatedAt: DateTime.utc(2026),
+      );
       final rates = GameEngine.hourlyRates(empty, {'wood': 10});
       expect(rates['wood'], closeTo(10 * kEnergyFloorMultiplier, 0.001));
+      final full = EnergyModel(
+        settlementId: 's',
+        lastUpdatedAt: DateTime.utc(2026),
+      );
+      expect(
+        GameEngine.hourlyRates(full, {'wood': 10})['wood'],
+        closeTo(10, 0.001),
+      );
     });
   });
 
   group('SettlementController.energyMultiplier reads the live rate', () {
     tearDown(() => SettlementController().energy = null);
 
-    test('the daily target reads 100%', () {
+    test('a full pool reads 100%', () {
       SettlementController().energy = EnergyModel(
         settlementId: 's',
-        stepsToday: kEnergyFullSteps.round(),
-        stepsDayKey: dateKeyFor(DateTime.now()),
         lastUpdatedAt: DateTime.now(),
       );
       expect(SettlementController().energyMultiplier, closeTo(1.0, 0.001));
     });
 
-    test('0 steps today reads the floor, not zero', () {
+    test('the ceiling reads its bonus', () {
       SettlementController().energy = EnergyModel(
         settlementId: 's',
-        stepsDayKey: dateKeyFor(DateTime.now()),
+        energyPct: kEnergyMaxPercent,
+        lastUpdatedAt: DateTime.now(),
+      );
+      expect(
+        SettlementController().energyMultiplier,
+        closeTo(1.0 + kEnergyMaxBoost, 0.001),
+      );
+    });
+
+    test('an empty pool reads the floor, not zero', () {
+      SettlementController().energy = EnergyModel(
+        settlementId: 's',
+        energyPct: 0,
         lastUpdatedAt: DateTime.now(),
       );
       expect(
@@ -166,8 +199,20 @@ void main() {
         'grid_h': 5,
         'is_main_building': true,
         'effects': [
-          {'type': 'workshop', 'stat': 'construction', 'resource': 'construction', 'mult': 30, 'slots': 3},
-          {'type': 'workshop', 'stat': 'crafting', 'resource': 'research', 'mult': 40, 'slots': 3},
+          {
+            'type': 'workshop',
+            'stat': 'construction',
+            'resource': 'construction',
+            'mult': 30,
+            'slots': 3,
+          },
+          {
+            'type': 'workshop',
+            'stat': 'crafting',
+            'resource': 'research',
+            'mult': 40,
+            'slots': 3,
+          },
         ],
       });
       expect(def.workshops, isEmpty);
@@ -178,7 +223,13 @@ void main() {
         'grid_w': 2,
         'grid_h': 2,
         'effects': [
-          {'type': 'workshop', 'stat': 'woodcutting', 'resource': 'wood', 'mult': 0.5, 'slots': 2},
+          {
+            'type': 'workshop',
+            'stat': 'woodcutting',
+            'resource': 'wood',
+            'mult': 0.5,
+            'slots': 2,
+          },
         ],
       });
       expect(camp.workshops, hasLength(1));
@@ -213,19 +264,22 @@ void main() {
       expect(c.xp, 0, reason: 'XP past the cap is forfeited, not banked');
     });
 
-    test('building lifetime cap is 10; slots are flat without explicit steps', () {
-      // User 2026-07-25: the automatic "+1 slot every 3 levels" rule is gone.
-      // A role with no slotSteps keeps a flat count across every level.
-      expect(kMaxBuildingLevel, 10);
-      const role = WorkshopRole(
-        stat: CreatureStat.production,
-        resource: 'wood',
-        slots: 6,
-      );
-      expect(effectiveSlots(role, 1), 6);
-      expect(effectiveSlots(role, 4), 6);
-      expect(effectiveSlots(role, 10), 6);
-    });
+    test(
+      'building lifetime cap is 10; slots are flat without explicit steps',
+      () {
+        // User 2026-07-25: the automatic "+1 slot every 3 levels" rule is gone.
+        // A role with no slotSteps keeps a flat count across every level.
+        expect(kMaxBuildingLevel, 10);
+        const role = WorkshopRole(
+          stat: CreatureStat.production,
+          resource: 'wood',
+          slots: 6,
+        );
+        expect(effectiveSlots(role, 1), 6);
+        expect(effectiveSlots(role, 4), 6);
+        expect(effectiveSlots(role, 10), 6);
+      },
+    );
 
     test('worker slots grow by explicit per-level slotSteps', () {
       // Slots at level L = base (level 1) + Σ slotSteps up to L.
@@ -282,9 +336,13 @@ void main() {
       // High battlesCleared so map-progress gating doesn't hide region-1
       // content — this test is about REGION gating only.
       final inRegion2 = availableBuildings(2, 999).map((d) => d.id).toSet();
-      expect(inRegion2, contains('small_wood_camp'),
-          reason: 'region-1 buildings remain buildable once granted '
-              '(user answer 8)');
+      expect(
+        inRegion2,
+        contains('small_wood_camp'),
+        reason:
+            'region-1 buildings remain buildable once granted '
+            '(user answer 8)',
+      );
       expect(inRegion2, contains('clay_camp_e2'));
       // ...and region-2 buildings are NOT offered while still in region 1,
       // even though the SAME node already granted them — the region gate
@@ -334,8 +392,10 @@ void main() {
     test('rolls are deterministic per date and distinct kinds', () {
       final a = rollDailyTasks(DateTime.utc(2026, 7, 21));
       final b = rollDailyTasks(DateTime.utc(2026, 7, 21));
-      expect(a.tasks.map((t) => t.kind).toList(),
-          b.tasks.map((t) => t.kind).toList());
+      expect(
+        a.tasks.map((t) => t.kind).toList(),
+        b.tasks.map((t) => t.kind).toList(),
+      );
       expect(a.tasks.map((t) => t.kind).toSet(), hasLength(3));
       expect(a.dateKey, '2026-07-21');
     });
@@ -366,10 +426,7 @@ void main() {
       battleStage: 1,
       spots: const [],
     );
-    const spot = ResourceSpotDef(
-      id: 'sp',
-      resource: 'wood',
-    );
+    const spot = ResourceSpotDef(id: 'sp', resource: 'wood');
     final member = CreatureInstance(
       id: 'c',
       userId: 'u',

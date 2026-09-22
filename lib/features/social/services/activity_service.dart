@@ -29,6 +29,9 @@ class ActivityService {
         .select()
         .order('created_at', ascending: false)
         .limit(limit);
-    return (rows as List).cast<Map<String, dynamic>>().map(FriendActivity.fromMap).toList();
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map(FriendActivity.fromMap)
+        .toList();
   }
 }

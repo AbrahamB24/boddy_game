@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart' show goldButton;
 import '../../core/theme/foe_theme.dart';
+import '../../core/theme/strategy_theme.dart' show Strategy;
 import '../../core/ui/feel.dart';
 import '../settlement/settlement_controller.dart';
 import '../settlement/widgets/parchment_sheet.dart';
-import '../settlement/widgets/scroll_paper.dart'
-    show kParchmentLight, parchmentButton;
 import 'models/area.dart';
 import 'models/expedition.dart' show ExpeditionType;
 import 'models/creature_enums.dart';
@@ -133,8 +133,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   /// What a hunt here can find. EVERY species, minus the legendaries still
   /// standing (user 2026-07-27) — the area decides the danger, the level and
   /// the travel, no longer the guest list.
-  List<SpeciesDef> get _pool =>
-      catchableSpecies(_settlement.dungeonMaxStage);
+  List<SpeciesDef> get _pool => catchableSpecies(_settlement.dungeonMaxStage);
 
   int get _unlockedOptions => maxHuntOptionCount(
     _settlement.buildingHuntOptions + _settlement.pathHuntOptions,
@@ -290,15 +289,27 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
           ),
         );
 
-  /// The [ParchmentSheet]'s own chrome (drag handle, fixed-height sheet,
-  /// title bar) dropped — embedded straight in the host page's own
-  /// scrolling list, this is just its content, sized to itself rather than
-  /// to a sheet.
+  /// The [ParchmentSheet]'s own chrome (drag handle, drag-sized sheet, title
+  /// bar) dropped — embedded straight in the host page instead of under a
+  /// sheet. NOT "sized to itself" any more (2026-09-22 fix): its one caller
+  /// ([ExpeditionsScreen._targetsColumn]) hands it a bounded height through
+  /// an `Expanded` slot beside the region rail, not an ambient scrolling
+  /// list the way the doc comment here used to assume — a hunt with a big
+  /// enough roster (a real, reported crash: "RenderFlex overflowed… Column
+  /// ← ExpeditionLaunchPanel") simply had nowhere to go. The body scrolls
+  /// within whatever height it is actually given now, exactly the way the
+  /// modal sheet's own [build] already does above; [_whereRow] and
+  /// [_sendBar] stay fixed top and bottom either way.
   Widget _buildInline() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       _whereRow(),
-      ...(_isHunt ? _huntBody() : _gatherBody()),
+      Expanded(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: _isHunt ? _huntBody() : _gatherBody(),
+        ),
+      ),
       const SizedBox(height: 12),
       _sendBar(),
     ],
@@ -314,35 +325,48 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
     final dials = gatherDefFor(spot.resource);
     return [
       _panel([
-        _kv('In the ground', '${stock.toStringAsFixed(0)} / '
-            '${dials.spotCapacity.toStringAsFixed(0)}'),
-        _bar(dials.spotCapacity <= 0 ? 0 : stock / dials.spotCapacity,
-            kParchmentGo),
+        _kv(
+          'In the ground',
+          '${stock.toStringAsFixed(0)} / '
+              '${dials.spotCapacity.toStringAsFixed(0)}',
+        ),
+        _bar(
+          dials.spotCapacity <= 0 ? 0 : stock / dials.spotCapacity,
+          kParchmentGo,
+        ),
         const SizedBox(height: 8),
         _kv('Regrows', '${dials.regenPerHour.toStringAsFixed(0)}/h'),
-        _kv('One carry point holds',
-            '${_fmtNum(dials.unitsPerCarry)} ${spot.resource}'),
+        _kv(
+          'One carry point holds',
+          '${_fmtNum(dials.unitsPerCarry)} ${spot.resource}',
+        ),
       ]),
       const SizedBox(height: 12),
       _panel([
-        Text('This trip',
-            style: FoE.label(size: 12).copyWith(color: kAccent)),
+        Text('This trip', style: FoE.label(size: 12).copyWith(color: kAccent)),
         const SizedBox(height: 8),
-        _kv('Haul', plan == null || !plan.isViable
-            ? '—'
-            : '${plan.amount.toStringAsFixed(0)} ${plan.resource}'),
+        _kv(
+          'Haul',
+          plan == null || !plan.isViable
+              ? '—'
+              : '${plan.amount.toStringAsFixed(0)} ${plan.resource}',
+        ),
         _kv('Carry cap', plan?.loadCap.toStringAsFixed(0) ?? '0'),
         _kv('Mining rate', '${plan?.ratePerHour.toStringAsFixed(1) ?? '0'}/h'),
-        _kv('Duration',
-            plan != null && plan.isViable ? fmtTripDuration(plan.duration) : '—'),
+        _kv(
+          'Duration',
+          plan != null && plan.isViable ? fmtTripDuration(plan.duration) : '—',
+        ),
       ]),
       const SizedBox(height: 14),
       ..._groupSection(
-        hint: 'Mining speed is the group\'s gather stat; the load cap is its '
+        hint:
+            'Mining speed is the group\'s gather stat; the load cap is its '
             'carry. A full load ends the trip.',
         // The two stats a miner is judged on, exactly where the caravan
         // picker puts its carry/speed pair.
-        caption: (c) => '⛏️ ${gatherPowerOf(c)}   '
+        caption: (c) =>
+            '⛏️ ${gatherPowerOf(c)}   '
             '🎒 ${c.statValue(CreatureStat.carry)}',
       ),
     ];
@@ -490,12 +514,20 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
         opacity: locked ? 0.5 : 1,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          decoration: ShapeDecoration(color: active
+          decoration: ShapeDecoration(
+            color: active
                 ? kAccent.withValues(alpha: 0.12)
-                : kInk.withValues(alpha: 0.06), shape: FoE.facet(radius: 10, side: BorderSide(color: active
-                  ? kAccent.withValues(alpha: 0.55)
-                  : kInk.withValues(alpha: 0.18),
-              width: active ? 1.6 : 1))),
+                : kInk.withValues(alpha: 0.06),
+            shape: FoE.facet(
+              radius: 10,
+              side: BorderSide(
+                color: active
+                    ? kAccent.withValues(alpha: 0.55)
+                    : kInk.withValues(alpha: 0.18),
+                width: active ? 1.6 : 1,
+              ),
+            ),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -504,8 +536,9 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
                 '${locked ? '🔒 ' : ''}${o.label}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: FoE.title(size: 13)
-                    .copyWith(color: active ? kAccent : kInk),
+                style: FoE.title(
+                  size: 13,
+                ).copyWith(color: active ? kAccent : kInk),
               ),
               const SizedBox(height: 3),
               Text(
@@ -540,7 +573,8 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
       title: 'Group',
       hint: '${_members.length} / $_groupCap chosen',
     ),
-    if (hint != null) Text(hint, style: FoE.dim(size: 10).copyWith(color: kInkFaint)),
+    if (hint != null)
+      Text(hint, style: FoE.dim(size: 10).copyWith(color: kInkFaint)),
     // "THE SAME AGAIN" (user 2026-07-30). Sending a party is the most repeated
     // action in the game, and it was a fresh hunt through the roster every time.
     // Only shown when it would actually DO something: there is a remembered
@@ -556,25 +590,20 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
     // 2026-09-11: "das '+' Feld zentrieren") — the 10 min hunt (and Gather,
     // early on) still caps at a single hunter, and a lone tile pinned to the
     // left of a full-width row reads as stranded.
-    monsterTileGrid(
-      [
-        for (var i = 0; i < _groupCap; i++)
-          i < _members.length
-              ? _filledPlace(_members[i])
-              : _emptyPlace(isNext: i == _members.length),
-      ],
-      alignment: _groupCap == 1 ? WrapAlignment.center : WrapAlignment.start,
-    ),
+    monsterTileGrid([
+      for (var i = 0; i < _groupCap; i++)
+        i < _members.length
+            ? _filledPlace(_members[i])
+            : _emptyPlace(isNext: i == _members.length),
+    ], alignment: _groupCap == 1 ? WrapAlignment.center : WrapAlignment.start),
   ];
 
   /// A place waiting to be filled. A tap opens the roster.
   ///
   /// Only the NEXT one to be filled says "Add" — six copies of the word is
   /// noise, and one is a caption for the whole rank.
-  Widget _emptyPlace({required bool isNext}) => EmptyMonsterSlot(
-    label: isNext ? 'Add' : null,
-    onTap: _openPicker,
-  );
+  Widget _emptyPlace({required bool isNext}) =>
+      EmptyMonsterSlot(label: isNext ? 'Add' : null, onTap: _openPicker);
 
   /// A filled place: THE monster tile, unchanged from every other screen.
   ///
@@ -583,8 +612,10 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   /// ✗ badge; the tile itself is the only entry point now, same as the
   /// work-post picker's own filled seats. The roster offers a dedicated
   /// EMPTY tile for the case that used to be this tap's whole job.
-  Widget _filledPlace(CreatureInstance c) =>
-      CreatureCard(creature: c, onTap: () => _openPicker(swapTargetId: c.id));
+  Widget _filledPlace(CreatureInstance c) => CreatureCard(
+    creature: c,
+    onTap: () => _openPicker(swapTargetId: c.id),
+  );
 
   /// The roster, as a sheet over this one — opened only while a place is being
   /// filled, which is what keeps it off the page the rest of the time.
@@ -593,9 +624,8 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   /// breeding, already out) and minus anyone already picked — capped at the
   /// group size. Empty when the shortcut would change nothing.
   List<CreatureInstance> _lastPartyAvailable() {
-    final ids = _expeditions.lastParty[
-      _isHunt ? ExpeditionType.capture : ExpeditionType.gather
-    ];
+    final ids = _expeditions
+        .lastParty[_isHunt ? ExpeditionType.capture : ExpeditionType.gather];
     if (ids == null) return const [];
     final free = {for (final c in _available) c.id: c};
     final out = <CreatureInstance>[];
@@ -610,9 +640,12 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
 
   Widget _sameAgainButton() {
     final party = _lastPartyAvailable();
-    final missing = (_expeditions.lastParty[
-              _isHunt ? ExpeditionType.capture : ExpeditionType.gather
-            ]?.length ??
+    final missing =
+        (_expeditions
+                .lastParty[_isHunt
+                    ? ExpeditionType.capture
+                    : ExpeditionType.gather]
+                ?.length ??
             0) -
         party.length -
         _selected.length;
@@ -628,7 +661,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: parchmentButton(),
+        decoration: goldButton(),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -707,6 +740,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
         };
         return descending ? -r : r;
       }
+
       list.sort(cmp);
       return list;
     }
@@ -741,7 +775,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
                         flex: 3,
                         child: SearchPill(
                           controller: _pickerSearch,
-                          palette: PillPalette.parchment,
+                          palette: PillPalette.cream,
                           onChanged: (v) => setSheetState(() => query = v),
                         ),
                       ),
@@ -749,7 +783,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
                       Expanded(
                         flex: 2,
                         child: MenuPill<String>(
-                          palette: PillPalette.parchment,
+                          palette: PillPalette.cream,
                           icon: Icons.swap_vert,
                           label: switch (sortKey) {
                             'level' => 'Level',
@@ -786,7 +820,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
                       Expanded(
                         flex: 2,
                         child: MenuPill<String>(
-                          palette: PillPalette.parchment,
+                          palette: PillPalette.cream,
                           icon: Icons.filter_alt_outlined,
                           label: filterElement?.label ?? 'Every type',
                           engaged: filterElement != null,
@@ -821,15 +855,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
                       kMonsterTilePageMargin,
                       20,
                     ),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: kMonsterTileCols,
-                      mainAxisSpacing: kMonsterTileSpacing,
-                      crossAxisSpacing: kMonsterTileSpacing,
-                      // The grid's own height, not a hand-tuned pixel figure
-                      // that stops tracking [kMonsterTileAspect] the next
-                      // time it moves.
-                      mainAxisExtent: monsterTileHeight(sheetCtx),
-                    ),
+                    gridDelegate: monsterTileGridDelegate(sheetCtx),
                     itemCount: candidates.length + (swapping ? 1 : 0),
                     itemBuilder: (_, i) {
                       // A dedicated EMPTY tile (user 2026-08-31: "beim
@@ -877,12 +903,16 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
               creature: c,
               // The stat this trip is actually judged on, in the tile
               // itself (user 2026-08-31: "den gleichen Stil übernehmen" —
-              // the work-post picker's label-left/value-right vitals row)
+              // the work-post picker's flag on the tile)
               // instead of a caption line below it.
-              vitalsLabel: _isHunt ? 'Catch' : 'Mining',
-              vitalsValue: _isHunt
-                  ? c.statValue(CreatureStat.catchRate)
-                  : gatherPowerOf(c),
+              extras: [
+                TileValue(
+                  _isHunt ? 'Catch' : 'Mining',
+                  _isHunt
+                      ? c.statValue(CreatureStat.catchRate)
+                      : gatherPowerOf(c),
+                ),
+              ],
               onTap: () {
                 if (_swapTargetId != null) {
                   setState(() {
@@ -927,19 +957,19 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
         // Zero slots is not a queue — name the building that opens them
         // instead of a busy party that isn't there (user 2026-07-29).
         ? _expeditions.noSlots
-            ? 'No expedition slots — build a Scout Post'
-            : 'All expedition slots busy '
-                '(${_expeditions.activeCount}/${_expeditions.maxSlots})'
+              ? 'No expedition slots — build a Scout Post'
+              : 'All expedition slots busy '
+                    '(${_expeditions.activeCount}/${_expeditions.maxSlots})'
         : _isHunt
-            ? ready
-                ? 'Send ${_option.label} hunt · '
+        ? ready
+              ? 'Send ${_option.label} hunt · '
                     '${fmtTripDuration(captureDuration(_option))}'
-                : 'Pick who goes'
-            : ready
-                ? 'Send expedition · ${fmtTripDuration(plan!.duration)}'
-                : _members.isEmpty
-                    ? 'Pick who goes'
-                    : 'Nothing left to mine here';
+              : 'Pick who goes'
+        : ready
+        ? 'Send expedition · ${fmtTripDuration(plan!.duration)}'
+        : _members.isEmpty
+        ? 'Pick who goes'
+        : 'Nothing left to mine here';
 
     // The send bar is a FOOTER cut from the same paper, not a dark strip
     // bolted under the sheet (user 2026-07-29 redraw). A hairline above it is
@@ -953,7 +983,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
       decoration: widget.inline
           ? null
           : BoxDecoration(
-              color: kParchmentLight,
+              color: Strategy.cream,
               border: Border(
                 top: BorderSide(color: kInk.withValues(alpha: 0.18)),
               ),
@@ -981,7 +1011,9 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: kAccent),
+                    strokeWidth: 2,
+                    color: kAccent,
+                  ),
                 ),
               ),
             )
@@ -999,7 +1031,10 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
     width: double.infinity,
     padding: const EdgeInsets.all(12),
     decoration: ParchmentSheet.card,
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    ),
   );
 
   Widget _kv(String label, String value) => Padding(
@@ -1015,17 +1050,12 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
 
   Widget _bar(double fraction, Color color) => Padding(
     padding: const EdgeInsets.only(top: 6),
-    child: RecessBar(
-      value: fraction.clamp(0.0, 1.0),
-      color: color,
-      height: 9,
-    ),
+    child: RecessBar(value: fraction.clamp(0.0, 1.0), color: color, height: 9),
   );
 
   /// 20 → "20", 0.5 → "0.5" — carry weights are not always whole.
   static String _fmtNum(double v) =>
       v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
-
 }
 
 /// Trip lengths read as "1h 20m" / "12m" / "45s" everywhere they appear — the

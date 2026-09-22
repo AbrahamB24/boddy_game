@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-
 /// The XP indicator drawn as an open-topped semicircle "bowl" that sits under a
 /// monster's feet: a bright amber fill growing from the upper-left, along the
 /// bottom, to the upper-right, with a dot at the leading edge and the rest left

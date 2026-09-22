@@ -16,7 +16,7 @@ Stand: 2026-07-16 · Anker vom User festgelegt.
 | Fang-Tempo (Commons, aktiver Tag) | **~5–8 / Tag** |
 
 Annahmen: „aktiver Spieler" = ~20–30 min aktives Spielen + mehrfaches
-Einchecken; Energie-Uptime ≈ 100 % (≥ 10 000 Schritte/Tag, s. kDrainPerHour).
+Einchecken; Energie-Uptime ≈ 100 % (Energie-Pool: 5000 Schritte = 100 %, 10 000 = 125 %; 100 % reichen 24 h, 125 % reichen 30 h — Dials `energyFullSteps`, `energyFullHours`).
 
 ## 2. Abgeleitete Tagesziele (Era I)
 
@@ -46,7 +46,11 @@ Siegquote (Ziel ≥ 95 % bei gleichem Level, ~50 % bei Level +8 = nächste Stage
 ## 3. Stat-Budget-Framework
 
 **Skala-Anker (TIER 1, User 2026-07-17):** Gesamt-Base-Budget und Growth sind
-FESTE Pro-Rarität-Werte (`kBaseBudgetByRarity`), Growth = Base ÷ 30:
+FESTE Pro-Rarität-Werte, Growth = Base ÷ 30. Die Tabelle unten ist der
+HISTORISCHE Anker; massgebend sind seit 2026-07-24 die Live-Werte in
+`kSpeciesBalance` (`models/species_balance.dart`), die `budgetBaseTotal` /
+`budgetGrowthTotal` lesen. Die frühere Konstante `kBaseBudgetByRarity` war
+eine zweite, abgedriftete Kopie und wurde 2026-09-21 entfernt.
 
 | Rarität | Base | Growth (= Base ÷ 30) |
 |---|---|---|
@@ -336,7 +340,7 @@ unbeschrifteten 🐾-Button.
 | `kJumpstartTimeScale` | 0.2 | Erster Hunt 35 min → **~7 min**; `expansion` 28.8 min → **~5.8 min**; Bau ×5 |
 | `kJumpstartEnemyStatMult` | 0.6 | Fang-Kampf + Tech-Prüfung (solo, sonst ~55 % HP-Kosten) |
 | `kJumpstartGiftBp` | 60 | `expansion` kostet 24 BP bei **0 BP Einkommen** → Baum wäre sonst zu |
-| `kJumpstartGiftFish/Fur` | 20 / 20 | Regions-Dungeon-Eintritt; Gebäude liefern bewusst kaum (mult 0.12) |
+| `kJumpstartGiftFish` | 20 | Regions-Dungeon-Eintritt; Gebäude liefern bewusst kaum (mult 0.12). Nur Fisch — Fleisch kommt erst mit Region 2 |
 | `kJumpstartFreeTechId` | `team_size_2` | Gratis **beim ersten Fang** → der letzte Mini-Dungeon ist 2v1, nicht solo |
 
 **Invariante:** `statScale` senkt nur **Kampfwerte**, nie die Gene — ein im
@@ -535,13 +539,19 @@ alles — Verkauf und alle drei Skip-Knöpfe lesen dieselben Raten):
 
 | Regler | Wert | Bedeutung |
 |---|---|---|
-| `kBasicSellRate` | 0.1 | 10 Holz/Stein → 🪙 1 |
-| `kGoodsSellRate` | 0.35 | ~3 Fisch/Fell → 🪙 1 (knapp UND mit echter Senke) |
-| `kSecondsPerGold` | 60 | 🪙 1 ≈ 1 Minute |
+| `kBasicSellRate` | 0.1 | Handelswert: 10 Holz/Stein ≙ 🪙 1 (Tausch und Shop rechnen damit) |
+| `kGoodsSellRate` | 0.35 | Handelswert: ~3 Fisch/Fell ≙ 🪙 1 |
+| `kSellPayoutFactor` | 0.001 | **Ein Verkauf zahlt nur ein Tausendstel**: 10 000 Holz/Stein → 🪙 1, ~2 900 Waren → 🪙 1 |
+| `kSecondsPerGold` | 6 | **🪙 1 ≈ 6 Sekunden: 1 Minute = 🪙 10, 1 Stunde = 🪙 600** |
 
-**Zusammen gelesen: 100 Holz kaufen 10 Minuten.** Ein Tagesertrag Holz (§2:
-~850) ≈ 🪙 85 ≈ 1,5 h Überspringen. Ein Test bewacht beide Seiten davon: genug,
-um sich zu lohnen, zu wenig, um das Spiel wegzukaufen.
+**Änderung 2026-09-22 (User: „Gold muss wirklich wertvoll sein“).** Gold wird nicht
+mehr aus Überschuss gemacht, sondern **verdient**: Daily Tasks samt Tages-Truhe
+und Serie, Expeditionen, Goldmine. Ein Tag Holz (~850) bringt beim Verkauf 0 Gold
+(vorher ~85); im Gegenzug kostet das Überspringen zehnmal mehr als vorher
+(vorher 🪙 1 ≈ 1 Minute). Ein Tag Aufgaben (~🪙 100) kauft rund 10 Minuten. Gold
+gatet weiterhin nichts. **Handel und Kauf bleiben bei den alten Werten** — nur der
+Verkaufs-Erlös wurde gekappt, damit Tausch und Shop nicht kippen. Tests:
+`gold_economy_test.dart`.
 
 **Preis nach RESTZEIT, nicht nach Gesamtdauer** (`goldToSkip`). Die letzte
 Minute eines 8h-Zuchtauftrags kostet eine Minute. Damit ist Abwarten *immer*
@@ -570,5 +580,5 @@ Einführung ohne Codeänderung. Ein Test prüft genau das.
 ## 10. Offene Folgen
 - Release-/Verwertungs-Mechanik (Fang-Tempo 5–8/Tag).
 - Era II+: Kosten so staffeln, dass spätere Eras länger dauern dürfen.
-- Energie-Anker (10 000 Schritte = 24 h = 100 % Uptime) bewusst beibehalten — einzige
+- Energie-Pool (5000 Schritte = 100 % = 24 h, 10 000 = 125 % = 30 h, Überschuss verfällt) bewusst beibehalten — einzige
   Fitness-Kopplung.

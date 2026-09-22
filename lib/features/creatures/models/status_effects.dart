@@ -182,8 +182,7 @@ bool statusValueIsRollChance(MainStatusKind kind) => switch (kind) {
   MainStatusKind.freeze ||
   MainStatusKind.petrify ||
   MainStatusKind.paralysis ||
-  MainStatusKind.confusion =>
-    true,
+  MainStatusKind.confusion => true,
   _ => false,
 };
 

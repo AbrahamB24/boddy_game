@@ -100,10 +100,7 @@ Map<CreatureRarity, double> rarityWeights() => {
 /// regardless of hunt length (removed 2026-09-11 — a longer hunt used to bias
 /// toward rarer finds; the user wants length to only ever change the NUMBER
 /// of finds, never their odds).
-SpeciesDef? rollEncounter(
-  math.Random rng, {
-  required int dungeonMaxStage,
-}) {
+SpeciesDef? rollEncounter(math.Random rng, {required int dungeonMaxStage}) {
   final pool = catchableSpecies(dungeonMaxStage);
   if (pool.isEmpty) return null;
 
@@ -135,8 +132,7 @@ SpeciesDef? rollEncounter(
 /// opens the window, not a survival check (user report 2026-07-17: an
 /// equal-level wild sometimes beat the starter outright). Dungeon and trial
 /// wilds are untouched: those fights ARE the challenge.
-double get kCaptureWildStatMult =>
-    GameTuning.i.raw(Dials.captureWildStatMult);
+double get kCaptureWildStatMult => GameTuning.i.raw(Dials.captureWildStatMult);
 
 /// HP fraction the wild must be fought DOWN TO before the catch QTE opens —
 /// the encounter's battle phase. Rarer finds must be brought lower, without
@@ -316,7 +312,5 @@ const List<CaptureHuntOption> kCaptureHuntOptions = [
 /// kJumpstartTimeScale. Kept as a function (not a raw field read) so the
 /// tutorial scaling stays in one place and the fixed seconds are never
 /// rewritten for it.
-Duration captureDuration(
-  CaptureHuntOption option, {
-  double timeScale = 1.0,
-}) => Duration(seconds: (option.seconds * timeScale).round());
+Duration captureDuration(CaptureHuntOption option, {double timeScale = 1.0}) =>
+    Duration(seconds: (option.seconds * timeScale).round());

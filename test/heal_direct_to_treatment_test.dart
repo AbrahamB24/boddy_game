@@ -73,18 +73,18 @@ void main() {
   // orthogonal to what this file actually pins (slot-vs-line routing), so
   // every test gets one full-health medicine worker for free.
   CreatureInstance healer() => CreatureInstance(
-        id: 'healer',
-        userId: 'u',
-        speciesId: 's',
-        gender: CreatureGender.female,
-        level: 1,
-        statBase: {for (final s in CreatureStat.values) s: 20.0},
-        statSlope: {for (final s in CreatureStat.values) s: 1.0},
-        // 'b' — the PLACED building's own id from layout(), not the type id
-        // (_hutId): workshopOccupancy matches on PlacedBuilding.id.
-        assignedBuildingId: 'b',
-        assignedStat: CreatureStat.medicine,
-      );
+    id: 'healer',
+    userId: 'u',
+    speciesId: 's',
+    gender: CreatureGender.female,
+    level: 1,
+    statBase: {for (final s in CreatureStat.values) s: 20.0},
+    statSlope: {for (final s in CreatureStat.values) s: 1.0},
+    // 'b' — the PLACED building's own id from layout(), not the type id
+    // (_hutId): workshopOccupancy matches on PlacedBuilding.id.
+    assignedBuildingId: 'b',
+    assignedStat: CreatureStat.medicine,
+  );
 
   setUp(() {
     // ONE treatment slot, so "full" and "free" are one monster apart.
@@ -109,7 +109,7 @@ void main() {
     // unaffected by the energy scale treatment now applies).
     settlement.energy = EnergyModel(
       settlementId: 's',
-      stepsToday: kEnergyFullSteps.round(),
+      energyPct: 100,
       lastUpdatedAt: DateTime.now(),
     );
     settlement.resources = ResourceModel(
@@ -140,17 +140,14 @@ void main() {
     expect(settlement.healQueueCapacity, 5);
   });
 
-  test(
-    'a hut with nobody stationed reads as 0 capacity, not "no hut" '
-    '(user 2026-08-24)',
-    () {
-      creatures.creatures.clear(); // pull the healer set up in setUp()
-      // Still a real healing building — authored=true keeps the null-means-
-      // unlimited branch from kicking in — it just heals nobody until
-      // someone works it.
-      expect(settlement.healCapacity, 0);
-    },
-  );
+  test('a hut with nobody stationed reads as 0 capacity, not "no hut" '
+      '(user 2026-08-24)', () {
+    creatures.creatures.clear(); // pull the healer set up in setUp()
+    // Still a real healing building — authored=true keeps the null-means-
+    // unlimited branch from kicking in — it just heals nobody until
+    // someone works it.
+    expect(settlement.healCapacity, 0);
+  });
 
   test('with a slot FREE, nothing is put in the line', () async {
     final c = mob('hurt');
@@ -207,14 +204,16 @@ void main() {
     expect(creatures.healQueue.map((c) => c.id), ['b']);
   });
 
-  test('an already-full hut sends everyone healAll finds into the line',
-      () async {
-    creatures.creatures.addAll([
-      mob('busy', healing: true),
-      mob('x', hp: 4),
-      mob('y', hp: 6),
-    ]);
-    await creatures.healAll();
-    expect(creatures.healQueue.map((c) => c.id).toSet(), {'x', 'y'});
-  });
+  test(
+    'an already-full hut sends everyone healAll finds into the line',
+    () async {
+      creatures.creatures.addAll([
+        mob('busy', healing: true),
+        mob('x', hp: 4),
+        mob('y', hp: 6),
+      ]);
+      await creatures.healAll();
+      expect(creatures.healQueue.map((c) => c.id).toSet(), {'x', 'y'});
+    },
+  );
 }

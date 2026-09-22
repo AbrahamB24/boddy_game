@@ -46,6 +46,7 @@ class GameNotifications {
     NotifyKind.healing: ('healing', 'Healing Hut'),
     NotifyKind.building: ('building', 'Construction'),
     NotifyKind.training: ('training', 'Combat School'),
+    NotifyKind.social: ('social', 'PvP & messages'),
   };
 
   static Future<void> _init() async {
@@ -57,9 +58,13 @@ class GameNotifications {
       // land hours out on iOS.
       tzdata.initializeTimeZones();
       try {
-        tz.setLocalLocation(tz.getLocation(await FlutterTimezone.getLocalTimezone()));
+        tz.setLocalLocation(
+          tz.getLocation(await FlutterTimezone.getLocalTimezone()),
+        );
       } catch (e) {
-        debugPrint('[GameNotifications] device timezone unknown, using UTC: $e');
+        debugPrint(
+          '[GameNotifications] device timezone unknown, using UTC: $e',
+        );
       }
       await _plugin.initialize(
         const InitializationSettings(
@@ -85,15 +90,23 @@ class GameNotifications {
     await _init();
     if (!_available) return false;
     try {
-      final android = _plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       if (android != null) {
         return await android.requestNotificationsPermission() ?? false;
       }
-      final ios = _plugin.resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin>();
+      final ios = _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
       if (ios != null) {
-        return await ios.requestPermissions(alert: true, badge: true, sound: true) ??
+        return await ios.requestPermissions(
+              alert: true,
+              badge: true,
+              sound: true,
+            ) ??
             false;
       }
     } catch (e) {
@@ -151,6 +164,38 @@ class GameNotifications {
     }
   }
 
+  /// Tells the player NOW — for something that just happened while the app is
+  /// out of sight (a friend arrived in the PvP lobby, a message came). Not a
+  /// promise: nothing is scheduled. It only reaches a process the OS has not
+  /// killed yet; for a closed app it would take a push service.
+  static Future<void> showNow({
+    required NotifyKind kind,
+    required String key,
+    required String title,
+    required String body,
+  }) async {
+    if (!await _ensurePermission()) return;
+    final (channelId, channelName) = _channels[kind]!;
+    try {
+      await _plugin.show(
+        _idFor(kind, key),
+        title,
+        body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            channelId,
+            channelName,
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: const DarwinNotificationDetails(),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[GameNotifications] show failed: $e');
+    }
+  }
+
   /// Takes back the promise for [key] — collected early, sped up, cancelled.
   static Future<void> cancel(NotifyKind kind, String key) async {
     await _init();
@@ -185,6 +230,7 @@ enum NotifyKind {
   healing,
   building,
   training,
+  social,
 }
 
 /// `zonedSchedule` works in a named zone, so an absolute instant has to be

@@ -549,7 +549,10 @@ class CombatEngine extends ChangeNotifier {
   /// [needsPlayerSwitch]'s mirror for the enemy side, gated behind [isPvp] —
   /// see that flag's doc comment.
   bool get needsEnemySwitch =>
-      isPvp && outcome == null && openEnemySlots > 0 && benchedEnemies.isNotEmpty;
+      isPvp &&
+      outcome == null &&
+      openEnemySlots > 0 &&
+      benchedEnemies.isNotEmpty;
 
   // Whole-roster liveness — drives victory/defeat (a side loses only when its
   // WHOLE roster is down, not when the field empties).
@@ -574,6 +577,33 @@ class CombatEngine extends ChangeNotifier {
 
   Combatant _lowestNextTurn() =>
       _activeAlive.reduce((a, b) => a.nextTurnAt <= b.nextTurnAt ? a : b);
+
+  /// Cheap deterministic fingerprint of the whole battle state (PvP desync
+  /// detection, see pvp_sync_service.dart's [PvpAction.stateHash]): two
+  /// independently-run engines fed the identical action sequence must always
+  /// compute the same value. Covers hp/ap/status/alive for EVERY combatant
+  /// (bench included — a benched monster's hp still matters) plus who's
+  /// acting, since that's exactly the state a missed or misapplied action
+  /// would perturb. Deliberately NOT a security boundary (a client could lie
+  /// about its own hash) — only a "did our simulations quietly diverge"
+  /// self-check.
+  int get stateHash {
+    var hash = 0;
+    for (final c in [...players, ...enemies]) {
+      hash = Object.hash(
+        hash,
+        c.id,
+        c.hp,
+        c.ap,
+        c.alive,
+        c.mainStatus,
+        c.mainStatusTurnsRemaining,
+        c.secondaryDebuffs.length,
+        c.selfBuffs.length,
+      );
+    }
+    return Object.hash(hash, _acting?.id);
+  }
 
   bool get isPlayerTurn =>
       outcome == null &&
@@ -1190,11 +1220,15 @@ class CombatEngine extends ChangeNotifier {
       _pendingAdvance = false;
       return;
     }
-    if (needsPlayerSwitch || needsEnemySwitch) return; // still owed — hold the queue
+    if (needsPlayerSwitch || needsEnemySwitch) {
+      return; // still owed — hold the queue
+    }
     _pendingAdvance = false;
     _acting = _activeAlive.isEmpty ? null : _lowestNextTurn();
     _advanceToActionableActor();
-    if (outcome == null && !needsPlayerSwitch && !needsEnemySwitch) _beginTurn();
+    if (outcome == null && !needsPlayerSwitch && !needsEnemySwitch) {
+      _beginTurn();
+    }
   }
 
   void flee() {
@@ -1553,7 +1587,10 @@ class CombatEngine extends ChangeNotifier {
   // ever sees actionable turns.
   void _advanceToActionableActor() {
     var guard = 0;
-    while (outcome == null && !needsPlayerSwitch && !needsEnemySwitch && guard < 50) {
+    while (outcome == null &&
+        !needsPlayerSwitch &&
+        !needsEnemySwitch &&
+        guard < 50) {
       guard++;
       if (_activeAlive.isEmpty) return;
       final actor = _acting ??= _lowestNextTurn();

@@ -1,32 +1,27 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
+import '../../core/ui/pressable.dart';
 import '../common/widgets/filter_pills.dart';
-import '../common/widgets/parchment_page.dart';
+import 'build_menu_request.dart';
 import 'data/building_definitions.dart';
 import 'models/placed_building.dart';
 import 'services/game_engine.dart';
 import 'settlement_controller.dart';
 import 'sheets/building_detail_dialog.dart';
-import 'storage_detail_screen.dart';
 import 'widgets/building_icon.dart';
-import '../../core/ui/pressable.dart';
 
-/// The resource-tap breakdown, now its OWN screen (user 2026-08-31: "die
-/// Ressourcendetail screens einen eigenen Screen werden, welche ebenfalls
-/// genau so aufgebaut sind [wie Housing/Work]") — replacing
-/// [ResourceBreakdownSheet]'s bottom sheet.
+/// ONE RESOURCE, WHOLE (user 2026-09-22, "Epochen-Regale"): what is in the store
+/// and how full it is, what MAKES it and what EATS it, and where the room to keep
+/// it comes from — on one page, three cards. It replaces the two pages this used
+/// to be (the production list and, behind its "In store" bar, the storage list).
 ///
-/// Same shape as the Management screen's Housing/Work tabs: a header line
-/// (a sort pill included), then one compact row per building — its own
-/// asset, its name and level, what it contributes — tapping a row into the
-/// SAME [showBuildingDetailDialog] those tabs open.
-///
-/// The store's own ceiling moved OUT to its own [StorageDetailScreen] (user
-/// 2026-08-31: "das Lager nicht unten kommt, sondern wenn ich auf den in
-/// store Balken drücke, dann komme ich auf die Lagerseite, welche genau
-/// gleich aufgebaut ist") — the "In store" bar here is now the door into
-/// it, not a section competing with the production list for the same page.
+/// LEFT: the hero — the pile, its ceiling, the rate and how long until it is full
+/// (or empty). MIDDLE: "Produced by" (one row per building, tap = its dialog,
+/// sortable) and "Consumed by" (drains not tied to a building), summed in Total.
+/// RIGHT: "Storage" — the store's bar and every building that adds room to it.
+/// A resource without a ceiling (gold has none) has no Storage card.
 class ResourceDetailScreen extends StatefulWidget {
   final String resourceId;
   final String emoji;
@@ -45,129 +40,240 @@ class ResourceDetailScreen extends StatefulWidget {
 
 class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
   final _ctrl = SettlementController();
-  static final PillPalette _pills = PillPalette.parchment;
 
-  /// Same convention as the Housing/Work tabs: null = by amount produced
-  /// (the default), 'level' or 'name' otherwise, same field flips direction
-  /// on a second tap.
+  /// null = by amount (the default), 'level' or 'name' otherwise; the same field
+  /// tapped again flips direction — the convention of every sort pill.
   String? _sort;
   bool _descending = true;
 
-  // ── The PAGE is built once; only its NUMBERS listen (user-report
-  // 2026-08-31: pressing back out of this screen could hang on a black
-  // screen) ──
-  // This used to wrap the whole ParchmentPage — Scaffold, meander bands,
-  // header and its back button included — in one AnimatedBuilder tied to
-  // [_ctrl], which ticks every 5 s on its own passive-economy timer. That
-  // tore down and rebuilt the ENTIRE page, back button included, on a
-  // timer that keeps running while the pop transition is still playing —
-  // every other pushed screen in the app (Management, the work/housing
-  // tabs) builds its chrome once and only re-renders on its own setState.
-  // Only [trailing] and [child] actually read [_ctrl], so only those two
-  // listen now; the Scaffold/header/back-button/bands are built once per
-  // State build, exactly like everywhere else.
+  // The PAGE is built once; only its NUMBERS listen (user report 2026-08-31:
+  // backing out could hang on a black screen). [_ctrl] ticks every 5 s on its own
+  // passive-economy timer, and rebuilding the scaffold and its close button on
+  // that timer while the pop transition plays is what did it.
   @override
-  Widget build(BuildContext context) => ParchmentPage(
+  Widget build(BuildContext context) => MenuScaffold(
     title: '${widget.emoji}  ${widget.title}',
     trailing: AnimatedBuilder(
       animation: _ctrl,
       builder: (context, _) {
         final total = _ctrl.hourlyRates[widget.resourceId] ?? 0;
         return Text(
-          '${total >= 0 ? '+' : ''}${total.toStringAsFixed(1)}/h',
-          // A net loss is red, same rule the top bar's own cell follows
-          // (user 2026-08-01) — the '+' cancels itself out on the one
-          // number where the direction is the whole point otherwise.
+          _perHour(total),
+          // A net loss is red, the rule the header's own cell follows (user
+          // 2026-08-01).
           style: FoE.value(
             size: 14,
-          ).copyWith(color: total < 0 ? FoE.danger : FoE.goldBright),
+          ).copyWith(color: total < 0 ? CreamPalette.warn : kBoxInk),
         );
       },
     ),
-    child: AnimatedBuilder(
-      animation: _ctrl,
-      builder: (context, _) {
-        final made = _ctrl.productionSourcesByBuilding(widget.resourceId)
-          ..sort((a, b) {
-            final cmp = switch (_sort) {
-              'level' => a.$1.level.compareTo(b.$1.level),
-              'name' => a.$2.name.compareTo(b.$2.name),
-              _ => a.$3.compareTo(b.$3),
-            };
-            return _descending ? -cmp : cmp;
-          });
-        // The synthetic drains (refining, upkeep) — never tied to one
-        // building, so they stay grouped/untappable, same as before.
-        final eaten = _ctrl
-            .productionSources(widget.resourceId)
-            .where((s) => s.amount < 0)
-            .toList();
-        final stored = _ctrl.resources?.amountOf(widget.resourceId);
-        final capacity = _ctrl.storageCapacity(widget.resourceId);
-        final hasCap = stored != null && capacity > 0;
-        final isFull = hasCap && stored >= capacity;
-        final net =
-            made.fold<double>(0, (a, s) => a + s.$3) +
-            eaten.fold<double>(0, (a, s) => a + s.amount);
+    child: AnimatedBuilder(animation: _ctrl, builder: (context, _) => _body()),
+  );
 
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(
-            ParchmentPage.kParchmentPagePad,
-            12,
-            ParchmentPage.kParchmentPagePad,
-            20,
+  Widget _body() {
+    final id = widget.resourceId;
+    final made = _ctrl.productionSourcesByBuilding(id)
+      ..sort((a, b) {
+        final cmp = switch (_sort) {
+          'level' => a.$1.level.compareTo(b.$1.level),
+          'name' => a.$2.name.compareTo(b.$2.name),
+          _ => a.$3.compareTo(b.$3),
+        };
+        return _descending ? -cmp : cmp;
+      });
+    // The synthetic drains (refining, upkeep) — never tied to one building.
+    final eaten = _ctrl
+        .productionSources(id)
+        .where((s) => s.amount < 0)
+        .toList();
+    final stored = _ctrl.resources?.amountOf(id) ?? 0;
+    final capacity = _ctrl.storageCapacity(id);
+    final hasCap = capacity > 0;
+    final rate = _ctrl.hourlyRates[id] ?? 0;
+    // ENERGY IS A FACTOR ON THE PRODUCTION (user 2026-09-22: "oben rechts 92
+    // total, Mitte nur 77 — die Prozente durch die Energie auch als Bonus oder
+    // Malus auflisten"): the rows list what the buildings make at 100 %, the
+    // header's rate is that times the energy multiplier. So the multiplier is a
+    // row of its own, and the Total under the list is the header's figure. (The
+    // refining drains below are already priced at the energy-scaled rate, the way
+    // the header subtracts them.)
+    final madeSum = made.fold<double>(0, (a, s) => a + s.$3);
+    final energy = _ctrl.energy;
+    final mult = energy?.multiplier ?? 1.0;
+    final energyDelta = madeSum > 0 ? madeSum * (mult - 1) : 0.0;
+    final net =
+        madeSum + energyDelta + eaten.fold<double>(0, (a, s) => a + s.amount);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(width: 210, child: _hero(stored, capacity, rate)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _productionCard(
+            made,
+            eaten,
+            net,
+            energyDelta: energyDelta,
+            energyPercent: energy?.percent,
+            energyMult: mult,
           ),
-          children: [
-            if (hasCap) ...[
-              _storeButton(stored, capacity, isFull),
-              const SizedBox(height: 14),
-            ],
-            if (made.isEmpty && eaten.isEmpty)
+        ),
+        if (hasCap) ...[
+          const SizedBox(width: 12),
+          SizedBox(width: 280, child: _storageCard(stored, capacity)),
+        ],
+      ],
+    );
+  }
+
+  // ── The hero ──────────────────────────────────────────────
+  Widget _hero(double stored, double capacity, double rate) {
+    final hasCap = capacity > 0;
+    final full = hasCap && stored >= capacity;
+    final frac = hasCap ? (stored / capacity).clamp(0.0, 1.0) : 0.0;
+    return creamCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(widget.emoji, style: const TextStyle(fontSize: 54)),
+          const SizedBox(height: 4),
+          Text(
+            _group(stored),
+            style: FoE.value(size: 26).copyWith(color: kBoxInk),
+          ),
+          if (hasCap)
+            Text(
+              'of ${_group(capacity)}',
+              style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+            ),
+          if (hasCap) ...[
+            const SizedBox(height: 8),
+            _bar(frac, full ? CreamPalette.warn : CreamPalette.gold, 12),
+          ],
+          const SizedBox(height: 10),
+          Text(
+            _perHour(rate),
+            style: FoE.value(size: 18).copyWith(
+              color: rate < 0
+                  ? CreamPalette.warn
+                  : rate > 0
+                  ? CreamPalette.better
+                  : kBoxInkFaint,
+            ),
+          ),
+          Text(
+            _outlook(stored, capacity, rate),
+            textAlign: TextAlign.center,
+            style: FoE.dim(size: 11.5).copyWith(
+              color: full ? CreamPalette.warn : kBoxInkSoft,
+              fontWeight: full ? FontWeight.w800 : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// When the pile is full or empty at this rate.
+  static String _outlook(double stored, double capacity, double rate) {
+    if (capacity > 0 && stored >= capacity) return 'Full — production stops';
+    if (rate > 0 && capacity > 0) {
+      return 'full in ${_hours((capacity - stored) / rate)}';
+    }
+    if (rate < 0 && stored > 0) return 'empty in ${_hours(stored / -rate)}';
+    if (stored <= 0 && rate <= 0) return 'nothing here yet';
+    return '';
+  }
+
+  // ── Production ────────────────────────────────────────────
+  Widget _productionCard(
+    List<(PlacedBuilding, BuildingDef, double)> made,
+    List<ProductionSource> eaten,
+    double net, {
+    required double energyDelta,
+    required double? energyPercent,
+    required double energyMult,
+  }) => sectionCard(
+    title: 'Produced by',
+    // Flexible, not bare (the 2026-08-31 crash: "RenderFlex children have
+    // non-zero flex but incoming width constraints are unbounded"): [MenuPill]
+    // has an Expanded label inside it, so it needs a bounded width from the Row it
+    // sits in. Without it the whole page failed to lay out — only one card showed.
+    trailing: made.isEmpty ? null : Flexible(child: _sortPill()),
+    expand: true,
+    child: made.isEmpty && eaten.isEmpty
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Text(
                 'Nothing is producing this yet.',
-                style: FoE.dim(size: 12).copyWith(color: FoE.textDim),
-              )
-            else ...[
-              if (made.isNotEmpty) ...[
-                Row(
-                  children: [
-                    _heading('Produced by'),
-                    const Spacer(),
-                    // Flexible, not bare (2026-08-31 crash: "RenderFlex
-                    // children have non-zero flex but incoming width
-                    // constraints are unbounded") — [MenuPill] has an
-                    // Expanded label INSIDE it, so it needs a bounded
-                    // width from whatever Row it sits in.
-                    Flexible(child: _sortPill()),
-                  ],
+                style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+              ),
+              const SizedBox(height: 12),
+              // A way forward, not a dead end (user 2026-09-22): the build strip,
+              // on the category that makes things.
+              _actionButton(
+                'Build a producer',
+                () => BuildMenuRequest.open(
+                  context,
+                  category: BuildingCategory.production,
                 ),
-                const SizedBox(height: 8),
-                for (final s in made) _instanceRow(context, s),
-                const SizedBox(height: 4),
-              ],
+              ),
+            ],
+          )
+        : ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              for (final s in made)
+                s.$1.isPaused
+                    ? _builtRow(
+                        s.$1,
+                        s.$2,
+                        '0/h',
+                        sub: 'Lv ${s.$1.level} · Paused',
+                        color: kBoxInkFaint,
+                      )
+                    : _builtRow(s.$1, s.$2, '+${_amt(s.$3)}/h'),
+              if (energyDelta.abs() >= 0.05)
+                _row(
+                  icon: const Text('⚡', style: TextStyle(fontSize: 24)),
+                  name: 'Energy ${(energyPercent ?? 0).round()} %',
+                  sub: energyDelta > 0
+                      ? 'bonus: +${((energyMult - 1) * 100).round()} % on production'
+                      : 'malus: ${((energyMult - 1) * 100).round()} % on production',
+                  value:
+                      '${energyDelta > 0 ? '+' : '−'}${_amt(energyDelta.abs())}/h',
+                  color: energyDelta > 0
+                      ? CreamPalette.better
+                      : CreamPalette.warn,
+                ),
               if (eaten.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                _heading('Consumed by'),
-                const SizedBox(height: 8),
-                for (final s in eaten) _syntheticRow(s),
+                _subheading('Consumed by'),
+                const SizedBox(height: 6),
+                for (final s in eaten) _drainRow(s),
               ],
-              _netRow(net),
+              _totalRow(net),
             ],
-          ],
-        );
-      },
+          ),
+  );
+
+  Widget _subheading(String text) => Text(
+    text.toUpperCase(),
+    style: TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 1.1,
+      color: kBoxAccent,
     ),
   );
 
-  Widget _heading(String text) => Text(
-    text.toUpperCase(),
-    style: FoE.label(size: 10).copyWith(color: FoE.gold, letterSpacing: 1.1),
-  );
-
-  /// Order "Produced by" by amount, by level, or by name — same
-  /// field-picks-then-flips control the Housing/Work tabs use.
+  /// Order "Produced by" by amount, by level, or by name — the field-picks-then-
+  /// flips control the Housing/Work tabs use.
   Widget _sortPill() => MenuPill<String>(
-    palette: _pills,
+    palette: PillPalette.cream,
     icon: Icons.swap_vert,
     label: switch (_sort) {
       'level' => 'Level',
@@ -184,7 +290,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
     trailing: Icon(
       _descending ? Icons.arrow_downward : Icons.arrow_upward,
       size: 14,
-      color: FoE.gold,
+      color: kBoxAccent,
     ),
     selectedTrailing: _descending ? '↓' : '↑',
     onSelected: (v) {
@@ -200,57 +306,15 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
     },
   );
 
-  /// "In store", now the door into [StorageDetailScreen] rather than a
-  /// section of this page (user 2026-08-31).
-  Widget _storeButton(double stored, double capacity, bool isFull) =>
-      Pressable(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => StorageDetailScreen(
-              resourceId: widget.resourceId,
-              emoji: widget.emoji,
-              title: widget.title,
-            ),
-          ),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: FoE.panel(radius: 10),
-          child: Row(
-            children: [
-              // Just "Storage" (user 2026-08-31: "Hier auch nur Storage, den
-              // Rest löschen") — no caption line, same as the section
-              // heading and its sort pill on the page this opens.
-              Expanded(child: Text('Storage', style: FoE.label(size: 12))),
-              Text(
-                '${stored.toStringAsFixed(0)} / ${capacity.toStringAsFixed(0)}',
-                style: FoE.value(
-                  size: 14,
-                ).copyWith(color: isFull ? FoE.danger : FoE.goldBright),
-              ),
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 18, color: FoE.textDim),
-            ],
-          ),
-        ),
-      );
-
-  /// WHAT IS ACTUALLY PRODUCED — the sum of every row above it, arrived at
-  /// rather than asserted (if it ever disagrees with the header rate, a row
-  /// is missing).
-  ///
-  /// A thicker rule now (user 2026-08-31), the same 2 px [ParchmentDivider]
-  /// draws — not that widget itself, because it insets by
-  /// [ParchmentPage.kParchmentPagePad] on the assumption of NO ambient
-  /// padding, and this row already sits inside the page's own padded
-  /// ListView; a second inset here would pull it in twice.
-  Widget _netRow(double net) => Container(
-    margin: const EdgeInsets.only(top: 8),
-    padding: const EdgeInsets.only(top: 10),
-    decoration: const BoxDecoration(
-      border: Border(top: BorderSide(color: FoE.border, width: 2)),
+  /// WHAT IS ACTUALLY PRODUCED — the sum of every row above it, arrived at rather
+  /// than asserted (if it ever disagrees with the header rate, a row is missing).
+  Widget _totalRow(double net) => Container(
+    margin: const EdgeInsets.only(top: 6),
+    padding: const EdgeInsets.fromLTRB(4, 8, 4, 2),
+    decoration: BoxDecoration(
+      border: Border(
+        top: BorderSide(color: kBoxInk.withValues(alpha: 0.3), width: 2),
+      ),
     ),
     child: Row(
       children: [
@@ -259,105 +323,233 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
         Expanded(
           child: Text(
             'Total',
-            style: FoE.label(size: 13).copyWith(fontWeight: FontWeight.w800),
+            style: FoE.label(
+              size: 13,
+            ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
           ),
         ),
         Text(
-          '${net > 0 ? '+' : ''}${net.toStringAsFixed(1)}/h',
+          _perHour(net),
           style: FoE.value(
             size: 14,
-          ).copyWith(color: net < 0 ? FoE.danger : FoE.goldBright),
+          ).copyWith(color: net < 0 ? CreamPalette.warn : CreamPalette.better),
         ),
       ],
     ),
   );
 
-  /// The Housing/Work tab's own row shape, for a real building: its asset,
-  /// centred and big, its name and level, and what it contributes here —
-  /// tapping it into the same building detail dialog those tabs use.
-  Widget _instanceRow(
-    BuildContext context,
-    (PlacedBuilding, BuildingDef, double) s,
-  ) {
-    final (b, def, amount) = s;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Pressable(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => showBuildingDetailDialog(context, _ctrl, b),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: FoE.panel(radius: 8),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 64,
-                child: Center(
-                  child: BuildingIcon(
-                    imageUrl: def.imageUrl,
-                    defId: def.id,
-                    size: 56,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(def.name, style: FoE.label(size: 13)),
-                    Text(
-                      'Lv ${b.level}',
-                      style: FoE.dim(size: 11).copyWith(color: FoE.gold),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '+${amount.toStringAsFixed(1)}/h',
-                style: FoE.value(size: 12).copyWith(color: FoE.gold),
-              ),
-            ],
+  // ── Storage ───────────────────────────────────────────────
+  Widget _storageCard(double stored, double capacity) {
+    final full = stored >= capacity;
+    final frac = (stored / capacity).clamp(0.0, 1.0);
+    final sources = _ctrl.storageSourcesByBuilding(widget.resourceId)
+      ..sort((a, b) => b.$3.compareTo(a.$3));
+    // The settlement's own base — never tied to a building, so it is a fixed line
+    // above the sortable ones.
+    final baseCap = capacity - sources.fold<double>(0, (a, s) => a + s.$3);
+    final rate = _ctrl.hourlyRates[widget.resourceId] ?? 0;
+    return sectionCard(
+      title: 'Storage',
+      trailing: Text(
+        '${_group(stored)} / ${_group(capacity)}',
+        style: FoE.value(
+          size: 13,
+        ).copyWith(color: full ? CreamPalette.warn : kBoxInk),
+      ),
+      expand: true,
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          _bar(frac, full ? CreamPalette.warn : CreamPalette.gold, 12),
+          const SizedBox(height: 4),
+          Text(
+            _outlook(stored, capacity, rate).isEmpty
+                ? ' '
+                : _outlook(stored, capacity, rate),
+            style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
           ),
-        ),
+          const SizedBox(height: 8),
+          if (baseCap > 0)
+            _row(
+              icon: const Text('🏛', style: TextStyle(fontSize: 24)),
+              name: 'The settlement itself',
+              sub: 'base room',
+              value: '+${baseCap.toStringAsFixed(0)}',
+              color: kBoxInk,
+            ),
+          for (final s in sources)
+            _builtRow(
+              s.$1,
+              s.$2,
+              '+${s.$3.toStringAsFixed(0)}',
+              color: kBoxInk,
+            ),
+          const SizedBox(height: 6),
+          // More room is one tap away: the build strip, on the category of a
+          // building that stores this. Amber when the store is already full.
+          _actionButton(
+            'Build more storage',
+            () => BuildMenuRequest.open(context, category: _storageCategory()),
+            primary: full,
+          ),
+        ],
       ),
     );
   }
 
-  /// A drain not tied to any one building (refining, creature upkeep) — the
-  /// same row shape, minus the tap and the level line it has nothing to
-  /// show for either.
-  Widget _syntheticRow(ProductionSource s) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
+  // ── Ways forward ──────────────────────────────────────────
+  /// The build-strip category of a building that adds room to this resource
+  /// (Production if none is found).
+  BuildingCategory _storageCategory() {
+    final era = _ctrl.dungeonMaxStage;
+    for (final def in kBuildingDefs.values) {
+      final category = def.category;
+      if (category == null || category == BuildingCategory.special) continue;
+      if (def.effectEntry('storage', widget.resourceId, era) != null) {
+        return category;
+      }
+    }
+    return BuildingCategory.production;
+  }
+
+  /// A full-width button on a card: amber when it is the thing to do, a light
+  /// tile otherwise.
+  Widget _actionButton(
+    String label,
+    VoidCallback onTap, {
+    bool primary = true,
+  }) => Pressable(
+    onTap: onTap,
     child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: FoE.panel(radius: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 64,
-            child: Center(
-              child: BuildingIcon(
-                imageUrl: s.imageUrl,
-                defId: s.defId,
-                emoji: s.emoji,
-                size: 56,
+      height: 38,
+      alignment: Alignment.center,
+      decoration: primary ? goldButton() : raisedTile(radius: 12),
+      child: Text(
+        label,
+        style: FoE.label(size: 13).copyWith(
+          color: primary ? goldButtonInk() : kBoxInk,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    ),
+  );
+
+  // ── Rows ──────────────────────────────────────────────────
+  /// A building's row: its art, name and level, the figure — tapping it opens the
+  /// same building dialog the Work and Housing pages open.
+  Widget _builtRow(
+    PlacedBuilding b,
+    BuildingDef def,
+    String value, {
+    String? sub,
+    Color color = CreamPalette.better,
+  }) => Pressable(
+    behavior: HitTestBehavior.opaque,
+    onTap: () => showBuildingDetailDialog(context, _ctrl, b),
+    child: _row(
+      icon: BuildingIcon(imageUrl: def.imageUrl, defId: def.id, size: 38),
+      name: def.name,
+      sub: sub ?? 'Lv ${b.level}',
+      value: value,
+      color: color,
+    ),
+  );
+
+  /// A drain not tied to any one building (refining, creature upkeep) — the same
+  /// row, minus the tap and the level line it has nothing to show for.
+  Widget _drainRow(ProductionSource s) => _row(
+    icon: BuildingIcon(
+      imageUrl: s.imageUrl,
+      defId: s.defId,
+      emoji: s.emoji,
+      size: 38,
+    ),
+    name: s.count > 1 ? '${s.label} ×${s.count}' : s.label,
+    value: '−${_amt(s.amount.abs())}/h',
+    color: CreamPalette.warn,
+  );
+
+  Widget _row({
+    required Widget icon,
+    required String name,
+    String? sub,
+    required String value,
+    required Color color,
+  }) => Container(
+    margin: const EdgeInsets.only(bottom: 5),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: raisedTile(radius: 10),
+    child: Row(
+      children: [
+        SizedBox(width: 44, child: Center(child: icon)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: FoE.label(
+                  size: 12.5,
+                ).copyWith(color: kBoxInk, fontWeight: FontWeight.w700),
               ),
-            ),
+              if (sub != null)
+                Text(
+                  sub,
+                  style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
+                ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              s.count > 1 ? '${s.label} ×${s.count}' : s.label,
-              style: FoE.label(size: 13),
+        ),
+        Text(value, style: FoE.value(size: 12.5).copyWith(color: color)),
+      ],
+    ),
+  );
+
+  Widget _bar(double frac, Color color, double height) => ClipRRect(
+    borderRadius: BorderRadius.circular(height / 2),
+    child: SizedBox(
+      height: height,
+      width: double.infinity,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(color: kBoxInk.withValues(alpha: 0.16)),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: frac,
+              child: ColoredBox(color: color),
             ),
-          ),
-          Text(
-            '${s.amount.toStringAsFixed(1)}/h',
-            style: FoE.value(size: 12).copyWith(color: FoE.danger),
           ),
         ],
       ),
     ),
   );
+
+  // ── Formatting ────────────────────────────────────────────
+  /// "1,240" — a whole number with thousands separators.
+  static String _group(double v) {
+    final s = v.round().abs().toString();
+    final b = StringBuffer(v < 0 ? '-' : '');
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+      b.write(s[i]);
+    }
+    return b.toString();
+  }
+
+  static String _amt(double v) => v.toStringAsFixed(v.abs() >= 100 ? 0 : 1);
+
+  static String _perHour(double v) =>
+      '${v > 0
+          ? '+'
+          : v < 0
+          ? '−'
+          : ''}${_amt(v.abs())}/h';
+
+  static String _hours(double h) =>
+      h >= 48 ? '${(h / 24).round()} d' : '${h.ceil()} h';
 }

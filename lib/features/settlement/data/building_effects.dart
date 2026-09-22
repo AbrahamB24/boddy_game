@@ -278,8 +278,13 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       // starting numbers as that dial, so this changes no ceiling today; it
       // only gives them a building, and — like every other storage effect
       // in this table — a level to grow with.
+      //
+      // Fish joined them (user 2026-09-20: "der Startstorage kommt vom Castle
+      // und nicht von der Siedlung") — it is the one luxury a player holds
+      // from the first minute, so without a line here it sat on the flat dial
+      // and showed up as "The settlement itself" until a Storehouse existed.
       ..._storageFor(
-        const ['wood', 'stone'],
+        const ['wood', 'stone', 'fish'],
         atLevelOne: 500,
         growthPerLevel: 1.25,
       ),

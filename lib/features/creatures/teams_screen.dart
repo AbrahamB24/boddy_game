@@ -1,19 +1,31 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
+import '../../core/theme/cream_kit.dart';
+import '../../core/theme/strategy_theme.dart'
+    show chunkyDecoration, strategyDarken;
 import '../../core/ui/snack.dart';
 import '../common/widgets/filter_pills.dart';
-import '../common/widgets/parchment_page.dart';
+import '../settlement/settlement_controller.dart';
 import 'models/creature_enums.dart';
 import 'models/creature_instance.dart';
 import 'models/saved_team.dart';
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
+import 'services/overworld_path.dart';
+import 'widgets/creature_family.dart';
 import '../../core/ui/pressable.dart';
 
 // Saved battle rosters. The active team is what battleTeam() hands to every
 // fight in the game, so this screen is the ONLY place the player says who
 // fights — before it existed, the answer was silently "your oldest monsters".
+//
+// "Kompakte Zeilen" (user 2026-09-22): one row per team — star, name, the seats as
+// monster faces (empty ones as "+", the next one locked with the battle it opens
+// at), power, buttons. A banner on top says how many monsters a team may hold and
+// what it takes to get another. Built for many teams: the list scrolls, and the
+// number of SAVED teams is not limited — only the seats per team come from the map
+// (see nextPartySeat).
 class TeamsScreen extends StatefulWidget {
   const TeamsScreen({super.key});
 
@@ -23,16 +35,20 @@ class TeamsScreen extends StatefulWidget {
 
 class _TeamsScreenState extends State<TeamsScreen> {
   final _ctrl = CreaturesController();
+  final _settlement = SettlementController();
 
   @override
   void initState() {
     super.initState();
     _ctrl.addListener(_onChange);
+    // The seat count follows the battles won.
+    _settlement.addListener(_onChange);
   }
 
   @override
   void dispose() {
     _ctrl.removeListener(_onChange);
+    _settlement.removeListener(_onChange);
     super.dispose();
   }
 
@@ -45,46 +61,58 @@ class _TeamsScreenState extends State<TeamsScreen> {
     // battleTeams, not savedTeams: the same table also holds the Market's saved
     // caravans since migration 0028, and they are not fighting rosters.
     final teams = _ctrl.battleTeams;
-    return ParchmentPage(
+    final cap = _ctrl.teamSizeCap;
+    return MenuScaffold(
       title: 'Teams',
-      trailing: Text(
-        'max ${_ctrl.teamSizeCap} per team',
-        style: FoE.dim(size: 11),
+      trailing: _newTeamButton(),
+      child: creamCard(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+        child: teams.isEmpty
+            ? _empty(cap)
+            : ListView.builder(
+                itemCount: teams.length,
+                itemBuilder: (_, i) => _teamRow(teams[i], cap),
+              ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: FoE.gold,
-        onPressed: () => _editTeam(null),
-        icon: const Icon(Icons.add, color: Colors.black),
-        label: Text(
-          'New team',
-          style: FoE.label(size: 13).copyWith(color: Colors.black),
-        ),
-      ),
-      child: teams.isEmpty
-          ? _empty()
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(ParchmentPage.kParchmentPagePad, 12, ParchmentPage.kParchmentPagePad, 96),
-              itemCount: teams.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (_, i) => _teamCard(teams[i]),
-            ),
     );
   }
 
-  Widget _empty() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Text(
-        'No saved teams.\n\nWithout one, fights use the first '
-        '${_ctrl.teamSizeCap} monster${_ctrl.teamSizeCap > 1 ? 's' : ''} that '
-        'can go — your oldest. Build a team to choose for yourself.',
-        textAlign: TextAlign.center,
-        style: FoE.dim(size: 12),
+  /// The one control left besides the rows themselves. Any number of teams may be
+  /// saved — only the seats per team come from the map (see nextPartySeat).
+  Widget _newTeamButton() => Pressable(
+    onTap: () => _editTeam(null),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: goldButton(),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.add, size: 16, color: CreamPalette.ink),
+          const SizedBox(width: 4),
+          Text(
+            'New team',
+            style: FoE.title(size: 12).copyWith(color: goldButtonInk()),
+          ),
+        ],
       ),
     ),
   );
 
-  Widget _teamCard(SavedTeam team) {
+  Widget _empty(int cap) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 460),
+      child: Text(
+        'No saved teams.\n\nWithout one, fights use the first '
+        '$cap monster${cap > 1 ? 's' : ''} that '
+        'can go — your oldest. Build a team to choose for yourself.',
+        textAlign: TextAlign.center,
+        style: FoE.label(size: 12.5).copyWith(color: kBoxInkSoft, height: 1.4),
+      ),
+    ),
+  );
+
+  // ── One team ──────────────────────────────────────────────
+  Widget _teamRow(SavedTeam team, int cap) {
     final members = team.memberIds
         .map(_ctrl.byId)
         .whereType<CreatureInstance>()
@@ -92,119 +120,165 @@ class _TeamsScreenState extends State<TeamsScreen> {
     // Members that no longer exist (released, or from a reset profile) are
     // simply absent — the roster is intent, and battleTeam() skips them too.
     final missing = team.memberIds.length - members.length;
-    final overCap = members.length > _ctrl.teamSizeCap;
+    final over = members.length > cap ? members.length - cap : 0;
+    // What would fight: the first [cap] in the player's order, K.O. ones aside.
+    final power = members
+        .take(cap)
+        .where((c) => !c.isKo)
+        .fold<int>(0, (a, c) => a + totalPower(c));
+    final next = nextPartySeat(_settlement.battlesCleared);
+    final seats = members.length > cap ? members.length : cap;
+    final sub = over > 0
+        ? '$over sits out'
+        : missing > 0
+        ? '$missing gone'
+        : '${members.length}/$cap seats';
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: FoE.panel(
-        radius: 12,
-        overrideBorder: team.isActive ? FoE.goldBright : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      height: 52,
+      margin: const EdgeInsets.only(bottom: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: raisedTile(radius: 12, lit: team.isActive),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${team.isActive ? '⭐ ' : ''}${team.name}',
-                  style: FoE.title(size: 14),
+          Pressable(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => team.isActive
+                ? _ctrl.activateTeam(null)
+                : _ctrl.activateTeam(team),
+            child: SizedBox(
+              width: 24,
+              child: Icon(
+                team.isActive ? Icons.star_rounded : Icons.star_border_rounded,
+                size: 22,
+                color: team.isActive ? CreamPalette.goldDeep : kBoxInkFaint,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 140,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  team.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FoE.title(size: 13.5).copyWith(color: kBoxInk),
                 ),
-              ),
-              Text(
-                '${members.length} 🐾',
-                style: FoE.dim(size: 11),
-              ),
-            ],
+                Text(
+                  sub,
+                  style: FoE.dim(size: 10.5).copyWith(
+                    color: over > 0 || missing > 0
+                        ? CreamPalette.warn
+                        : kBoxInkSoft,
+                    fontWeight: over > 0 || missing > 0
+                        ? FontWeight.w800
+                        : null,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
-          if (members.isEmpty)
-            Text('Nobody left in this team', style: FoE.dim(size: 11))
-          else
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [for (final c in members) _memberChip(c)],
+          Expanded(
+            child: Row(
+              children: [
+                for (var k = 0; k < seats; k++) ...[
+                  if (k < members.length)
+                    // Past the cap they hold their place but do not fight.
+                    Opacity(
+                      opacity: k >= cap ? 0.4 : 1,
+                      child: CreatureAvatar.of(
+                        members[k],
+                        size: 34,
+                        showHp: false,
+                      ),
+                    )
+                  else
+                    _seatBox(const Icon(Icons.add, size: 16), faint: false),
+                  const SizedBox(width: 8),
+                ],
+                if (next != null)
+                  Tooltip(
+                    message: 'Seat ${cap + 1} from battle ${next.battle}',
+                    child: _seatBox(
+                      Icon(Icons.lock_outline, size: 15, color: kBoxInkFaint),
+                      faint: true,
+                    ),
+                  ),
+              ],
             ),
-          if (overCap) ...[
-            const SizedBox(height: 6),
-            // Not silently trimmed on save: the cap grows with research, so an
-            // oversized team becomes legal later. battleTeam() takes the first
-            // teamSizeCap in the player's own order until then.
-            Text(
-              '⚠️ Over the current cap — only the first ${_ctrl.teamSizeCap} '
-              'will fight until you research more team size.',
-              style: FoE.dim(size: 10).copyWith(color: FoE.gold),
-            ),
-          ],
-          if (missing > 0) ...[
-            const SizedBox(height: 6),
-            Text(
-              '⚠️ $missing member${missing > 1 ? 's are' : ' is'} gone',
-              style: FoE.dim(size: 10).copyWith(color: FoE.danger),
-            ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _miniBtn(
-                team.isActive ? '⭐ Active' : 'Use this team',
-                team.isActive
-                    ? () => _ctrl.activateTeam(null)
-                    : () => _ctrl.activateTeam(team),
-              ),
-              const SizedBox(width: 6),
-              _miniBtn('Edit', () => _editTeam(team)),
-              const Spacer(),
-              _miniBtn('Delete', () => _confirmDelete(team), danger: true),
-            ],
           ),
+          SizedBox(
+            width: 64,
+            child: Text(
+              '$power',
+              textAlign: TextAlign.right,
+              style: FoE.value(size: 14).copyWith(color: kBoxAccent),
+            ),
+          ),
+          const SizedBox(width: 12),
+          team.isActive
+              ? _miniBtn('★ Active', () => _ctrl.activateTeam(null))
+              : _miniBtn('Use', () => _ctrl.activateTeam(team), active: true),
+          const SizedBox(width: 6),
+          _miniBtn('Edit', () => _editTeam(team)),
+          const SizedBox(width: 6),
+          _miniBtn('✕', () => _confirmDelete(team), danger: true),
         ],
       ),
     );
   }
 
-  Widget _memberChip(CreatureInstance c) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-    decoration: FoE.panel(radius: FoE.radiusSmall),
-    child: Text(
-      '${c.isKo ? '💀 ' : ''}${c.displayName} · '
-      '${totalPower(c).toStringAsFixed(0)}',
-      style: FoE.label(size: 11).copyWith(
-        color: c.isKo ? FoE.danger : FoE.parchment,
+  /// A seat with nobody in it: a dashed square, the size of a monster's face.
+  Widget _seatBox(Widget child, {required bool faint}) => SizedBox(
+    width: 34,
+    height: 34,
+    child: CustomPaint(
+      painter: DashedRRectPainter(
+        color: CreamPalette.tan.withValues(alpha: faint ? 0.5 : 0.85),
+        radius: 9,
       ),
+      child: Center(child: child),
     ),
   );
 
   Future<void> _confirmDelete(SavedTeam team) async {
-    // Same shape/backdrop/text roles as the app's other two "are you sure"
-    // dialogs (2026-08-31 audit — battle_screen.dart's Flee?,
-    // creature_detail_screen.dart's Release?), which this one had drifted
-    // from: no shape at all (default rounding, not the gold-bordered
-    // radius-12 facet), FoE.panelMid instead of panelDark, and the
-    // body/cancel text roles swapped (dim vs label).
     final ok = await showDialog<bool>(
       context: context,
+      barrierColor: CreamPalette.dim,
       builder: (dctx) => AlertDialog(
-        backgroundColor: FoE.panelDark,
-        shape: FoE.facet(
-          radius: 12,
-          side: const BorderSide(color: FoE.borderGold),
+        backgroundColor: CreamPalette.paperTop,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: CreamPalette.tan, width: 1.5),
         ),
-        title: Text('Delete "${team.name}"?', style: FoE.title(size: 15)),
+        title: Text(
+          'Delete "${team.name}"?',
+          style: FoE.title(size: 15).copyWith(color: kBoxInk),
+        ),
         content: Text(
           'The monsters are untouched — only the roster goes.',
-          style: FoE.label(size: 13),
+          style: TextStyle(fontSize: 13, color: kBoxInkSoft),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dctx, false),
-            child: Text('Keep', style: FoE.dim(size: 13)),
+            child: Text(
+              'Keep',
+              style: TextStyle(fontSize: 13, color: kBoxInkSoft),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(dctx, true),
-            child: Text(
+            child: const Text(
               'Delete',
-              style: FoE.label(size: 13).copyWith(color: Colors.redAccent),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: CreamPalette.warn,
+              ),
             ),
           ),
         ],
@@ -234,20 +308,42 @@ class _TeamsScreenState extends State<TeamsScreen> {
     return _ctrl.renameTeam(team, d.name);
   }
 
-  Widget _miniBtn(String label, VoidCallback onTap, {bool danger = false}) =>
-      Pressable(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: FoE.btn(),
-          child: Text(
-            label,
-            style: FoE.label(
-              size: 12,
-            ).copyWith(color: danger ? Colors.redAccent : FoE.parchment),
-          ),
+  /// A row button: amber for the main one, the warning colour for Delete,
+  /// raised cream for the rest.
+  Widget _miniBtn(
+    String label,
+    VoidCallback onTap, {
+    bool danger = false,
+    bool active = false,
+  }) => Pressable(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: danger
+          ? chunkyDecoration(
+              fill: CreamPalette.warn,
+              deep: strategyDarken(CreamPalette.warn, 0.35),
+              radius: 10,
+              shadowOffset: 2,
+            )
+          : active
+          ? chunkyDecoration(
+              fill: CreamPalette.gold,
+              deep: CreamPalette.goldDeep,
+              radius: 10,
+              shadowOffset: 2,
+            )
+          : raisedTile(radius: 10),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          color: danger ? CreamPalette.paperTop : kBoxInk,
         ),
-      );
+      ),
+    ),
+  );
 }
 
 class _TeamDraft {
@@ -308,6 +404,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
       };
       return _descending ? -r : r;
     }
+
     list.sort(cmp);
     return list;
   }
@@ -318,7 +415,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
         flex: 3,
         child: SearchPill(
           controller: _search,
-          palette: PillPalette.parchment,
+          palette: PillPalette.cream,
           onChanged: (v) => setState(() => _query = v),
         ),
       ),
@@ -326,7 +423,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
       Expanded(
         flex: 2,
         child: MenuPill<String>(
-          palette: PillPalette.parchment,
+          palette: PillPalette.cream,
           icon: Icons.swap_vert,
           label: switch (_sortKey) {
             'level' => 'Level',
@@ -343,7 +440,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
           trailing: Icon(
             _descending ? Icons.arrow_downward : Icons.arrow_upward,
             size: 14,
-            color: FoE.goldBright,
+            color: CreamPalette.accent,
           ),
           selectedTrailing: _descending ? '↓' : '↑',
           onSelected: (v) => setState(() {
@@ -361,7 +458,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
       Expanded(
         flex: 2,
         child: MenuPill<String>(
-          palette: PillPalette.parchment,
+          palette: PillPalette.cream,
           icon: Icons.filter_alt_outlined,
           label: _filterElement?.label ?? 'Every type',
           engaged: _filterElement != null,
@@ -373,7 +470,8 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
                 MapEntry(e.name, '${e.emoji} ${e.label}'),
           ],
           onSelected: (v) => setState(
-            () => _filterElement = v.isEmpty ? null : CreatureElement.fromName(v),
+            () =>
+                _filterElement = v.isEmpty ? null : CreatureElement.fromName(v),
           ),
         ),
       ),
@@ -384,76 +482,89 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
   Widget build(BuildContext context) {
     final ctrl = CreaturesController();
     final cap = ctrl.teamSizeCap;
+    // Capped to a FRACTION of the screen's own height now (2026-09-18) —
+    // a plain modal bottom sheet has no natural height limit of its own,
+    // and in landscape's short viewport an uncapped Column of controls +
+    // roster list could ask for more room than exists at all.
+    final maxH = MediaQuery.sizeOf(context).height * 0.86;
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: FoE.panelMid,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(FoE.radius)),
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.team == null ? 'New team' : 'Edit team',
-              style: FoE.title(size: 16),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxH),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [CreamPalette.paperTop, CreamPalette.paperBottom],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _name,
-              style: FoE.label(size: 14).copyWith(color: FoE.parchment),
-              decoration: InputDecoration(
-                hintText: 'Team name (e.g. Steinteam)',
-                hintStyle: FoE.dim(size: 13),
-                filled: true,
-                fillColor: FoE.panelDark,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(FoE.radiusSmall),
-                  borderSide: BorderSide.none,
-                ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            border: Border(
+              top: BorderSide(color: CreamPalette.gold, width: 2.5),
+            ),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.team == null ? 'New team' : 'Edit team',
+                style: FoE.title(size: 16).copyWith(color: kBoxInk),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Picked ${_picked.length}/$cap — tap to add or remove. Order is '
-              'the order they fight in.',
-              style: FoE.dim(size: 11),
-            ),
-            const SizedBox(height: 8),
-            _controlsRow(),
-            const SizedBox(height: 8),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final c in _roster(ctrl)) _row(c, cap),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: Pressable(
-                onTap: () => Navigator.pop(
-                  context,
-                  _TeamDraft(_name.text, _picked),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: FoE.btn(active: true),
-                  alignment: Alignment.center,
-                  child: Text(
-                    'Save team',
-                    style: FoE.label(size: 14).copyWith(color: Colors.white),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _name,
+                style: FoE.label(size: 14).copyWith(color: kBoxInk),
+                decoration: InputDecoration(
+                  hintText: 'Team name (e.g. Steinteam)',
+                  hintStyle: FoE.dim(size: 13).copyWith(color: kBoxInkFaint),
+                  filled: true,
+                  fillColor: CreamPalette.tan.withValues(alpha: 0.16),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(FoE.radiusSmall),
+                    borderSide: BorderSide.none,
                   ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                'Picked ${_picked.length}/$cap — tap to add or remove. Order is '
+                'the order they fight in.',
+                style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+              ),
+              const SizedBox(height: 8),
+              _controlsRow(),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [for (final c in _roster(ctrl)) _row(c, cap)],
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: Pressable(
+                  onTap: () =>
+                      Navigator.pop(context, _TeamDraft(_name.text, _picked)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    alignment: Alignment.center,
+                    decoration: goldButton(),
+                    child: Text(
+                      'Save team',
+                      style: FoE.title(
+                        size: 14,
+                      ).copyWith(color: goldButtonInk()),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -466,18 +577,29 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
     // silently refusing the 4th monster reads as a bug rather than a rule.
     final overCap = picked && at >= cap;
     return Pressable(
-      onTap: () => setState(
-        () => picked ? _picked.remove(c.id) : _picked.add(c.id),
-      ),
+      onTap: () =>
+          setState(() => picked ? _picked.remove(c.id) : _picked.add(c.id)),
       child: Container(
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        decoration: ShapeDecoration(color: picked ? FoE.panelDark : Colors.transparent, shape: FoE.facet(radius: FoE.radiusSmall, side: BorderSide(color: picked ? FoE.goldBright : FoE.border))),
+        decoration: ShapeDecoration(
+          color: picked
+              ? CreamPalette.tan.withValues(alpha: 0.18)
+              : Colors.transparent,
+          shape: FoE.facet(
+            radius: FoE.radiusSmall,
+            side: BorderSide(
+              color: picked
+                  ? CreamPalette.accent
+                  : CreamPalette.tan.withValues(alpha: 0.45),
+            ),
+          ),
+        ),
         child: Row(
           children: [
             Text(
               picked ? '${at + 1}.' : '  ',
-              style: FoE.value(size: 12).copyWith(color: FoE.goldBright),
+              style: FoE.value(size: 12).copyWith(color: kBoxAccent),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -486,7 +608,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
                 children: [
                   Text(
                     c.displayName,
-                    style: FoE.label(size: 13).copyWith(color: FoE.parchment),
+                    style: FoE.label(size: 13).copyWith(color: kBoxInk),
                   ),
                   Text(
                     [
@@ -497,16 +619,16 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
                         '${c.hp.toStringAsFixed(0)} HP',
                       if (overCap) 'over cap — sits out',
                     ].join(' · '),
-                    style: FoE.dim(size: 10).copyWith(
-                      color: overCap ? FoE.gold : null,
-                    ),
+                    style: FoE.dim(size: 10)
+                        .copyWith(color: kBoxInkSoft)
+                        .copyWith(color: overCap ? CreamPalette.warn : null),
                   ),
                 ],
               ),
             ),
             Text(
               totalPower(c).toStringAsFixed(0),
-              style: FoE.value(size: 13).copyWith(color: FoE.goldBright),
+              style: FoE.value(size: 13).copyWith(color: kBoxAccent),
             ),
           ],
         ),

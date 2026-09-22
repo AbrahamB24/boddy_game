@@ -49,11 +49,17 @@ class FriendActivity {
     return switch (kind) {
       ActivityKind.friendAdded => '$actorName made a new friend.',
       ActivityKind.battleWon =>
-        label != null ? '$actorName won a PvP battle against $label.' : '$actorName won a PvP battle.',
+        label != null
+            ? '$actorName won a PvP battle against $label.'
+            : '$actorName won a PvP battle.',
       ActivityKind.buildingUpgraded =>
-        label != null ? '$actorName upgraded $label.' : '$actorName upgraded a building.',
+        label != null
+            ? '$actorName upgraded $label.'
+            : '$actorName upgraded a building.',
       ActivityKind.levelUp =>
-        label != null ? '$actorName\'s $label reached a new level.' : '$actorName leveled up.',
+        label != null
+            ? '$actorName\'s $label reached a new level.'
+            : '$actorName leveled up.',
       null => '$actorName did something.',
     };
   }

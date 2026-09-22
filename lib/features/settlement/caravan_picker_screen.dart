@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../common/widgets/filter_pills.dart';
 import '../common/widgets/monster_tile_grid.dart';
-import '../common/widgets/parchment_page.dart';
 import '../creatures/models/creature_enums.dart';
 import '../creatures/models/creature_instance.dart';
 import '../creatures/services/creatures_controller.dart';
 import '../creatures/widgets/creature_card.dart';
-import 'widgets/scroll_paper.dart'
-    show kParchmentInk;
 
 /// Filling ONE PLACE in the Market's caravan — the egg picker's twin (the
 /// Hatchery fills its slot from a SCREEN, not a popup, and the Market follows
@@ -39,14 +37,14 @@ class CaravanPickerScreen extends StatefulWidget {
 }
 
 class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
-  static final Color _inkSoft = kParchmentInk.withValues(alpha: 0.78);
-  static const Color _accent = FoE.gold;
+  static final Color _inkSoft = kBoxInkSoft;
+  static const Color _accent = CreamPalette.goldDeep;
 
   /// Room UNDER a tile for its carry/speed line, on top of the tile's own
   /// height. See the grid's comment: a caption must not cost tile.
   static const double _kCaptionHeight = 17;
 
-  static final PillPalette _pills = PillPalette.parchment;
+  static final PillPalette _pills = PillPalette.cream;
 
   final _creatures = CreaturesController();
   final _search = TextEditingController();
@@ -93,65 +91,77 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
     listenable: _creatures,
     builder: (context, _) {
       final options = _options;
-      return ParchmentPage(
+      return MenuScaffold(
         title: 'Add a hauler',
         // How full the caravan is — the cap grows with the linear path, so it
         // is worth seeing while you pick rather than discovering when a place
         // stops appearing.
         trailing: Text(
           '${widget.selected.length}/$_cap',
-          style: FoE.value(size: 12).copyWith(color: _accent),
+          style: FoE.value(size: 12).copyWith(color: kBoxInk),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(ParchmentPage.kParchmentPagePad, 10, ParchmentPage.kParchmentPagePad, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(flex: 3, child: _searchPill()),
-                  const SizedBox(width: 8),
-                  Expanded(flex: 2, child: _sortPill()),
-                  const SizedBox(width: 8),
-                  Expanded(flex: 2, child: _filterPill()),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: options.isEmpty
-                    ? Text(
-                        _query.isEmpty
-                            ? 'Nobody is free to travel.'
-                            : 'No monster matches.',
-                        style: FoE.dim(size: 12).copyWith(color: _inkSoft),
-                      )
-                    : Builder(
-                        // THE CAPTION IS EXTRA (user 2026-07-27): the
-                        // carry/speed line used to live INSIDE the 0.70 cell,
-                        // so it ate its height off the tile and every monster
-                        // here stood squashed next to the same monster on the
-                        // Monsters screen. mainAxisExtent is the only way to
-                        // say "the tile's height, and then some" — and the
-                        // CARD portion of that height now comes from the
-                        // shared [monsterTileHeight] (user 2026-08-31: "genau
-                        // gleich gross sein wie die Kacheln beim
-                        // Monstersscreen"), not this screen's own local width
-                        // computation.
-                        builder: (context) => GridView.builder(
-                          padding: const EdgeInsets.only(top: 4, bottom: 16),
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: kMonsterTileCols,
-                            mainAxisSpacing: kMonsterTileSpacing,
-                            crossAxisSpacing: kMonsterTileSpacing,
-                            mainAxisExtent:
-                                monsterTileHeight(context) + _kCaptionHeight,
+          padding: const EdgeInsets.only(bottom: 10),
+          child: creamCard(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(flex: 3, child: _searchPill()),
+                    const SizedBox(width: 8),
+                    Expanded(flex: 2, child: _sortPill()),
+                    const SizedBox(width: 8),
+                    Expanded(flex: 2, child: _filterPill()),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: options.isEmpty
+                      ? Text(
+                          _query.isEmpty
+                              ? 'Nobody is free to travel.'
+                              : 'No monster matches.',
+                          style: FoE.dim(size: 12).copyWith(color: _inkSoft),
+                        )
+                      : Builder(
+                          // THE CAPTION IS EXTRA (user 2026-07-27): the
+                          // carry/speed line used to live INSIDE the 0.70 cell,
+                          // so it ate its height off the tile and every monster
+                          // here stood squashed next to the same monster on the
+                          // Monsters screen. mainAxisExtent is the only way to
+                          // say "the tile's height, and then some" — and the
+                          // CARD portion of that height now comes from the
+                          // shared [monsterTileHeight] (user 2026-08-31: "genau
+                          // gleich gross sein wie die Kacheln beim
+                          // Monstersscreen"), not this screen's own local width
+                          // computation.
+                          builder: (context) => SingleChildScrollView(
+                            // Fixed-width cells (the shared tile width), not a
+                            // max-extent grid: that one hands the tile ANY width
+                            // up to its cap, and the tile's height follows its
+                            // width — the caption row then no longer fitted.
+                            padding: const EdgeInsets.only(top: 18, bottom: 16),
+                            child: Wrap(
+                              spacing: kMonsterTileSpacing,
+                              runSpacing: kMonsterTileSpacing,
+                              children: [
+                                for (final c in options)
+                                  SizedBox(
+                                    width: monsterTileWidth(context),
+                                    height:
+                                        monsterTileHeight(context) +
+                                        _kCaptionHeight,
+                                    child: _tile(c),
+                                  ),
+                              ],
+                            ),
                           ),
-                          itemCount: options.length,
-                          itemBuilder: (_, i) => _tile(options[i]),
                         ),
-                      ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -226,10 +236,7 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
     label: _sortStat.label,
     engaged: _sortStat != CreatureStat.carry,
     value: _sortStat.name,
-    entries: const [
-      MapEntry('carry', 'Carry'),
-      MapEntry('speed', 'Speed'),
-    ],
+    entries: const [MapEntry('carry', 'Carry'), MapEntry('speed', 'Speed')],
     onSelected: (v) =>
         setState(() => _sortStat = CreatureStat.values.byName(v)),
   );
@@ -245,7 +252,8 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
     entries: [
       const MapEntry('', 'Every type'),
       for (final e in CreatureElement.values)
-        if (e != CreatureElement.neutral) MapEntry(e.name, '${e.emoji} ${e.label}'),
+        if (e != CreatureElement.neutral)
+          MapEntry(e.name, '${e.emoji} ${e.label}'),
     ],
     onSelected: (v) => setState(
       () => _filterElement = v.isEmpty ? null : CreatureElement.fromName(v),

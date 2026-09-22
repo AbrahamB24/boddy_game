@@ -1,159 +1,37 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
-import '../../settlement/widgets/meander_strip.dart';
+import '../../../core/theme/strategy_theme.dart';
 import '../../settlement/widgets/scroll_paper.dart'
     show
         kPageShadow,
         kParchmentDeep,
         kParchmentInk,
         kParchmentLight,
-        kParchmentMid,
-        parchmentButton,
-        parchmentButtonInk;
+        kParchmentMid;
 import 'app_back_button.dart';
-import '../../../core/ui/pressable.dart';
 
-/// THE PAGE EVERY SCREEN IS PRINTED ON (user 2026-07-27: "der Hintergrund soll
-/// bei allen Screens so sein wie bei monsters" + "bitte den Header noch schöner
-/// gestalten bei allen screens").
-///
-/// Eight screens had grown their own copy of the same three things — the
-/// parchment gradient, the meander bands down the edges, a 48-px band with a
-/// back button — and half a dozen more were still on the flat [FoE.bg] with no
-/// page treatment at all. Copies drift: the bands sat at different insets, the
-/// bars were different heights, and a change to "the look" meant eight edits
-/// and remembering all eight.
-///
-/// This is that sheet of paper, once. A screen supplies its title, whatever
-/// belongs on the right of the bar, and its body.
-///
-/// The BODY is laid over the bands, not beside them: they are the page's
-/// printed border, and the body's own side padding ([kParchmentPagePad]) is
-/// what keeps content off them.
-///
-/// The page went DARK on 2026-07-31 (user: "setzte das ganze app in den
-/// darkmode"), and it did so in the palette rather than here — see the tone
-/// ladder in scroll_paper.dart. This widget asks for "the sheet" and "the
-/// shade" exactly as it always did; there is no light/dark branch in it,
-/// because there is no light page left to branch to.
-class ParchmentPage extends StatelessWidget {
-  /// Names the page, in the bar.
-  final String title;
-
-  /// The page's content. Usually a scrollable padded with
-  /// [kParchmentPagePad] horizontally.
-  final Widget child;
-
-  /// Sits at the right end of the bar — a count, a purse, a row of icons.
-  final Widget? trailing;
-
-  /// Back arrow + its action. Omitting [onBack] pops the route.
-  final bool showBack;
-  final VoidCallback? onBack;
-
-  /// The meander bordure. Off for pages whose content runs edge to edge.
-  final bool bands;
-
-  /// Passed straight to the [Scaffold] — the Teams page's "New team".
-  final Widget? floatingActionButton;
-
-  const ParchmentPage({
-    super.key,
-    required this.title,
-    required this.child,
-    this.trailing,
-    this.showBack = true,
-    this.onBack,
-    this.bands = true,
-    this.floatingActionButton,
-  });
-
-  /// Side padding that clears the bands. Every page's content uses it, so the
-  /// left edge of a grid on one screen lines up with the next.
-  ///
-  /// 36, not 24 (user 2026-09-06: "das Mäanderband so viel Abstand zum Rand
-  /// haben wie beim Gebäudedetailscreen") — the bands themselves moved from a
-  /// 4px inset/14px width (edge at 18) to building_detail_dialog.dart's own
-  /// 14px inset/16px width (edge at 30), and this keeps the same 6px gap
-  /// beyond the band that dialog already used.
-  static const double kParchmentPagePad = 36;
+/// THE PAGE'S SHARED MEASURES (was the page every screen is printed on, until
+/// every screen moved to [MenuScaffold] — user 2026-09-22 removed the dead widget
+/// and its old navy [StrategyScaffold] chrome). What is left is what other files
+/// still read: the content inset and the page gradient.
+abstract final class ParchmentPage {
+  /// Side padding for content that lines up from one screen to the next.
+  static const double kParchmentPagePad = 18;
 
   /// Ornament ink — a shade you notice only when you look for it. Anything
   /// stronger and the border competes with the content.
   static final Color ornament = kParchmentInk.withValues(alpha: 0.22);
 
-  /// THE page background, header included (user 2026-09-05: "Dieser
-  /// Farbübergang soll der background für jedes Menü sein (inkl. header
-  /// etc.)") — the same top-to-bottom sheet-into-shade transition the
-  /// building dialog already drew as its own one-off gradient. This UNDOES
-  /// the 2026-07-31 "one flat sheet, no gradient" rule for the page ground
-  /// specifically; low-poly's flat facet steps still hold everywhere else
-  /// (cards, buttons, the header's own border lines).
+  /// The sheet-into-shade transition behind a dialog or sheet (user 2026-09-05:
+  /// "Dieser Farbübergang soll der background für jedes Menü sein").
   static const Gradient pageGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
     colors: [kParchmentLight, kParchmentMid],
-  );
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: kParchmentMid,
-    floatingActionButton: floatingActionButton,
-    body: DecoratedBox(
-      decoration: const BoxDecoration(gradient: pageGradient),
-      child: SafeArea(
-        // The bands run the FULL page height now, behind the header (user
-        // 2026-08-31: "das Mäanderband soll oben weitergehen und 'unter'
-        // den Header auf allen Screens") — they used to sit only in the
-        // Expanded body's own Stack, starting exactly where the header
-        // ends, so the border was a strip down the CONTENT, not down the
-        // PAGE. The header (opaque, full width) still covers its own row
-        // of it exactly as before; what changes is that the border is one
-        // continuous strip top-to-bottom rather than one that started
-        // below the bar.
-        child: bands
-            ? Stack(
-                children: [
-                  Positioned(
-                    left: 14,
-                    top: 0,
-                    bottom: 0,
-                    width: 16,
-                    // fillHeight (user 2026-09-06: "oben und unten bis zur
-                    // Kante") — flush top-to-bottom everywhere now, not
-                    // just the hard-edged boxes it used to be reserved for.
-                    child: MeanderStrip(color: ornament, fillHeight: true),
-                  ),
-                  Positioned(
-                    right: 14,
-                    top: 0,
-                    bottom: 0,
-                    width: 16,
-                    child: MeanderStrip(
-                      color: ornament,
-                      flip: true,
-                      fillHeight: true,
-                    ),
-                  ),
-                  _headerAndBody(context, child),
-                ],
-              )
-            : _headerAndBody(context, child),
-      ),
-    ),
-  );
-
-  Widget _headerAndBody(BuildContext context, Widget body) => Column(
-    children: [
-      ParchmentHeader(
-        title: title,
-        trailing: trailing,
-        showBack: showBack,
-        onBack: onBack ?? () => Navigator.of(context).pop(),
-      ),
-      Expanded(child: body),
-    ],
   );
 }
 
@@ -312,14 +190,20 @@ class ParchmentHeader extends StatelessWidget {
         color: gradient == null ? (fill ?? bandFill) : null,
         gradient: gradient,
         boxShadow: shadow ?? bandShadow,
+        // The edges come from the band's OWN fill (user 2026-09-20: a teal line
+        // still framed the wood bands) — they used to be cut from [bandFill],
+        // so any band with another fill got the old blue as its outline.
         // TWO FACETS, no gradient (user 2026-07-31, low poly): the band's top
         // plane catches the light and its foot turns away from it. A border does
         // this in flat colour, where a gradient would have blended the two.
         border: seamless
             ? null
             : Border(
-                top: BorderSide(color: FoE.lit(bandFill), width: 2),
-                bottom: BorderSide(color: FoE.shade(bandFill), width: 2),
+                top: BorderSide(color: FoE.lit(fill ?? bandFill), width: 2),
+                bottom: BorderSide(
+                  color: FoE.shade(fill ?? bandFill),
+                  width: 2,
+                ),
               ),
       ),
       child: child,
@@ -409,126 +293,108 @@ class ParchmentDialog extends StatelessWidget {
   /// action (none do yet, but the option costs nothing to leave open).
   final bool showCloseButton;
 
+  /// A wider card than the default (the away digest lays two columns side by
+  /// side); still capped to the screen.
+  final double? maxWidth;
+
+  /// The exit button's words ("Continue" on the away digest).
+  final String closeLabel;
+
+  /// Runs just before the dialog closes with its exit button.
+  final VoidCallback? onClose;
+
   const ParchmentDialog({
     super.key,
     required this.title,
     required this.child,
     this.trailing,
-    this.maxHeightFraction = 0.8,
+    // Raised from 0.8 (2026-09-18, landscape switch): a fraction of the
+    // SHORT axis now (≤430px) rather than a tall portrait screen's height,
+    // so the same fraction leaves far fewer absolute pixels than before.
+    this.maxHeightFraction = 0.9,
     this.showCloseButton = true,
+    this.maxWidth,
+    this.closeLabel = 'Close',
+    this.onClose,
   });
 
+  // The building dialog's template (user 2026-09-18): a cream card with a flat
+  // heading and a gold Close button, no plate behind it. Width is capped against
+  // the (short) landscape axis instead of a fixed portrait 400.
   @override
-  Widget build(BuildContext context) => Dialog(
-    backgroundColor: Colors.transparent,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.all(Radius.circular(16)),
-    ),
-    insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 24),
-    child: Container(
-      width: 400,
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * maxHeightFraction,
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: ParchmentPage.pageGradient,
-        boxShadow: FoE.drop(),
-      ),
-      // INSIDE the Container, not on it — that Container is also what casts
-      // the shadow above, and clipping IT would cut the shadow off at the
-      // same straight edge instead of letting it fall away naturally.
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          children: [
-            Positioned(
-              left: 14,
-              top: 0,
-              bottom: 0,
-              width: 16,
-              child: MeanderStrip(
-                color: ParchmentPage.ornament,
-                fillHeight: true,
-              ),
-            ),
-            Positioned(
-              right: 14,
-              top: 0,
-              bottom: 0,
-              width: 16,
-              child: MeanderStrip(
-                color: ParchmentPage.ornament,
-                flip: true,
-                fillHeight: true,
-              ),
-            ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ParchmentHeader.band(
-                  child: Padding(
-                    // +12/+12 (2026-09-06): the bands beside it widened by
-                    // exactly that on each side, see kParchmentPagePad.
-                    padding: const EdgeInsets.fromLTRB(32, 10, 28, 10),
-                    // CENTRED now (user 2026-09-06: "bei solchen Boxen, den
-                    // Header zentrieren") — a Row's Expanded(Text) reads as
-                    // left-aligned the moment [trailing] is null (nothing on
-                    // the right to visually balance it), which most callers
-                    // never pass. A Stack centres the title on the box's own
-                    // true middle regardless of whether trailing exists or
-                    // how wide it is, with trailing pinned to the right on
-                    // top of it.
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Center(
-                          child: Text(
-                            title,
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: ParchmentHeader.titleStyle(),
-                          ),
-                        ),
-                        if (trailing != null)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: trailing!,
-                          ),
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: math.min(
+            maxWidth ?? (size.width * 0.62).clamp(360.0, 560.0),
+            size.width - 32,
+          ),
+          maxHeight: size.height * maxHeightFraction,
+        ),
+        child: creamCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                // The kit's ONE leaving button, at the right end of the heading
+                // (user 2026-09-22: "Zurück und Schliessenbutton vereinheitlichen").
+                child: CreamHeading(
+                  title: title,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (trailing != null) ...[
+                        trailing!,
+                        const SizedBox(width: 8),
                       ],
+                      if (showCloseButton)
+                        KitCloseButton(
+                          onTap: () {
+                            onClose?.call();
+                            Navigator.pop(context);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              Flexible(child: child),
+              // A labelled button at the foot only when the dialog has a real action
+              // to take ("Continue"); a plain "Close" is the cross above.
+              if (showCloseButton && closeLabel != 'Close')
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
+                  child: ChunkyButton(
+                    onTap: () {
+                      onClose?.call();
+                      Navigator.pop(context);
+                    },
+                    fill: Strategy.gold,
+                    deep: Strategy.goldDeep,
+                    expand: true,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      closeLabel,
+                      textAlign: TextAlign.center,
+                      style: FoE.label(
+                        size: 14,
+                      ).copyWith(color: Strategy.outline),
                     ),
                   ),
                 ),
-                Flexible(child: child),
-                if (showCloseButton)
-                  Padding(
-                    // +12/+12 (2026-09-06), same band-width delta as the
-                    // header row above.
-                    padding: const EdgeInsets.fromLTRB(38, 12, 38, 20),
-                    child: Pressable(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        alignment: Alignment.center,
-                        decoration: parchmentButton(),
-                        child: Text(
-                          'Close',
-                          style: FoE.label(
-                            size: 14,
-                          ).copyWith(color: parchmentButtonInk()),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// The bar's back arrow: THE APP'S OWN [AppBackButton], not a shape that

@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/foe_theme.dart';
+import 'dev_foe.dart';
 import '../../creatures/models/area.dart';
 import '../../creatures/models/path_node.dart';
 import '../../creatures/models/species_def.dart' show SpeciesDef, kSpeciesDefs;
@@ -42,13 +42,14 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
   List<int> get _eras {
     final out = <int>{
       for (final n in pathNodesInOrder()) regionForBattle(n.order),
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     return out;
   }
 
-  List<PathNode> _nodesOf(int era) =>
-      [for (final n in pathNodesInOrder()) if (regionForBattle(n.order) == era) n];
+  List<PathNode> _nodesOf(int era) => [
+    for (final n in pathNodesInOrder())
+      if (regionForBattle(n.order) == era) n,
+  ];
 
   AreaDef? _areaOf(int era) {
     for (final a in kAreaDefs.values) {
@@ -127,7 +128,8 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _note = '${changed.length} Kämpfe neu gewürfelt '
+        _note =
+            '${changed.length} Kämpfe neu gewürfelt '
             '(Boss unverändert).';
       });
     } catch (e) {
@@ -139,17 +141,19 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
     }
   }
 
-  static String _roman(int era) => const [
-    '',
-    'I',
-    'II',
-    'III',
-    'IV',
-    'V',
-    'VI',
-    'VII',
-    'VIII',
-  ].elementAtOrNull(era) ?? '$era';
+  static String _roman(int era) =>
+      const [
+        '',
+        'I',
+        'II',
+        'III',
+        'IV',
+        'V',
+        'VI',
+        'VII',
+        'VIII',
+      ].elementAtOrNull(era) ??
+      '$era';
 
   @override
   Widget build(BuildContext context) {
@@ -197,9 +201,7 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
               child: Text(_note!, style: FoE.dim(size: 11)),
             ),
           Expanded(
-            child: TabBarView(
-              children: [for (final e in eras) _eraTab(e)],
-            ),
+            child: TabBarView(children: [for (final e in eras) _eraTab(e)]),
           ),
         ],
       ),
@@ -215,7 +217,9 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
     final used = dist.entries.toList()
       ..sort((a, b) {
         final byTotal = b.value.total.compareTo(a.value.total);
-        return byTotal != 0 ? byTotal : _nameOf(a.key).compareTo(_nameOf(b.key));
+        return byTotal != 0
+            ? byTotal
+            : _nameOf(a.key).compareTo(_nameOf(b.key));
       });
     // UNUSED is asked of the REGION's pool, not of every species in the game:
     // "Verdant Hollow never fields three of its own eight" is the finding; "era
@@ -243,9 +247,9 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
             decoration: FoE.btn(active: !_busy),
             child: Text(
               '🎲 Monster dieser Region neu würfeln',
-              style: FoE.label(size: 13).copyWith(
-                color: _busy ? FoE.textDim : Colors.white,
-              ),
+              style: FoE.label(
+                size: 13,
+              ).copyWith(color: _busy ? FoE.textDim : FoE.onGold),
             ),
           ),
         ),
@@ -281,8 +285,9 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
                   s.name,
                   // Rarity in the ink, here too — an unused LEGENDARY and an
                   // unused common are not the same omission.
-                  style: FoE.label(size: 11)
-                      .copyWith(color: speciesNameColor(s.id)),
+                  style: FoE.label(
+                    size: 11,
+                  ).copyWith(color: speciesNameColor(s.id)),
                 ),
             ],
           ),
@@ -291,7 +296,8 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
     );
   }
 
-  String _nameOf(String speciesId) => kSpeciesDefs[speciesId]?.name ?? speciesId;
+  String _nameOf(String speciesId) =>
+      kSpeciesDefs[speciesId]?.name ?? speciesId;
 
   Widget _row(String speciesId, int total, int nodes, int maxTotal) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
@@ -302,13 +308,14 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
           child: Text(
             _nameOf(speciesId),
             overflow: TextOverflow.ellipsis,
-            style: FoE.label(size: 12)
-                .copyWith(color: speciesNameColor(speciesId)),
+            style: FoE.label(
+              size: 12,
+            ).copyWith(color: speciesNameColor(speciesId)),
           ),
         ),
         Expanded(
           child: ClipPath(
-      clipper: ShapeBorderClipper(shape: FoE.facet(radius: 3)),
+            clipper: ShapeBorderClipper(shape: FoE.facet(radius: 3)),
             child: LinearProgressIndicator(
               value: maxTotal == 0 ? 0 : total / maxTotal,
               minHeight: 8,

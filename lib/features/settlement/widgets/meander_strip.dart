@@ -63,7 +63,11 @@ class _KeyPainter extends CustomPainter {
   final bool flip;
   final bool fillHeight;
 
-  _KeyPainter({required this.color, required this.flip, this.fillHeight = false});
+  _KeyPainter({
+    required this.color,
+    required this.flip,
+    this.fillHeight = false,
+  });
 
   /// One motif's height, as a multiple of the strip's width — the
   /// reference's own ratio (a 45px repeat over a 57px cross-section) rather

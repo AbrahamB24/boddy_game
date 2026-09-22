@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/pressable.dart';
 
@@ -19,8 +20,8 @@ import '../../core/ui/pressable.dart';
 
 /// Registry of spotlight anchors. Screens hang a [GlobalKey] per highlight
 /// target on their widgets and look it up here by a stable name, so the
-/// intro flow can say "highlight 'quick-build'" without the two screens
-/// knowing each other.
+/// intro flow can say "highlight 'build-target-row'" without the two
+/// screens knowing each other.
 class IntroSpotlightAnchors {
   IntroSpotlightAnchors._();
 
@@ -113,11 +114,12 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
   @override
   Widget build(BuildContext context) {
     final hole = _hole;
-    // ~70% black — dim, not blind. Fully transparent when [dim] is false;
-    // the scrim rects still absorb every tap either way.
-    final scrim = widget.dim
-        ? const Color(0xB3000000)
-        : const Color(0x00000000);
+    // Dim, not blind — and the KIT's dim (warm ink at 62 %), the same veil
+    // every cream dialog drops behind itself, rather than the flat 70 %
+    // black this used before the redesign (2026-09-21). Fully transparent
+    // when [dim] is false; the scrim rects still absorb every tap either
+    // way.
+    final scrim = widget.dim ? CreamPalette.dim : const Color(0x00000000);
 
     return Positioned.fill(
       child: hole == null
@@ -171,7 +173,10 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
                   ),
                 ),
                 // Glow frame around the hole — draws attention without
-                // intercepting the pointer.
+                // intercepting the pointer. The kit's gold, and a rounded
+                // rectangle rather than FoE's facet: nothing else in the
+                // redesigned UI is bevelled any more, so a facet read as a
+                // leftover from the old chrome (2026-09-21).
                 Positioned.fromRect(
                   rect: hole,
                   child: IgnorePointer(
@@ -180,15 +185,15 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
                         shape: widget.circular
                             ? const CircleBorder(
                                 side: BorderSide(
-                                  color: FoE.goldBright,
-                                  width: 2,
+                                  color: CreamPalette.gold,
+                                  width: 2.5,
                                 ),
                               )
-                            : FoE.facet(
-                                radius: 10,
-                                side: BorderSide(
-                                  color: FoE.goldBright,
-                                  width: 2,
+                            : RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: const BorderSide(
+                                  color: CreamPalette.gold,
+                                  width: 2.5,
                                 ),
                               ),
                       ),
@@ -243,13 +248,21 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
       bottom: below ? null : screenH - hole.top + 12,
       child: IgnorePointer(
         child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: FoE.panel(radius: 10, overrideBorder: FoE.goldBright),
-            child: Text(
-              widget.hint!,
-              textAlign: TextAlign.center,
-              style: FoE.label(size: 12).copyWith(color: FoE.parchment),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            // The same paper the guide card is made of, so the hint reads as
+            // the card still talking rather than as a second voice
+            // (2026-09-21). A [raisedTile] and not a full [creamCard]: it is
+            // one line, and the card's iso-grid pattern under that much
+            // whitespace looks like a card that failed to fill.
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              decoration: raisedTile(lit: true, radius: 12),
+              child: Text(
+                widget.hint!,
+                textAlign: TextAlign.center,
+                style: FoE.label(size: 12).copyWith(color: kBoxInk),
+              ),
             ),
           ),
         ),

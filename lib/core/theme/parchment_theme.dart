@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../features/settlement/widgets/scroll_paper.dart'
-    show
-        kActionGreen,
-        kPageShadow,
-        kParchmentDeep,
-        kParchmentInk,
-        kParchmentLight,
-        kParchmentMid;
+    show kActionGreen, kPageShadow, kParchmentInk, kParchmentLight;
 import '../../features/common/widgets/parchment_page.dart';
+import 'cream_kit.dart' show CreamPalette, kBoxInk, kBoxInkSoft;
 import 'foe_theme.dart';
+import 'strategy_theme.dart';
 
 /// THE APP'S ONE THEME (user 2026-07-27: "dieser look gefällt mir, übertrage
 /// dies bitte auf die gesamte app … D.h Buttons, Dropdown menüs etc. ebenfalls
@@ -57,7 +53,11 @@ ThemeData buildParchmentTheme() {
     // scrollbar, the ripple. Leaving it `light` while the palette went dark is
     // exactly how you end up with a black caret on a graphite field.
     brightness: Brightness.dark,
-    scaffoldBackgroundColor: kParchmentMid,
+    // The wood ground, not the old navy page (user 2026-09-20: "der blaue
+    // Hintergrund ist oft noch zu sehen und schimmert durch") — whatever a
+    // screen leaves uncovered (edges, a transition, a translucent layer) now
+    // shows the same ground the kit's menus stand on.
+    scaffoldBackgroundColor: CreamPalette.groundBottom,
     colorScheme: ColorScheme.fromSeed(
       seedColor: accent,
       brightness: Brightness.dark,
@@ -99,59 +99,50 @@ ThemeData buildParchmentTheme() {
         side: BorderSide(color: ink.withValues(alpha: 0.18)),
       ),
     ),
+    // Modal surfaces wear the building dialog's template (user 2026-09-18): the
+    // cream card, navy ink — even though the app's own text theme is light, a
+    // dialog, a menu or a dropdown is a piece of CREAM laid on the screen.
     dialogTheme: DialogThemeData(
-      backgroundColor: kParchmentLight,
+      backgroundColor: Strategy.cream,
       surfaceTintColor: Colors.transparent,
-      titleTextStyle: FoE.title(size: 15).copyWith(color: ink),
-      contentTextStyle: FoE.label(size: 13).copyWith(color: inkSoft),
-      // 16 / 0.25, not 14 / 0.22 (2026-08-31 audit) — matching
-      // [ParchmentInfoButton] and [parchmentConfirm] in parchment_kit.dart,
-      // which hand-build the same "modal slab of parchment" shape at those
-      // numbers. Every plain AlertDialog() in the app inherits this theme
-      // default, so the two hand-built dialogs and every ambient one now
-      // read as the same object instead of two close-but-different radii.
-      shape: FoE.facet(
-        radius: 16,
-        side: BorderSide(color: ink.withValues(alpha: 0.25)),
-      ),
+      titleTextStyle: FoE.title(size: 15).copyWith(color: kBoxInk),
+      contentTextStyle: FoE.label(size: 13).copyWith(color: kBoxInkSoft),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: kParchmentLight,
+      color: Strategy.cream,
       surfaceTintColor: Colors.transparent,
       elevation: 8,
-      textStyle: FoE.label(size: 12).copyWith(color: ink),
-      shape: FoE.facet(
-        radius: 12,
-        side: BorderSide(color: ink.withValues(alpha: 0.22)),
-      ),
+      textStyle: FoE.label(size: 12).copyWith(color: kBoxInk),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
     menuTheme: MenuThemeData(
       style: MenuStyle(
-        backgroundColor: const WidgetStatePropertyAll(kParchmentLight),
+        backgroundColor: const WidgetStatePropertyAll(Strategy.cream),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         shape: WidgetStatePropertyAll(
-          FoE.facet(
-            radius: 12,
-            side: BorderSide(color: ink.withValues(alpha: 0.22)),
-          ),
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     ),
     dropdownMenuTheme: DropdownMenuThemeData(
-      textStyle: FoE.label(size: 12).copyWith(color: ink),
-      menuStyle: MenuStyle(
-        backgroundColor: const WidgetStatePropertyAll(kParchmentLight),
-        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+      textStyle: FoE.label(size: 12).copyWith(color: kBoxInk),
+      menuStyle: const MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(Strategy.cream),
+        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
       ),
     ),
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
+      // A bottom sheet spans the whole (long) landscape width otherwise; cap it to
+      // a readable column, centred (2026-09-18).
+      constraints: BoxConstraints(maxWidth: 720),
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: kParchmentDeep,
-      contentTextStyle: FoE.label(size: 13).copyWith(color: ink),
+      backgroundColor: Strategy.cream,
+      contentTextStyle: FoE.label(size: 13).copyWith(color: kBoxInk),
       behavior: SnackBarBehavior.floating,
       shape: FoE.facet(
         radius: 12,

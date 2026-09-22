@@ -94,9 +94,12 @@ void main() {
   });
 
   group('PhoneFrame', () {
-    testWidgets('is a no-op at phone width — no letterboxing on a device',
+    // LANDSCAPE (2026-09-18): a phone-shaped viewport is now wide-short —
+    // width the long axis, height the short one ([FoE.phoneMaxWidth]) —
+    // rather than the narrow-tall shape this used to test.
+    testWidgets('is a no-op at phone size — no letterboxing on a device',
         (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
+      tester.view.physicalSize = const Size(844, 390);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
@@ -106,7 +109,7 @@ void main() {
       expect(find.byType(ClipRRect), findsNothing);
     });
 
-    testWidgets('frames a desktop window to phone width', (tester) async {
+    testWidgets('frames a desktop window to phone size', (tester) async {
       tester.view.physicalSize = const Size(2500, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -127,8 +130,9 @@ void main() {
 
       // The app must BELIEVE it is phone-sized: code reading MediaQuery.size
       // would otherwise lay out for a 2500px window that no player has.
-      expect(seen.width, FoE.phoneMaxWidth);
-      expect(seen.height, lessThanOrEqualTo(932));
+      // Width is the LONG axis now, height the SHORT one.
+      expect(seen.width, lessThanOrEqualTo(932));
+      expect(seen.height, FoE.phoneMaxWidth);
       expect(find.byType(ClipRRect), findsOneWidget);
     });
   });

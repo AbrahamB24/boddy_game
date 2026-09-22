@@ -55,9 +55,9 @@ int levelOnePower(CreatureInstance c) => genePower(c.statBase);
 /// Shared rather than re-summed there so an egg's ⚡ and the ⚡ the hatchling
 /// wears on the very same tile shape are the same number by construction.
 int genePower(Map<CreatureStat, double> genes) => CreatureStat.values.fold(
-      0,
-      (sum, s) => sum + math.max(1, (genes[s] ?? 10).round()).toInt(),
-    );
+  0,
+  (sum, s) => sum + math.max(1, (genes[s] ?? 10).round()).toInt(),
+);
 
 /// The best [stat] among [owned] — each read AT [atLevel] rather than at its
 /// own current level, so this is a fair GENE comparison regardless of how far

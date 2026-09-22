@@ -127,8 +127,11 @@ int maxBuildingLevelFor(BuildingDef def, int regionOrder) {
 // other dev screen. Order is the order the tabs appear in, and follows what a
 // growing settlement reaches for first.
 enum BuildingCategory {
+  // Production holds what a settlement makes: the mortar (wood, stone) AND the
+  // era goods and gold (user 2026-09-19: "goods kommen in production") — there
+  // is no separate Goods drawer any more. A stored 'goods' key still reads, as
+  // Production (see [fromId]).
   production('production', 'Production', Icons.forest),
-  goods('goods', 'Goods', Icons.diamond),
   // "Habitats", not "Housing" (user 2026-08-03): monsters live in ground you
   // have made liveable, not in buildings. The KEY stays 'housing' — it is
   // written to the metadata jsonb and to every existing row.
@@ -149,6 +152,8 @@ enum BuildingCategory {
 
   static BuildingCategory? fromId(String? id) {
     if (id == null) return null;
+    // The retired Goods drawer: authored defs that name it live in Production.
+    if (id == 'goods') return production;
     for (final c in values) {
       if (c.id == id) return c;
     }
@@ -171,17 +176,19 @@ enum BuildingCategory {
 /// knows they behave differently, so membership in it is a fact about the
 /// building, not a preference.
 BuildingCategory categoryOfBuilding(BuildingDef def) {
-  if (def.isRoad || def.isBuildPlot || def.isMainBuilding) {
-    return BuildingCategory.special;
-  }
+  // Road and Building Plot live in Civic, at its front (user 2026-09-19: "road
+  // und building plot sollen bei civic sein, zu vorderst") — the menu sorts them
+  // there. The castle stays the one thing in Special.
+  if (def.isRoad || def.isBuildPlot) return BuildingCategory.civic;
+  if (def.isMainBuilding) return BuildingCategory.special;
   if (def.category != null) return def.category!;
   for (final role in def.workshops) {
-    if (role.resource == 'wood' || role.resource == 'stone') {
+    // Mortar, gold and the era goods are all things the settlement makes.
+    if (role.resource == 'wood' ||
+        role.resource == 'stone' ||
+        role.resource == 'gold' ||
+        kGoodsDefs.containsKey(role.resource)) {
       return BuildingCategory.production;
-    }
-    // Gold sits with the era goods: it's spending currency, not mortar.
-    if (role.resource == 'gold' || kGoodsDefs.containsKey(role.resource)) {
-      return BuildingCategory.goods;
     }
   }
   if (def.housingCapacity > 0) return BuildingCategory.housing;
@@ -396,15 +403,8 @@ class WorkshopRole {
   /// PRICED at send, so a yield multiplier would either be ignored or let the
   /// settlement renegotiate mid-road (see caravanBonuses).
   static const Map<String, Map<String, String>> kCombinedParts = {
-    kExpedition: {
-      'carry': kExpCarry,
-      'goods': kExpGoods,
-      'travel': kExpTravel,
-    },
-    kCaravan: {
-      'carry': kCarCarry,
-      'travel': kCarTravel,
-    },
+    kExpedition: {'carry': kExpCarry, 'goods': kExpGoods, 'travel': kExpTravel},
+    kCaravan: {'carry': kCarCarry, 'travel': kCarTravel},
   };
 
   /// The parts of [resource]'s combined post, or empty for a plain one.
@@ -494,42 +494,114 @@ class WorkshopRole {
 // Every number below is a DIAL (Settlement → Energie): they decide the whole
 // day's pacing, and pacing is the thing that gets retuned most.
 //
-// ENERGY IS A DAILY-STEPS FORMULA, NOT A DRAINING POOL (user 2026-09-14,
-// replacing the 2026-07-27 hard gate) — there is no more "tank" that empties
-// over time. [energyMultiplierForRate] reads TODAY's step count straight
-// off [EnergyModel.stepsToday] and always returns SOME rate: 5000 steps is
-// the 100% baseline, fewer steps ramp linearly down to a floor (never a full
-// stop, unlike the old hard gate this replaces), and steps beyond 5000 buy a
-// bonus rate on top, capped at 10 000 steps/day. Nothing here ever GATES an
-// action any more — see SettlementController.hasEnergy, now permanently
-// true; every reader of this multiplies a rate by it instead.
+// ENERGY IS A POOL THAT STEPS FILL AND TIME EMPTIES (user 2026-09-20:
+// "Energie wieder direktes Feedback. Wenn ich Schritte mache, dann soll die
+// Energie hochgehen … und es geht wirklich runter auf 0"), replacing the
+// 2026-09-14 daily-steps formula:
+//
+//   * FILLING — [kEnergyFullSteps] (5000) steps take it from 0 to 100 %; the
+//     steps after that are worth less, [kEnergyBoostPerThousandSteps] per 1000
+//     (5 %), up to the ceiling [kEnergyMaxPercent] (125 %, i.e. 10 000 steps
+//     from empty). Steps taken AT the ceiling are lost — they count again the
+//     moment the energy has fallen below it ([energyAfterSteps]).
+//   * EMPTYING — a steady [kEnergyDrainPerHour], sized so that 100 % lasts
+//     [kEnergyFullHours] (24 h) and therefore 125 % lasts 30 h ([energyDrain]).
+//   * WHAT IT DOES — every production/construction rate is multiplied by the
+//     energy's own fraction (100 % = ×1.0, 125 % = ×1.25), never below the
+//     floor [kEnergyFloorMultiplier]: an empty pool slows the settlement, it
+//     does not stop it. Nothing here gates an action — see
+//     SettlementController.hasEnergy, permanently true.
 double get kEnergyFullSteps => GameTuning.i.raw(Dials.energyFullSteps);
 double get kEnergyFloorMultiplier =>
     GameTuning.i.raw(Dials.energyFloorMultiplier);
 double get kEnergyBoostPerThousandSteps =>
     GameTuning.i.raw(Dials.energyBoostPerThousandSteps);
 double get kEnergyMaxBoost => GameTuning.i.raw(Dials.energyMaxBoost);
+double get kEnergyFullHours => GameTuning.i.raw(Dials.energyFullHours);
 
-/// The rate multiplier for [stepsToday] — 1.0 at [kEnergyFullSteps], ramping
-/// linearly from [kEnergyFloorMultiplier] at 0 steps, then bonus-ramping
-/// linearly past full at [kEnergyBoostPerThousandSteps] per 1000 extra
-/// steps, capped at `1.0 + kEnergyMaxBoost`. THE one place every rate in the
-/// game reads "how much energy do I have right now" — production,
-/// construction speed, everything [SettlementController.hasEnergy] used to
-/// gate outright.
-double energyMultiplierForSteps(int stepsToday) {
-  final full = kEnergyFullSteps;
-  final floor = kEnergyFloorMultiplier;
-  if (stepsToday <= 0) return floor;
-  if (full <= 0 || stepsToday >= full) {
-    final extra = full <= 0 ? 0.0 : (stepsToday - full).toDouble();
-    final boost = (kEnergyBoostPerThousandSteps * extra / 1000.0).clamp(
-      0.0,
-      kEnergyMaxBoost,
-    );
-    return 1.0 + boost;
+/// What a brand-new (or reset) settlement starts with: one full day, so the
+/// first session is not spent crawling at the floor rate.
+const double kEnergyStartPercent = 100.0;
+
+/// The ceiling of the pool, in percent (100 + the bonus cap).
+double get kEnergyMaxPercent => 100.0 + kEnergyMaxBoost * 100.0;
+
+/// Percent lost per real hour. 0 when the dial is nonsense, so a bad value
+/// freezes the pool instead of dividing by zero.
+double get kEnergyDrainPerHour =>
+    kEnergyFullHours <= 0 ? 0.0 : 100.0 / kEnergyFullHours;
+
+/// The rate multiplier a pool at [percent] runs the settlement at: its own
+/// fraction, but never below [kEnergyFloorMultiplier].
+double energyMultiplierForPercent(double percent) => math.max(
+  kEnergyFloorMultiplier,
+  percent.clamp(0.0, kEnergyMaxPercent) / 100,
+);
+
+/// The pool after [steps] more steps, starting from [percent].
+///
+/// Piecewise, so the numbers a player is promised come out exactly: below 100 %
+/// a step is worth 100 / [kEnergyFullSteps] percent; above it,
+/// [kEnergyBoostPerThousandSteps] × 100 / 1000. Whatever does not fit under
+/// [kEnergyMaxPercent] is dropped — it does NOT wait for later.
+double energyAfterSteps(double percent, int steps) {
+  final ceiling = kEnergyMaxPercent;
+  var p = percent.clamp(0.0, ceiling);
+  var left = steps.toDouble();
+  if (left <= 0) return p;
+
+  final lowPerStep = kEnergyFullSteps <= 0 ? 0.0 : 100.0 / kEnergyFullSteps;
+  if (p < 100 && lowPerStep > 0) {
+    final room = math.min(100.0, ceiling) - p;
+    final use = math.min(left, room / lowPerStep);
+    p += use * lowPerStep;
+    left -= use;
   }
-  return floor + (1.0 - floor) * (stepsToday / full);
+  final highPerStep = kEnergyBoostPerThousandSteps * 100.0 / 1000.0;
+  if (left > 0 && p >= 100 && p < ceiling && highPerStep > 0) {
+    final use = math.min(left, (ceiling - p) / highPerStep);
+    p += use * highPerStep;
+  }
+  return p.clamp(0.0, ceiling);
+}
+
+/// What [hours] of running down do to a pool at [startPercent]: the pool at the
+/// end, and the EFFECTIVE hours of work the settlement got done meanwhile —
+/// the multiplier integrated over the window, because it is falling the whole
+/// time (a night away is not priced at the rate you left with).
+///
+/// While the pool is above the floor the rate is the pool's own fraction and
+/// falls linearly, so its integral is closed-form; once the pool is at or under
+/// the floor (or empty) the rest of the window runs at the floor rate.
+({double endPercent, double effectiveHours}) energyDrain(
+  double startPercent,
+  double hours,
+) {
+  if (hours <= 0) return (endPercent: startPercent, effectiveHours: 0.0);
+  final drain = kEnergyDrainPerHour;
+  final floor = kEnergyFloorMultiplier;
+  final start = startPercent.clamp(0.0, kEnergyMaxPercent);
+  final floorPct = floor * 100.0;
+
+  // No drain: a constant rate for the whole window.
+  if (drain <= 0) {
+    return (
+      endPercent: start,
+      effectiveHours: hours * energyMultiplierForPercent(start),
+    );
+  }
+
+  // Phase A: from [start] down to the floor, rate = pct / 100.
+  final tA = start > floorPct
+      ? math.min(hours, (start - floorPct) / drain)
+      : 0.0;
+  final effA = (start * tA - drain * tA * tA / 2) / 100.0;
+  // Phase B: at the floor rate for whatever is left of the window.
+  final effB = (hours - tA) * floor;
+  return (
+    endPercent: math.max(0.0, start - drain * hours),
+    effectiveHours: effA + effB,
+  );
 }
 
 /// Max simultaneous active construction sites, before any building adds more.
@@ -588,6 +660,7 @@ double? buildPointsForCut(double cut) {
   if (cut >= 1) return null;
   return kBuildPointsForHalfTime * cut / (1 - cut);
 }
+
 /// Build-queue slots before any building grants some — 0 keeps the queue
 /// locked until something opens it.
 int get kBaseQueueSlots => GameTuning.i.count(Dials.baseQueueSlots);
@@ -751,9 +824,8 @@ class BuildingEffect {
   /// Like [levelScale] but returns 1.0 when no [levelFactor] is set — for
   /// effects the runtime historically did NOT level-scale (expeditionSlots,
   /// heal, resource): they stay flat unless a factor is explicitly authored.
-  double levelScaleExplicit(int level) => levelFactor == null
-      ? 1.0
-      : math.pow(levelFactor!, level - 1).toDouble();
+  double levelScaleExplicit(int level) =>
+      levelFactor == null ? 1.0 : math.pow(levelFactor!, level - 1).toDouble();
 
   /// The effect's value AT building [level]. Uses the explicit [levelSteps]
   /// ladder when authored (start capacity + the increments up to this level),
@@ -806,7 +878,6 @@ class BuildingDef {
   final double artBaseWidth;
 
   // (see [kChimneyAnchor] below for where a building's smoke comes out)
-
 
   /// Where the base's bottom (south) point sits across the image, and how far
   /// above its bottom edge — both as fractions of the image's WIDTH.
@@ -1101,8 +1172,11 @@ class BuildingDef {
   ///
   /// [type] since 2026-07-26: matings and incubations are separate buildings
   /// with separate caps, so they are separate effects too.
-  int concurrentJobsAt(int level, {int eraOrder = 99, String type = 'breeding'}) =>
-      effectAt(type, '', eraOrder, level: level).round();
+  int concurrentJobsAt(
+    int level, {
+    int eraOrder = 99,
+    String type = 'breeding',
+  }) => effectAt(type, '', eraOrder, level: level).round();
 
   /// How many treatments this building can run at once at [level] (user
   /// 2026-07-25) — from a `healSlots` effect, level-scaled via its explicit
@@ -1155,8 +1229,10 @@ class BuildingDef {
 
   /// The distinct [type] keys this building defines — for iterating every
   /// resource a `production`/`resource` effect covers.
-  Set<String> effectKeys(String type) =>
-      {for (final e in effects) if (e.type == type) e.key};
+  Set<String> effectKeys(String type) => {
+    for (final e in effects)
+      if (e.type == type) e.key,
+  };
 
   /// Resource cost to build/upgrade this building TO [level]. When [costPerEra]
   /// is authored, the level's region band (see [regionOrderForLevel]) names the
@@ -1167,12 +1243,15 @@ class BuildingDef {
     if (costPerEra.isNotEmpty) {
       final region = regionOrderForLevel(level);
       // Nearest defined band at or below this region, else the lowest one.
-      final base = costPerEra[region] ??
+      final base =
+          costPerEra[region] ??
           costPerEra[(costPerEra.keys.where((e) => e <= region).toList()
                     ..sort())
                   .lastOrNull ??
               (costPerEra.keys.toList()..sort()).first];
-      final f = math.pow(costFactor, level - firstLevelOfRegion(region)).toDouble();
+      final f = math
+          .pow(costFactor, level - firstLevelOfRegion(region))
+          .toDouble();
       return {for (final e in (base ?? const {}).entries) e.key: e.value * f};
     }
     final f = math.pow(costFactor, level - 1).toDouble();
@@ -1469,6 +1548,7 @@ const Map<int, String> _eraPrefix = {
   7: 'Glass',
   8: 'Crystal',
 };
+
 /// The ID for a generated building — bare in era I, suffixed after it.
 ///
 /// ── Era I names things plainly (user 2026-08-12) ──
@@ -1492,7 +1572,14 @@ String _named(int era, String what) {
 }
 
 const Map<int, int> _eraHousingCap = {
-  1: 12, 2: 25, 3: 35, 4: 50, 5: 70, 6: 95, 7: 125, 8: 165,
+  1: 12,
+  2: 25,
+  3: 35,
+  4: 50,
+  5: 70,
+  6: 95,
+  7: 125,
+  8: 165,
 };
 
 // ── Named by SIZE again (user 2026-08-12) ──
@@ -1551,8 +1638,9 @@ Map<int, int> _rosterCapCivic(int intro) => {
 // Material extractors cap at the lifetime ceiling (user 2026-07-25: don't let an
 // era-1 camp inflate to L24 in era 8 — that broke the "successor building, not a
 // higher cap" model). Flat 10 across every era band.
-Map<int, int> _rosterCapMaterial(int intro) =>
-    {for (var e = intro; e <= 8; e++) e: kMaxBuildingLevel};
+Map<int, int> _rosterCapMaterial(int intro) => {
+  for (var e = intro; e <= 8; e++) e: kMaxBuildingLevel,
+};
 Map<int, Map<String, double>> _rosterCostPerEra(Map<int, int> cap, double k) =>
     {for (final e in cap.keys) e: _rosterCost(e, k)};
 
@@ -1567,19 +1655,21 @@ List<WorkshopRole> get _legendarySlot => const [
   ),
 ];
 
-String _luxWord(String id) => const {
-  // 'Fish Hut' -> 'Fish Shop' (user 2026-08-31), the same shop-front word
-  // 'meat' already gets via [_luxNameOverride]'s "Butcher Shop" — fish just
-  // happens to fit the generic "{good} {word}" template, so no override
-  // needed for it.
-  'fish': 'Shop',
-  'wine': 'Vineyard',
-  'spices': 'Garden',
-  'salt': 'Works',
-  'coffee': 'Roastery',
-  'tea': 'House',
-  'perfume': 'Perfumery',
-}[id] ?? 'Works';
+String _luxWord(String id) =>
+    const {
+      // 'Fish Hut' -> 'Fish Shop' (user 2026-08-31), the same shop-front word
+      // 'meat' already gets via [_luxNameOverride]'s "Butcher Shop" — fish just
+      // happens to fit the generic "{good} {word}" template, so no override
+      // needed for it.
+      'fish': 'Shop',
+      'wine': 'Vineyard',
+      'spices': 'Garden',
+      'salt': 'Works',
+      'coffee': 'Roastery',
+      'tea': 'House',
+      'perfume': 'Perfumery',
+    }[id] ??
+    'Works';
 
 /// A full name that doesn't fit the "{good} {word}" template at all — meat
 /// isn't a "Meat Lodge" or a "Meat Works", it's butchered, not gathered raw
@@ -1592,53 +1682,57 @@ String? _luxNameOverride(String id) => const {'meat': 'Butcher Shop'}[id];
 /// user's renamed Blender sources use (fish_shop.blend, butcher_shop.blend,
 /// 2026-09-06); every other luxury across every era keeps the generic
 /// `lux_<goodId>` pattern.
-String _luxId(String id) => const {
-  'fish': 'fish_shop',
-  'meat': 'butcher_shop',
-}[id] ?? 'lux_$id';
+String _luxId(String id) =>
+    const {'fish': 'fish_shop', 'meat': 'butcher_shop'}[id] ?? 'lux_$id';
 
 List<BuildingDef> _buildRoster() {
   final defs = <BuildingDef>[];
 
-  defs.add(const BuildingDef(
-    id: 'castle',
-    // Castle, not Castle (user 2026-08-12). It has been a castle in the
-    // art since 2026-08-04 — stone, battlements, a gatehouse and a donjon —
-    // and the name was the last thing still calling it a camp.
-    name: 'Castle',
-    color: Color(0xFF7C5CBF),
-    // 10x10, not 7x7 (user 2026-08-24: "Grösse 10x10 / hinteren beiden
-    // Ecken sind Ecktürme / Vorne sind zwei Rundtürme / Zugbrücke / An der
-    // hinteren Wand ist der grosse Bergfried") — a full four-tower
-    // enclosure needs the room a five-piece skyline along one wall
-    // didn't. See PRESETS['castle'] / MAIN_HALL_PLAN in
-    // tool/blender/render_building.py for the matching render-side change.
-    gridW: 10,
-    gridH: 10,
-    isMainBuilding: true,
-    isUnique: true,
-    population: 5,
-  ));
-  defs.add(const BuildingDef(
-    id: 'road',
-    name: 'Road',
-    color: Color(0xFF6B6455),
-    gridW: 1,
-    gridH: 1,
-    isRoad: true,
-    maxCount: 0,
-  ));
-  defs.add(BuildingDef(
-    id: 'building_plot',
-    name: 'Building Plot',
-    color: const Color(0xFF8D6E4A),
-    gridW: 5,
-    gridH: 5,
-    resourceCost: {'wood': 350},
-    isBuildPlot: true,
-    maxCount: 0,
-    eraIds: const ['era_1'],
-  ));
+  defs.add(
+    const BuildingDef(
+      id: 'castle',
+      // Castle, not Castle (user 2026-08-12). It has been a castle in the
+      // art since 2026-08-04 — stone, battlements, a gatehouse and a donjon —
+      // and the name was the last thing still calling it a camp.
+      name: 'Castle',
+      color: Color(0xFF7C5CBF),
+      // 10x10, not 7x7 (user 2026-08-24: "Grösse 10x10 / hinteren beiden
+      // Ecken sind Ecktürme / Vorne sind zwei Rundtürme / Zugbrücke / An der
+      // hinteren Wand ist der grosse Bergfried") — a full four-tower
+      // enclosure needs the room a five-piece skyline along one wall
+      // didn't. See PRESETS['castle'] / MAIN_HALL_PLAN in
+      // tool/blender/render_building.py for the matching render-side change.
+      gridW: 10,
+      gridH: 10,
+      isMainBuilding: true,
+      isUnique: true,
+      population: 5,
+    ),
+  );
+  defs.add(
+    const BuildingDef(
+      id: 'road',
+      name: 'Road',
+      color: Color(0xFF6B6455),
+      gridW: 1,
+      gridH: 1,
+      isRoad: true,
+      maxCount: 0,
+    ),
+  );
+  defs.add(
+    BuildingDef(
+      id: 'building_plot',
+      name: 'Building Plot',
+      color: const Color(0xFF8D6E4A),
+      gridW: 5,
+      gridH: 5,
+      resourceCost: {'wood': 350},
+      isBuildPlot: true,
+      maxCount: 0,
+      eraIds: const ['era_1'],
+    ),
+  );
 
   for (var era = 1; era <= 8; era++) {
     final matCap = _rosterCapMaterial(era);
@@ -1664,62 +1758,66 @@ List<BuildingDef> _buildRoster() {
         // camp the loop produces. See PRESETS['small_wood_camp'] in
         // render_building.py for the matching render-side change.
         final isSmallWoodCamp = era == 1 && res == 'wood' && !large;
-        defs.add(BuildingDef(
-          id: isSmallQuarry
-              ? 'small_quarry'
-              : _idFor(
-                  era,
-                  '${large ? 'large' : 'small'}_${res}_camp',
-                  '${res}_${large ? 'works' : 'camp'}_e$era',
-                ),
-          // ── SIZE, not era (user 2026-08-12: "primitive wood camp ist
-          // das small wood camp usw.") ──
-          // The pair is the only place in the roster where two buildings
-          // differ by nothing except how big they are, and "Primitive" said
-          // nothing about that — it said which era, which the MATERIAL already
-          // says: era 3 gathers Terracotta, era 5 gathers Iron. Era 1 is the
-          // only one with two raws, and Wood and Stone are era 1's materials
-          // anyway. So the adjective goes to the difference that is real.
-          // BOTH are Camps (user 2026-08-12: "Large Wood Camp"). Small and
-          // Large is the whole difference between them, and calling the big
-          // one a Works said there was a second one as well.
-          name: '${large ? 'Large' : 'Small'} $baseName Camp',
-          color: _rosterColor(res),
-          // A camp SHIPS what it gathers, so it needs room for a cart
-          // beside the pile (2026-08-09). The works halls were already
-          // 4 x 4 and stay there. small_quarry is 5 x 4 (measured against
-          // the hand-edited .blend, 2026-08-23). small_wood_camp is 3 x 3
-          // (user 2026-08-23).
-          gridW: isSmallQuarry ? 5 : (isSmallWoodCamp ? 3 : 4),
-          gridH: isSmallQuarry ? 4 : (large ? 4 : 3),
-          resourceCost: _rosterCost(era, k),
-          constructionHours: _eraBuildHours(large ? 600 : 360, era),
-          eraIds: ['era_$era'],
-          maxCount: 0,
-          maxLevelPerEra: matCap,
-          costPerEra: _rosterCostPerEra(matCap, k),
-          costFactor: 1.3,
-          timeFactor: 1.3,
-        ));
+        defs.add(
+          BuildingDef(
+            id: isSmallQuarry
+                ? 'small_quarry'
+                : _idFor(
+                    era,
+                    '${large ? 'large' : 'small'}_${res}_camp',
+                    '${res}_${large ? 'works' : 'camp'}_e$era',
+                  ),
+            // ── SIZE, not era (user 2026-08-12: "primitive wood camp ist
+            // das small wood camp usw.") ──
+            // The pair is the only place in the roster where two buildings
+            // differ by nothing except how big they are, and "Primitive" said
+            // nothing about that — it said which era, which the MATERIAL already
+            // says: era 3 gathers Terracotta, era 5 gathers Iron. Era 1 is the
+            // only one with two raws, and Wood and Stone are era 1's materials
+            // anyway. So the adjective goes to the difference that is real.
+            // BOTH are Camps (user 2026-08-12: "Large Wood Camp"). Small and
+            // Large is the whole difference between them, and calling the big
+            // one a Works said there was a second one as well.
+            name: '${large ? 'Large' : 'Small'} $baseName Camp',
+            color: _rosterColor(res),
+            // A camp SHIPS what it gathers, so it needs room for a cart
+            // beside the pile (2026-08-09). The works halls were already
+            // 4 x 4 and stay there. small_quarry is 5 x 4 (measured against
+            // the hand-edited .blend, 2026-08-23). small_wood_camp is 3 x 3
+            // (user 2026-08-23).
+            gridW: isSmallQuarry ? 5 : (isSmallWoodCamp ? 3 : 4),
+            gridH: isSmallQuarry ? 4 : (large ? 4 : 3),
+            resourceCost: _rosterCost(era, k),
+            constructionHours: _eraBuildHours(large ? 600 : 360, era),
+            eraIds: ['era_$era'],
+            maxCount: 0,
+            maxLevelPerEra: matCap,
+            costPerEra: _rosterCostPerEra(matCap, k),
+            costFactor: 1.3,
+            timeFactor: 1.3,
+          ),
+        );
       }
     }
 
     if (element != null) {
-      defs.add(BuildingDef(
-        id: 'refinery_e$era',
-        name: _named(era, 'Refinery'),
-        color: const Color(0xFF5C6BC0),
-        gridW: 4,
-        gridH: 4,
-        resourceCost: _rosterCost(era, 1.4),
-        constructionHours: _eraBuildHours(720, era),
-        eraIds: ['era_$era'],
-        maxCount: 0,
-        maxLevelPerEra: matCap,
-        costPerEra: _rosterCostPerEra(matCap, 1.4),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
+      defs.add(
+        BuildingDef(
+          id: 'refinery_e$era',
+          name: _named(era, 'Refinery'),
+          color: const Color(0xFF5C6BC0),
+          gridW: 4,
+          gridH: 4,
+          resourceCost: _rosterCost(era, 1.4),
+          constructionHours: _eraBuildHours(720, era),
+          eraIds: ['era_$era'],
+          maxCount: 0,
+          maxLevelPerEra: matCap,
+          costPerEra: _rosterCostPerEra(matCap, 1.4),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
     }
 
     final cap = _eraHousingCap[era]!;
@@ -1733,143 +1831,193 @@ List<BuildingDef> _buildRoster() {
           ]
         : [
             ('pen_a_e$era', _named(era, habitat.$1), 3, 4, 0.9, cap),
-            ('pen_b_e$era', _named(era, habitat.$2), 3, 5, 1.3,
-                (cap * 1.4).round()),
+            (
+              'pen_b_e$era',
+              _named(era, habitat.$2),
+              3,
+              5,
+              1.3,
+              (cap * 1.4).round(),
+            ),
           ];
     for (final h in houseSpecs) {
-      defs.add(BuildingDef(
-        id: h.$1,
-        name: h.$2,
-        color: const Color(0xFF795548),
-        gridW: h.$3,
-        gridH: h.$4,
-        resourceCost: _rosterCost(era, h.$5),
-        constructionHours: _eraBuildHours(300, era),
-        eraIds: ['era_$era'],
-        maxCount: 0,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, h.$5),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-        population: h.$6,
-      ));
+      defs.add(
+        BuildingDef(
+          id: h.$1,
+          name: h.$2,
+          color: const Color(0xFF795548),
+          gridW: h.$3,
+          gridH: h.$4,
+          resourceCost: _rosterCost(era, h.$5),
+          constructionHours: _eraBuildHours(300, era),
+          eraIds: ['era_$era'],
+          maxCount: 0,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, h.$5),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+          population: h.$6,
+        ),
+      );
     }
 
-    final luxuries = kGoodsDefs.values
-        .where((g) => g.isSupply && g.regionOrder == era)
-        .toList()
-      ..sort((a, b) => a.id.compareTo(b.id));
+    final luxuries =
+        kGoodsDefs.values
+            .where((g) => g.isSupply && g.regionOrder == era)
+            .toList()
+          ..sort((a, b) => a.id.compareTo(b.id));
     for (final lux in luxuries) {
-      defs.add(BuildingDef(
-        id: _luxId(lux.id),
-        name: '${lux.emoji} '
-            '${_luxNameOverride(lux.id) ?? '${lux.name} ${_luxWord(lux.id)}'}',
-        color: const Color(0xFF8D6E4A),
-        // A luxury has to SHOW what it trades, and the showing is what needs
-        // the ground: a dock with a boat in it, a tanning vat and a drying
-        // frame. Three deep rather than two (2026-08-09).
-        gridW: 3,
-        gridH: 3,
-        resourceCost: _rosterCost(era, 0.9),
-        constructionHours: _eraBuildHours(360, era),
-        eraIds: ['era_$era'],
-        maxCount: 0,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.9),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
+      defs.add(
+        BuildingDef(
+          id: _luxId(lux.id),
+          name:
+              '${lux.emoji} '
+              '${_luxNameOverride(lux.id) ?? '${lux.name} ${_luxWord(lux.id)}'}',
+          color: const Color(0xFF8D6E4A),
+          // A luxury has to SHOW what it trades, and the showing is what needs
+          // the ground: a dock with a boat in it, a tanning vat and a drying
+          // frame. Three deep rather than two (2026-08-09).
+          gridW: 3,
+          gridH: 3,
+          resourceCost: _rosterCost(era, 0.9),
+          constructionHours: _eraBuildHours(360, era),
+          eraIds: ['era_$era'],
+          maxCount: 0,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.9),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
     }
 
     final matProd = <BuildingEffect>[
-      BuildingEffect(type: 'production', key: 'wood', value: _rate1(3 * _eraMult(era)), era: era),
-      BuildingEffect(type: 'production', key: 'stone', value: _rate1(3 * _eraMult(era)), era: era),
+      BuildingEffect(
+        type: 'production',
+        key: 'wood',
+        value: _rate1(3 * _eraMult(era)),
+        era: era,
+      ),
+      BuildingEffect(
+        type: 'production',
+        key: 'stone',
+        value: _rate1(3 * _eraMult(era)),
+        era: era,
+      ),
       for (var e = 2; e <= era; e++)
-        BuildingEffect(type: 'production', key: rawForRegion(e)!.id, value: _rate1(2 * _eraMult(era)), era: era),
+        BuildingEffect(
+          type: 'production',
+          key: rawForRegion(e)!.id,
+          value: _rate1(2 * _eraMult(era)),
+          era: era,
+        ),
       if (element != null)
-        BuildingEffect(type: 'production', key: element.id, value: _rate1(1.5 * _eraMult(era)), era: era),
+        BuildingEffect(
+          type: 'production',
+          key: element.id,
+          value: _rate1(1.5 * _eraMult(era)),
+          era: era,
+        ),
     ];
-    defs.add(BuildingDef(
-      id: _idFor(era, 'church', 'special_materials_e$era'),
-      name: _named(era, 'Church'),
-      color: const Color(0xFF6D4C41),
-      // 3 x 5 (user 2026-08-12): a NAVE and a west tower, not a hall. Long and
-      // narrow is what makes a church read as a church from above — five cells
-      // of ridge with a tower at one end, where 5 x 5 was a square block.
-      gridW: 3,
-      gridH: 5,
-      resourceCost: _rosterCost(era, 3.0),
-      constructionHours: _eraBuildHours(900, era),
-      eraIds: ['era_$era'],
-      maxCount: 0,
-      maxLevelPerEra: civCap,
-      costPerEra: _rosterCostPerEra(civCap, 3.0),
-      costFactor: 1.3,
-      timeFactor: 1.3,
-      workshops: _legendarySlot,
-      effects: matProd,
-    ));
-    final goldProd = <BuildingEffect>[
-      BuildingEffect(type: 'production', key: 'gold', value: _rate1(4 * _eraMult(era)), era: era),
-      for (final lux in luxuries)
-        BuildingEffect(type: 'production', key: lux.id, value: _rate1(1.5 * _eraMult(era)), era: era),
-    ];
-    defs.add(BuildingDef(
-      id: _idFor(era, 'marketplace', 'special_treasury_e$era'),
-      name: _named(era, 'Marketplace'),
-      color: const Color(0xFFC9971A),
-      gridW: 4,
-      gridH: 4,
-      resourceCost: _rosterCost(era, 3.0),
-      constructionHours: _eraBuildHours(900, era),
-      eraIds: ['era_$era'],
-      maxCount: 0,
-      maxLevelPerEra: civCap,
-      costPerEra: _rosterCostPerEra(civCap, 3.0),
-      costFactor: 1.3,
-      timeFactor: 1.3,
-      workshops: _legendarySlot,
-      effects: goldProd,
-    ));
-
-    if (era == 1) {
-      defs.add(BuildingDef(
-        id: 'builder_camp',
-        name: 'Builder Camp',
-        color: const Color(0xFF546E7A),
-        // 5 x 5, not 6 x 6 (user 2026-08-23) — shrunk in their own
-        // builder_camp.blend edit; the measured model no longer fills 6 x 6.
-        gridW: 5,
+    defs.add(
+      BuildingDef(
+        id: _idFor(era, 'church', 'special_materials_e$era'),
+        name: _named(era, 'Church'),
+        color: const Color(0xFF6D4C41),
+        // 3 x 5 (user 2026-08-12): a NAVE and a west tower, not a hall. Long and
+        // narrow is what makes a church read as a church from above — five cells
+        // of ridge with a tower at one end, where 5 x 5 was a square block.
+        gridW: 3,
         gridH: 5,
-        resourceCost: _rosterCost(1, 1.2),
-        constructionHours: _eraBuildHours(480, 1),
-        eraIds: const ['era_1'],
+        resourceCost: _rosterCost(era, 3.0),
+        constructionHours: _eraBuildHours(900, era),
+        eraIds: ['era_$era'],
         maxCount: 0,
         maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 1.2),
+        costPerEra: _rosterCostPerEra(civCap, 3.0),
         costFactor: 1.3,
         timeFactor: 1.3,
-      ));
-      defs.add(BuildingDef(
-        id: 'healing_hut',
-        name: 'Healing Hut',
-        color: const Color(0xFF4FAE6B),
-        // 5x4, not 4x4 (user 2026-08-23: first "nur 4x4", then "müsste wohl
-        // 5 (x) und 4 (y) sein"). The hand-authored plan is still the 6x5 it
-        // grew to (4x4→5x4→6x5, see prior history in git blame) — it now
-        // gets scaled onto this smaller tile instead of redrawn, matching
-        // the castle's own plan-scaling trick (tool/blender/render_building.py
-        // HEALING_HUT_PLAN_W/H).
-        gridW: 5,
+        workshops: _legendarySlot,
+        effects: matProd,
+      ),
+    );
+    final goldProd = <BuildingEffect>[
+      BuildingEffect(
+        type: 'production',
+        key: 'gold',
+        value: _rate1(4 * _eraMult(era)),
+        era: era,
+      ),
+      for (final lux in luxuries)
+        BuildingEffect(
+          type: 'production',
+          key: lux.id,
+          value: _rate1(1.5 * _eraMult(era)),
+          era: era,
+        ),
+    ];
+    defs.add(
+      BuildingDef(
+        id: _idFor(era, 'marketplace', 'special_treasury_e$era'),
+        name: _named(era, 'Marketplace'),
+        color: const Color(0xFFC9971A),
+        gridW: 4,
         gridH: 4,
-        resourceCost: _rosterCost(1, 0.6),
-        constructionHours: _eraBuildHours(120, 1),
-        eraIds: const ['era_1'],
+        resourceCost: _rosterCost(era, 3.0),
+        constructionHours: _eraBuildHours(900, era),
+        eraIds: ['era_$era'],
+        maxCount: 0,
         maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.6),
+        costPerEra: _rosterCostPerEra(civCap, 3.0),
         costFactor: 1.3,
         timeFactor: 1.3,
-      ));
+        workshops: _legendarySlot,
+        effects: goldProd,
+      ),
+    );
+
+    if (era == 1) {
+      defs.add(
+        BuildingDef(
+          id: 'builder_camp',
+          name: 'Builder Camp',
+          color: const Color(0xFF546E7A),
+          // 5 x 5, not 6 x 6 (user 2026-08-23) — shrunk in their own
+          // builder_camp.blend edit; the measured model no longer fills 6 x 6.
+          gridW: 5,
+          gridH: 5,
+          resourceCost: _rosterCost(1, 1.2),
+          constructionHours: _eraBuildHours(480, 1),
+          eraIds: const ['era_1'],
+          maxCount: 0,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 1.2),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
+      defs.add(
+        BuildingDef(
+          id: 'healing_hut',
+          name: 'Healing Hut',
+          color: const Color(0xFF4FAE6B),
+          // 5x4, not 4x4 (user 2026-08-23: first "nur 4x4", then "müsste wohl
+          // 5 (x) und 4 (y) sein"). The hand-authored plan is still the 6x5 it
+          // grew to (4x4→5x4→6x5, see prior history in git blame) — it now
+          // gets scaled onto this smaller tile instead of redrawn, matching
+          // the castle's own plan-scaling trick (tool/blender/render_building.py
+          // HEALING_HUT_PLAN_W/H).
+          gridW: 5,
+          gridH: 4,
+          resourceCost: _rosterCost(1, 0.6),
+          constructionHours: _eraBuildHours(120, 1),
+          eraIds: const ['era_1'],
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.6),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
       // Combat School (user 2026-09-05) — evolution no longer grants a move
       // by itself; this is where a creature actually learns one (every
       // neutral move + every move of its own type, gated by that move's own
@@ -1879,80 +2027,88 @@ List<BuildingDef> _buildRoster() {
       // the game. No bundled art yet (a Blender pass is a separate,
       // hands-on follow-up — see [[blender-render-kit]]); sized/costed off
       // the Healing Hut as the closest analog until real numbers are tuned.
-      defs.add(BuildingDef(
-        id: 'combat_school',
-        name: 'Combat School',
-        color: const Color(0xFFB5442E),
-        gridW: 5,
-        gridH: 4,
-        resourceCost: _rosterCost(1, 0.6),
-        constructionHours: _eraBuildHours(120, 1),
-        eraIds: const ['era_1'],
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.6),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
+      defs.add(
+        BuildingDef(
+          id: 'combat_school',
+          name: 'Combat School',
+          color: const Color(0xFFB5442E),
+          gridW: 5,
+          gridH: 4,
+          resourceCost: _rosterCost(1, 0.6),
+          constructionHours: _eraBuildHours(120, 1),
+          eraIds: const ['era_1'],
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.6),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
       // Trade Center (user 2026-07-25, item Phase 3) — the market's home and
       // gold's only real sink. The id stays `trading_post`
       // (kTradingPostBuildingId, which the map's Market action already keys on):
       // the constant and the sheet existed long before the building did, so the
       // market was unreachable until this def appeared.
-      defs.add(BuildingDef(
-        id: 'trading_post',
-        name: 'Trade Center',
-        color: const Color(0xFFC9A227),
-        // A market needs stalls down BOTH sides of the hall, which 3 x 3 could not hold without the awnings overhanging the grass.
-        gridW: 4,
-        gridH: 3,
-        resourceCost: _rosterCost(1, 1.0),
-        constructionHours: _eraBuildHours(300, 1),
-        eraIds: const ['era_1'],
-        maxCount: 1, // one market per settlement — a second adds nothing
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 1.0),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
-      defs.add(BuildingDef(
-        id: 'breeding_hut',
-        name: 'Breeding Hut',
-        color: const Color(0xFFE91E63),
-        // 4x4, not 3x4 (user 2026-08-04). The art was rebuilt as two wings
-        // round a court, and a SQUARE footprint is what makes that read: the
-        // plan projects to a true rhombus with its near corner at the bottom
-        // of the picture, so a court left open at that corner is looked INTO
-        // rather than past. The plot has to agree with the picture — the map
-        // scales art to the footprint's width, so a 3x4 def would squash it.
-        gridW: 4,
-        gridH: 4,
-        resourceCost: _rosterCost(1, 0.9),
-        constructionHours: _eraBuildHours(300, 1),
-        eraIds: const ['era_1'],
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.9),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
+      defs.add(
+        BuildingDef(
+          id: 'trading_post',
+          name: 'Trade Center',
+          color: const Color(0xFFC9A227),
+          // A market needs stalls down BOTH sides of the hall, which 3 x 3 could not hold without the awnings overhanging the grass.
+          gridW: 4,
+          gridH: 3,
+          resourceCost: _rosterCost(1, 1.0),
+          constructionHours: _eraBuildHours(300, 1),
+          eraIds: const ['era_1'],
+          maxCount: 1, // one market per settlement — a second adds nothing
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 1.0),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
+      defs.add(
+        BuildingDef(
+          id: 'breeding_hut',
+          name: 'Breeding Hut',
+          color: const Color(0xFFE91E63),
+          // 4x4, not 3x4 (user 2026-08-04). The art was rebuilt as two wings
+          // round a court, and a SQUARE footprint is what makes that read: the
+          // plan projects to a true rhombus with its near corner at the bottom
+          // of the picture, so a court left open at that corner is looked INTO
+          // rather than past. The plot has to agree with the picture — the map
+          // scales art to the footprint's width, so a 3x4 def would squash it.
+          gridW: 4,
+          gridH: 4,
+          resourceCost: _rosterCost(1, 0.9),
+          constructionHours: _eraBuildHours(300, 1),
+          eraIds: const ['era_1'],
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.9),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
       // Hatchery — hatches the eggs the Breeding Hut lays; unlocked together
       // with it (user 2026-07-24). Built the SAME WAY as the hut but on its own
       // keys (user 2026-07-26): a `hatching` post and a `hatching` job cap, so
       // the two buildings are staffed, capped and tuned independently.
-      defs.add(BuildingDef(
-        id: 'hatchery',
-        name: 'Hatchery',
-        color: const Color(0xFFF06292),
-        // The clutches are the label, and they have to lie in front of the chamber rather than under its eaves.
-        gridW: 4,
-        gridH: 3,
-        resourceCost: _rosterCost(1, 0.9),
-        constructionHours: _eraBuildHours(300, 1),
-        eraIds: const ['era_1'],
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.9),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
+      defs.add(
+        BuildingDef(
+          id: 'hatchery',
+          name: 'Hatchery',
+          color: const Color(0xFFF06292),
+          // The clutches are the label, and they have to lie in front of the chamber rather than under its eaves.
+          gridW: 4,
+          gridH: 3,
+          resourceCost: _rosterCost(1, 0.9),
+          constructionHours: _eraBuildHours(300, 1),
+          eraIds: const ['era_1'],
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.9),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
       // ── Scout Post ──
       // ERA I, not II (moved 2026-07-26). It is the sole source of longer hunts
       // and extra expedition slots now that the feature unlocks are gone (user:
@@ -1960,21 +2116,23 @@ List<BuildingDef> _buildRoster() {
       // used to arrive in the FIRST region (battles 5 and 6). Leaving the post
       // in era II would have pushed both a whole region later — the building
       // has to exist where the thing it grants is meant to appear.
-      defs.add(BuildingDef(
-        id: 'scout_post',
-        name: 'Scout Post',
-        color: const Color(0xFF7E9E5B),
-        gridW: 2,
-        gridH: 2,
-        resourceCost: _rosterCost(1, 0.7),
-        constructionHours: _eraBuildHours(300, 1),
-        eraIds: const ['era_1'],
-        maxCount: 2,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.7),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
+      defs.add(
+        BuildingDef(
+          id: 'scout_post',
+          name: 'Scout Post',
+          color: const Color(0xFF7E9E5B),
+          gridW: 2,
+          gridH: 2,
+          resourceCost: _rosterCost(1, 0.7),
+          constructionHours: _eraBuildHours(300, 1),
+          eraIds: const ['era_1'],
+          maxCount: 2,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.7),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
       // ── Caravanserai (user 2026-07-29) ──
       // The Scout Post's twin, on the other road. Trade caravans used to be
       // expeditions in every respect — same seats, same amplifiers — so a load
@@ -1986,22 +2144,24 @@ List<BuildingDef> _buildRoster() {
       // Era I, beside the Trade Center: the Market exists from the first era,
       // so its road has to as well — kBaseCaravanSlots alone would mean one
       // caravan forever until era II.
-      defs.add(BuildingDef(
-        id: 'caravanserai',
-        name: 'Caravanserai',
-        color: const Color(0xFFB07D3A),
-        // Wider AND deeper (2026-08-09): the yard is the building. Camels and a wagon need floor, and at 3 x 2 twenty props ended up off the tile.
-        gridW: 4,
-        gridH: 3,
-        resourceCost: _rosterCost(1, 0.8),
-        constructionHours: _eraBuildHours(300, 1),
-        eraIds: const ['era_1'],
-        maxCount: 2,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.8),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
+      defs.add(
+        BuildingDef(
+          id: 'caravanserai',
+          name: 'Caravanserai',
+          color: const Color(0xFFB07D3A),
+          // Wider AND deeper (2026-08-09): the yard is the building. Camels and a wagon need floor, and at 3 x 2 twenty props ended up off the tile.
+          gridW: 4,
+          gridH: 3,
+          resourceCost: _rosterCost(1, 0.8),
+          constructionHours: _eraBuildHours(300, 1),
+          eraIds: const ['era_1'],
+          maxCount: 2,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.8),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
       // ── The two STORES (user 2026-07-30) ──
       // "Ein Lager für die Ära 1 einfügen, welches alle Produktion und
       // Luxusressourcen lagern kann. Zusätzlich ein Goldlager."
@@ -2014,104 +2174,116 @@ List<BuildingDef> _buildRoster() {
       //
       // Which resources each one holds, and by how much per level, is authored
       // in building_effects.dart — one `storage` effect per resource.
-      defs.add(BuildingDef(
-        id: 'storehouse',
-        name: 'Storehouse',
-        color: const Color(0xFF9A7B4F),
-        // Raised on staddle stones, so the ground floor is all shadow — the sacks, casks and the cart at the door need their own strip of yard.
-        gridW: 4,
-        gridH: 3,
-        resourceCost: _rosterCost(1, 0.9),
-        constructionHours: _eraBuildHours(300, 1),
-        eraIds: const ['era_1'],
-        // Several, so more room is a thing you BUILD as well as a thing you
-        // level — the same shape as the housing huts.
-        maxCount: 4,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.9),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
-      defs.add(BuildingDef(
-        id: 'gold_vault',
-        name: 'Gold Vault',
-        color: const Color(0xFFC9A227),
-        // 4 x 4, not 3 x 3 (user 2026-08-23, rebuilt to a reference photo):
-        // a keep with a tower, a rampart and one long exterior stair needs
-        // real room to stand in.
-        gridW: 4,
-        gridH: 4,
-        resourceCost: _rosterCost(1, 0.7),
-        constructionHours: _eraBuildHours(300, 1),
-        eraIds: const ['era_1'],
-        maxCount: 2,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.7),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
+      defs.add(
+        BuildingDef(
+          id: 'storehouse',
+          name: 'Storehouse',
+          color: const Color(0xFF9A7B4F),
+          // Raised on staddle stones, so the ground floor is all shadow — the sacks, casks and the cart at the door need their own strip of yard.
+          gridW: 4,
+          gridH: 3,
+          resourceCost: _rosterCost(1, 0.9),
+          constructionHours: _eraBuildHours(300, 1),
+          eraIds: const ['era_1'],
+          // Several, so more room is a thing you BUILD as well as a thing you
+          // level — the same shape as the housing huts.
+          maxCount: 4,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.9),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
+      defs.add(
+        BuildingDef(
+          id: 'gold_vault',
+          name: 'Gold Vault',
+          color: const Color(0xFFC9A227),
+          // 4 x 4, not 3 x 3 (user 2026-08-23, rebuilt to a reference photo):
+          // a keep with a tower, a rampart and one long exterior stair needs
+          // real room to stand in.
+          gridW: 4,
+          gridH: 4,
+          resourceCost: _rosterCost(1, 0.7),
+          constructionHours: _eraBuildHours(300, 1),
+          eraIds: const ['era_1'],
+          maxCount: 2,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.7),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
     } else if (era == 2) {
-      defs.add(BuildingDef(
-        id: 'thinker_circle',
-        name: 'Workshop',
-        color: const Color(0xFF5C6BC0),
-        gridW: 3,
-        gridH: 3,
-        resourceCost: _rosterCost(2, 1.2),
-        constructionHours: _eraBuildHours(480, 2),
-        eraIds: const ['era_2'],
-        maxCount: 0,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 1.2),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
+      defs.add(
+        BuildingDef(
+          id: 'thinker_circle',
+          name: 'Workshop',
+          color: const Color(0xFF5C6BC0),
+          gridW: 3,
+          gridH: 3,
+          resourceCost: _rosterCost(2, 1.2),
+          constructionHours: _eraBuildHours(480, 2),
+          eraIds: const ['era_2'],
+          maxCount: 0,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 1.2),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
     } else if (era == 3) {
-      defs.add(BuildingDef(
-        id: 'training_grounds',
-        name: 'Training Grounds',
-        color: const Color(0xFFD84315),
-        gridW: 3,
-        gridH: 3,
-        resourceCost: _rosterCost(3, 1.0),
-        constructionHours: _eraBuildHours(360, 3),
-        eraIds: const ['era_3'],
-        maxCount: 1,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 1.0),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
-      defs.add(BuildingDef(
-        id: 'warehouse',
-        name: 'Warehouse',
-        color: const Color(0xFF8D6E63),
-        gridW: 2,
-        gridH: 2,
-        resourceCost: _rosterCost(3, 0.8),
-        constructionHours: _eraBuildHours(300, 3),
-        eraIds: const ['era_3'],
-        maxCount: 3,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.8),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
-      defs.add(BuildingDef(
-        id: 'smokehouse',
-        name: 'Smokehouse',
-        color: const Color(0xFFB55E36),
-        gridW: 2,
-        gridH: 2,
-        resourceCost: _rosterCost(3, 0.9),
-        constructionHours: _eraBuildHours(300, 3),
-        eraIds: const ['era_3'],
-        maxCount: 2,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 0.9),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-      ));
+      defs.add(
+        BuildingDef(
+          id: 'training_grounds',
+          name: 'Training Grounds',
+          color: const Color(0xFFD84315),
+          gridW: 3,
+          gridH: 3,
+          resourceCost: _rosterCost(3, 1.0),
+          constructionHours: _eraBuildHours(360, 3),
+          eraIds: const ['era_3'],
+          maxCount: 1,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 1.0),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
+      defs.add(
+        BuildingDef(
+          id: 'warehouse',
+          name: 'Warehouse',
+          color: const Color(0xFF8D6E63),
+          gridW: 2,
+          gridH: 2,
+          resourceCost: _rosterCost(3, 0.8),
+          constructionHours: _eraBuildHours(300, 3),
+          eraIds: const ['era_3'],
+          maxCount: 3,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.8),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
+      defs.add(
+        BuildingDef(
+          id: 'smokehouse',
+          name: 'Smokehouse',
+          color: const Color(0xFFB55E36),
+          gridW: 2,
+          gridH: 2,
+          resourceCost: _rosterCost(3, 0.9),
+          constructionHours: _eraBuildHours(300, 3),
+          eraIds: const ['era_3'],
+          maxCount: 2,
+          maxLevelPerEra: civCap,
+          costPerEra: _rosterCostPerEra(civCap, 0.9),
+          costFactor: 1.3,
+          timeFactor: 1.3,
+        ),
+      );
     }
   }
 
@@ -2310,10 +2482,7 @@ bool buildingHasPathReward(String buildingId) =>
 /// reached automatically on the last boss clear (user 2026-09-05: no more
 /// paid Castle ascension standing between "boss beaten" and "buildings
 /// available").
-List<BuildingDef> availableBuildings(
-  int currentRegion,
-  int battlesCleared,
-) {
+List<BuildingDef> availableBuildings(int currentRegion, int battlesCleared) {
   // CUMULATIVE regions (user 2026-07-22): older buildings STAY buildable
   // when a region passes — a def is available once any of its regions has
   // been reached. Exact matching used to make every region-1 building

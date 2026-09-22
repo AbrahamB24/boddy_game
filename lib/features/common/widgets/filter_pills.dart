@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/cream_kit.dart'
+    show CreamPalette, kBoxAccent, kBoxInk, kBoxInkFaint;
 import '../../../core/theme/foe_theme.dart';
 import '../../settlement/widgets/scroll_paper.dart'
     show kParchmentInk, kParchmentLight;
@@ -56,10 +58,29 @@ class PillPalette {
     menuSurface: kParchmentLight,
   );
 
+  /// The same pill on a CREAM card (the building dialog's template): navy ink,
+  /// a light wash for the fill, a tan edge, and a cream menu.
+  static final PillPalette cream = PillPalette(
+    ink: kBoxInk,
+    inkFaint: kBoxInkFaint,
+    accent: kBoxAccent,
+    fill: Colors.white.withValues(alpha: 0.55),
+    border: CreamPalette.tan.withValues(alpha: 0.7),
+    menuSurface: CreamPalette.paperTop,
+  );
+
   /// One pill's surface. ENGAGED — something typed, something filtered, a
   /// non-default order — is the accent; idle is the plain recess.
-  ShapeDecoration skin(bool engaged) => ShapeDecoration(color: engaged ? accent.withValues(alpha: 0.14) : fill, shape: FoE.facet(radius: 19, side: BorderSide(color: engaged ? accent : border,
-      width: engaged ? 1.4 : 1)));
+  ShapeDecoration skin(bool engaged) => ShapeDecoration(
+    color: engaged ? accent.withValues(alpha: 0.14) : fill,
+    shape: FoE.facet(
+      radius: 19,
+      side: BorderSide(
+        color: engaged ? accent : border,
+        width: engaged ? 1.4 : 1,
+      ),
+    ),
+  );
 }
 
 /// The height every pill shares, so a row of them lines up.

@@ -2,10 +2,16 @@ import '../../core/ui/feel.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
+// Warms a sprite's BYTES into the same store CreatureSprite reads from,
+// without decoding it — see the precache in initState.
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 import '../../core/supabase/supabase_client.dart';
+import '../../core/ui/app_navigator.dart';
+import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
@@ -21,17 +27,23 @@ import 'models/status_effects.dart';
 import 'models/creature_instance.dart';
 import 'models/species_def.dart';
 import '../social/models/pvp_match.dart';
+import '../social/services/friends_service.dart';
+import '../social/services/pvp_notifier.dart';
 import '../social/services/pvp_service.dart';
+import '../social/widgets/social_kit.dart';
+import 'pvp_lobby_screen.dart';
 import 'services/battle_rewards.dart';
 import 'services/capture_math.dart';
 import 'services/combat_engine.dart';
 import 'services/creatures_controller.dart';
+import 'services/pvp_combatant_snapshot.dart';
 import 'services/pvp_sync_service.dart';
 import 'widgets/battle_scene.dart';
 import 'widgets/creature_backdrop.dart';
 import 'widgets/creature_card.dart';
+import 'widgets/creature_family.dart' show SockelAvatar;
 import 'widgets/creature_sprite.dart' show decodeWidthFor;
-import 'widgets/type_circle_dialog.dart';
+import 'widgets/type_chart_screen.dart';
 import 'widgets/wild_preview.dart';
 import '../common/widgets/recess_bar.dart';
 import '../common/widgets/parchment_page.dart';
@@ -175,7 +187,10 @@ enum _ScriptBeat {
 
 class _BattleScreenState extends State<BattleScreen>
     with TickerProviderStateMixin {
-  late final CombatEngine _engine;
+  // Not `final` any more (2026-09-17): a desync resync rebuilds this from
+  // scratch — see [_handleDesync]. Every other mode still assigns it exactly
+  // once, in initState, same as before.
+  late CombatEngine _engine;
   Timer? _autoTimer;
   bool _autoBattle = false;
   bool _outcomeApplied = false;
@@ -186,8 +201,28 @@ class _BattleScreenState extends State<BattleScreen>
   final PvpService _pvpService = PvpService();
   // Set when a relayed 'flee' arrives — CombatEngine.flee() doesn't record
   // WHICH side fled, so _applyOutcome needs this to award the forfeit win
-  // to the side that stayed rather than treating both sides as losers.
+  // to the side that stayed rather than treating both sides as losers. Also
+  // set for a timeout win claimed via [_maybeClaimTimeout] — reuses this
+  // exact same path (see that method's doc comment).
   bool _pvpOpponentFled = false;
+
+  // ── PvP resilience (2026-09-17) ───────────────────────────────
+  // One timer for "it's their turn" AND "they disconnected" (see
+  // supabase/migrations/0053_pvp_resilience.sql's doc comment) — purely
+  // LOCAL state, deliberately never read back from the DB: both clients
+  // derive the identical deadline independently from the same deterministic
+  // action sequence (lockstep), so there's nothing to synchronize. The
+  // server write ([PvpService.advanceTurn]) exists only so
+  // [PvpService.claimTimeoutWin] has something authoritative to check.
+  static const _kPvpTurnTimeout = Duration(seconds: 60);
+  String? _turnWindowKey;
+  String? _waitingOnId;
+  DateTime? _turnDeadline;
+  Timer? _turnCountdownTimer;
+  bool _claimingTimeout = false;
+  // Guards against a resync-triggered replay re-triggering itself if the
+  // rebuilt engine somehow still disagreed — see [_handleDesync].
+  bool _resyncing = false;
 
   // A brief inline message (rejected action etc.) shown IN the battle log line
   // instead of a bottom SnackBar — a SnackBar floats over the action menu and
@@ -295,6 +330,14 @@ class _BattleScreenState extends State<BattleScreen>
   // the action loop is held (`_entering`) until they've arrived.
   late final AnimationController _entry;
   bool _entering = true;
+
+  /// Which page of the command deck is open (user 2026-09-20, "Variante 7 — Reiter"):
+  /// Items and Change are tabs of the deck now, not bottom sheets. See [_shownTab].
+  _DeckTab _deckTab = _DeckTab.attack;
+
+  /// The ability the deck's info box describes — set by a long press on its tile
+  /// (which used to open a sheet) or by using it. See [_infoAbilityFor].
+  String? _infoAbilityId;
 
   // ── Idle bob (user request) ────────────────────────────────
   // A slow, small up-down breathing motion so the field never looks frozen
@@ -471,7 +514,9 @@ class _BattleScreenState extends State<BattleScreen>
     if (!_isFirstBattleTutorial || _battleCallout != null) return null;
     return switch (_scriptBeat) {
       _ScriptBeat.tackle => 'battle-attack-btn',
-      _ScriptBeat.healItem => 'battle-items-btn',
+      // The Items TAB first; once it is open, the first item's Use button.
+      _ScriptBeat.healItem =>
+        _deckTab == _DeckTab.items ? 'battle-item-use' : 'battle-items-btn',
       _ScriptBeat.missedAttack ||
       _ScriptBeat.powerAttack => 'battle-first-ability',
       _ScriptBeat.bankEndTurn => 'battle-endturn-btn',
@@ -806,7 +851,11 @@ class _BattleScreenState extends State<BattleScreen>
     _prevPlayerField = List.of(_engine.playerField);
     _prevEnemyField = List.of(_engine.enemyField);
     _engine.addListener(_onEngineChanged);
-    if (widget.isPvp) _startPvpSync();
+    if (widget.isPvp) {
+      // On screen: my own turn coming round is not news to me.
+      PvpNotifier.instance.openBattleId = widget.pvpMatch!.id;
+      _startPvpSync();
+    }
     _fx = AnimationController(
       vsync: this,
       // The ATTACKER's own lunge — windup, strike, rebound — and its sound
@@ -837,10 +886,10 @@ class _BattleScreenState extends State<BattleScreen>
       vsync: this,
       duration: const Duration(milliseconds: 950),
     );
+    // Also no per-frame setState (2026-09-21): the shrinking ring is read
+    // inside an AnimatedBuilder in [_catchOverlay], so only the ring's own
+    // CustomPaint repaints while it closes instead of the whole screen.
     _ring = AnimationController(vsync: this)
-      ..addListener(() {
-        if (mounted) setState(() {});
-      })
       ..addStatusListener((s) {
         // Ring fully shrank with no tap → a miss.
         if (s == AnimationStatus.completed && _catchOpen && !_catchBetween) {
@@ -850,14 +899,17 @@ class _BattleScreenState extends State<BattleScreen>
     // Entry animation (user 2026-07-24): the fighters slide onto the field
     // before the fight begins, so the combat has a proper "Auftritt". The
     // action loop is held until they've arrived.
+    // NO per-frame setState here (2026-09-21). The slide is already driven by
+    // the AnimatedBuilder around each rank in [_bigSprite]'s caller, which
+    // rebuilds only the Transform and keeps its `child` — so a listener that
+    // called setState was rebuilding this entire ~6k-line screen sixty times
+    // a second for the 620 ms the fighters take to walk on, which is the one
+    // moment in a battle when the frame budget is already fullest.
     _entry =
         AnimationController(
             vsync: this,
             duration: const Duration(milliseconds: 620),
           )
-          ..addListener(() {
-            if (mounted) setState(() {});
-          })
           ..addStatusListener((s) {
             if (s == AnimationStatus.completed && mounted) {
               setState(() => _entering = false);
@@ -881,12 +933,29 @@ class _BattleScreenState extends State<BattleScreen>
     // was nothing recognisable to see move. Precached here, the real image
     // is already resident by the time anyone's first turn comes up — bench
     // included, since a reserve's own first attack has the exact same gap.
+    //
+    // BYTES, NOT A DECODE, off the web (2026-09-21). [CreatureSprite] caps
+    // every sprite's decode with `memCacheWidth`, so it resolves a
+    // `ResizeImage(CachedNetworkImageProvider(url), width: …)` — while
+    // `precacheImage(NetworkImage(url))` filed a full-resolution decode
+    // under a different ImageCache key AND fetched through Flutter's own
+    // HttpClient, which shares nothing with flutter_cache_manager's store.
+    // On mobile it therefore closed neither half of the gap: not the fetch,
+    // not the decode. Pulling the file into the same store the sprite reads
+    // from closes the fetch, which is the slow half. Web keeps the old path:
+    // there [CreatureSprite] draws through `Image.network`, so this really
+    // does warm the browser's cache for it, and six sprites is a decode cost
+    // worth paying to keep the first swing from animating a placeholder.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final cache = kIsWeb ? null : DefaultCacheManager();
       for (final c in [..._engine.players, ..._engine.enemies]) {
         for (final url in {c.imageUrl, c.backImageUrl}) {
-          if (url != null) {
+          if (url == null) continue;
+          if (cache == null) {
             precacheImage(NetworkImage(url), context).catchError((_) {});
+          } else {
+            cache.downloadFile(url).then((_) {}, onError: (Object _) {});
           }
         }
       }
@@ -896,6 +965,7 @@ class _BattleScreenState extends State<BattleScreen>
   @override
   void dispose() {
     _autoTimer?.cancel();
+    _turnCountdownTimer?.cancel();
     _flashTimer?.cancel();
     _fx.dispose();
     _fxReact.dispose();
@@ -906,7 +976,12 @@ class _BattleScreenState extends State<BattleScreen>
     _idle.dispose();
     _engine.removeListener(_onEngineChanged);
     _engine.dispose();
-    if (widget.isPvp) _pvpSync.disconnect();
+    if (widget.isPvp) {
+      _pvpSync.disconnect();
+      if (PvpNotifier.instance.openBattleId == widget.pvpMatch!.id) {
+        PvpNotifier.instance.openBattleId = null;
+      }
+    }
     Feel.stopBattleMusic();
     super.dispose();
   }
@@ -929,14 +1004,78 @@ class _BattleScreenState extends State<BattleScreen>
   /// live from where that leaves off.
   void _startPvpSync() {
     final match = widget.pvpMatch!;
+    final myId = supabase.auth.currentUser!.id;
     for (final raw in match.actionLog) {
-      _applyRemoteAction(PvpAction.fromJson(raw));
+      _applyRemoteAction(PvpAction.fromJson(raw), checkDesync: false);
     }
     _pvpSync.connect(
       matchId: match.id,
+      myUserId: myId,
+      opponentUserId: match.otherUserId(myId),
       resumeFromSeq: match.actionLog.length,
       onRemoteAction: _applyRemoteAction,
     );
+  }
+
+  /// Builds a completely fresh [CombatEngine] from the match's FROZEN team
+  /// snapshots (the same construction [PvpLobbyScreen._goToBattle] did) —
+  /// used by [_handleDesync] to discard a diverged engine rather than trying
+  /// to patch its already-wrong mutable state. My own side rebuilds from
+  /// [widget.team] (live [CreatureInstance]s, untouched by the engine —
+  /// [Combatant.fromInstance] only ever reads their pre-battle hp); the
+  /// opponent's side must come from the persisted snapshot JSON instead,
+  /// since [widget.enemies] IS the live, already-mutated [Combatant] list
+  /// the diverged engine has been writing hp/status into directly.
+  CombatEngine _buildFreshEngine() {
+    final match = widget.pvpMatch!;
+    final myId = supabase.auth.currentUser!.id;
+    final oppSnapshot = match.playerA == myId ? match.teamB! : match.teamA!;
+    return CombatEngine(
+      players: widget.team.map(Combatant.fromInstance).toList(),
+      enemies: [
+        for (final j in oppSnapshot)
+          combatantFromSnapshot(j, isPlayerSide: false),
+      ],
+      isPvp: true,
+      rng: math.Random(widget.pvpSeed!),
+    );
+  }
+
+  /// A remote action's [PvpAction.stateHash] didn't match my own post-apply
+  /// [CombatEngine.stateHash] — the two independently-run engines have
+  /// quietly diverged (bug/race condition; see the migration's doc comment).
+  /// Self-heals by rebuilding from scratch ([_buildFreshEngine]) and
+  /// replaying the match's persisted, canonical `action_log` — the exact
+  /// mechanism [_startPvpSync] already uses for an ordinary reconnect, just
+  /// triggered mid-fight instead. Reports the mismatch either way
+  /// ([PvpService.reportDesync]) so a divergence that keeps happening is
+  /// visible in the data even though a player only ever sees a brief, silent
+  /// re-sync (never a crash).
+  Future<void> _handleDesync(PvpAction mismatchedAction) async {
+    if (_resyncing) return; // already fixing one; don't pile on
+    _resyncing = true;
+    try {
+      final matchId = widget.pvpMatch!.id;
+      unawaited(
+        _pvpService.reportDesync(
+          matchId,
+          seq: mismatchedAction.seq,
+          myHash: '${_engine.stateHash}',
+          expectedHash: mismatchedAction.stateHash?.toString(),
+        ),
+      );
+      final fresh = await _pvpService.loadMatch(matchId);
+      _engine.removeListener(_onEngineChanged);
+      _engine.dispose();
+      _engine = _buildFreshEngine();
+      _engine.addListener(_onEngineChanged);
+      for (final raw in fresh.actionLog) {
+        _applyRemoteAction(PvpAction.fromJson(raw), checkDesync: false);
+      }
+      if (mounted) setState(() {});
+    } finally {
+      _resyncing = false;
+    }
   }
 
   /// Applies one relayed action (mine or the opponent's — see
@@ -944,15 +1083,26 @@ class _BattleScreenState extends State<BattleScreen>
   /// know which) directly to [_engine]. [_onEngineChanged] (already wired
   /// via [ChangeNotifier]) picks up the resulting notify exactly like any
   /// local action would.
-  void _applyRemoteAction(PvpAction action) {
+  ///
+  /// [checkDesync] is false while replaying a persisted `action_log` (the
+  /// initial reconnect catch-up in [_startPvpSync], or [_handleDesync]'s own
+  /// resync) — those hashes were already valid when first sent; rechecking
+  /// them against a freshly-built engine would either be redundant or, if it
+  /// somehow still disagreed, risk piling resync attempts on top of each
+  /// other (guarded anyway by [_resyncing], but there's no reason to invite
+  /// it). It stays true for the normal, live broadcast path.
+  void _applyRemoteAction(PvpAction action, {bool checkDesync = true}) {
     final actor = _findCombatant(action.actorId);
     if (actor == null) return;
+    final myId = supabase.auth.currentUser!.id;
     switch (action.kind) {
       case 'attack':
         final target = _findCombatant(action.targetId);
         if (target != null) _engine.basicAttack(actor, target);
       case 'ability':
-        final ability = action.abilityId == null ? null : kAbilityDefs[action.abilityId];
+        final ability = action.abilityId == null
+            ? null
+            : kAbilityDefs[action.abilityId];
         if (ability != null) {
           _engine.useAbility(actor, ability, _findCombatant(action.targetId));
         }
@@ -965,9 +1115,23 @@ class _BattleScreenState extends State<BattleScreen>
       case 'endTurn':
         _engine.forceEndTurn();
       case 'flee':
-        _pvpOpponentFled = true;
+        // [action.senderId] is who actually gave up — NOT [actor], which is
+        // decorative for this kind (see [_confirmFlee]'s doc). This method
+        // also replays my OWN past actions during a reconnect catch-up (see
+        // [_startPvpSync]), so unconditionally assuming "the opponent fled"
+        // here used to falsely flip a reloaded give-up into a win: an old
+        // senderId-less log entry (recorded before this field existed) has
+        // no way to tell, so it falls back to the old, still-wrong "assume
+        // opponent" behaviour rather than crashing.
+        _pvpOpponentFled = action.senderId == null || action.senderId != myId;
         _engine.flee();
     }
+    if (checkDesync &&
+        action.stateHash != null &&
+        action.stateHash != _engine.stateHash) {
+      unawaited(_handleDesync(action));
+    }
+    if (widget.isPvp) _syncTurnStateIfNeeded();
     if (mounted) setState(() {});
   }
 
@@ -988,11 +1152,103 @@ class _BattleScreenState extends State<BattleScreen>
       actorId: actor.id,
       abilityId: abilityId,
       targetId: target?.id,
+      // The LOCAL engine already applied this action (see this method's own
+      // doc), so [_engine.stateHash] here already reflects the post-action
+      // state — exactly what the receiving side should independently arrive
+      // at too.
+      stateHash: _engine.stateHash,
+      // Who actually sent this — see [PvpAction.senderId]'s doc. Needed so a
+      // reconnect replaying this same entry back out of `action_log` (which
+      // runs every action, mine included, through [_applyRemoteAction]) can
+      // still tell it apart from a genuine live receipt from the opponent.
+      senderId: supabase.auth.currentUser!.id,
     );
+    _syncTurnStateIfNeeded();
+  }
+
+  /// Recomputes whose decision the match is currently waiting on — a fresh
+  /// [PvpService.advanceTurn] write (and local timer restart) only happens
+  /// when that decision-point actually CHANGED (a new key), so calling this
+  /// after every action is cheap and safe. "Waiting on" covers a pending
+  /// switch-in choice too (a fainted slot with a bench to fill), not just
+  /// whoever's [CombatEngine.currentActor] — both are moments the OTHER side
+  /// is stuck without my input, or vice versa.
+  void _syncTurnStateIfNeeded() {
+    if (!widget.isPvp || _engine.outcome != null) return;
+    final key =
+        '${_engine.needsPlayerSwitch}|${_engine.needsEnemySwitch}|${_engine.currentActor.id}';
+    if (key == _turnWindowKey) return;
+    _turnWindowKey = key;
+
+    final myId = supabase.auth.currentUser!.id;
+    final opponentId = widget.pvpMatch!.otherUserId(myId);
+    final waitingOn = _engine.needsPlayerSwitch
+        ? myId
+        : _engine.needsEnemySwitch
+        ? opponentId
+        : (_engine.currentActor.isPlayerSide ? myId : opponentId);
+
+    _waitingOnId = waitingOn;
+    _turnDeadline = DateTime.now().add(_kPvpTurnTimeout);
+    _pvpService.advanceTurn(
+      widget.pvpMatch!.id,
+      waitingOnUserId: waitingOn,
+      deadlineSeconds: _kPvpTurnTimeout.inSeconds,
+    );
+    _restartTurnCountdown();
+  }
+
+  void _restartTurnCountdown() {
+    _turnCountdownTimer?.cancel();
+    _turnCountdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) {
+        _turnCountdownTimer?.cancel();
+        return;
+      }
+      setState(() {}); // only repaints the countdown banner
+      _maybeClaimTimeout();
+    });
+  }
+
+  /// Fires once per second while the countdown banner is up (see
+  /// [_restartTurnCountdown]): if the OPPONENT is who we're waiting on and
+  /// their deadline has passed, attempts the server-authoritative timeout
+  /// claim. A rejection (they actually acted just in time, the server clock
+  /// disagrees slightly, …) is expected often enough to be routine — the
+  /// next [_syncTurnStateIfNeeded] call simply supersedes this attempt, so
+  /// failures are silently swallowed rather than surfaced.
+  Future<void> _maybeClaimTimeout() async {
+    if (_claimingTimeout || !widget.isPvp || _engine.outcome != null) return;
+    final myId = supabase.auth.currentUser!.id;
+    final opponentId = widget.pvpMatch!.otherUserId(myId);
+    if (_waitingOnId != opponentId) return;
+    final deadline = _turnDeadline;
+    if (deadline == null || DateTime.now().isBefore(deadline)) return;
+
+    _claimingTimeout = true;
+    try {
+      await _pvpService.claimTimeoutWin(widget.pvpMatch!.id);
+      if (!mounted) return;
+      // Same path a relayed 'flee' takes (see [_pvpOpponentFled]'s doc) —
+      // the server already recorded the win; this just drives MY OWN local
+      // outcome UI/effects through the one mechanism that already exists.
+      _pvpOpponentFled = true;
+      _engine.flee();
+      setState(() {});
+    } catch (_) {
+      // Not eligible yet (or any other RPC error) — ignored, see this
+      // method's own doc comment.
+    } finally {
+      _claimingTimeout = false;
+    }
   }
 
   void _onEngineChanged() {
     if (!mounted) return;
+    // Covers the very FIRST decision point too (before any action has been
+    // sent or received) — [_applyRemoteAction]/[_relayPvpAction]'s own calls
+    // only fire once something has actually happened.
+    if (widget.isPvp) _syncTurnStateIfNeeded();
     // Checked on EVERY change, not just new actions — a faint can ride
     // along with any of them (a hit, a DoT tick, recoil), and the engine
     // clears its own field the instant it happens.
@@ -1575,82 +1831,18 @@ class _BattleScreenState extends State<BattleScreen>
         : KeyedSubtree(key: IntroSpotlightAnchors.of(anchor), child: tile);
   }
 
-  /// Opens the bench picker to switch monsters. [forced] = the active fainted
-  /// and a reserve MUST come in (can't be dismissed).
-  Future<void> _openSwitchPicker({required bool forced}) async {
-    final bench = _engine.benchedPlayers;
-    if (bench.isEmpty) return;
-    final chosen = await showModalBottomSheet<Combatant>(
-      context: context,
-      backgroundColor: FoE.panelDark,
-      isDismissible: !forced,
-      enableDrag: !forced,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
-      ),
-      builder: (_) => PopScope(
-        canPop: !forced,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                forced
-                    ? 'Your monster fainted — send in a reserve'
-                    : 'Switch monster (free — costs no turn)',
-                style: FoE.title(size: 14),
-              ),
-              const SizedBox(height: 12),
-              for (final c in bench)
-                Pressable(
-                  onTap: () => Navigator.pop(context, c),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    // all(12), not all(10) (2026-08-31 audit) — matching
-                    // this sheet's own sibling row below ("Use an item"),
-                    // the same selectable-row shape.
-                    padding: const EdgeInsets.all(12),
-                    decoration: FoE.panel(radius: 8),
-                    child: Row(
-                      children: [
-                        SizedBox(width: 40, child: _portrait(c, size: 28)),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${c.element.emoji} ${c.name} · Lv ${c.level}',
-                                style: FoE.label(size: 13),
-                              ),
-                              const SizedBox(height: 4),
-                              _bar(
-                                c.hp / c.maxHp,
-                                FoE.positive,
-                                '${c.hp}/${c.maxHp}',
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (chosen == null) return;
+  /// Sends [chosen] in from the bench — the Change tab's "Send in" (and the
+  /// forced replacement after a K.O., where the same page is the only one shown).
+  void _switchTo(Combatant chosen) {
     final idx = _engine.players.indexOf(chosen);
     final err = _engine.switchActivePlayer(idx);
     if (err != null) {
-      if (mounted) _showError(err);
+      _showError(err);
       return;
     }
     _relayPvpAction(kind: 'switch', actor: chosen);
+    // The new monster is up: back to its moves.
+    if (mounted) setState(() => _deckTab = _DeckTab.attack);
   }
 
   // Shows [message] inline in the battle log line for a moment — NOT a bottom
@@ -1672,14 +1864,6 @@ class _BattleScreenState extends State<BattleScreen>
   // the one nobody looks at rots. The flag, its toggle button and every branch
   // are gone; what is left is the app's own language, faceted and dark.
 
-  // ── The screen's two surfaces ─────────────────────────────
-  // The monsters are FLAT-coloured art, so the chrome is too: the tray and the
-  // slabs on it are one tone each, separated by a STEP rather than by a
-  // hairline, and lit along the edge that faces you (FoE.lit). Gold stays the
-  // one accent, so the vivid element colours keep the field to themselves.
-  static const Color _flatSurface = FoE.panelDark; // trays, cards, log
-  static const Color _flatSurfaceHi = FoE.panelMid; // raised surface
-
   @override
   Widget build(BuildContext context) {
     final body = SafeArea(
@@ -1687,66 +1871,22 @@ class _BattleScreenState extends State<BattleScreen>
         children: [
           Column(
             children: [
-              _topBar(),
-              // Type-matchup key between the turn order and the arena (user
-              // request): the fire/water/plant RPS ring + light↔shadow.
-              _typeChart(),
-              // Split battlefield (user 2026-07-18): the enemy up top on
-              // ITS type backdrop, my monster below on MINE. The two type
-              // tiles now run all the way to the middle and MEET there; the
-              // battle log is overlaid on that seam rather than sitting in a
-              // gap between them (user request). My monster faces away (back
-              // art). It keeps its FULL size but is nudged DOWN toward the
-              // buttons (user request); the small bottom overshoot tucks
-              // behind the (opaque) command deck.
+              if (widget.isPvp) _pvpConnectionBanner(),
+              // ONE arena and the command deck beside it, both the FULL height
+              // (user 2026-09-21: "das HUD rechts wird bis nach oben erweitert,
+              // gleiches Padding wie unten"): the top bar is gone — the turn order,
+              // the keys and the waiting monsters live on the arena itself (see
+              // [_arena]). LANDSCAPE (2026-09-18): the arena takes the left, the
+              // command deck the right.
               Expanded(
-                child: Stack(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ONE battlefield behind BOTH ranks (user 2026-07-31).
-                    // The two element tiles that used to meet at a seam are
-                    // gone: a rank of three can hold three types, so the
-                    // ground says WHERE you are and each monster's own plate
-                    // says WHAT it is. See widgets/battle_scene.dart.
-                    Positioned.fill(
-                      child: BattleScene(
-                        imageUrl: widget.area?.imageUrl,
-                        era: widget.area?.battleStage ?? 1,
-                      ),
-                    ),
-                    // The sprites (and only the sprites) sit slightly low in
-                    // the arena, tucking the player's rank toward the deck.
-                    LayoutBuilder(
-                      builder: (context, box) => Transform.translate(
-                        offset: Offset(0, box.maxHeight * _kArenaDrop),
-                        child: Stack(
-                          children: [
-                            Column(
-                              children: [
-                                Expanded(child: _rank(isEnemy: true)),
-                                const Expanded(child: SizedBox()),
-                              ],
-                            ),
-                            // On the seam where the two ranks face off.
-                            Align(
-                              alignment: Alignment.center,
-                              child: _logLine(),
-                            ),
-                            // MY rank last, so it stands in FRONT of the
-                            // battle log (user request, kept).
-                            Column(
-                              children: [
-                                const Expanded(child: SizedBox()),
-                                Expanded(child: _rank(isEnemy: false)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    Expanded(child: _arena()),
+                    _commandDeck(context),
                   ],
                 ),
               ),
-              _actionPanel(),
             ],
           ),
           if (_floats.isNotEmpty) _floatsLayer(),
@@ -1805,8 +1945,8 @@ class _BattleScreenState extends State<BattleScreen>
         if (!didPop) _confirmFlee();
       },
       child: Scaffold(
-        // The arena paints its own place (see BattleScene); everything around
-        // it is the app's page.
+        // The battlefield (see BattleScene) is painted behind the whole screen
+        // by [body]; this is only what shows before it does.
         backgroundColor: FoE.bg,
         // A small camera shake on every hit (user request) — rides
         // [_fxReact], the struck monster's OWN flinch pulse, so it needs no
@@ -1828,7 +1968,894 @@ class _BattleScreenState extends State<BattleScreen>
                 : 0.0;
             return Transform.translate(offset: Offset(shake, 0), child: child);
           },
-          child: body,
+          // ONE battlefield behind EVERYTHING (user 2026-09-21: "den Kampfscreen/
+          // Hintergrund durchgehend machen"): the ground says WHERE you are and
+          // each monster's own plate says WHAT it is (see widgets/battle_scene).
+          // The top bar and the command deck stand directly on it.
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(
+                child: BattleScene(
+                  imageUrl: widget.area?.imageUrl,
+                  era: widget.area?.battleStage ?? 1,
+                ),
+              ),
+              body,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The battlefield with everything that stands ON it (user 2026-09-21): the two
+  /// ranks with the log on the seam between them, the turn order centred at the
+  /// top with the keys (flee, type chart, AUTO) at its top right, and the monsters
+  /// still waiting as small tiles down the LEFT edge — the enemy's at the top, mine
+  /// under the log. The command deck is the only thing beside it, and it now runs
+  /// the full height too.
+  Widget _arena() => LayoutBuilder(
+    builder: (context, box) => Stack(
+      children: [
+        // The battlefield itself is not drawn here any more: it runs behind the
+        // WHOLE screen (see [build]).
+        //
+        // The ranks keep clear of the tile gutter on both sides (so the centre of
+        // the ranks is the centre of the turn order above them); the log runs
+        // wider, edge to edge.
+        Transform.translate(
+          offset: Offset(0, box.maxHeight * _kArenaDrop),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: _kBenchGutter),
+                child: Column(
+                  children: [
+                    Expanded(child: _rank(isEnemy: true)),
+                    const Expanded(child: SizedBox()),
+                  ],
+                ),
+              ),
+              // On the seam where the two ranks face off.
+              Align(alignment: Alignment.center, child: _logLine()),
+              // MY rank last, so it stands in FRONT of the battle log (user
+              // request, kept).
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: _kBenchGutter),
+                child: Column(
+                  children: [
+                    const Expanded(child: SizedBox()),
+                    Expanded(child: _rank(isEnemy: false)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        _arenaHud(box.maxWidth),
+        Positioned(
+          left: 6,
+          // Under the flee key in the corner.
+          top: 56,
+          child: _benchColumn(_engine.benchedEnemies, isEnemy: true),
+        ),
+        Positioned(
+          left: 6,
+          top: box.maxHeight / 2 + _kLogHeight / 2 + 8,
+          child: _benchColumn(_engine.benchedPlayers, isEnemy: false),
+        ),
+      ],
+    ),
+  );
+
+  /// The width of the strip down each side of the arena that the ranks stay out
+  /// of — the left one holds the waiting monsters' tiles.
+  static const double _kBenchGutter = 46;
+
+  // ── The command deck (user 2026-09-20, "Variante 7 — Reiter") ──────────────
+  //
+  // A cream Holz card on the right with THREE TABS: Attack | Items | Change.
+  // Items and Change used to open bottom sheets over the fight; they are pages of
+  // the deck itself now, so nothing ever covers the arena. The Attack page holds
+  // the actor row (portrait, name, level, HP, AP), the ability tiles, an info box
+  // for the picked ability — which replaces the long-press sheet — and End turn.
+  //
+  // The tutorial's anchors all live here; see [_scriptedBattleAnchor].
+
+  static const double _kTabH = 32;
+  static const double _kTileH = 46;
+  static const double _kTileGap = 8;
+
+  /// MY turn = actionable. During the enemy's turn (or auto-battle) the same
+  /// controls show but are greyed and inert (user 2026-07-18). `!_presenting`
+  /// too (user 2026-08-29) — the engine's own turn flips to the player the
+  /// instant an enemy's action resolves, before that action's lunge/react has
+  /// finished PLAYING; see [_presenting]'s own doc for what tapping in that gap
+  /// used to break.
+  bool get _myTurn =>
+      _engine.outcome == null &&
+      !_engine.needsPlayerSwitch &&
+      _engine.isPlayerTurn &&
+      !_autoBattle &&
+      !_presenting;
+
+  /// The page the deck actually shows. A forced switch always shows Change; the
+  /// tutorial's scripted fight keeps every beat but the potion on Attack, so a
+  /// stray tap on another tab during an enemy beat can't hide the lit control.
+  _DeckTab get _shownTab {
+    if (_engine.needsPlayerSwitch) return _DeckTab.change;
+    if (_isFirstBattleTutorial &&
+        _scriptBeat != null &&
+        _scriptBeat != _ScriptBeat.healItem) {
+      return _DeckTab.attack;
+    }
+    return _deckTab;
+  }
+
+  /// The ability the info box describes: the one last picked (long-press or
+  /// used), else the first real ability — the plain Attack needs no explaining.
+  AbilityDef? _infoAbilityFor(Combatant actor) {
+    final all = actor.abilities;
+    if (all.isEmpty) return null;
+    for (final a in all) {
+      if (a.id == _infoAbilityId) return a;
+    }
+    return all.length > 1 ? all[1] : all.first;
+  }
+
+  Widget _commandDeck(BuildContext context) {
+    final w = (MediaQuery.sizeOf(context).width * 0.34).clamp(270.0, 340.0);
+    // No brown ground under the card any more: it floats on the battlefield.
+    return Container(
+      width: w,
+      padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
+      child: creamCard(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+        child: DefaultTextStyle.merge(
+          // Material's default body height (1.43) would push the compact rows over
+          // their fixed heights.
+          style: const TextStyle(height: 1.15),
+          child: _deckBody(),
+        ),
+      ),
+    );
+  }
+
+  Widget _deckBody() {
+    // Held off exactly as long as [_endOverlay] itself is (see its own "held
+    // back while a [_scriptInfoHint] is still showing" comment) — the finisher's
+    // crit explainer can leave [_engine.outcome] set for a beat before the win
+    // screen is allowed to take over, and the deck used to collapse to nothing
+    // the instant outcome was set, leaving a dead blank strip under the
+    // still-showing hint (user 2026-09-06: "am Ende des Kampfes verschwindet
+    // das UI").
+    if (_engine.outcome != null && _scriptInfoHint == null) {
+      return const SizedBox.shrink();
+    }
+    if (_entering) {
+      // Hold input while the fighters are still sliding on.
+      return const Center(
+        child: Text(
+          'Get ready…',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: kBoxAccent,
+          ),
+        ),
+      );
+    }
+    final forced = _engine.needsPlayerSwitch;
+    final actor = _engine.activePlayer;
+    if (!forced && actor == null) return const SizedBox.shrink();
+    final tab = _shownTab;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _deckTabs(tab, forced),
+        const SizedBox(height: 8),
+        Expanded(
+          child: switch (tab) {
+            _DeckTab.attack => _attackPage(actor!),
+            _DeckTab.items => _itemsPage(actor!),
+            _DeckTab.change => _changePage(actor, forced),
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _deckTabs(_DeckTab shown, bool forced) {
+    // Tabs are always browsable — the pages grey their own actions when it is
+    // not your turn — except in a forced switch (only Change makes sense) and in
+    // the scripted fight, where only the potion beat opens anything.
+    final canTap =
+        !forced &&
+        (!_isFirstBattleTutorial || _scriptBeat == _ScriptBeat.healItem);
+    Widget tab(_DeckTab t, IconData icon, String label, {String? anchor}) {
+      final on = shown == t;
+      Widget button = Pressable(
+        onTap: canTap && !on ? () => setState(() => _deckTab = t) : null,
+        child: Container(
+          height: _kTabH,
+          alignment: Alignment.center,
+          decoration: on ? goldButton() : raisedTile(radius: 11),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 14, color: on ? kBoxInk : kBoxInkSoft),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: on ? kBoxInk : kBoxInkSoft,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (anchor != null) {
+        button = KeyedSubtree(
+          key: IntroSpotlightAnchors.of(anchor),
+          child: button,
+        );
+      }
+      return Expanded(child: button);
+    }
+
+    return Padding(
+      // Room for the tabs' own 3px drop shadow.
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Row(
+        children: [
+          tab(_DeckTab.attack, Icons.flash_on, 'Attack'),
+          const SizedBox(width: 6),
+          tab(
+            _DeckTab.items,
+            Icons.backpack,
+            'Items',
+            anchor: 'battle-items-btn',
+          ),
+          const SizedBox(width: 6),
+          tab(_DeckTab.change, Icons.swap_horiz, 'Change'),
+        ],
+      ),
+    );
+  }
+
+  // ── Attack page ───────────────────────────────────────────
+
+  Widget _attackPage(Combatant actor) {
+    final myTurn = _myTurn;
+    final info = _infoAbilityFor(actor);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // AP are CARRIED per monster now (user 2026-07-20), so show MY
+        // monster's real pool at all times — including during the enemy's turn,
+        // when what you banked is exactly what you're planning around.
+        _actorRow(actor, actor.ap, maxActionPointsForStage(actor.stage)),
+        const SizedBox(height: 8),
+        _abilityGrid(actor, myTurn, info),
+        const SizedBox(height: 8),
+        Expanded(
+          child: info == null ? const SizedBox.shrink() : _abilityInfoBox(info),
+        ),
+        const SizedBox(height: 8),
+        _turnRow(myTurn),
+      ],
+    );
+  }
+
+  Widget _actorRow(Combatant actor, int ap, int maxAp) {
+    final frac = actor.maxHp <= 0 ? 0.0 : actor.hp / actor.maxHp;
+    return SizedBox(
+      height: 44,
+      child: Row(
+        children: [
+          // The battle's small monster: on the arena's own podium, HP as its
+          // rim (user 2026-09-20: "Nimm die Sockelkachel für den Kampf").
+          SizedBox(
+            width: 46,
+            height: 44,
+            child: Center(
+              child: SockelAvatar.combatant(actor, size: 38, hpColor: _hpColor),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        actor.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: kBoxInk,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Lv ${actor.level}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: kBoxInkSoft,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                _creamHpBar(actor.hp, actor.maxHp, frac),
+                const SizedBox(height: 2),
+                // The cost, then what it buys (2026-08-01).
+                KeyedSubtree(
+                  key: IntroSpotlightAnchors.of('battle-ap'),
+                  child: _apPips(ap, maxAp),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _creamHpBar(int hp, int maxHp, double frac) => Row(
+    children: [
+      Expanded(
+        child: RecessBar(value: frac, color: _hpColor(frac), height: 8),
+      ),
+      const SizedBox(width: 5),
+      Text(
+        '$hp/$maxHp',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: kBoxInkSoft,
+        ),
+      ),
+    ],
+  );
+
+  /// THE ACTION POINTS — a row of small chips over the moves they pay for. Spent
+  /// points are not hidden, they are EMPTIED: what you had this turn is as much
+  /// a part of the read as what is left.
+  Widget _apPips(int ap, int maxAp) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const Text(
+        'AP',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          color: kBoxAccent,
+        ),
+      ),
+      const SizedBox(width: 6),
+      for (var i = 0; i < maxAp; i++)
+        Container(
+          margin: const EdgeInsets.only(right: 4),
+          width: 16,
+          height: 8,
+          decoration: BoxDecoration(
+            color: i < ap ? CreamPalette.gold : Colors.transparent,
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(
+              color: i < ap ? CreamPalette.goldDeep : CreamPalette.tan,
+              width: 1.2,
+            ),
+          ),
+        ),
+    ],
+  );
+
+  Widget _abilityGrid(Combatant actor, bool myTurn, AbilityDef? info) {
+    return KeyedSubtree(
+      key: IntroSpotlightAnchors.of('battle-actions'),
+      // This callout's hole is the WHOLE tile grid, unlike every other anchor
+      // here — so unlike a plain info readout (turn order, AP, HP), the real
+      // buttons underneath stay live and tappable purely because the scrim
+      // happens to be punched out around them. Not just cosmetic: firing a REAL
+      // ability here would spend AP and damage the enemy outside the script,
+      // which the exact percentages after it assume never happened (user
+      // 2026-09-03: "dürfen die Fähigkeiten nicht aktiv sein, sonst
+      // funktioniert das Tutorial nicht"). IgnorePointer only while this exact
+      // callout is up — every later step still needs these tiles live.
+      child: IgnorePointer(
+        ignoring:
+            _battleCallout != null &&
+            _battleCalloutAnchors[_battleCallout!] == 'battle-actions',
+        child: Builder(
+          builder: (context) {
+            // Attack sits at abilities[0] on every combatant now (user
+            // 2026-09-03: "attack soll eine normale Fähigkeit sein") — ONE
+            // loop, no separate hardcoded tile for it.
+            final firstReal = _firstRealAbility(actor);
+            final secondReal = _secondRealAbility(actor);
+            final tiles = [
+              for (final a in actor.abilities)
+                _maybeAnchoredAbilityTile(
+                  a,
+                  firstReal,
+                  secondReal,
+                  _abilityBtn(
+                    a.name,
+                    _effectiveApCost(a),
+                    element: a.element,
+                    enabled: myTurn && actor.ap >= _effectiveApCost(a),
+                    onTap: () {
+                      setState(() => _infoAbilityId = a.id);
+                      _useAbility(a);
+                    },
+                    ability: a,
+                    selected: identical(a, info),
+                  ),
+                ),
+            ];
+            // Up to three to a row: 4 → 2+2, 5 → 3+2, 6 → 3+3 (user
+            // 2026-08-28), see [_abilityRowSplit].
+            final split = _abilityRowSplit(tiles.length, 3);
+            var i = 0;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var r = 0; r < split.length; r++) ...[
+                  if (r > 0) const SizedBox(height: _kTileGap),
+                  Row(
+                    children: [
+                      for (var j = 0; j < split[r]; j++) ...[
+                        if (j > 0) const SizedBox(width: _kTileGap),
+                        Expanded(child: tiles[i++]),
+                      ],
+                    ],
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// What the picked ability does — its numbers, its effects, and its live
+  /// effectiveness against the enemy you have targeted. Fills whatever height the
+  /// tiles and buttons leave, and scrolls if an ability says more than fits.
+  Widget _abilityInfoBox(AbilityDef a) {
+    final enemy = _target;
+    final isDamage = a.kind == AbilityKind.damage;
+    String? effText;
+    Color effColor = kBoxInkFaint;
+    if (isDamage && enemy != null && a.element != CreatureElement.neutral) {
+      final mult = _effectivenessVsEnemy(a.element);
+      if (mult > 1.0) {
+        effText = '▲ Super effective vs ${enemy.name}  (×${_fmtMult(mult)})';
+        effColor = CreamPalette.better;
+      } else if (mult < 1.0) {
+        effText = '▼ Resisted by ${enemy.name}  (×${_fmtMult(mult)})';
+        effColor = CreamPalette.warn;
+      } else {
+        effText = '– Neutral vs ${enemy.name}';
+      }
+    }
+    final notes = <String>[
+      if (a.extraHitChance > 0)
+        a.extraHitSameTarget
+            ? 'May hit the SAME target again: 2nd hit '
+                  '${(a.extraHitChance * 100).round()} % chance, 3rd '
+                  '${(a.extraHitChance * a.extraHitChance * 100).round()} %.'
+            : 'May also hit ANOTHER enemy: 2nd hit '
+                  '${(a.extraHitChance * 100).round()} % chance, 3rd '
+                  '${(a.extraHitChance * a.extraHitChance * 100).round()} % — '
+                  'does nothing extra alone.',
+      for (final e in a.effects) describeAbilityEffect(e).join('\n'),
+      if (a.priority > 0) 'Priority +${a.priority} — acts sooner',
+    ];
+    final soft = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      color: kBoxInkSoft,
+      height: 1.25,
+    );
+    // In the ability's own element colour, like its tile (user 2026-09-21).
+    final tint = a.element.color;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+      decoration: BoxDecoration(
+        color: tint.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: tint.withValues(alpha: 0.85), width: 1.6),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          a.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: kBoxInk,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CreamPalette.gold,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${_effectiveApCost(a)} AP',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: kBoxInk,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      '${a.element.emoji} ${a.element.label}',
+                      if (isDamage) 'Power ${a.power}',
+                      a.target.label,
+                    ].join(' · '),
+                    style: soft,
+                  ),
+                  if (effText != null)
+                    Text(
+                      effText,
+                      style: soft.copyWith(
+                        color: effColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  for (final n in notes) Text(n, style: soft),
+                  if (a.description.isNotEmpty)
+                    Text(
+                      a.description,
+                      style: soft.copyWith(color: kBoxInkFaint, fontSize: 10.5),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          // Said out loud: how to get here (tapping a move uses it).
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, size: 11, color: kBoxInkFaint),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Tap the (i) on a move, or hold it, to read about it.',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: kBoxInkFaint,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _turnRow(bool myTurn) => Padding(
+    padding: const EdgeInsets.only(bottom: 3),
+    child: Row(
+      children: [
+        Expanded(
+          child: KeyedSubtree(
+            key: IntroSpotlightAnchors.of('battle-endturn-btn'),
+            child: SocialGoldButton(
+              'End turn',
+              height: 36,
+              fontSize: 13,
+              onTap: myTurn ? _endTurn : null,
+            ),
+          ),
+        ),
+        // Only shown when this encounter can EVER be caught — a story battle
+        // isn't [isCapture] at all and never will be this turn or any other
+        // (user 2026-08-28: "Catchbutton nur dann anzeigen, wenn das Monster
+        // theoretisch gefangen werden kann"). [_canCatch] still gates whether
+        // it's ENABLED right now (wrong turn, not worn down enough yet).
+        if (widget.isCapture) ...[
+          const SizedBox(width: _kTileGap),
+          Expanded(
+            child: _deckTile(
+              'Catch',
+              Icons.catching_pokemon,
+              enabled: myTurn && _canCatch,
+              onTap: _startCatch,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+
+  /// A light tile button on the cream card — the quiet sibling of the gold one.
+  Widget _deckTile(
+    String label,
+    IconData icon, {
+    required bool enabled,
+    required VoidCallback onTap,
+  }) => Pressable(
+    onTap: enabled ? onTap : null,
+    child: Container(
+      height: 36,
+      alignment: Alignment.center,
+      decoration: raisedTile(radius: 11, locked: !enabled),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: enabled ? kBoxInk : kBoxInkFaint),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: enabled ? kBoxInk : kBoxInkFaint,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  // ── Items page ────────────────────────────────────────────
+
+  /// A page's small-caps heading with its price on the right, over a hairline.
+  Widget _pageHeading(String title, String note) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(
+        children: [
+          Flexible(
+            child: Text(
+              title.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                color: kBoxAccent,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          const Spacer(),
+          Text(
+            note,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: kBoxInkSoft,
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 5),
+      Container(height: 1, color: CreamPalette.tan.withValues(alpha: 0.55)),
+      const SizedBox(height: 8),
+    ],
+  );
+
+  Widget _itemsPage(Combatant actor) {
+    final held = _usableItems();
+    // Every item costs a flat [kItemApCost] (user 2026-09-05); the scripted
+    // potion beat is paid for by the script itself.
+    final canPay =
+        _myTurn &&
+        (actor.ap >= kItemApCost || _scriptBeat == _ScriptBeat.healItem);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _pageHeading('Use an item', 'costs $kItemApCost AP'),
+        Expanded(
+          child: held.isEmpty
+              ? Center(
+                  child: Text(
+                    'No usable items in your bag.',
+                    style: TextStyle(fontSize: 12, color: kBoxInkSoft),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  children: [
+                    for (var i = 0; i < held.length; i++)
+                      _deckRow(
+                        leading: Text(
+                          held[i].$1.emoji,
+                          style: const TextStyle(fontSize: 20),
+                        ),
+                        title: '${held[i].$1.name} ×${held[i].$2}',
+                        detail: Text(
+                          _itemUseLabel(held[i].$1, actor),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: kBoxInkSoft,
+                          ),
+                        ),
+                        action: 'Use',
+                        enabled: canPay,
+                        onTap: () => _applyItem(held[i].$1),
+                        // The scripted potion beat lights the FIRST row's button.
+                        anchor: i == 0 ? 'battle-item-use' : null,
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  // ── Change page ───────────────────────────────────────────
+
+  Widget _changePage(Combatant? actor, bool forced) {
+    final bench = _engine.benchedPlayers;
+    // A forced switch is free and always allowed; a voluntary one costs the
+    // leaving monster [kSwitchApCost] out of its own pool.
+    final canSwitch =
+        forced || (_myTurn && actor != null && actor.ap >= kSwitchApCost);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _pageHeading(
+          forced ? 'Your monster fainted' : 'Switch monster',
+          forced ? 'send in a reserve' : 'costs $kSwitchApCost AP',
+        ),
+        Expanded(
+          child: bench.isEmpty
+              ? Center(
+                  child: Text(
+                    'No reserves left.',
+                    style: TextStyle(fontSize: 12, color: kBoxInkSoft),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  children: [
+                    for (final c in bench)
+                      _deckRow(
+                        leading: SockelAvatar.combatant(
+                          c,
+                          size: 30,
+                          hpColor: _hpColor,
+                        ),
+                        title: '${c.element.emoji} ${c.name} · Lv ${c.level}',
+                        detail: _creamHpBar(
+                          c.hp,
+                          c.maxHp,
+                          c.maxHp <= 0 ? 0.0 : c.hp / c.maxHp,
+                        ),
+                        action: 'Send in',
+                        enabled: canSwitch,
+                        onTap: () => _switchTo(c),
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// One row of the Items / Change lists: a tile with the thing, what it does,
+  /// and a small gold button on the right.
+  Widget _deckRow({
+    required Widget leading,
+    required String title,
+    required Widget detail,
+    required String action,
+    required bool enabled,
+    required VoidCallback onTap,
+    String? anchor,
+  }) {
+    Widget button = Pressable(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.center,
+        decoration: goldButton(active: enabled),
+        child: Text(
+          action,
+          maxLines: 1,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: goldButtonInk(active: enabled),
+          ),
+        ),
+      ),
+    );
+    if (anchor != null) {
+      button = KeyedSubtree(
+        key: IntroSpotlightAnchors.of(anchor),
+        child: button,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+        decoration: raisedTile(radius: 10),
+        child: Row(
+          children: [
+            SizedBox(width: 28, child: Center(child: leading)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: kBoxInk,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  detail,
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            button,
+          ],
         ),
       ),
     );
@@ -1894,9 +2921,17 @@ class _BattleScreenState extends State<BattleScreen>
           radius: 12,
           side: const BorderSide(color: FoE.borderGold),
         ),
-        title: Text('Flee?', style: FoE.title(size: 15)),
+        // PvP: "Flee" reads oddly for surrendering to another player (it's
+        // wording built for escaping a wild encounter) — same button, same
+        // mechanism, just "Give up" instead (user 2026-09-17).
+        title: Text(
+          widget.isPvp ? 'Give up?' : 'Flee?',
+          style: FoE.title(size: 15),
+        ),
         content: Text(
-          'The battle ends with no reward. HP and energy stay as they are.',
+          widget.isPvp
+              ? 'You lose the match. Your opponent wins.'
+              : 'The battle ends with no reward. HP and energy stay as they are.',
           style: FoE.label(size: 13),
         ),
         actions: [
@@ -1907,7 +2942,7 @@ class _BattleScreenState extends State<BattleScreen>
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
-              'Flee',
+              widget.isPvp ? 'Give up' : 'Flee',
               style: FoE.label(size: 13).copyWith(color: Colors.redAccent),
             ),
           ),
@@ -2096,78 +3131,167 @@ class _BattleScreenState extends State<BattleScreen>
   /// the look toggle, AUTO — so it takes [ParchmentHeader.band] rather than the
   /// whole header, which is the same split the settlement's resource strip uses.
   /// The MATERIAL is identical; only what stands on it differs.
-  Widget _topBar() => ParchmentHeader.band(
-    // Grown from 44 to fit the bigger turn-order cards (user request).
-    height: 58,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
+  /// The "opponent might be gone" strip — shown only while I'm the one
+  /// waiting (see [_syncTurnStateIfNeeded]'s `waitingOn`), with a live
+  /// countdown to the shared turn/reconnect deadline. Silent otherwise: it's
+  /// not shown on MY OWN turn (that's just the normal action panel), and not
+  /// shown at all outside a pending decision. [_pvpSync.opponentOnline] only
+  /// changes the WORDING ("reconnecting" vs. just "waiting") — the timer and
+  /// its eventual [_maybeClaimTimeout] behave identically either way (see
+  /// 0053_pvp_resilience.sql's doc comment on why one timer covers both).
+  Widget _pvpConnectionBanner() {
+    final myId = supabase.auth.currentUser!.id;
+    final opponentId = widget.pvpMatch?.otherUserId(myId);
+    final deadline = _turnDeadline;
+    if (opponentId == null || _waitingOnId != opponentId || deadline == null) {
+      return const SizedBox.shrink();
+    }
+    final secondsLeft = deadline
+        .difference(DateTime.now())
+        .inSeconds
+        .clamp(0, _kPvpTurnTimeout.inSeconds);
+    return Container(
+      width: double.infinity,
+      // Dark glass over the battlefield, not a brown band.
+      color: const Color(0x99000000),
+      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 12),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _pvpSync.opponentOnline,
+        builder: (context, online, _) => Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              online ? Icons.hourglass_top : Icons.wifi_off,
+              size: 13,
+              color: CreamPalette.paperTop,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              online
+                  ? 'Waiting for opponent… ${secondsLeft}s'
+                  : 'Opponent disconnected — reconnecting… ${secondsLeft}s',
+              style: FoE.dim(size: 11).copyWith(color: CreamPalette.paperTop),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // THE HUD ON THE ARENA (user 2026-09-21: "Zugreihenfolge zentrieren auf den
+  // Kampfbereich, dafür Typechart und Auto oben rechts des Kampfbereichs"): no top
+  // bar any more. The turn-order cards stand centred on the arena, and the three
+  // keys — give up, type chart, AUTO — sit at its top right. Both stand straight
+  // on the battlefield; taps between them fall through to the monsters.
+  Widget _arenaHud(double arenaW) {
+    // The keys' cluster at the top RIGHT: 34 + 6 + 66, plus its right margin. Flee
+    // has its own corner, top LEFT (user 2026-09-21).
+    const cluster = 34 + 6 + 66 + 8.0;
+    // Centred, and never wider than what is left when the cluster's width is kept
+    // free on BOTH sides (so the strip stays on the arena's own centre line).
+    final stripW = (arenaW - 2 * (cluster + 6)).clamp(0.0, 300.0);
+    return Positioned(
+      top: 6,
+      left: 0,
+      right: 0,
+      height: 54,
+      child: Stack(
         children: [
-          IconButton(
-            icon: const Icon(Icons.flag, color: FoE.parchment, size: 18),
-            tooltip: 'Flee',
-            onPressed: _engine.outcome == null ? _confirmFlee : null,
-          ),
-          // The upcoming-turn queue now rides on THIS row, between Flee and AUTO
-          // (user request), instead of on a row of its own.
-          Expanded(
-            child: KeyedSubtree(
-              key: IntroSpotlightAnchors.of('battle-turnorder'),
-              child: _initiativeStrip(),
+          Center(
+            child: SizedBox(
+              width: stripW,
+              child: KeyedSubtree(
+                key: IntroSpotlightAnchors.of('battle-turnorder'),
+                child: _initiativeStrip(),
+              ),
             ),
           ),
-          const SizedBox(width: 6),
-          // Same tint as the other deck buttons (user request); the ✔ marks it on.
-          // Disabled for the tutorial's scripted first fight (user: "der auto
-          // button funktioniert während des tutorials, was alles zerstört")
-          // — AUTO hands the PLAYER's own turns to performAutoAction(), the
-          // real, un-scripted AI, which the whole authored beat sequence
-          // (and its HP=12/scriptedNextHit numbers) assumes never runs here.
-          _deckButton(
-            icon: Icons.smart_toy,
-            label: _autoBattle ? 'AUTO ✔' : 'AUTO',
-            base: _kUtilTint,
-            // Off in PvP (user 2026-09-15): AUTO hands the player's own
-            // turns to performAutoAction(), the local PvE AI — meaningless
-            // and misleading against a real second human.
-            enabled: !_isFirstBattleTutorial && !widget.isPvp,
-            onTap: () {
-              setState(() => _autoBattle = !_autoBattle);
-              _scheduleAutoIfNeeded();
-            },
-            width: 62,
-            height: 32,
+          Positioned(
+            left: 8,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: _glassKey(
+                Icons.flag,
+                widget.isPvp ? 'Give up' : 'Flee',
+                _engine.outcome == null ? _confirmFlee : null,
+              ),
+            ),
           ),
-          const SizedBox(width: 4),
+          Positioned(
+            right: 8,
+            top: 0,
+            bottom: 0,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _typeChartButton(),
+                const SizedBox(width: 6),
+                // Same tint as the other deck buttons (user request); the ✔ marks
+                // it on. Disabled for the tutorial's scripted first fight (user:
+                // "der auto button funktioniert während des tutorials, was alles
+                // zerstört") — AUTO hands the PLAYER's own turns to
+                // performAutoAction(), the real, un-scripted AI, which the whole
+                // authored beat sequence (and its HP=12/scriptedNextHit numbers)
+                // assumes never runs here.
+                _autoButton(
+                  // Off in PvP (user 2026-09-15): AUTO hands the player's own
+                  // turns to performAutoAction(), the local PvE AI — meaningless
+                  // and misleading against a real second human.
+                  enabled: !_isFirstBattleTutorial && !widget.isPvp,
+                  onTap: () {
+                    setState(() => _autoBattle = !_autoBattle);
+                    _scheduleAutoIfNeeded();
+                  },
+                ),
+              ],
+            ),
+          ),
         ],
       ),
-    ),
-  );
+    );
+  }
 
   // ── Type-matchup key ──────────────────────────────────────
   // A compact "what beats what" chart (user request). 2026-09-07: was an
   // inline collapsible strip; now a single tap opens the full-size overlay
-  // (see showTypeCircleDialog) — "das müsste viel grösser sein... mache
+  // (see showTypeChart) — "das müsste viel grösser sein... mache
   // bitte ein Overlaymenü wie der Buildingdetailscreen". The overlay draws
   // the live 8-type matrix (CreatureElement, since 2026-09-08).
-  Widget _typeChart() => Pressable(
-    behavior: HitTestBehavior.opaque,
-    onTap: () => showTypeCircleDialog(context),
-    child: Container(
-      color: FoE.bg,
-      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.hexagon_outlined, size: 13, color: FoE.textDim),
-          const SizedBox(width: 6),
-          Text('Type chart', style: FoE.dim(size: 11)),
-          const SizedBox(width: 4),
-          Icon(Icons.open_in_full, size: 12, color: FoE.textDim),
-        ],
-      ),
-    ),
+  //
+  // MOVED to the top bar as a round key (user 2026-09-21: "Typecharte woanders
+  // platzieren, so dass die Beschreibung der Fähigkeiten mehr Platz hat") — the
+  // strip under the deck took a row of height the ability text needs.
+  Widget _typeChartButton() => _glassKey(
+    Icons.hexagon_outlined,
+    'Type chart',
+    () => showTypeChart(context, initial: _target?.element),
   );
+
+  /// A round key on the arena itself: dark glass with a white glyph, so it reads
+  /// on grass, stone or a region's own art alike. Null [onTap] = dead.
+  Widget _glassKey(IconData icon, String tooltip, VoidCallback? onTap) =>
+      Tooltip(
+        message: tooltip,
+        child: Pressable(
+          onTap: onTap,
+          child: Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0x80000000),
+              border: Border.all(color: const Color(0x33FFFFFF)),
+            ),
+            child: Icon(
+              icon,
+              size: 17,
+              color: onTap == null ? const Color(0x66FFFFFF) : Colors.white,
+            ),
+          ),
+        ),
+      );
 
   // ── Turn order (CTB queue) ────────────────────────────────
   /// Who acts next, as faceted cards between Flee and AUTO (redesign
@@ -2235,7 +3359,11 @@ class _BattleScreenState extends State<BattleScreen>
           ),
         ),
       ),
-      child: _portrait(c, size: acting ? 38 : 32),
+      child: SockelAvatar.combatant(
+        c,
+        size: acting ? 34 : 28,
+        hpColor: _hpColor,
+      ),
     );
   }
 
@@ -2253,38 +3381,54 @@ class _BattleScreenState extends State<BattleScreen>
   // ruler line.
   Widget _rank({required bool isEnemy}) {
     final field = isEnemy ? _engine.enemyField : _engine.playerField;
-    final bench = isEnemy ? _engine.benchedEnemies : _engine.benchedPlayers;
     return ClipRect(
       child: LayoutBuilder(
         builder: (context, box) {
           final h = box.maxHeight;
           final w = box.maxWidth;
-          // The strip the reserve waits in, on the rank's OUTER edge (enemy at
-          // the top, mine at the bottom) — the sprites keep clear of it.
-          // Shrunk to the old formula's OWN floor when there is no bench
-          // (user request: bigger monsters) — an empty strip was costing
-          // every fighter the same height whether or not anyone was waiting
-          // in it — but never below that floor: on the player's rank this
-          // band is also what keeps the nameplate clear of the action deck
-          // below it, and going lower than 16 let the deck cover the name
-          // (user 2026-08-27: "Der Name wird verdeckt").
-          final reserve = bench.isEmpty ? 16.0 : (h * 0.16).clamp(16.0, 44.0);
+          // A hair of air on the rank's OUTER edge (enemy at the top, mine at the
+          // bottom). The reserve strip that used to wait here is gone — the
+          // waiting monsters are tiles down the arena's left edge now (user
+          // 2026-09-21), and the deck no longer sits below the arena — so the
+          // sprites and their plates may use the whole height.
+          final live = [
+            for (var i = 0; i < CombatEngine.kFieldSlots; i++)
+              // Also keeps a slot whose occupant just fainted in
+              // the row for the length of its K.O. presentation
+              // (user 2026-08-29) — otherwise the slot drops out of
+              // `live` and _fieldSlot is never even called for it
+              // again once the engine clears/refills it, which is
+              // exactly the moment the animation needs to run.
+              if ((field[i] != null && field[i]!.alive) ||
+                  _koPlaying.values.any(
+                    (e) => e.slot == i && e.isEnemy == isEnemy,
+                  ))
+                i,
+          ];
+          final wedge = live.length == CombatEngine.kFieldSlots;
+          final reserve = 4.0;
           // How far the wedge opens. A fraction of the rank's own height, so it
           // is the same shape on every phone; small on purpose — this is a step
           // forward, not a second row.
           final step = h * _kWedgeStep;
+          // The bottom edge of MY rank also holds the flanks, which the wedge
+          // steps back DOWN by half a step (their plates must stay on screen);
+          // the enemy's stay put.
+          final outer = isEnemy ? reserve : reserve + (wedge ? step * 0.5 : 0);
           // CLEARANCE FOR THE LOG (user 2026-07-31: "Monster weiter nach oben,
           // so dass es keine überschneidungen mit dem combat log gibt"). Half
           // the log sits in each rank's half, and the wedge then steps the
           // middle monster straight into it — so the reserved band is the log's
           // half PLUS the step it is about to take, plus a hair of air.
-          final seam = _kLogHeight / 2 + step + 6;
+          // The step is only owed when there IS a wedge — a lone monster or a pair
+          // stands level and may come right up to the log (user 2026-09-21).
+          final seam = _kLogHeight / 2 + (wedge ? step : 0) + 4;
           return Stack(
             fit: StackFit.expand,
             children: [
               Positioned(
-                top: isEnemy ? reserve : seam,
-                bottom: isEnemy ? seam : reserve,
+                top: isEnemy ? outer : seam,
+                bottom: isEnemy ? seam : outer,
                 left: 2,
                 right: 2,
                 // ── ONLY THE OCCUPIED SLOTS, CENTRED (user 2026-08-04) ──
@@ -2298,21 +3442,6 @@ class _BattleScreenState extends State<BattleScreen>
                 // step applies at three and the pair stands level.
                 child: Builder(
                   builder: (_) {
-                    final live = [
-                      for (var i = 0; i < CombatEngine.kFieldSlots; i++)
-                        // Also keeps a slot whose occupant just fainted in
-                        // the row for the length of its K.O. presentation
-                        // (user 2026-08-29) — otherwise the slot drops out of
-                        // `live` and _fieldSlot is never even called for it
-                        // again once the engine clears/refills it, which is
-                        // exactly the moment the animation needs to run.
-                        if ((field[i] != null && field[i]!.alive) ||
-                            _koPlaying.values.any(
-                              (e) => e.slot == i && e.isEnemy == isEnemy,
-                            ))
-                          i,
-                    ];
-                    final wedge = live.length == CombatEngine.kFieldSlots;
                     // This Row sits inside the Positioned's own left:2/
                     // right:2 inset, so its REAL available width is w - 4,
                     // not w — using raw w for 3 equal-width slots summed to
@@ -2325,7 +3454,15 @@ class _BattleScreenState extends State<BattleScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        for (final i in live)
+                        for (final i in live) ...[
+                          // Two stand a little apart (user 2026-09-21: "meine Monster
+                          // sind etwas zu nahe beisammen, wenn es 2 sind") — slots
+                          // touch edge to edge and the sprites are wider than that.
+                          if (i != live.first && live.length == 2)
+                            SizedBox(
+                              width:
+                                  innerW / CombatEngine.kFieldSlots * _kPairGap,
+                            ),
                           SizedBox(
                             // The slot keeps its full-rank width, so a monster
                             // is the same size whether one stands or three do.
@@ -2354,33 +3491,21 @@ class _BattleScreenState extends State<BattleScreen>
                               ),
                             ),
                           ),
+                        ],
                       ],
                     );
                   },
                 ),
               ),
-              // ENEMY reserve strip removed (user 2026-08-29: "Diese kleine
-              // Kachel löschen" — the small bench-chip tile that floated
-              // top-left over the green arena, easy to mistake for stray
-              // UI since it carries no label connecting it to anything).
-              // It was purely informational — the enemy's own bench isn't
-              // tappable — so nothing is lost by dropping it; the PLAYER's
-              // own reserve strip stays: that one IS how you switch in a
-              // benched monster.
-              if (bench.isNotEmpty && !isEnemy)
-                Positioned(
-                  bottom: 2,
-                  left: 8,
-                  right: 8,
-                  height: reserve,
-                  child: _reserveStrip(bench, isEnemy: isEnemy),
-                ),
             ],
           );
         },
       ),
     );
   }
+
+  /// The gap between two monsters standing alone, as a fraction of a slot's width.
+  static const double _kPairGap = 0.45;
 
   /// How far the wedge's point steps forward, as a fraction of the rank height.
   static const double _kWedgeStep = 0.07;
@@ -2393,7 +3518,7 @@ class _BattleScreenState extends State<BattleScreen>
   /// 2026-07-31 request this value first answered ("schiebe die plattformen
   /// weiter nach oben") is still real — a platform flush with the slot's own
   /// bottom read as floating above its ground, not standing in it.
-  static const double _kPlatformLift = 0.10;
+  static const double _kPlatformLift = 0.06;
 
   /// The tip of the wedge. With an even number of slots there is no single
   /// middle, so the two innermost both count as the point — the shape stays a
@@ -2454,6 +3579,10 @@ class _BattleScreenState extends State<BattleScreen>
     // A plain non-nullable local from here on — Dart's own promotion of the
     // reassigned parameter doesn't reliably survive into the closures below.
     final Combatant c0 = c;
+    // The platform is as wide as its slot (a flank a little narrower, standing
+    // further back). The slots are narrower than they were — a gutter for the
+    // waiting monsters' tiles takes the edges — so it no longer holds back.
+    final podiumW = width * (back ? 0.88 : 1.0);
     // Held back while a presentation is still playing (user 2026-08-29:
     // "wenn ich mit meinem Monster angreife, greift parallel dazu bereits
     // das gegnerische Monster an") — the ENGINE's currentActor advances the
@@ -2525,12 +3654,15 @@ class _BattleScreenState extends State<BattleScreen>
                           ? IntroSpotlightAnchors.of('battle-hp')
                           : null,
                       padding: EdgeInsets.only(
-                        bottom: width * (back ? 0.82 : 0.92) * _kPlatformLift,
+                        bottom: podiumW * _kPlatformLift,
                       ),
                       child: TypePodium(
                         element: c0.element,
-                        width: width * (back ? 0.82 : 0.92),
+                        width: podiumW,
                         dim: back,
+                        // The half-sphere under the disc — only the big
+                        // monsters on the field have it (user 2026-09-21).
+                        bowl: true,
                         // Mirrored for the PLAYER's own monster (user
                         // 2026-08-28: "bei den eigenen Monster das Typicon
                         // gespiegelt auf der rechten Seite") — the enemy
@@ -2549,13 +3681,37 @@ class _BattleScreenState extends State<BattleScreen>
                         ),
                       ),
                     ),
-                    _bigSprite(
-                      c0,
-                      back: !isEnemy,
-                      height: box.maxHeight * (back ? 0.92 : 1.0),
-                      acting: acting,
-                      targeted: targeted,
-                      koing: koing,
+                    // THE MONSTER STANDS ON THE TOP OF THE DISC (user
+                    // 2026-09-21): its feet at the disc's middle line, not down
+                    // in the gap under the platform — the platform's own lift
+                    // plus a bit under half the disc's height.
+                    // How big it is drawn: the room above its feet in this slot
+                    // plus a little headroom — the art has a transparent margin
+                    // and may rise into the air the wedge leaves (the enemy's up
+                    // to the arena's edge, mine into the clearance above its
+                    // rank). [_kSpriteScale] is the dial.
+                    Builder(
+                      builder: (context) {
+                        final feetPad =
+                            podiumW * (_kPlatformLift + 0.24 * 0.45);
+                        final room = box.maxHeight - feetPad;
+                        final target =
+                            (room + (isEnemy ? 14 : 16)) *
+                            (back ? 0.92 : 1.0) *
+                            _kSpriteScale;
+                        return Padding(
+                          padding: EdgeInsets.only(bottom: feetPad),
+                          child: _bigSprite(
+                            c0,
+                            back: !isEnemy,
+                            height: room,
+                            targetH: target,
+                            acting: acting,
+                            targeted: targeted,
+                            koing: koing,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -2587,8 +3743,12 @@ class _BattleScreenState extends State<BattleScreen>
           // means less upward push, i.e. both sit lower, with the sprite's
           // own position (set elsewhere, via [_kArenaDrop] and its own
           // Transform.scale) completely untouched.
-          // A bit more again (user 2026-08-29: "noch ein bisschen mehr").
-          SizedBox(height: isEnemy ? 10 : 26),
+          // MY monsters and their platforms move right down to the bottom edge
+          // (user 2026-09-21: "Meine Monster rücken mit dem Podest weiter nach
+          // unten") — the reserve strip and the deck no longer sit below them —
+          // and the enemy's plate sits close on its platform so the sprite gets
+          // every pixel above it.
+          SizedBox(height: isEnemy ? 4 : 2),
         ],
       ),
     );
@@ -2656,61 +3816,79 @@ class _BattleScreenState extends State<BattleScreen>
         // Level unter dem Namen") — this also DROPS the acting/targeted
         // colour the text briefly carried in the box's ring's place; that
         // signal has no home here any more.
-        Text(
-          c.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: FoE.label(size: 11).copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            shadows: const [Shadow(color: Color(0xAA000000), blurRadius: 2)],
-          ),
-        ),
-        Text(
-          'Lv ${c.level}',
-          maxLines: 1,
-          textAlign: TextAlign.center,
-          style: FoE.label(size: 10).copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-            shadows: const [Shadow(color: Color(0xAA000000), blurRadius: 2)],
-          ),
+        // ONE line, name then level (user 2026-09-21): the two-line plate cost
+        // the sprite a dozen pixels of height on every monster.
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                c.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: FoE.label(size: 11).copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  shadows: const [
+                    Shadow(color: Color(0xAA000000), blurRadius: 2),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Lv ${c.level}',
+              maxLines: 1,
+              style: FoE.label(size: 10).copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                shadows: const [
+                  Shadow(color: Color(0xAA000000), blurRadius: 2),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  /// Who is waiting behind the rank. The player's reserves are tappable (a
-  /// switch, or the forced replacement); the enemy's are just counted — its
-  /// bench is unlimited and there is nothing to decide about it.
-  Widget _reserveStrip(List<Combatant> bench, {required bool isEnemy}) => Row(
-    mainAxisAlignment: isEnemy
-        ? MainAxisAlignment.start
-        : MainAxisAlignment.end,
-    children: [
-      Padding(
-        padding: const EdgeInsets.only(right: 4),
-        child: Icon(
-          isEnemy ? Icons.groups : Icons.chair,
-          size: 13,
-          color: FoE.textDim,
-        ),
-      ),
-      // A long enemy wave would run off the edge — past four, say the number.
-      if (isEnemy && bench.length > 4)
-        Text(
-          '+${bench.length} waiting',
-          style: FoE.dim(size: 10).copyWith(color: FoE.textDim),
-        )
-      else
-        for (final c in bench) _benchChip(c, isEnemyRow: isEnemy),
-    ],
-  );
+  /// The monsters still waiting, as a column of small tiles (user 2026-09-21:
+  /// "links oben und unterhalb des Logs die restlichen Monster anzeigen, welche
+  /// dem Spieler/NPC noch zur Verfügung stehen"): the enemy's at the top left of
+  /// the arena, mine under the log. Mine are tappable on my turn to switch; the
+  /// enemy's are just shown. More than three and the rest is a number.
+  Widget _benchColumn(List<Combatant> bench, {required bool isEnemy}) {
+    if (bench.isEmpty) return const SizedBox.shrink();
+    // Three fit down to the log; more than that and the third becomes the number.
+    final cap = bench.length > 3 ? 2 : bench.length;
+    final shown = bench.take(cap).toList();
+    final more = bench.length - shown.length;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final c in shown)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: _benchTile(c, isEnemyRow: isEnemy),
+          ),
+        if (more > 0)
+          Text(
+            '+$more',
+            style: FoE.label(size: 11).copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              shadows: const [Shadow(color: Color(0xAA000000), blurRadius: 2)],
+            ),
+          ),
+      ],
+    );
+  }
 
-  /// A small bench portrait. Player chips are tappable on the player's turn to
-  /// switch (free); enemy chips are just shown.
-  Widget _benchChip(Combatant c, {required bool isEnemyRow}) {
+  /// One waiting monster: its Sockel (the rim is its HP) and its level, on a
+  /// dark-glass tile like the round keys. Gold edge = you can send it in now.
+  Widget _benchTile(Combatant c, {required bool isEnemyRow}) {
     // !_presenting too (user 2026-08-29, same underlying race as the action
     // deck's own myTurn gate): isPlayerTurn can already be true while a
     // still-playing presentation has the shared animation controllers busy.
@@ -2732,53 +3910,52 @@ class _BattleScreenState extends State<BattleScreen>
             }
           : null,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 3),
-        padding: const EdgeInsets.all(3),
+        width: 34,
+        padding: const EdgeInsets.fromLTRB(2, 3, 2, 1),
         decoration: ShapeDecoration(
-          color: FoE.panelDark,
+          color: const Color(0x80000000),
           shape: FoE.facet(
-            radius: 6,
-            side: BorderSide(color: canSwitchTo ? FoE.goldBright : FoE.border),
+            radius: 9,
+            side: BorderSide(
+              color: canSwitchTo ? FoE.goldBright : const Color(0x33FFFFFF),
+              width: canSwitchTo ? 1.6 : 1,
+            ),
           ),
         ),
-        child: SizedBox(width: 30, height: 30, child: _portrait(c, size: 22)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 26,
+              height: 26,
+              child: Center(
+                child: SockelAvatar.combatant(c, size: 24, hpColor: _hpColor),
+              ),
+            ),
+            Text(
+              'Lv ${c.level}',
+              maxLines: 1,
+              style: FoE.label(
+                size: 9,
+              ).copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// The large battlefield sprite, sized to [height]. [back] picks the
-  /// back-view art (player) over the front (enemy). Plays the hit pulse
-  /// (shake + white flash) when this side was just acted upon (user
-  /// 2026-07-18). Whose turn it is is shown in the turn-order bar, and its
-  /// health on the platform's own rim (see [TypePodium]) — not here.
-  /// A flat visual zoom on top of the sprite's own box (user 2026-08-28:
-  /// "Die Monster sollen nicht höher sein, sondern grösser... 30% grösser
-  /// machen/zoomen" — a correction of the previous attempt, which grew the
-  /// rank's own HEIGHT allowance and left most sprites no bigger at all,
-  /// since `BoxFit.contain` inside [imgH] is bound by WIDTH first for a
-  /// typical sprite and only uses the extra height as empty air above the
-  /// monster). [Transform.scale] grows both axes together regardless of
-  /// which one the box was actually bound by, and paints past the box
-  /// rather than needing more layout space for it.
-  /// Dialled back from 1.3 (user 2026-08-29, seen live: "Das linke
-  /// gegnerische Monster schaut aus dem Screen heraus") — bottomCenter
-  /// growth splits evenly left/right, and for the OUTERMOST slot in a full
-  /// 3-wide wedge that pushes the sprite's outer edge off the arena, where
-  /// this app's headless test harness (a square Icon placeholder, since it
-  /// can't load real network art) never could have caught it: a real
-  /// sprite's own aspect ratio decides how far the growth actually reaches
-  /// sideways, and there was no way to verify that without the live app.
-  static const double _kSpriteZoom = 1.15;
-
-  /// Was an extra bonus on TOP of [_kSpriteZoom] for the player's own
-  /// monsters — dropped back to 1.0 (user 2026-08-29: "Zoom wieder auf
-  /// 1.15" — the same figure for both sides now) in favour of moving the
-  /// whole rank DOWN instead (see [_kArenaDrop]): the bottom anchor that
-  /// keeps feet on the platform meant every bit of EXTRA zoom went up,
-  /// toward the log ("Das eigene Monster geht zu weit in den Kampflog
-  /// hinein") — a position shift gets the same "more of mine, up close"
-  /// feeling without that trade-off.
-  static const double _kPlayerSpriteZoomBonus = 1.0;
+  /// THE DIAL FOR HOW BIG THE MONSTERS ARE DRAWN (user 2026-09-21: "Monster
+  /// sollen deutlich grösser sein"). 1.0 = the art fills the room its slot has
+  /// above the platform (see [_fieldSlot]); the removed top bar and reserve strip
+  /// gave that room back. Higher lets the art rise past it — into the enemy's
+  /// edge of the screen, into the clearance above my rank — and a very high value
+  /// starts to cover the log and the neighbouring monsters.
+  ///
+  /// Earlier this was a flat zoom (1.3, once 1.15) on top of a box sized to the
+  /// slot; the zoom is now worked out from the target height instead, so the
+  /// art is decoded at the size it is drawn.
+  static const double _kSpriteScale = 1.0;
 
   // ── The lunge's own timeline, as fractions of _fx's 320ms (user
   // 2026-08-29) ── windup: ease back a little. strike: FAST swing past rest,
@@ -2833,19 +4010,28 @@ class _BattleScreenState extends State<BattleScreen>
     return -_kLungeReboundPx + _kLungeReboundPx * q;
   }
 
+  /// The large battlefield sprite. [height] is its layout box (its slot), [targetH]
+  /// how tall the art is actually DRAWN (see [_kSpriteScale]) — it is scaled up
+  /// from the bottom, so the feet stay on the platform. [back] picks the back-view
+  /// art (player) over the front (enemy). Plays the hit pulse (shake + white
+  /// flash) when this side was just acted upon (user 2026-07-18). Whose turn it is
+  /// is shown in the turn-order bar, and its health on the platform's own rim (see
+  /// [TypePodium]) — not here.
   Widget _bigSprite(
     Combatant c, {
     required bool back,
     required double height,
+    required double targetH,
     required bool acting,
     required bool targeted,
     bool koing = false,
   }) {
     final url = back ? (c.backImageUrl ?? c.imageUrl) : c.imageUrl;
-    // Bigger monsters (user request, twice now — 2026-08-27): nearly the
-    // WHOLE slot's own height, not height-minus-a-dozen-px, and a taller
-    // floor so a cramped layout can't shrink a lone monster down small.
-    final imgH = (height - 2).clamp(96.0, double.infinity);
+    // [height] is the room the slot really has above the platform; the art is
+    // laid out at exactly that (an Image is clamped to its parent, so a taller
+    // request would silently be squeezed) and then scaled to [targetH].
+    final imgH = math.max(height, 1.0);
+    final zoom = targetH / imgH;
     // Blink, rise, sink through the podium — its own presentation entirely,
     // no idle bob or hit-reaction competing with it (user 2026-08-29: "eine
     // K.O animation. Das Monster blinkt, geht hoch und durch das Podest
@@ -2891,15 +4077,14 @@ class _BattleScreenState extends State<BattleScreen>
                 child: Opacity(
                   opacity: opacity,
                   child: Transform.scale(
-                    scale: back
-                        ? _kSpriteZoom * _kPlayerSpriteZoomBonus
-                        : _kSpriteZoom,
+                    scale: zoom,
                     alignment: Alignment.bottomCenter,
                     child: _spriteWithShadow(
                       url,
                       imgH,
                       0.0,
                       c.element.shadowColor,
+                      decodeH: targetH,
                     ),
                   ),
                 ),
@@ -3016,9 +4201,7 @@ class _BattleScreenState extends State<BattleScreen>
               // platform and the growth reads as "closer", not as
               // "floating up" or "spreading sideways from the middle".
               child: Transform.scale(
-                scale: back
-                    ? _kSpriteZoom * _kPlayerSpriteZoomBonus
-                    : _kSpriteZoom,
+                scale: zoom,
                 alignment: Alignment.bottomCenter,
                 child: Stack(
                   alignment: Alignment.bottomCenter,
@@ -3028,6 +4211,7 @@ class _BattleScreenState extends State<BattleScreen>
                       imgH,
                       flash,
                       glowColor ?? c.element.shadowColor,
+                      decodeH: targetH,
                       // The reacting sprite flashes in the STRIKING move's
                       // colour.
                       flashColor: reacts ? _fxImpact : Colors.white,
@@ -3073,6 +4257,7 @@ class _BattleScreenState extends State<BattleScreen>
     double flash,
     Color shadowColor, {
     Color flashColor = Colors.white,
+    double? decodeH,
   }) {
     Widget img(FilterQuality quality) => url == null
         ? Icon(Icons.pets, color: FoE.gold, size: imgH * 0.6)
@@ -3083,7 +4268,7 @@ class _BattleScreenState extends State<BattleScreen>
             // Monsterassets werden sehr langsam geladen") — see
             // creature_sprite.dart's decodeWidthFor for why this was the
             // slow part, not the network.
-            cacheWidth: decodeWidthFor(context, imgH),
+            cacheWidth: decodeWidthFor(context, decodeH ?? imgH),
             fit: BoxFit.contain,
             filterQuality: quality,
             // A soft placeholder while the sprite streams in, so it fades in
@@ -3143,21 +4328,6 @@ class _BattleScreenState extends State<BattleScreen>
       ? FoE.gold
       : FoE.positive;
 
-  Widget _bar(double fraction, Color color, String label) => Row(
-    children: [
-      Expanded(
-        child: RecessBar(
-          value: fraction.clamp(0.0, 1.0),
-          color: color,
-          height: 9,
-          onDark: true,
-        ),
-      ),
-      const SizedBox(width: 4),
-      Text(label, style: FoE.dim(size: 9)),
-    ],
-  );
-
   Widget _portrait(Combatant c, {required double size}) => c.imageUrl == null
       ? Icon(Icons.pets, color: FoE.gold, size: size)
       : Image.network(
@@ -3172,7 +4342,7 @@ class _BattleScreenState extends State<BattleScreen>
   // The battle log's fixed height. The log is centred on the seam, so its
   // bottom edge sits _kLogHeight/2 into the lower half — which is where each
   // rank's sprites stop, so the two never overlap.
-  static const double _kLogHeight = 54;
+  static const double _kLogHeight = 46;
 
   Widget _logLine() {
     // The middle bar: overlaid on the seam where the two tiles meet, EDGE TO
@@ -3195,17 +4365,21 @@ class _BattleScreenState extends State<BattleScreen>
         width: double.infinity,
         height: _kLogHeight,
         alignment: Alignment.center,
-        // A slab floating on the seam between the two ranks: one tone, a cut
-        // corner, and the hard offset a flat-shaded thing casts.
+        // A cream card floating on the seam between the two ranks, in the
+        // kit's own paper and hard tan shadow (user 2026-09-21: "Battlelog in
+        // neuen UI Farben und Stil").
         margin: const EdgeInsets.symmetric(horizontal: 14),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: ShapeDecoration(
-          color: _flatSurfaceHi,
-          shadows: FoE.drop(dy: 3),
-          shape: FoE.facet(
-            radius: 10,
-            side: BorderSide(color: FoE.lit(_flatSurfaceHi), width: 1.5),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [CreamPalette.paperTop, CreamPalette.paperBottom],
           ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [
+            BoxShadow(color: CreamPalette.tanShadow, offset: Offset(0, 3)),
+          ],
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -3216,7 +4390,10 @@ class _BattleScreenState extends State<BattleScreen>
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: FoE.label(size: 11).copyWith(color: FoE.danger),
+                    style: FoE.label(size: 11).copyWith(
+                      color: CreamPalette.warn,
+                      fontWeight: FontWeight.w800,
+                    ),
                   )
                 : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -3228,9 +4405,7 @@ class _BattleScreenState extends State<BattleScreen>
                       for (var i = lines.length - 1; i >= 0; i--)
                         _logRow(
                           lines[i],
-                          color: i == lines.length - 1
-                              ? FoE.parchment
-                              : FoE.textDim,
+                          color: i == lines.length - 1 ? kBoxInk : kBoxInkSoft,
                         ),
                     ],
                   ),
@@ -3239,11 +4414,7 @@ class _BattleScreenState extends State<BattleScreen>
               Positioned(
                 right: 2,
                 bottom: 1,
-                child: Icon(
-                  Icons.unfold_more,
-                  size: 11,
-                  color: FoE.textDim.withValues(alpha: 0.7),
-                ),
+                child: Icon(Icons.unfold_more, size: 11, color: kBoxInkFaint),
               ),
           ],
         ),
@@ -3280,7 +4451,9 @@ class _BattleScreenState extends State<BattleScreen>
             line.text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: FoE.label(size: 11).copyWith(color: color),
+            style: FoE.label(
+              size: 11,
+            ).copyWith(color: color, fontWeight: FontWeight.w700),
           ),
         ),
       ],
@@ -3291,72 +4464,80 @@ class _BattleScreenState extends State<BattleScreen>
   /// fixed-size [_logLine] bar opens (it only ever shows the last two lines
   /// itself, and truncates each to one line besides).
   Future<void> _openFullLog() async {
+    // A cream sheet in the kit's paper, like every other sheet in the app.
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: FoE.panelDark,
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
       builder: (sheetCtx) => SafeArea(
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(sheetCtx).size.height * 0.6,
+            maxHeight: MediaQuery.of(sheetCtx).size.height * 0.88,
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Battle log',
-                  style: FoE.title(size: 15).copyWith(color: FoE.goldBright),
-                ),
-                const SizedBox(height: 10),
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _log.length,
-                    itemBuilder: (_, i) {
-                      final idx = _log.length - 1 - i; // newest first
-                      final line = _log[idx];
-                      final color = i == 0 ? FoE.parchment : FoE.textDim;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (line.iconUrl != null) ...[
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(3),
-                                child: Image.network(
-                                  line.iconUrl!,
-                                  width: 16,
-                                  height: 16,
-                                  fit: BoxFit.cover,
-                                  cacheWidth: decodeWidthFor(context, 16),
-                                  errorBuilder: (_, _, _) =>
-                                      const SizedBox(width: 16, height: 16),
+          child: creamSurface(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Battle log',
+                    style: FoE.title(size: 15).copyWith(color: kBoxInk),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    height: 1,
+                    color: CreamPalette.tan.withValues(alpha: 0.55),
+                  ),
+                  const SizedBox(height: 6),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _log.length,
+                      itemBuilder: (_, i) {
+                        final idx = _log.length - 1 - i; // newest first
+                        final line = _log[idx];
+                        final newest = i == 0;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (line.iconUrl != null) ...[
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(3),
+                                  child: Image.network(
+                                    line.iconUrl!,
+                                    width: 16,
+                                    height: 16,
+                                    fit: BoxFit.cover,
+                                    cacheWidth: decodeWidthFor(context, 16),
+                                    errorBuilder: (_, _, _) =>
+                                        const SizedBox(width: 16, height: 16),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  line.text,
+                                  style: FoE.label(size: 12).copyWith(
+                                    color: newest ? kBoxInk : kBoxInkSoft,
+                                    fontWeight: newest
+                                        ? FontWeight.w800
+                                        : FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(width: 6),
                             ],
-                            Expanded(
-                              child: Text(
-                                line.text,
-                                style: FoE.label(
-                                  size: 12,
-                                ).copyWith(color: color),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -3364,13 +4545,6 @@ class _BattleScreenState extends State<BattleScreen>
     );
   }
 
-  // ── Action panel (command deck) ───────────────────────────
-  // A distinct footer below the arena (user 2026-07): a dark bar with a gold
-  // hairline on top. NEW arrangement (user request): the AP read-out + End Turn
-  // on top, then the Items/Change/Catch utilities, and the ability tiles — each
-  // FULLY painted in its type colour — at the BOTTOM, in the thumb zone. Height
-  // is COMPUTED to fit everything (never scrolls), derived from the active
-  // PLAYER's ability count so the enemy's turn reserves the same space.
   // How far the arena is nudged DOWN toward the deck (fraction of its height).
   // Kept small so the lower tile's rounded bottom corners stay FULLY visible
   // above the deck instead of tucking behind it (user request). Went
@@ -3378,261 +4552,9 @@ class _BattleScreenState extends State<BattleScreen>
   // 2026-08-29: "Alle Monster beim Kampfscreen etwas nach oben schieben")
   // — pushes BOTH ranks, platforms included, since this offset wraps the
   // whole arena Stack.
-  static const double _kArenaDrop = 0.02;
-  static const double _kAbilityW = 112;
-  static const double _kAbilityH = 56;
-  static const double _kTileGap = 8;
-  static const double _kMenuH = 44;
-
-  /// The AP row's height including the gap under it — one line, not a column.
-  static const double _kApRowH = 14;
-  // Shared tint for EVERY non-type deck button (Auto/End Turn/Items/Catch/Change)
-  // so they read as one utility family next to the vivid type abilities.
-  static const Color _kUtilTint = FoE.panelLight;
-
-  Widget _actionPanel() {
-    return LayoutBuilder(
-      builder: (context, box) {
-        // The AP row sits ABOVE the moves now, so the tiles have the full
-        // width (2026-08-01).
-        final usable = box.maxWidth - 20;
-        final perRow = ((usable + _kTileGap) / (_kAbilityW + _kTileGap))
-            .floor()
-            .clamp(1, 6);
-        final abilities = _engine.activePlayer?.abilities.length ?? 0;
-        final boxes = 1 + abilities; // attack + abilities
-        // Same split the deck itself renders with — see [_abilityRowSplit] —
-        // so the reserved height always matches what actually gets drawn.
-        final rows = _abilityRowSplit(boxes, perRow).length;
-        final abilitiesH = rows * _kAbilityH + (rows - 1) * _kTileGap;
-        // The AP row is one line, whatever the pool is.
-        const apRowH = _kApRowH;
-        // utility row + gap + (abilities | AP column, tallest). The deck now
-        // ENDS directly above the buttons (user request): the enemy-turn status
-        // no longer reserves a strip on top — it floats just above the deck (see
-        // the overlay below) so the deck shrinks and the arena grows to match.
-        final contentH = _kMenuH + 8 + apRowH + 6 + abilitiesH;
-        final panelH = contentH + 22; // top 8 / bottom 10 padding + buffer
-
-        Widget content;
-        // Held off exactly as long as [_endOverlay] itself is (see its own
-        // "held back while a [_scriptInfoHint] is still showing" comment) —
-        // the finisher's crit explainer can leave [_engine.outcome] set for
-        // a beat before the win screen is allowed to take over, and this
-        // panel used to collapse to nothing the instant outcome was set,
-        // leaving a dead blank strip under the still-showing hint (user
-        // 2026-09-06: "am Ende des Kampfes verschwindet das UI").
-        if (_engine.outcome != null && _scriptInfoHint == null) {
-          content = const SizedBox.shrink();
-        } else if (_entering) {
-          // Hold input while the fighters are still sliding on.
-          content = Center(
-            child: Text(
-              'Get ready…',
-              style: FoE.title(size: 15).copyWith(color: FoE.goldBright),
-            ),
-          );
-        } else if (_engine.needsPlayerSwitch) {
-          content = Center(
-            child: _actionBtn(
-              'Send in a reserve',
-              icon: Icons.swap_horiz,
-              enabled: true,
-              onTap: () => _openSwitchPicker(forced: true),
-            ),
-          );
-        } else {
-          content = _playerActions();
-        }
-        return Container(
-          height: panelH.toDouble(),
-          // The command tray: one plane, lit along the edge that faces you —
-          // the same two-facet grammar the page's header band wears.
-          decoration: BoxDecoration(
-            color: _flatSurface,
-            border: Border(
-              top: BorderSide(color: FoE.lit(_flatSurface), width: 2),
-            ),
-          ),
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-          child: content,
-        );
-      },
-    );
-  }
-
-  Widget _playerActions() {
-    // MY turn = actionable. During the enemy's turn (or auto-battle) the same
-    // buttons show but are greyed and inert (user 2026-07-18). `!_presenting`
-    // too (user 2026-08-29) — the engine's own turn flips to the player the
-    // instant an enemy's action resolves, before that action's lunge/react
-    // has finished PLAYING; see [_presenting]'s own doc for what tapping in
-    // that gap used to break.
-    final myTurn =
-        _engine.outcome == null &&
-        !_engine.needsPlayerSwitch &&
-        _engine.isPlayerTurn &&
-        !_autoBattle &&
-        !_presenting;
-    final actor = _engine.activePlayer;
-    if (actor == null) return const SizedBox.shrink();
-    // AP are CARRIED per monster now (user 2026-07-20), so show MY monster's
-    // real pool at all times — including during the enemy's turn, when what you
-    // banked is exactly what you're planning around. `myTurn` alone greys the
-    // buttons; it must no longer zero the read-out.
-    final ap = actor.ap;
-    final maxAp = maxActionPointsForStage(actor.stage);
-    final canSwitch = _engine.benchedPlayers.isNotEmpty;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Utilities — ALL the same tint (user request), order: End Turn,
-        // Items, Change, Catch.
-        SizedBox(
-          height: _kMenuH,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: KeyedSubtree(
-                  key: IntroSpotlightAnchors.of('battle-endturn-btn'),
-                  child: _deckButton(
-                    icon: Icons.skip_next,
-                    label: 'End Turn',
-                    base: _kUtilTint,
-                    enabled: myTurn,
-                    onTap: _endTurn,
-                  ),
-                ),
-              ),
-              const SizedBox(width: _kTileGap),
-              Expanded(
-                child: KeyedSubtree(
-                  key: IntroSpotlightAnchors.of('battle-items-btn'),
-                  child: _deckButton(
-                    icon: Icons.backpack,
-                    label: 'Items',
-                    base: _kUtilTint,
-                    enabled: myTurn,
-                    onTap: _openItems,
-                  ),
-                ),
-              ),
-              const SizedBox(width: _kTileGap),
-              Expanded(
-                child: _deckButton(
-                  icon: Icons.swap_horiz,
-                  label: 'Change',
-                  base: _kUtilTint,
-                  enabled: myTurn && canSwitch && ap >= kSwitchApCost,
-                  onTap: () => _openSwitchPicker(forced: false),
-                ),
-              ),
-              // Only shown when this encounter can EVER be caught — a story
-              // battle isn't [isCapture] at all and never will be this turn
-              // or any other (user 2026-08-28: "Catchbutton nur dann
-              // anzeigen, wenn das Monster theoretisch gefangen werden
-              // kann"). [_canCatch] still gates whether it's ENABLED right
-              // now (wrong turn, not worn down enough yet).
-              if (widget.isCapture) ...[
-                const SizedBox(width: _kTileGap),
-                Expanded(
-                  child: _deckButton(
-                    icon: Icons.catching_pokemon,
-                    label: 'Catch',
-                    base: _kUtilTint,
-                    enabled: myTurn && _canCatch,
-                    onTap: _startCatch,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        // The cost, then what it buys (2026-08-01).
-        KeyedSubtree(
-          key: IntroSpotlightAnchors.of('battle-ap'),
-          child: Align(
-            // Centred (user 2026-08-28: "Die AP bitte zentrieren") — was
-            // left-aligned since the 2026-08-01 redesign, which read as
-            // pinned to the deck's edge rather than as the header over the
-            // move tiles it costs.
-            alignment: Alignment.center,
-            child: _apBar(ap, maxAp),
-          ),
-        ),
-        const SizedBox(height: 6),
-        KeyedSubtree(
-          key: IntroSpotlightAnchors.of('battle-actions'),
-          // This callout's hole is the WHOLE tile row, unlike every other
-          // anchor here — so unlike a plain info readout (turn order, AP,
-          // HP), the real buttons underneath stay live and tappable purely
-          // because the scrim happens to be punched out around them. Not
-          // just cosmetic: firing a REAL ability here would spend AP and
-          // damage the enemy outside the script, which the exact
-          // percentages after it assume never happened (user 2026-09-03:
-          // "dürfen die Fähigkeiten nicht aktiv sein, sonst funktioniert
-          // das Tutorial nicht"). IgnorePointer only while this exact
-          // callout is up — every later step still needs these tiles live.
-          child: IgnorePointer(
-            ignoring:
-                _battleCallout != null &&
-                _battleCalloutAnchors[_battleCallout!] == 'battle-actions',
-            child: LayoutBuilder(
-              builder: (context, box) {
-                // Attack sits at abilities[0] on every combatant now (user
-                // 2026-09-03: "attack soll eine normale Fähigkeit sein") —
-                // ONE loop, no more separate hardcoded tile for it.
-                final abilities = actor.abilities;
-                final firstReal = _firstRealAbility(actor);
-                final secondReal = _secondRealAbility(actor);
-                final tiles = [
-                  for (final a in abilities)
-                    _maybeAnchoredAbilityTile(
-                      a,
-                      firstReal,
-                      secondReal,
-                      _abilityBtn(
-                        a.name,
-                        _effectiveApCost(a),
-                        element: a.element,
-                        enabled: myTurn && ap >= _effectiveApCost(a),
-                        onTap: () => _useAbility(a),
-                        ability: a,
-                      ),
-                    ),
-                ];
-                final maxPerRow =
-                    ((box.maxWidth + _kTileGap) / (_kAbilityW + _kTileGap))
-                        .floor()
-                        .clamp(1, 6);
-                final split = _abilityRowSplit(tiles.length, maxPerRow);
-                var i = 0;
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (var r = 0; r < split.length; r++) ...[
-                      if (r > 0) const SizedBox(height: _kTileGap),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          for (var j = 0; j < split[r]; j++) ...[
-                            if (j > 0) const SizedBox(width: _kTileGap),
-                            tiles[i++],
-                          ],
-                        ],
-                      ),
-                    ],
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  // Now 0 (user 2026-09-21: the arena is the full height and the player rank is
+  // moved down by its own spacer instead).
+  static const double _kArenaDrop = 0.0;
 
   /// How many tiles sit on each row of the move deck. Explicit for 4/5/6
   /// (user 2026-08-28: "Bei 4 Fähigkeiten oben und unten 2. Bei 5 oben drei,
@@ -3660,43 +4582,6 @@ class _BattleScreenState extends State<BattleScreen>
     return rows.isEmpty ? [0] : rows;
   }
 
-  /// THE ACTION POINTS — a row of faceted chips above the moves they pay for
-  /// (redesign 2026-08-01).
-  ///
-  /// They were a column of round pips down the right-hand edge, which cost the
-  /// tiles a whole column of width and put the number you spend furthest from
-  /// the thing you spend it on. A ROW sits directly over the moves, reads
-  /// left-to-right like a cost, and is the one place a circle had survived the
-  /// faceting.
-  ///
-  /// Spent points are not hidden, they are EMPTIED: what you had this turn is
-  /// as much a part of the read as what is left.
-  Widget _apBar(int ap, int maxAp) => Row(
-    // min, not the Row default — a Row otherwise fills the Align it sits in
-    // and centres nothing (user 2026-08-28: "Die AP bitte zentrieren").
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Text('AP', style: FoE.dim(size: 10).copyWith(color: FoE.textDim)),
-      const SizedBox(width: 6),
-      for (var i = 0; i < maxAp; i++)
-        Container(
-          margin: const EdgeInsets.only(right: 4),
-          width: 16,
-          height: 8,
-          decoration: ShapeDecoration(
-            color: i < ap ? FoE.gold : Colors.transparent,
-            shape: FoE.facet(
-              radius: 3,
-              side: BorderSide(
-                color: i < ap ? FoE.lit(FoE.gold) : FoE.border,
-                width: 1.2,
-              ),
-            ),
-          ),
-        ),
-    ],
-  );
-
   /// A MOVE, as a faceted card (redesign 2026-08-01).
   ///
   /// The surface is the monster's own — [CreatureBackdrop], the same material
@@ -3717,12 +4602,16 @@ class _BattleScreenState extends State<BattleScreen>
     required bool enabled,
     required VoidCallback onTap,
     AbilityDef? ability,
+    bool selected = false,
   }) {
     // Dark text on light type colours (e.g. Light), white on the rest.
     final onColor = element.color.computeLuminance() > 0.5
         ? const Color(0xFF1A1300)
         : Colors.white;
-    final fg = enabled ? onColor : FoE.textMuted;
+    // The tile keeps its element colour when it cannot be used right now (user
+    // 2026-09-21: "die Fähigkeitsboxen in der Elementfarbe") — dimmed, not turned
+    // into a grey card, so the type still reads during the enemy's turn.
+    final fg = onColor;
     // Type effectiveness vs the CURRENT enemy — an inline cue so the static
     // type chart isn't the only place to read it (user request 2026-07-20).
     // Only DAMAGE moves with a real element land bonus/reduced damage.
@@ -3750,23 +4639,18 @@ class _BattleScreenState extends State<BattleScreen>
       ),
     );
 
-    Widget tile = enabled
-        ? CreatureBackdrop(
-            element: element,
-            radius: radius,
-            // Bigger (user 2026-08-29: "das Typicon grösser machen") — the
-            // card's own embossed glyph, same scale knob TypePodium uses for
-            // the same reason.
-            symbolScale: 1.35,
-            child: label,
-          )
-        : Container(
-            decoration: ShapeDecoration(
-              color: FoE.panelDark,
-              shape: FoE.facet(radius: radius),
-            ),
-            child: label,
-          );
+    Widget tile = Opacity(
+      opacity: enabled ? 1 : 0.5,
+      child: CreatureBackdrop(
+        element: element,
+        radius: radius,
+        // Bigger (user 2026-08-29: "das Typicon grösser machen") — the card's
+        // own embossed glyph, same scale knob TypePodium uses for the same
+        // reason.
+        symbolScale: 1.35,
+        child: label,
+      ),
+    );
 
     // Strong/weak → an arrow in the answer's colour (user 2026-08-29: "Zum
     // Start des Kampfes hat es noch gelbe/grüne Ränder um die Aktionen,
@@ -3781,15 +4665,31 @@ class _BattleScreenState extends State<BattleScreen>
         : null;
 
     return SizedBox(
-      width: _kAbilityW,
-      height: _kAbilityH,
+      height: _kTileH,
       child: Pressable(
         onTap: enabled ? onTap : null,
-        onLongPress: () => _showAbilityPreview(name, ap, element, ability),
+        // Long press PICKS the tile for the deck's info box (it used to open a
+        // sheet over the fight).
+        onLongPress: ability == null
+            ? null
+            : () => setState(() => _infoAbilityId = ability.id),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
             Positioned.fill(child: tile),
+            // The picked tile wears an ink frame — the one the info box speaks
+            // about.
+            if (selected)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: kBoxInk, width: 2),
+                    ),
+                  ),
+                ),
+              ),
             // THE COST, in the corner it is cut from. Yellow, and a bit
             // bigger (user 2026-08-29: "Die Ecke, welche anzeigt, wieviel AP
             // eine Aktion kostet, soll gelb sein und ein bisschen grösser")
@@ -3802,7 +4702,9 @@ class _BattleScreenState extends State<BattleScreen>
               child: Container(
                 padding: const EdgeInsets.fromLTRB(8, 3, 7, 4),
                 decoration: ShapeDecoration(
-                  color: enabled ? FoE.gold : Colors.transparent,
+                  color: enabled
+                      ? FoE.gold
+                      : CreamPalette.tan.withValues(alpha: 0.28),
                   shape: const RoundedRectangleBorder(
                     // Rounded on the inner corner only: the chip is a piece of
                     // the tile's own edge, not a sticker on it.
@@ -3814,7 +4716,7 @@ class _BattleScreenState extends State<BattleScreen>
                 child: Text(
                   '$ap',
                   style: FoE.value(size: 13).copyWith(
-                    color: enabled ? const Color(0xFF1A1300) : FoE.textMuted,
+                    color: enabled ? const Color(0xFF1A1300) : kBoxInkFaint,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -3827,6 +4729,27 @@ class _BattleScreenState extends State<BattleScreen>
                 child: CustomPaint(
                   size: const Size(14, 14),
                   painter: _EffectivenessArrow(color: effColor, up: mult > 1.0),
+                ),
+              ),
+            // THE WAY TO THE DESCRIPTION, VISIBLE: a small (i) in the tile's
+            // corner. One tap on the tile still USES the move; a tap on the (i)
+            // only reads about it, and works when the tile is greyed too.
+            // (Holding the tile does the same, but nothing said so.)
+            if (ability != null)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _infoAbilityId = ability.id),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(5, 6, 8, 4),
+                    child: Icon(
+                      Icons.info_outline,
+                      size: 14,
+                      color: fg.withValues(alpha: 0.9),
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -3936,355 +4859,82 @@ class _BattleScreenState extends State<BattleScreen>
     );
   }
 
-  /// Long-press preview of an ability (or the basic Attack when [a] is null):
-  /// what it does, its numbers, and its live effectiveness vs the current enemy
-  /// — so the player can weigh a move before spending AP (user request).
-  Future<void> _showAbilityPreview(
-    String name,
-    int ap,
-    CreatureElement element,
-    AbilityDef? a,
-  ) async {
-    final enemy = _target;
-    final isDamage = a == null || a.kind == AbilityKind.damage;
-    final rows = <Widget>[];
-
-    if (isDamage && enemy != null && element != CreatureElement.neutral) {
-      final mult = _effectivenessVsEnemy(element);
-      final (label, icon, color) = mult > 1.0
-          ? (
-              'Super effective vs ${enemy.name}',
-              Icons.keyboard_arrow_up,
-              FoE.positive,
-            )
-          : mult < 1.0
-          ? ('Resisted by ${enemy.name}', Icons.keyboard_arrow_down, FoE.danger)
-          : ('Neutral vs ${enemy.name}', Icons.remove, FoE.textDim);
-      rows.add(_previewRow(icon, '$label  (×${_fmtMult(mult)})', color: color));
-    }
-
-    if (a == null) {
-      rows.add(
-        _previewRow(
-          Icons.bolt,
-          'Basic attack · Power ${CombatEngine.basicAttackPower}',
-        ),
-      );
-      rows.add(
-        _previewRow(
-          Icons.info_outline,
-          'Free, typeless strike — never lands bonus damage.',
-        ),
-      );
-    } else {
-      if (a.kind == AbilityKind.damage) {
-        rows.add(_previewRow(Icons.bolt, 'Power ${a.power}'));
-      }
-      // Extra hits (user 2026-09-08: "nicht nur 1 gegner treffen sondern 2
-      // oder 3... mit jedem Treffer sinkt die Chance"): the compound chance
-      // to reach each further hit, capped at 3 total.
-      if (a.extraHitChance > 0) {
-        final pct2 = (a.extraHitChance * 100).round();
-        final pct3 = (a.extraHitChance * a.extraHitChance * 100).round();
-        rows.add(
-          _previewRow(
-            Icons.blur_on,
-            a.extraHitSameTarget
-                ? 'May hit the SAME target again: 2nd hit $pct2 % chance, '
-                      '3rd $pct3 %.'
-                : 'May also hit ANOTHER enemy: 2nd hit $pct2 % chance, 3rd '
-                      '$pct3 % — does nothing extra alone.',
-          ),
-        );
-      }
-      // ONE row per effect, stated fully (user 2026-07-30: "zeige mir ganz
-      // genau, was dies im Kampf bedeutet" — the same describeAbilityEffect
-      // the Dev-Mode form uses, so this card cannot say less than the editor
-      // already promised the author it would do).
-      for (final e in a.effects) {
-        rows.add(
-          _previewRow(
-            switch (e.kind.family) {
-              AbilityEffectFamily.mainStatus => Icons.local_fire_department,
-              AbilityEffectFamily.debuff => Icons.visibility_off,
-              AbilityEffectFamily.selfBuff => Icons.shield,
-              AbilityEffectFamily.heal => Icons.favorite,
-              AbilityEffectFamily.regen => Icons.eco,
-              AbilityEffectFamily.recoil => Icons.dangerous,
-              AbilityEffectFamily.lifesteal => Icons.bloodtype,
-              AbilityEffectFamily.selfPenalty => Icons.warning_amber,
-            },
-            describeAbilityEffect(e).join('\n'),
-            color: switch (e.kind.family) {
-              AbilityEffectFamily.heal ||
-              AbilityEffectFamily.regen ||
-              AbilityEffectFamily.selfBuff ||
-              AbilityEffectFamily.lifesteal => FoE.positive,
-              AbilityEffectFamily.selfPenalty ||
-              AbilityEffectFamily.recoil => FoE.danger,
-              _ => null,
-            },
-          ),
-        );
-      }
-      if (a.priority > 0) {
-        rows.add(
-          _previewRow(Icons.flash_on, 'Priority +${a.priority} — acts sooner'),
-        );
-      }
-      rows.add(_previewRow(Icons.gps_fixed, 'Target: ${a.target.label}'));
-    }
-
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: FoE.panelDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          14,
-          16,
-          16 + MediaQuery.of(ctx).viewPadding.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: ShapeDecoration(
-                    color: element.color,
-                    shape: FoE.facet(radius: 6),
-                  ),
-                  child: Text(
-                    element.label,
-                    style: FoE.label(size: 11).copyWith(
-                      color: element.color.computeLuminance() > 0.5
-                          ? const Color(0xFF1A1300)
-                          : Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(child: Text(name, style: FoE.title(size: 16))),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: ShapeDecoration(
-                    color: _kUtilTint,
-                    shape: FoE.facet(radius: 6),
-                  ),
-                  child: Text(
-                    '$ap AP',
-                    style: FoE.label(
-                      size: 11,
-                    ).copyWith(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ],
-            ),
-            ...rows,
-            if (a != null && a.description.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(a.description, style: FoE.dim(size: 12)),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// A non-type deck button (Auto / Items / Change / Catch / End Turn): the SAME
-  /// embossed-symbol backdrop tile as the abilities — [symbol] worked into a
-  /// [base]-coloured background, [label] on top, NO border (user request).
-  /// Disabled = flat greyed panel. Fills its parent when [width]/[height] are
-  /// null (utility row uses stretch); pass them for a fixed size (Auto).
-  Widget _deckButton({
-    required IconData icon,
-    required String label,
-    required Color base,
-    required bool enabled,
-    required VoidCallback onTap,
-    double? width,
-    double? height,
-  }) {
-    final onColor = base.computeLuminance() > 0.5
-        ? const Color(0xFF1A1300)
-        : Colors.white;
-    final fg = enabled ? onColor : FoE.textMuted;
-    final content = FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Text(
-        label,
-        maxLines: 1,
-        style: FoE.label(
-          size: 12,
-        ).copyWith(color: fg, fontWeight: FontWeight.w800),
-      ),
-    );
-    final radius = FoE.radiusSmall + 2;
-    Widget tile = enabled
-        ? CreatureBackdrop(
-            element: CreatureElement.neutral,
-            baseColor: base,
-            iconSymbol: icon,
-            radius: radius,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Center(child: content),
-          )
-        : Container(
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: ShapeDecoration(
-              color: FoE.panelDark,
-              shape: FoE.facet(radius: radius),
-            ),
-            child: content,
-          );
-    if (enabled) {
-      // The offset facet that lifts a key off the tray.
-      tile = DecoratedBox(
-        decoration: ShapeDecoration(
-          shadows: FoE.drop(dy: 2, alpha: 0.35),
-          shape: FoE.facet(radius: radius),
-        ),
-        child: tile,
-      );
-    }
-    return Pressable(
-      onTap: enabled ? onTap : null,
-      child: SizedBox(width: width, height: height, child: tile),
-    );
-  }
-
-  /// The forced-switch button (active fainted) — a single prominent gold pill.
-  Widget _actionBtn(
-    String label, {
-    required bool enabled,
-    required VoidCallback onTap,
-    IconData? icon,
-  }) {
-    final text = Text(
-      label,
-      style: FoE.label(
-        size: 13,
-      ).copyWith(color: FoE.goldBright, fontWeight: FontWeight.w700),
-    );
+  /// The top band's AUTO switch: a light Holz tile on the wood; the check marks
+  /// it on. [enabled] is false for the tutorial's scripted fight and for PvP.
+  Widget _autoButton({required bool enabled, required VoidCallback onTap}) {
+    final ink = enabled ? kBoxInk : kBoxInkFaint;
     return Pressable(
       onTap: enabled ? onTap : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: ShapeDecoration(
-          color: FoE.panelMid,
-          shape: FoE.facet(
-            radius: FoE.radiusSmall + 3,
-            side: BorderSide(color: FoE.gold, width: 1.5),
+        width: 66,
+        height: 32,
+        alignment: Alignment.center,
+        decoration: _autoBattle
+            ? goldButton(active: enabled)
+            : raisedTile(radius: 11, locked: !enabled),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.smart_toy, size: 14, color: ink),
+              const SizedBox(width: 4),
+              Text(
+                _autoBattle ? 'AUTO ✔' : 'AUTO',
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: ink,
+                ),
+              ),
+            ],
           ),
         ),
-        child: icon == null
-            ? text
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 17, color: FoE.goldBright),
-                  const SizedBox(width: 8),
-                  text,
-                ],
-              ),
       ),
     );
   }
 
-  // ── Items (in-battle heal potions) ────────────────────────
-  /// Opens a sheet of held heal items; using one heals the ACTIVE monster and
-  /// costs a flat [kItemApCost] AP, same as every ability's own AP spend —
-  /// NOT the whole turn (user 2026-09-05: "ein Item benutzen, kostet immer
-  /// 1 AP", replacing the older whole-turn rule from 2026-07-18).
-  Future<void> _openItems() async {
-    final settlement = SettlementController();
+  // ── Items (in-battle potions, cures, buffs) ───────────────
+  /// The held items the Items tab lists: battle-usable heal/buff/cure items,
+  /// which apply to the ACTIVE monster. (Revive is out-of-battle only — the
+  /// active can't be K.O., and bench-targeting is a later slice.)
+  List<(ItemDef, int)> _usableItems() => [
+    for (final e in SettlementController().items.entries)
+      if (kItemDefs[e.key] case final ItemDef d
+          when d.battleUsable &&
+              (d.kind == ItemKind.heal ||
+                  d.kind == ItemKind.buff ||
+                  d.kind == ItemKind.cureStatus ||
+                  d.kind == ItemKind.cureDebuffs))
+        (d, e.value),
+  ];
+
+  bool _usingItem = false;
+
+  /// Uses [chosen] on the ACTIVE monster; it costs a flat [kItemApCost] AP, same
+  /// as every ability's own AP spend — NOT the whole turn (user 2026-09-05: "ein
+  /// Item benutzen, kostet immer 1 AP", replacing the older whole-turn rule from
+  /// 2026-07-18).
+  Future<void> _applyItem(ItemDef chosen) async {
     final actor = _engine.activePlayer;
-    if (actor == null) return;
-    // Battle-usable heal/buff/cure items apply to the ACTIVE monster. (Revive
-    // is out-of-battle only — the active can't be K.O., and bench-targeting
-    // is a later slice.)
-    final held = [
-      for (final e in settlement.items.entries)
-        if (kItemDefs[e.key] case final ItemDef d
-            when d.battleUsable &&
-                (d.kind == ItemKind.heal ||
-                    d.kind == ItemKind.buff ||
-                    d.kind == ItemKind.cureStatus ||
-                    d.kind == ItemKind.cureDebuffs))
-          (d, e.value),
-    ];
-    final chosen = await showModalBottomSheet<ItemDef>(
-      context: context,
-      backgroundColor: FoE.panelDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
-      ),
-      builder: (_) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          16 + MediaQuery.of(context).viewPadding.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Use an item (costs $kItemApCost AP)',
-              style: FoE.title(size: 14),
-            ),
-            const SizedBox(height: 12),
-            if (held.isEmpty)
-              Text('No usable items in your bag.', style: FoE.dim(size: 12))
-            else
-              for (final (def, count) in held)
-                Pressable(
-                  onTap: () => Navigator.pop(context, def),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: FoE.panel(radius: 8),
-                    child: Row(
-                      children: [
-                        Text(def.emoji, style: const TextStyle(fontSize: 18)),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            '${def.name} ×$count · ${_itemUseLabel(def, actor)}',
-                            style: FoE.label(size: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-          ],
-        ),
-      ),
-    );
-    if (chosen == null || !mounted) return;
-    // Spend FIRST — if the item can't leave the bag, nothing happens.
-    final err = await settlement.consumeItem(chosen.id);
-    if (!mounted) return;
-    if (err != null) {
-      _flashMessage(err);
-      return;
+    if (actor == null || _usingItem) return;
+    _usingItem = true;
+    try {
+      // Spend FIRST — if the item can't leave the bag, nothing happens.
+      final err = await SettlementController().consumeItem(chosen.id);
+      if (!mounted) return;
+      if (err != null) {
+        _flashMessage(err);
+        return;
+      }
+      _applyItemEffect(chosen, actor);
+    } finally {
+      _usingItem = false;
     }
+  }
+
+  void _applyItemEffect(ItemDef chosen, Combatant actor) {
     switch (chosen.kind) {
       case ItemKind.buff:
         final buff = _selfBuffForStat(chosen.buffStat);
@@ -4300,19 +4950,25 @@ class _BattleScreenState extends State<BattleScreen>
         // weak/strong remedies — see ItemKind.cureStatus's own doc).
         // deterministicCombat always succeeds, matching every other roll's
         // own convention (see CombatEngine._rollAccuracy).
-        final worked = _engine.deterministicCombat ||
+        final worked =
+            _engine.deterministicCombat ||
             _engine.rng.nextDouble() < chosen.magnitude;
         final cured = worked && actor.cureMainStatus(chosen.cureMainStatus);
-        _flashMessage(cured
-            ? '${chosen.emoji} ${actor.name} is cured!'
-            : '${chosen.emoji} ${actor.name} — no effect.');
+        _flashMessage(
+          cured
+              ? '${chosen.emoji} ${actor.name} is cured!'
+              : '${chosen.emoji} ${actor.name} — no effect.',
+        );
       case ItemKind.cureDebuffs:
-        final worked = _engine.deterministicCombat ||
+        final worked =
+            _engine.deterministicCombat ||
             _engine.rng.nextDouble() < chosen.magnitude;
         final cleansed = worked && actor.clearSecondaryDebuffs();
-        _flashMessage(cleansed
-            ? '${chosen.emoji} ${actor.name} is cleansed!'
-            : '${chosen.emoji} ${actor.name} — no effect.');
+        _flashMessage(
+          cleansed
+              ? '${chosen.emoji} ${actor.name} is cleansed!'
+              : '${chosen.emoji} ${actor.name} — no effect.',
+        );
       default: // heal
         final heal = healFromItem(
           chosen,
@@ -4336,6 +4992,7 @@ class _BattleScreenState extends State<BattleScreen>
       actor.hp = actor.maxHp;
       _ensureApFor(_ScriptBeat.missedAttack);
       setState(() {
+        _deckTab = _DeckTab.attack;
         _scriptBeat = _ScriptBeat.missedAttack;
         _scriptInfoHint =
             'Items cost AP too — always 1, no matter which '
@@ -4345,7 +5002,8 @@ class _BattleScreenState extends State<BattleScreen>
       // Using an item always costs a flat kItemApCost AP (user 2026-09-05) —
       // the turn stays open for whatever's left, exactly like an ability.
       _engine.useItem(actor);
-      setState(() {});
+      // Back to the moves: the potion is the setup, the attack is the point.
+      setState(() => _deckTab = _DeckTab.attack);
     }
   }
 
@@ -4380,6 +5038,53 @@ class _BattleScreenState extends State<BattleScreen>
     }
   }
 
+  /// REMATCH (user 2026-09-19): one tap after a PvP result sends the same
+  /// opponent a new challenge and walks into its lobby — you can step out of it
+  /// like any other. If they already challenged you back (they were quicker),
+  /// that one is accepted instead, so two rematches never stack up.
+  Future<void> _rematch() async {
+    final match = widget.pvpMatch!;
+    final myId = supabase.auth.currentUser!.id;
+    final opponentId = match.otherUserId(myId);
+    // Held before popping: this screen is gone once the route is.
+    final nav = appNavigatorKey.currentState;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      final notifier = PvpNotifier.instance;
+      final open = notifier.openMatches.where(
+        (m) =>
+            m.otherUserId(myId) == opponentId &&
+            (m.status == PvpMatchStatus.pending ||
+                m.status == PvpMatchStatus.accepted),
+      );
+      PvpMatch rematch;
+      if (open.isEmpty) {
+        rematch = await _pvpService.createChallenge(opponentId);
+      } else {
+        final existing = open.first;
+        rematch =
+            existing.status == PvpMatchStatus.pending &&
+                existing.playerB == myId
+            ? await _pvpService.acceptChallenge(existing.id)
+            : existing;
+      }
+      notifier.remember(rematch);
+      final names = await FriendsService().usernamesFor([opponentId]);
+      if (nav == null) return;
+      final name = names[opponentId] ?? '(unknown)';
+      nav.popUntil((r) => r.isFirst);
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => PvpLobbyScreen(match: rematch, opponentName: name),
+        ),
+      );
+    } catch (e) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Could not start a rematch: $e')),
+      );
+    }
+  }
+
   // ── End overlay ───────────────────────────────────────────
   Widget _endOverlay() {
     final outcome = _engine.outcome!;
@@ -4393,71 +5098,93 @@ class _BattleScreenState extends State<BattleScreen>
     return Container(
       color: Colors.black.withValues(alpha: 0.6),
       alignment: Alignment.center,
+      // The result card is a cream Holz card too (user 2026-09-20, Variante 7).
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 40),
         // Height-bounded + scrollable so a fight where the whole party levels
         // (several cards) can't overflow the panel (user 2026-07-24).
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.86,
+          maxWidth: 560,
+          maxHeight: MediaQuery.of(context).size.height * 0.92,
         ),
-        padding: const EdgeInsets.all(20),
-        decoration: FoE.panel(radius: 12, glow: true),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(title, style: FoE.title(size: 20)),
-              if (subtitle != null) ...[
-                const SizedBox(height: 8),
-                Text(subtitle, style: FoE.label(size: 13)),
-              ],
-              // PvP has no XP/level-up/unlock pool — its reward is the
-              // rating change, already applied by [_applyPvpOutcome] and
-              // visible on the Ranking tab, not restated here.
-              if (outcome == CombatOutcome.victory && !widget.isPvp) ...[
-                const SizedBox(height: 16),
-                _victoryRewards(),
-                if (_levelUps.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _levelUpSection(),
-                ],
-                if (widget.victoryRewards.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _unlockSection(),
-                ],
-              ],
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: Pressable(
-                  // A capture battle returns every wild caught along the
-                  // way too (2026-09-11) — every other battle (dungeon,
-                  // Survival, Training) still just gets its bare outcome.
-                  // PvP has no caller waiting on a result at all — it just
-                  // goes back to the app root (the PvP tab, not mid-lobby).
-                  onTap: () => widget.isPvp
-                      ? Navigator.of(context).popUntil((r) => r.isFirst)
-                      : Navigator.of(context).pop(
-                          widget.isCapture
-                              ? HuntBattleResult(
-                                  outcome,
-                                  _caught,
-                                  widget.enemies.where((w) => !w.alive).length,
-                                )
-                              : outcome,
-                        ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: FoE.btn(active: true),
-                    alignment: Alignment.center,
-                    child: Text(
-                      'Continue',
-                      style: FoE.label(size: 14).copyWith(color: Colors.white),
-                    ),
+        child: creamCard(
+          padding: const EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: kBoxInk,
                   ),
                 ),
-              ),
-            ],
+                if (subtitle != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 13, color: kBoxInkSoft),
+                  ),
+                ],
+                // PvP has no XP/level-up/unlock pool — its reward is the
+                // rating change, already applied by [_applyPvpOutcome] and
+                // visible on the Ranking tab, not restated here.
+                if (outcome == CombatOutcome.victory && !widget.isPvp) ...[
+                  const SizedBox(height: 16),
+                  _victoryRewards(),
+                  if (_levelUps.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _levelUpSection(),
+                  ],
+                  if (widget.victoryRewards.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _unlockSection(),
+                  ],
+                ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: SocialGoldButton(
+                    'Continue',
+                    height: 42,
+                    fontSize: 15,
+                    // A capture battle returns every wild caught along the
+                    // way too (2026-09-11) — every other battle (dungeon,
+                    // Survival, Training) still just gets its bare outcome.
+                    // PvP has no caller waiting on a result at all — it just
+                    // goes back to the app root (the PvP tab, not mid-lobby).
+                    onTap: () => widget.isPvp
+                        ? Navigator.of(context).popUntil((r) => r.isFirst)
+                        : Navigator.of(context).pop(
+                            widget.isCapture
+                                ? HuntBattleResult(
+                                    outcome,
+                                    _caught,
+                                    widget.enemies
+                                        .where((w) => !w.alive)
+                                        .length,
+                                  )
+                                : outcome,
+                          ),
+                  ),
+                ),
+                // A rematch is one tap away (user 2026-09-19).
+                if (widget.isPvp) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SocialTileButton(
+                      'Rematch',
+                      height: 38,
+                      fontSize: 14,
+                      onTap: _rematch,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
@@ -4475,11 +5202,15 @@ class _BattleScreenState extends State<BattleScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.military_tech, size: 15, color: FoE.gold),
+            const Icon(Icons.military_tech, size: 15, color: kBoxAccent),
             const SizedBox(width: 6),
             Text(
               'Defeated $foes ${foes == 1 ? 'foe' : 'foes'}',
-              style: FoE.dim(size: 12),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: kBoxInkSoft,
+              ),
             ),
           ],
         ),
@@ -4501,7 +5232,7 @@ class _BattleScreenState extends State<BattleScreen>
           duration: const Duration(milliseconds: 900),
           curve: Curves.easeOutCubic,
           builder: (context, v, _) =>
-              RecessBar(value: v, color: FoE.gold, height: 11, onDark: true),
+              RecessBar(value: v, color: CreamPalette.gold, height: 11),
         ),
       ],
     );
@@ -4540,7 +5271,11 @@ class _BattleScreenState extends State<BattleScreen>
           const SizedBox(height: 3),
           Text(
             '+$_xpEach XP',
-            style: FoE.label(size: 10).copyWith(color: FoE.gold),
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: CreamPalette.goldDeep,
+            ),
           ),
         ],
       ),
@@ -4559,9 +5294,13 @@ class _BattleScreenState extends State<BattleScreen>
         children: [
           const Text('⬆️', style: TextStyle(fontSize: 15)),
           const SizedBox(width: 6),
-          Text(
+          const Text(
             'Level Up!',
-            style: FoE.title(size: 14).copyWith(color: FoE.goldBright),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: kBoxAccent,
+            ),
           ),
         ],
       ),
@@ -4590,22 +5329,20 @@ class _BattleScreenState extends State<BattleScreen>
     child: Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: ShapeDecoration(
-        color: FoE.panelDark,
-        shape: FoE.facet(
-          radius: 12,
-          side: BorderSide(color: FoE.goldBright.withValues(alpha: 0.6)),
-        ),
-      ),
+      decoration: raisedTile(radius: 12, lit: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // No gift icon any more (user 2026-08-28: "Unlocked: Icon
           // löschen") — the title alone says what the box is for.
           Center(
-            child: Text(
+            child: const Text(
               'Unlocked!',
-              style: FoE.title(size: 14).copyWith(color: FoE.goldBright),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: kBoxAccent,
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -4644,7 +5381,11 @@ class _BattleScreenState extends State<BattleScreen>
       Expanded(
         child: Text(
           text,
-          style: FoE.label(size: 12).copyWith(color: FoE.parchment),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: kBoxInk,
+          ),
         ),
       ),
     ],
@@ -4686,13 +5427,7 @@ class _BattleScreenState extends State<BattleScreen>
       ),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: ShapeDecoration(
-          color: FoE.panelDark,
-          shape: FoE.facet(
-            radius: 10,
-            side: BorderSide(color: FoE.gold.withValues(alpha: 0.55)),
-          ),
-        ),
+        decoration: raisedTile(radius: 10, lit: true),
         child: Row(
           children: [
             SizedBox(
@@ -4722,22 +5457,29 @@ class _BattleScreenState extends State<BattleScreen>
                           up.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: FoE.label(
-                            size: 12,
-                          ).copyWith(color: FoE.parchment),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: kBoxInk,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text('Lv ${up.fromLevel}', style: FoE.dim(size: 11)),
-                      const Text(
+                      Text(
+                        'Lv ${up.fromLevel}',
+                        style: TextStyle(fontSize: 11, color: kBoxInkSoft),
+                      ),
+                      Text(
                         '  →  ',
-                        style: TextStyle(color: FoE.textDim, fontSize: 11),
+                        style: TextStyle(color: kBoxInkSoft, fontSize: 11),
                       ),
                       Text(
                         '${up.toLevel}',
-                        style: FoE.value(
-                          size: 13,
-                        ).copyWith(color: FoE.goldBright),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: kBoxAccent,
+                        ),
                       ),
                     ],
                   ),
@@ -4764,12 +5506,16 @@ class _BattleScreenState extends State<BattleScreen>
   Widget _statGainChip(CreatureStat stat, int gain) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
     decoration: ShapeDecoration(
-      color: FoE.positive.withValues(alpha: 0.16),
+      color: CreamPalette.better.withValues(alpha: 0.16),
       shape: FoE.facet(radius: 6),
     ),
     child: Text(
       '${_statAbbrev(stat)} +$gain',
-      style: FoE.label(size: 10).copyWith(color: FoE.positive),
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+        color: CreamPalette.better,
+      ),
     ),
   );
 
@@ -4792,7 +5538,6 @@ class _BattleScreenState extends State<BattleScreen>
     // fieldEnemies.first once more than one wild can be on the field.
     final wild = _catchWild;
     final showRing = _catchOpen && !_catchBetween;
-    final radius = showRing ? (1 - _ring.value) : 1.0;
     return Positioned.fill(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -4827,13 +5572,20 @@ class _BattleScreenState extends State<BattleScreen>
                 child: SizedBox(
                   width: 280,
                   height: 280,
-                  child: CustomPaint(
-                    painter: _BattleRingPainter(
-                      radiusFraction: radius,
-                      showRing: showRing,
-                      windowLo: _catchWindow.lo,
-                      windowHi: _catchWindow.hi,
-                      zoneColor: _catchBetween ? FoE.positive : FoE.gold,
+                  // The ring is the only thing that moves while it closes, so
+                  // it is the only thing that rebuilds — the wild's picture
+                  // rides along as `child` and is built once (2026-09-21).
+                  child: AnimatedBuilder(
+                    animation: _ring,
+                    builder: (context, child) => CustomPaint(
+                      painter: _BattleRingPainter(
+                        radiusFraction: showRing ? (1 - _ring.value) : 1.0,
+                        showRing: showRing,
+                        windowLo: _catchWindow.lo,
+                        windowHi: _catchWindow.hi,
+                        zoneColor: _catchBetween ? FoE.positive : FoE.gold,
+                      ),
+                      child: child,
                     ),
                     child: Center(
                       child: SizedBox(
@@ -5294,3 +6046,6 @@ class _ChargingRingPainter extends CustomPainter {
   @override
   bool shouldRepaint(_ChargingRingPainter old) => old.t != t;
 }
+
+/// The pages of the battle screen's command deck.
+enum _DeckTab { attack, items, change }

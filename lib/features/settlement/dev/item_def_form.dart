@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/foe_theme.dart';
+import 'dev_foe.dart';
 import '../../creatures/models/area.dart' show kResourceEmoji;
 import '../../creatures/models/creature_enums.dart' show CreatureStat;
 import '../../creatures/models/status_effects.dart' show MainStatusKind;
@@ -159,8 +159,10 @@ class _ItemDefFormState extends State<ItemDefForm> {
       data: buildDevModeTheme(),
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_isNew ? 'New Item' : 'Edit Item',
-              style: FoE.title(size: 16)),
+          title: Text(
+            _isNew ? 'New Item' : 'Edit Item',
+            style: FoE.title(size: 16),
+          ),
           actions: [
             if (!_isNew)
               IconButton(
@@ -176,40 +178,69 @@ class _ItemDefFormState extends State<ItemDefForm> {
               children: [
                 Expanded(
                   flex: 3,
-                  child: _textRow('Id', _id,
-                      enabled: _isNew, onChanged: (v) => _id = v),
+                  child: _textRow(
+                    'Id',
+                    _id,
+                    enabled: _isNew,
+                    onChanged: (v) => _id = v,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _textRow('Emoji', _emoji, onChanged: (v) => _emoji = v),
+                  child: _textRow(
+                    'Emoji',
+                    _emoji,
+                    onChanged: (v) => _emoji = v,
+                  ),
                 ),
               ],
             ),
             _textRow('Name', _name, onChanged: (v) => _name = v),
-            _textRow('Description', _description,
-                onChanged: (v) => _description = v),
+            _textRow(
+              'Description',
+              _description,
+              onChanged: (v) => _description = v,
+            ),
             _kindDropdown(),
-            _numRow(_magnitudeLabel(), _magnitude,
-                isDouble: true, onChanged: (v) => _magnitude = v.toDouble()),
+            _numRow(
+              _magnitudeLabel(),
+              _magnitude,
+              isDouble: true,
+              onChanged: (v) => _magnitude = v.toDouble(),
+            ),
             if (_kind == ItemKind.buff) _buffStatDropdown(),
             if (_kind == ItemKind.resourcePack) _packResourceDropdown(),
             if (_kind == ItemKind.cureStatus) _cureStatusDropdown(),
-            _checkboxRow('Usable in battle', _battleUsable,
-                (v) => setState(() => _battleUsable = v)),
+            _checkboxRow(
+              'Usable in battle',
+              _battleUsable,
+              (v) => setState(() => _battleUsable = v),
+            ),
             const SizedBox(height: 14),
 
             _sectionLabel('Recipe ingredients (concrete goods)'),
             const SizedBox(height: 8),
             ..._ingredients.map(_ingredientRow),
             _addButton('+ Zutat', () {
-              setState(() => _ingredients.add(
-                  _IngredientDraft(key: kResourceEmoji.keys.first, amount: 2)));
+              setState(
+                () => _ingredients.add(
+                  _IngredientDraft(key: kResourceEmoji.keys.first, amount: 2),
+                ),
+              );
             }),
             const SizedBox(height: 8),
-            _numRow('Craft-Sekunden (Workshop-Arbeit)', _craftSeconds,
-                isDouble: true, onChanged: (v) => _craftSeconds = v.toDouble()),
-            _numRow('Supply cost (fallback when there are no ingredients)', _supplyCost,
-                isDouble: true, onChanged: (v) => _supplyCost = v.toDouble()),
+            _numRow(
+              'Craft-Sekunden (Workshop-Arbeit)',
+              _craftSeconds,
+              isDouble: true,
+              onChanged: (v) => _craftSeconds = v.toDouble(),
+            ),
+            _numRow(
+              'Supply cost (fallback when there are no ingredients)',
+              _supplyCost,
+              isDouble: true,
+              onChanged: (v) => _supplyCost = v.toDouble(),
+            ),
             const SizedBox(height: 14),
 
             _sectionLabel('Trade (gold)'),
@@ -217,13 +248,19 @@ class _ItemDefFormState extends State<ItemDefForm> {
             Row(
               children: [
                 Expanded(
-                  child: _numRow('Buy price (0 = not for sale)', _buyPrice,
-                      onChanged: (v) => _buyPrice = v.toInt()),
+                  child: _numRow(
+                    'Buy price (0 = not for sale)',
+                    _buyPrice,
+                    onChanged: (v) => _buyPrice = v.toInt(),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _numRow('Sell price', _sellPrice,
-                      onChanged: (v) => _sellPrice = v.toInt()),
+                  child: _numRow(
+                    'Sell price',
+                    _sellPrice,
+                    onChanged: (v) => _sellPrice = v.toInt(),
+                  ),
                 ),
               ],
             ),
@@ -323,7 +360,10 @@ class _ItemDefFormState extends State<ItemDefForm> {
             decoration: const InputDecoration(labelText: 'Gut', isDense: true),
             items: [
               for (final k in kResourceEmoji.keys)
-                DropdownMenuItem(value: k, child: Text('${kResourceEmoji[k]} $k')),
+                DropdownMenuItem(
+                  value: k,
+                  child: Text('${kResourceEmoji[k]} $k'),
+                ),
             ],
             onChanged: (v) => setState(() => i.key = v ?? i.key),
           ),
@@ -331,16 +371,23 @@ class _ItemDefFormState extends State<ItemDefForm> {
         const SizedBox(width: 8),
         Expanded(
           child: TextFormField(
-            initialValue:
-                i.amount % 1 == 0 ? i.amount.toInt().toString() : i.amount.toString(),
+            initialValue: i.amount % 1 == 0
+                ? i.amount.toInt().toString()
+                : i.amount.toString(),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: FoE.label(size: 14).copyWith(color: FoE.parchment),
-            decoration: const InputDecoration(labelText: 'Amount', isDense: true),
+            decoration: const InputDecoration(
+              labelText: 'Amount',
+              isDense: true,
+            ),
             onChanged: (v) => i.amount = double.tryParse(v) ?? i.amount,
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
+          icon: const Icon(
+            Icons.remove_circle_outline,
+            color: Colors.redAccent,
+          ),
           onPressed: () => setState(() => _ingredients.remove(i)),
         ),
       ],
@@ -368,12 +415,16 @@ class _ItemDefFormState extends State<ItemDefForm> {
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(
             children: [
-              Icon(value ? Icons.check_box : Icons.check_box_outline_blank,
-                  color: value ? FoE.gold : FoE.textDim),
+              Icon(
+                value ? Icons.check_box : Icons.check_box_outline_blank,
+                color: value ? FoE.gold : FoE.textDim,
+              ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(label,
-                    style: FoE.label(size: 14).copyWith(color: FoE.parchment)),
+                child: Text(
+                  label,
+                  style: FoE.label(size: 14).copyWith(color: FoE.parchment),
+                ),
               ),
             ],
           ),
@@ -393,10 +444,14 @@ class _ItemDefFormState extends State<ItemDefForm> {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: FoE.goldBright),
+                  strokeWidth: 2,
+                  color: FoE.goldBright,
+                ),
               )
-            : Text('Save',
-                style: FoE.label(size: 14).copyWith(color: Colors.white)),
+            : Text(
+                'Save',
+                style: FoE.label(size: 14).copyWith(color: FoE.onGold),
+              ),
       ),
     ),
   );

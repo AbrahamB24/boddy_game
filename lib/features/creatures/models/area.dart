@@ -62,10 +62,8 @@ class ResourceSpotDef {
   String get emoji =>
       kGoodsDefs[resource]?.emoji ?? kResourceEmoji[resource] ?? '📦';
 
-  factory ResourceSpotDef.fromJson(Map<String, dynamic> j) => ResourceSpotDef(
-    id: j['id'] as String,
-    resource: j['resource'] as String,
-  );
+  factory ResourceSpotDef.fromJson(Map<String, dynamic> j) =>
+      ResourceSpotDef(id: j['id'] as String, resource: j['resource'] as String);
 
   Map<String, dynamic> toJson() => {'id': id, 'resource': resource};
 }
@@ -125,7 +123,9 @@ class AreaDef {
     description: row['description'] as String? ?? '',
     battleStage: (row['battle_stage'] as num?)?.toInt() ?? 1,
     spots: ((row['spots'] as List?) ?? const [])
-        .map((s) => ResourceSpotDef.fromJson((s as Map).cast<String, dynamic>()))
+        .map(
+          (s) => ResourceSpotDef.fromJson((s as Map).cast<String, dynamic>()),
+        )
         .toList(),
     speciesPoolIds: ((row['species_pool'] as List?) ?? const [])
         .map((e) => e as String)

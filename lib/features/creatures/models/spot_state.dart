@@ -43,8 +43,10 @@ class SpotState {
     final current = currentStock(def, now);
     return SpotState(
       spotId: spotId,
-      stock:
-          (current - mined).clamp(0.0, gatherDefFor(def.resource).spotCapacity),
+      stock: (current - mined).clamp(
+        0.0,
+        gatherDefFor(def.resource).spotCapacity,
+      ),
       lastUpdatedAt: now,
     );
   }

@@ -79,6 +79,8 @@ class CombatTuning extends ChangeNotifier {
   }
 
   /// Back to the calibrated defaults (dev "reset" button).
-  Future<String?> resetToDefaults() =>
-      save(damageScale: kDefaultDamageScale, defenseWeight: kDefaultDefenseWeight);
+  Future<String?> resetToDefaults() => save(
+    damageScale: kDefaultDamageScale,
+    defenseWeight: kDefaultDefenseWeight,
+  );
 }

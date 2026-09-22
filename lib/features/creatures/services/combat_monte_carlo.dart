@@ -13,11 +13,6 @@ import 'stat_budget.dart';
 // anchors (equal level: ≥95% wins in ~4–6 actions; +8 levels ≈ next stage:
 // ~50%).
 
-/// Sum of a combat archetype's weights (they're RELATIVE — scaled onto the real
-/// per-rarity combat base). All archetypes sum to the same value, so the
-/// species editor's validator asserts against this.
-const double kStandardCombatBudget = kCombatBudgetTarget;
-
 /// Budget growth per level (linear, like StatCurve.growth) — a flat 1/30 across
 /// rarities now (see stat_budget.dart).
 const double kBudgetGrowthPerLevel = kGrowthPerLevelTarget;

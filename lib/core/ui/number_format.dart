@@ -25,5 +25,6 @@ String shortNumber(num value) {
 ///
 /// Used where the exact figure matters up close (a cost you are about to pay)
 /// but the digits stop being informative once they run long.
-String shortNumberAbove(num value, {num from = 10000}) =>
-    value.abs() >= from ? shortNumber(value) : value.toDouble().toStringAsFixed(0);
+String shortNumberAbove(num value, {num from = 10000}) => value.abs() >= from
+    ? shortNumber(value)
+    : value.toDouble().toStringAsFixed(0);

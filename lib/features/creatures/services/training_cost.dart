@@ -14,6 +14,7 @@ import '../models/ability_def.dart';
 /// hardcoded constant — tunable in Dev Mode like every other timer in the
 /// game.
 Duration trainingDuration(AbilityDef ability) {
-  final seconds = ability.totalPower * GameTuning.i.raw(Dials.trainSecondsPerPower);
+  final seconds =
+      ability.totalPower * GameTuning.i.raw(Dials.trainSecondsPerPower);
   return Duration(seconds: seconds.round());
 }

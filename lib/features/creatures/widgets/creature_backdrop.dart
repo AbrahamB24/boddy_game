@@ -60,7 +60,7 @@ class CreatureBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ClipPath(
-      clipper: ShapeBorderClipper(shape: FoE.facet(radius: radius)),
+    clipper: ShapeBorderClipper(shape: FoE.facet(radius: radius)),
     child: CustomPaint(
       painter: _GradientBackdrop(baseColor ?? element.color),
       child: LayoutBuilder(
@@ -74,14 +74,15 @@ class CreatureBackdrop extends StatelessWidget {
               // top-left highlight peek out from behind the mid-tone body, a
               // low-relief extrude in the element's own colour.
               Positioned(
-                right: watermarkLeft ? null : (watermarkTop ? -s * 0.13 : -s * 0.04),
-                left: watermarkLeft ? (watermarkTop ? -s * 0.13 : -s * 0.04) : null,
+                right: watermarkLeft
+                    ? null
+                    : (watermarkTop ? -s * 0.13 : -s * 0.04),
+                left: watermarkLeft
+                    ? (watermarkTop ? -s * 0.13 : -s * 0.04)
+                    : null,
                 top: watermarkTop ? -s * 0.15 : null,
                 bottom: watermarkTop ? null : -s * 0.06,
-                child: Opacity(
-                  opacity: 0.36,
-                  child: _embossedSymbol(s),
-                ),
+                child: Opacity(opacity: 0.36, child: _embossedSymbol(s)),
               ),
               Padding(padding: padding, child: child),
             ],

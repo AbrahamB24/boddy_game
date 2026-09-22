@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/cream_kit.dart' show pushMenu;
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/feel.dart';
 import '../../creatures/collection_screen.dart';
@@ -186,7 +187,7 @@ class _EventSheetState extends State<_EventSheet> {
         : ListView.separated(
             // +12/+12 (2026-09-06): ParchmentDialog's own bands widened by
             // that on each side.
-            padding: const EdgeInsets.fromLTRB(38, 12, 38, 8),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             itemCount: _log.events.length,
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, i) => _row(context, _log.events[i]),
@@ -254,7 +255,16 @@ class _EventSheetState extends State<_EventSheet> {
         // Closes the feed first: coming back from the screen to a sheet you have
         // already acted on is a step nobody wants.
         Navigator.pop(context);
-        Navigator.push(context, MaterialPageRoute(builder: (_) => destination));
+        // A menu screen (the expeditions hub) is laid over the map; every other
+        // destination is still a full page.
+        if (destination is ExpeditionsScreen) {
+          pushMenu(context, destination);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => destination),
+          );
+        }
       },
       child: Container(
         padding: const EdgeInsets.all(12),

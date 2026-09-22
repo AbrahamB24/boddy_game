@@ -19,14 +19,30 @@ const double kMonsterTileSpacing = 10.0;
 const double kMonsterTilePageMargin = 24.0;
 const double kMonsterTileAspect = 0.60;
 
-/// The Monsters screen's own tile width, for this device.
-double monsterTileWidth(BuildContext context) {
-  final screenWidth = MediaQuery.sizeOf(context).width;
-  final usable = screenWidth -
-      kMonsterTilePageMargin * 2 -
-      kMonsterTileSpacing * (kMonsterTileCols - 1);
-  return usable / kMonsterTileCols;
-}
+/// The shared monster/resource tile width.
+///
+/// FIXED since the landscape switch (2026-09-18): this used to be a third of
+/// the DEVICE width, which was the short axis in portrait. Landscape makes
+/// the width the long axis (up to 932px), so the same formula would size a
+/// single tile taller than the whole screen. A constant keeps every tile
+/// identical everywhere and lets grids auto-flow as many columns as fit
+/// ([monsterTileGridDelegate]). [context] is kept so callers didn't change.
+double monsterTileWidth(BuildContext context) => kMonsterTileWidth;
+
+/// Landscape-friendly tile width, see [monsterTileWidth].
+const double kMonsterTileWidth = 96.0;
+
+/// A grid delegate that flows as many [kMonsterTileWidth]-wide columns as
+/// fit, each [monsterTileHeight] tall (plus [extraHeight] for a caption).
+SliverGridDelegate monsterTileGridDelegate(
+  BuildContext context, {
+  double extraHeight = 0,
+}) => SliverGridDelegateWithMaxCrossAxisExtent(
+  maxCrossAxisExtent: kMonsterTileWidth + 14,
+  mainAxisSpacing: kMonsterTileSpacing,
+  crossAxisSpacing: kMonsterTileSpacing,
+  mainAxisExtent: monsterTileHeight(context) + extraHeight,
+);
 
 double monsterTileHeight(BuildContext context) =>
     monsterTileWidth(context) / kMonsterTileAspect;

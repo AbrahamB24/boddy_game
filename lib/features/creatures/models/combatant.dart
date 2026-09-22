@@ -221,7 +221,9 @@ class Combatant {
   /// it cannot grant a resistance the target doesn't already have.
   double incomingTypeMult(CreatureElement attackerElement) {
     final own = attackerElement.multiplierVs(element);
-    final exposedTo = mainStatus == null ? null : mainStatusExposure(mainStatus!);
+    final exposedTo = mainStatus == null
+        ? null
+        : mainStatusExposure(mainStatus!);
     if (exposedTo == null) return own;
     return math.max(own, attackerElement.multiplierVs(exposedTo));
   }
@@ -249,9 +251,7 @@ class Combatant {
   /// The catalog magnitude for [kind], in the same "positive fraction" unit the
   /// authored value uses — the single place the two agree.
   static double _catalogMainValue(MainStatusKind kind) => switch (kind) {
-    MainStatusKind.burn ||
-    MainStatusKind.poison =>
-      statusDotFraction(kind, 0),
+    MainStatusKind.burn || MainStatusKind.poison => statusDotFraction(kind, 0),
     MainStatusKind.frost => 1 - statusSpeedMult(kind),
     MainStatusKind.soaked => 1 - statusAttackMult(kind),
     MainStatusKind.dazzled => 1 - statusAccuracyMult(kind),
@@ -260,8 +260,7 @@ class Combatant {
     MainStatusKind.freeze ||
     MainStatusKind.petrify ||
     MainStatusKind.paralysis ||
-    MainStatusKind.confusion =>
-      statusSkipChance(kind),
+    MainStatusKind.confusion => statusSkipChance(kind),
   };
 
   /// Re-applying a secondary debuff just refreshes its duration (no stack) —
@@ -281,7 +280,9 @@ class Combatant {
                   SecondaryDebuffKind.speedDown => secondarySpeedMult(kind),
                   SecondaryDebuffKind.attackDown => secondaryAttackMult(kind),
                   SecondaryDebuffKind.defenseDown => secondaryDefenseMult(kind),
-                  SecondaryDebuffKind.regression => secondaryRegressionMult(kind),
+                  SecondaryDebuffKind.regression => secondaryRegressionMult(
+                    kind,
+                  ),
                 },
     );
   }
@@ -395,10 +396,11 @@ class Combatant {
       if (mainStatusTurnsRemaining <= 0) {
         _clearMainStatus();
       } else if (rng != null) {
-        final cureChance = (GameTuning.i.raw(Dials.statusCureChanceBase) +
-                GameTuning.i.raw(Dials.statusCureChanceStep) *
-                    mainStatusTurnsActive)
-            .clamp(0.0, GameTuning.i.raw(Dials.statusCureChanceCap));
+        final cureChance =
+            (GameTuning.i.raw(Dials.statusCureChanceBase) +
+                    GameTuning.i.raw(Dials.statusCureChanceStep) *
+                        mainStatusTurnsActive)
+                .clamp(0.0, GameTuning.i.raw(Dials.statusCureChanceCap));
         if (rng.nextDouble() < cureChance) _clearMainStatus();
       }
     }
@@ -446,7 +448,10 @@ class Combatant {
   /// PvP match is never built this way at all — it has no CreatureInstance
   /// to read, only a frozen snapshot — see [combatantFromSnapshot] in that
   /// same file.
-  factory Combatant.fromInstance(CreatureInstance c, {bool isPlayerSide = true}) {
+  factory Combatant.fromInstance(
+    CreatureInstance c, {
+    bool isPlayerSide = true,
+  }) {
     final species = c.species;
     return Combatant(
       id: 'p_${c.id}',
@@ -468,7 +473,10 @@ class Combatant {
       // unlockStage could afford (see [_capToStage]).
       abilities: [
         kAbilityDefs['attack'] ?? _fallbackAttack,
-        for (final a in c.equippedAbilities) _capToStage(a),
+        // Capped again on the way in: a monster saved when the limit was six
+        // equipped would otherwise bring a seventh move into the fight.
+        for (final a in c.equippedAbilities.take(kMaxEquippedAbilities))
+          _capToStage(a),
       ],
       hp: c.hp,
     );
@@ -521,8 +529,8 @@ class Combatant {
           1,
           (temp.statValue(s) *
                   (isBoss
-                          ? GameTuning.i.raw(Dials.bossStatMult)
-                          : kWildStatMult) *
+                      ? GameTuning.i.raw(Dials.bossStatMult)
+                      : kWildStatMult) *
                   statScale)
               .round(),
         ),

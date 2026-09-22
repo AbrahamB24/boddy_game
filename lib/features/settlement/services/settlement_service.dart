@@ -36,15 +36,14 @@ class SettlementService {
         // stone) with slack — the script must never stall on "can't afford".
         'wood': 750.0,
         'stone': 300.0,
-        // Jumpstart float, not income: fish/meat are the region-dungeon entry
-        // cost and buildings make them deliberately slowly (workshop mult
-        // 0.12), so a new player would otherwise stall at the first gate.
+        // Jumpstart float, not income: fish is the region-dungeon entry cost
+        // and buildings make it deliberately slowly (workshop mult 0.12), so
+        // a new player would otherwise stall at the first gate. Meat is not
+        // gifted — it only arrives with region 2.
         //
-        // fish alone still writes the LEGACY column (migration 0006 kept it
-        // rather than drop it) — meat never had one, so it goes straight into
-        // `goods`, the column every resource but the original two now uses.
+        // fish is the one good with a LEGACY column (migration 0006 kept it
+        // rather than drop it).
         'fish': kJumpstartGiftFish,
-        'goods': {'meat': kJumpstartGiftMeat},
       }),
       // steps_today/steps_day_key default to 0/'' — a fresh settlement
       // simply hasn't walked yet today, which reads as the floor rate until
@@ -62,10 +61,39 @@ class SettlementService {
         'construction_seconds_built': 0,
         'is_complete': true,
       }),
-      supabase.from('profiles').upsert({'id': userId}),
+      _createProfileRow(userId),
     ]);
 
     return model;
+  }
+
+  /// The new player's profile — and the ONE place the guided tutorial is
+  /// actually started (2026-09-21).
+  ///
+  /// This used to upsert `{'id': userId}` and nothing else, which left
+  /// `profiles.intro_step` NULL. [loadIntroStep] deliberately reads NULL as
+  /// [IntroStep.done] — that is what keeps veterans and pre-migration
+  /// clients out of a tutorial they have no business being dropped into —
+  /// so the column never being written meant a brand-new account read as a
+  /// veteran on its very first load. The tutorial was unreachable for
+  /// exactly the player it exists for, whatever [kIntroEnabled] said.
+  ///
+  /// Seeding it at creation is the narrow fix: only an account that has
+  /// never had a settlement gets a step written, so the NULL-means-done
+  /// rule still protects everybody else.
+  Future<void> _createProfileRow(String userId) async {
+    try {
+      await supabase.from('profiles').upsert({
+        'id': userId,
+        'intro_step': IntroStep.welcome.index,
+      });
+    } catch (_) {
+      // Pre-migration deployment (0005_intro_step.sql not applied): the
+      // account still has to be created. It starts without a tutorial, the
+      // same as it did before this existed — losing the intro is survivable,
+      // losing the profile row is not.
+      await supabase.from('profiles').upsert({'id': userId});
+    }
   }
 
   // ── Loaders ───────────────────────────────────────────────
@@ -201,7 +229,15 @@ class SettlementService {
   Future<void> moveBuilding(String buildingId, int newX, int newY) async {
     await supabase
         .from('placed_buildings')
-        .update({'grid_x': newX, 'grid_y': newY})
+        .update({
+          'grid_x': newX,
+          'grid_y': newY,
+          // Placing always means "now on the grid", whether this building
+          // came from the Umbaumodus tray or was already standing somewhere
+          // else — see SettlementController.moveBuilding's own comment.
+          // A no-op write for a building that was never stored.
+          'is_stored': false,
+        })
         .eq('id', buildingId);
   }
 
@@ -210,6 +246,17 @@ class SettlementService {
         .from('placed_buildings')
         .update({'is_paused': paused})
         .eq('id', buildingId);
+  }
+
+  /// "Alle Gebäude zurücknehmen" (user 2026-09-22): one round trip for every
+  /// building the Umbaumodus tray just took off the map, the same batching
+  /// reasoning as [saveBuildings] — see its own doc comment.
+  Future<void> setBuildingsStored(List<String> ids, bool stored) async {
+    if (ids.isEmpty) return;
+    await supabase
+        .from('placed_buildings')
+        .update({'is_stored': stored})
+        .inFilter('id', ids);
   }
 
   Future<void> deleteBuilding(String buildingId) async {
@@ -300,16 +347,11 @@ class SettlementService {
           wood: floor(750),
           stone: floor(300),
           gold: floor(0),
-          goods: const {
-            'fish': kJumpstartGiftFish,
-            'meat': kJumpstartGiftMeat,
-          },
+          goods: const {'fish': kJumpstartGiftFish},
           lastUpdatedAt: now,
         ),
       ),
-      saveEnergy(
-        EnergyModel(settlementId: settlementId, lastUpdatedAt: now),
-      ),
+      saveEnergy(EnergyModel(settlementId: settlementId, lastUpdatedAt: now)),
       _resetSettlementRow(settlementId),
       _resetProfileRow(userId),
     ]);
@@ -328,7 +370,11 @@ class SettlementService {
   /// Delete that tolerates the table not existing yet — the expedition/gate
   /// tables arrive with migrations 0001/0004, and a reset must still work on a
   /// deployment where those haven't been applied.
-  Future<void> _deleteTolerant(String table, String column, String value) async {
+  Future<void> _deleteTolerant(
+    String table,
+    String column,
+    String value,
+  ) async {
     try {
       await supabase.from(table).delete().eq(column, value);
     } catch (e) {
@@ -413,16 +459,14 @@ class SettlementService {
       'dungeon_max_stage': (row['dungeon_max_stage'] as num?)?.toInt() ?? 1,
       // Expansion unlocks earned from map "expansion points" — the Building
       // Plot reward count (see SettlementController.buildPlotLimit).
-      'expansions_unlocked':
-          (row['expansions_unlocked'] as num?)?.toInt() ?? 0,
+      'expansions_unlocked': (row['expansions_unlocked'] as num?)?.toInt() ?? 0,
       // Linear-path progress: campaign battles won so far. Drives party size
       // (partySizeForBattle) and, later, map-milestone unlocks. Tolerates the
       // column not existing yet (migration 0019).
       'battles_cleared': (row['battles_cleared'] as num?)?.toInt() ?? 0,
       // Survival Mode's own high score (user 2026-09-06). Tolerates the
       // column not existing yet (migration 0042), same as every field above.
-      'survival_best_floor':
-          (row['survival_best_floor'] as num?)?.toInt() ?? 0,
+      'survival_best_floor': (row['survival_best_floor'] as num?)?.toInt() ?? 0,
     };
   }
 
@@ -539,5 +583,4 @@ class SettlementService {
       // Column not migrated yet — in-memory value still holds this session.
     }
   }
-
 }

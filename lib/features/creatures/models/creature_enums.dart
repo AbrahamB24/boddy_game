@@ -18,7 +18,7 @@ export 'xp_balance.dart' show XpConfig, kXpBalance;
 /// The 8 combat elements (expanded from 5, user 2026-09-08): a 6-type RING
 /// — Feuer→Eis→Pflanze→Blitz→Wasser→Stein→Feuer — plus Licht/Schatten as two
 /// HUB types tied to every ring type individually, first sketched as a pure
-/// design draft in type_circle_dialog.dart and now the live matrix. Explicit
+/// design draft in the old type_circle_dialog.dart and now the live matrix. Explicit
 /// 8x8 matrix (not a simple beats/loses pair):
 ///
 ///  * RING vs RING: one step clockwise is a mild advantage (×1.25), two steps
@@ -28,7 +28,7 @@ export 'xp_balance.dart' show XpConfig, kXpBalance;
 ///    every advantage is its clean inverse (1.25↔0.75, 1.5↔0.5) so the
 ///    matrix is fully reciprocal there.
 ///  * HUB vs RING: each hub has its own bespoke tie to every ring type
-///    (see type_circle_dialog.dart's `_kEdges` for the exact draft this
+///    (see the old type_circle_dialog.dart's `_kEdges` for the exact draft this
 ///    encodes), same reciprocal-inverse rule for the un-drawn reverse
 ///    direction.
 ///  * HUB vs HUB: Licht/Schatten mutually hit each other hard (×1.5 BOTH
@@ -68,7 +68,7 @@ enum CreatureElement {
   Color get shadowColor => Color.lerp(color, Colors.black, 0.32)!;
 
   // Row = attacker, column = defender, order Fire/Ice/Plant/Lightning/Water/
-  // Stone/Light/Shadow both ways — matches type_circle_dialog.dart's _kEdges
+  // Stone/Light/Shadow both ways — matches the old type_circle_dialog.dart's _kEdges
   // exactly (every value here is either a drawn edge or that edge's clean
   // reciprocal inverse; see the class doc above for the derivation).
   static const List<List<double>> _matrix = [
@@ -88,8 +88,8 @@ enum CreatureElement {
   /// matrix from being indexed with neutral's out-of-range index.
   double multiplierVs(CreatureElement defender) =>
       (this == neutral || defender == neutral)
-          ? 1.0
-          : _matrix[index][defender.index];
+      ? 1.0
+      : _matrix[index][defender.index];
 
   static CreatureElement fromName(String? name) => CreatureElement.values
       .firstWhere((e) => e.name == name, orElse: () => CreatureElement.fire);
@@ -223,20 +223,26 @@ enum CreatureStat {
   /// sync with this enum's own doc comment above, which is the source of
   /// truth for what each stat is for.
   String get description => switch (this) {
-    CreatureStat.hp => 'How much damage this monster can take before it goes down.',
+    CreatureStat.hp =>
+      'How much damage this monster can take before it goes down.',
     CreatureStat.attack => 'How much damage this monster deals.',
     CreatureStat.defense => 'How much damage this monster shrugs off.',
-    CreatureStat.speed => 'Turn order in battle — also what a Scout Post reads to speed up expeditions.',
+    CreatureStat.speed =>
+      'Turn order in battle — also what a Scout Post reads to speed up expeditions.',
     CreatureStat.catchRate => 'This monster\'s odds of catching a wild one.',
-    CreatureStat.gathering => 'Out on the map, filling a load — every expedition spot, every era.',
-    CreatureStat.production => 'Inside a production building, making build goods or luxury goods.',
+    CreatureStat.gathering =>
+      'Out on the map, filling a load — every expedition spot, every era.',
+    CreatureStat.production =>
+      'Inside a production building, making build goods or luxury goods.',
     CreatureStat.construction => 'On a building site — speeds construction.',
     CreatureStat.crafting => 'At the workbench, making items.',
     CreatureStat.breeding => 'In the Breeding Hut or the Hatchery.',
     CreatureStat.medicine => 'In the Healing Hut — cuts the heal timer.',
     CreatureStat.trade => 'In the Trade Center.',
-    CreatureStat.logistics => 'Inside a store, making room — Storehouse and Gold Vault capacity.',
-    CreatureStat.carry => 'How much loot an expedition hauls back, or a trade caravan carries.',
+    CreatureStat.logistics =>
+      'Inside a store, making room — Storehouse and Gold Vault capacity.',
+    CreatureStat.carry =>
+      'How much loot an expedition hauls back, or a trade caravan carries.',
   };
 
   /// The key this stat was stored under before it was renamed, or null.
@@ -296,8 +302,10 @@ enum CreatureStat {
   static CreatureStat fromName(String? name) {
     final retired = _retiredNames[name];
     if (retired != null) return retired;
-    return CreatureStat.values
-        .firstWhere((s) => s.name == name, orElse: () => CreatureStat.hp);
+    return CreatureStat.values.firstWhere(
+      (s) => s.name == name,
+      orElse: () => CreatureStat.hp,
+    );
   }
 }
 
@@ -520,8 +528,7 @@ int xpToNextLevel(int level) => kXpBalance.xpToNext(level);
 /// the SAME in every building that stations monsters (see [XpConfig.workPerHour]
 /// for why one number, and CreaturesController.xpRatePerHour for the one place
 /// that decides which of the two rates a post pays).
-double workXpPerHourAt(int buildingLevel) =>
-    kXpBalance.workXpAt(buildingLevel);
+double workXpPerHourAt(int buildingLevel) => kXpBalance.workXpAt(buildingLevel);
 
 /// XP per hour in a TRAINING role (WorkshopRole.kTraining — the Training
 /// Grounds), the higher of the two (user request 2026-07-17: a building to

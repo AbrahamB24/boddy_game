@@ -56,8 +56,9 @@ class CreatureSprite extends StatelessWidget {
     // art the two are close enough that either is a sensible cap, and most
     // callers here only ever pass one of the two anyway.
     final knownWidth = width ?? height;
-    final memWidth =
-        knownWidth == null ? null : decodeWidthFor(context, knownWidth);
+    final memWidth = knownWidth == null
+        ? null
+        : decodeWidthFor(context, knownWidth);
     // FLUTTER WEB (user 2026-09-02): cached_network_image/flutter_cache_manager
     // is built around a real on-disk cache, which the browser doesn't have —
     // in practice this made creature art fail to load intermittently on

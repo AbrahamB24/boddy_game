@@ -26,7 +26,8 @@ class HealConfig {
 
   factory HealConfig.fromJson(Map<String, dynamic> j) => HealConfig(
     koMultiplier:
-        (j['koMultiplier'] as num?)?.toDouble() ?? const HealConfig().koMultiplier,
+        (j['koMultiplier'] as num?)?.toDouble() ??
+        const HealConfig().koMultiplier,
   );
 }
 

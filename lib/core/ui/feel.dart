@@ -21,9 +21,8 @@ import '../../features/creatures/models/creature_enums.dart';
 // which is the only way a game keeps a consistent voice as it grows.
 //
 // Both channels are OPTIONAL and independently switchable, persisted with
-// shared_preferences and default to on. The switch is the speaker icon in the
-// settlement header (FeelButton): one tap mutes, a long press opens both
-// switches — a mute buried in a settings page is a mute nobody finds on the bus.
+// shared_preferences and default to on. The switches live in the Profile's
+// Preferences (user 2026-09-20 — the old header speaker icon is gone).
 //
 // Everything is fire-and-forget and error-swallowing: a missing asset, a device
 // with no vibrator, a headless test — none of them may break a tap. Note that
@@ -49,6 +48,10 @@ enum FeelEvent {
 
   /// REFUSED. Not enough goods, no room, not your turn.
   deny,
+
+  /// Somebody or something is waiting on you: a friend in the PvP lobby, a
+  /// message, your turn in a match you stepped out of (user 2026-09-19).
+  alert,
 }
 
 /// The one place that decides what each moment sounds and feels like.
@@ -161,6 +164,7 @@ class Feel {
   static void collect() => of(FeelEvent.collect);
   static void fanfare() => of(FeelEvent.fanfare);
   static void deny() => of(FeelEvent.deny);
+  static void alert() => of(FeelEvent.alert);
 
   /// Starts [work] and DISCARDS its outcome, errors included.
   ///
@@ -185,6 +189,7 @@ class Feel {
           _fireAndForget(HapticFeedback.selectionClick(), 'haptics');
         case FeelEvent.success:
           _fireAndForget(HapticFeedback.lightImpact(), 'haptics');
+        case FeelEvent.alert:
         case FeelEvent.place:
           _fireAndForget(HapticFeedback.mediumImpact(), 'haptics');
         case FeelEvent.fanfare:
@@ -206,6 +211,8 @@ class Feel {
     FeelEvent.collect => 'sfx/collect.wav',
     FeelEvent.fanfare => 'sfx/fanfare.wav',
     FeelEvent.deny => 'sfx/deny.wav',
+    // No clip of its own yet: the success chime is the closest to "look here".
+    FeelEvent.alert => 'sfx/success.wav',
   };
 
   static void _sound(FeelEvent event) {
@@ -258,7 +265,8 @@ class Feel {
   /// every single hit.
   static final Set<CreatureElement> _missingAttackClip = {};
 
-  static String _attackAsset(CreatureElement element) => 'sfx/'
+  static String _attackAsset(CreatureElement element) =>
+      'sfx/'
       '${(_missingAttackClip.contains(element) ? CreatureElement.neutral : element).name}'
       '_attack.mp3';
 

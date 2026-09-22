@@ -60,7 +60,8 @@ List<AreaDef> unlockedAreas(int dungeonMaxStage) =>
 /// [ResourceSpotDef.resource], so no explicit exclusion list is needed.
 Set<String> resourcesProducedBy(Iterable<String> builtTypeIds) => {
   for (final typeId in builtTypeIds)
-    for (final role in kBuildingEffects[typeId]?.workshops ?? const <WorkshopRole>[])
+    for (final role
+        in kBuildingEffects[typeId]?.workshops ?? const <WorkshopRole>[])
       if (role.resource == 'wood' ||
           role.resource == 'stone' ||
           role.resource == 'gold' ||
@@ -87,7 +88,10 @@ Set<String> resourcesProducedBy(Iterable<String> builtTypeIds) => {
 /// resource — see [resourcesProducedBy]. Null (the default, and every
 /// existing caller/test) means unfiltered, so this stays additive rather
 /// than a breaking change to callers that don't care about this dimension.
-List<ExpeditionTarget> targetsIn(AreaDef area, {Set<String>? unlockedResources}) => [
+List<ExpeditionTarget> targetsIn(
+  AreaDef area, {
+  Set<String>? unlockedResources,
+}) => [
   for (final s in area.spots)
     if (s.resource != 'gold' &&
         (unlockedResources == null || unlockedResources.contains(s.resource)))

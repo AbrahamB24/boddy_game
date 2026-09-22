@@ -3,17 +3,15 @@ import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/foe_theme.dart';
+import '../../settlement/dev/dev_foe.dart';
 import '../../settlement/dev/dev_theme.dart';
 import '../models/ability_def.dart';
 import '../models/creature_enums.dart';
 import '../models/species_balance.dart';
 import '../models/species_def.dart';
-import '../services/creature_defs_controller.dart';
 import '../services/creature_defs_service.dart';
 import '../services/stat_budget.dart';
 import '../widgets/creature_sprite.dart' show decodeWidthFor;
-import 'ability_def_form.dart';
 import '../../../core/ui/pressable.dart';
 
 // Create/edit form for one SpeciesDef: element/rarity/role, per-species
@@ -68,8 +66,10 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
   // featured stat(s) between start value and growth; 0 = today's neutral roll.
   double _maturityBias = 0.0;
 
-  List<CreatureStat> get _definedPriorities =>
-      [for (final s in _workPriorities) if (s != null) s];
+  List<CreatureStat> get _definedPriorities => [
+    for (final s in _workPriorities)
+      if (s != null) s,
+  ];
 
   bool get _isNew => widget.existing == null;
 
@@ -220,7 +220,9 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
       tier: _tier,
       // Persist whole-number bases (clamped to each attribute's hard cap) and
       // 0.1-step growth (user 2026-07-24).
-      stats: {for (final e in _stats.entries) e.key: _finalizeCurve(e.key, e.value)},
+      stats: {
+        for (final e in _stats.entries) e.key: _finalizeCurve(e.key, e.value),
+      },
       stages: List.generate(
         3,
         (i) => SpeciesStage(
@@ -277,8 +279,12 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
       }
     });
     try {
-      final url = await _svc.uploadStageImage(_id.trim(), stage, bytes,
-          back: back);
+      final url = await _svc.uploadStageImage(
+        _id.trim(),
+        stage,
+        bytes,
+        back: back,
+      );
       if (mounted) {
         setState(() {
           if (back) {
@@ -344,7 +350,10 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                     ),
                   )
                 : IconButton(
-                    icon: const Icon(Icons.save_outlined, color: FoE.goldBright),
+                    icon: const Icon(
+                      Icons.save_outlined,
+                      color: FoE.goldBright,
+                    ),
                     tooltip: 'Save',
                     onPressed: _save,
                   ),
@@ -591,8 +600,10 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: FoE.btn(active: true),
                 alignment: Alignment.center,
-                child: Text('🎲 Roll (with these roles)',
-                    style: FoE.label(size: 14).copyWith(color: Colors.white)),
+                child: Text(
+                  '🎲 Roll (with these roles)',
+                  style: FoE.label(size: 14).copyWith(color: FoE.onGold),
+                ),
               ),
             ),
           ),
@@ -628,8 +639,9 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
   /// being edited counts too (user 2026-09-07, same as _prioCount), via its
   /// LIVE, not-yet-saved pick (_combatArch) rather than its stored role.
   int _archCount(CombatArchetype a) {
-    final others = kSpeciesDefs.values.where((d) =>
-        d.id != _originalId && d.rarity == _rarity && _speciesArch(d) == a);
+    final others = kSpeciesDefs.values.where(
+      (d) => d.id != _originalId && d.rarity == _rarity && _speciesArch(d) == a,
+    );
     return others.length + (_combatArch == a ? 1 : 0);
   }
 
@@ -639,8 +651,12 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
   /// ([_definedPriorities]) rather than its stale stored role, so ticking a
   /// dropdown updates the count immediately without saving first.
   int _prioCount(CreatureStat s) {
-    final others = kSpeciesDefs.values.where((d) =>
-        d.id != _originalId && d.rarity == _rarity && _speciesPrios(d).contains(s));
+    final others = kSpeciesDefs.values.where(
+      (d) =>
+          d.id != _originalId &&
+          d.rarity == _rarity &&
+          _speciesPrios(d).contains(s),
+    );
     return others.length + (_definedPriorities.contains(s) ? 1 : 0);
   }
 
@@ -662,7 +678,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                     ),
                   ),
             child: Container(
-              margin: const EdgeInsets.only(top: 4, right: 4),
+              margin: const EdgeInsets.only(top: 4),
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: FoE.btn(active: kAbilityDefs.isNotEmpty),
               alignment: Alignment.center,
@@ -670,20 +686,6 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                 kAbilityDefs.isEmpty ? 'No abilities yet' : '+ Add existing',
                 style: FoE.label(size: 13),
               ),
-            ),
-          ),
-        ),
-        // Create a NEW ability right here and assign it (user 2026-07-24).
-        Expanded(
-          child: Pressable(
-            onTap: () => _newAbility(),
-            child: Container(
-              margin: const EdgeInsets.only(top: 4, left: 4),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              decoration: FoE.btn(active: true),
-              alignment: Alignment.center,
-              child: Text('✎ New ability',
-                  style: FoE.label(size: 13).copyWith(color: Colors.white)),
             ),
           ),
         ),
@@ -780,8 +782,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
             child: Pressable(
               onTap: uploading ? null : onTap,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 alignment: Alignment.center,
                 decoration: FoE.btn(),
                 child: uploading
@@ -790,8 +791,10 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(url == null ? 'PNG' : 'Replace',
-                        style: FoE.label(size: 12)),
+                    : Text(
+                        url == null ? 'PNG' : 'Replace',
+                        style: FoE.label(size: 12),
+                      ),
               ),
             ),
           ),
@@ -799,7 +802,6 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
       ),
     ],
   );
-
 
   /// Whole-number bases clamped to the rarity's per-category cap, growth in 0.1
   /// steps clamped to the rarity's growth cap (user 2026-07-24).
@@ -839,9 +841,14 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
     void updateBase(int stage, double value) {
       final bases = List.of(curve.stageBase);
       // Whole numbers, clamped to the category cap for this rarity.
-      bases[stage] =
-          kSpeciesBalance.clampBase(stat, _rarity, value.roundToDouble());
-      setState(() => _stats[stat] = StatCurve(stageBase: bases, growth: curve.growth));
+      bases[stage] = kSpeciesBalance.clampBase(
+        stat,
+        _rarity,
+        value.roundToDouble(),
+      );
+      setState(
+        () => _stats[stat] = StatCurve(stageBase: bases, growth: curve.growth),
+      );
     }
 
     void updateGrowth(double value) {
@@ -876,9 +883,9 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
               // Amber if the base is over the global cap for this rarity.
               Text(
                 maxBase == null ? 'max —' : 'max ${maxBase.toStringAsFixed(0)}',
-                style: FoE.dim(size: 9).copyWith(
-                  color: inRange ? FoE.textDim : FoE.gold,
-                ),
+                style: FoE.dim(
+                  size: 9,
+                ).copyWith(color: inRange ? FoE.textDim : FoE.gold),
               ),
               const Spacer(),
               Flexible(
@@ -1001,25 +1008,18 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                   ),
                 ),
               ),
-              // Edit the picked ability DIRECTLY from here (user 2026-07-24) —
-              // opens the full ability editor, then refreshes the preview.
               IconButton(
-                icon: const Icon(Icons.edit, color: FoE.gold, size: 18),
-                tooltip: 'Edit this ability',
-                onPressed: def == null ? null : () => _editAbility(def),
-              ),
-              IconButton(
-                icon:
-                    const Icon(Icons.close, color: Colors.redAccent, size: 18),
+                icon: const Icon(
+                  Icons.close,
+                  color: Colors.redAccent,
+                  size: 18,
+                ),
                 onPressed: () => setState(() => _abilities.removeAt(index)),
               ),
             ],
           ),
           // A live preview of the picked ability, right under the row.
-          if (def != null) ...[
-            const SizedBox(height: 6),
-            _abilityPreview(def),
-          ],
+          if (def != null) ...[const SizedBox(height: 6), _abilityPreview(def)],
         ],
       ),
     );
@@ -1029,9 +1029,8 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
     if (kAbilityDefs.isEmpty) return;
     final id = await showDialog<String>(
       context: context,
-      builder: (_) => _AbilityPickerDialog(
-        current: _abilities[index].abilityId,
-      ),
+      builder: (_) =>
+          _AbilityPickerDialog(current: _abilities[index].abilityId),
     );
     if (id == null) return; // cancelled
     setState(
@@ -1040,37 +1039,6 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
         unlockStage: _abilities[index].unlockStage,
       ),
     );
-  }
-
-  /// Opens the full ability editor for [def], then reloads the ability defs so
-  /// the inline preview reflects the edit immediately (user 2026-07-24).
-  Future<void> _editAbility(AbilityDef def) async {
-    await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => AbilityDefForm(existing: def)),
-    );
-    await CreatureDefsController().load();
-    if (mounted) setState(() {});
-  }
-
-  /// Creates a BRAND-NEW ability from here and, once saved, assigns it to this
-  /// species. [index] null = add a new ability slot; otherwise replace that row.
-  Future<void> _newAbility({int? index}) async {
-    final id = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const AbilityDefForm()),
-    );
-    await CreatureDefsController().load();
-    if (!mounted) return;
-    setState(() {
-      if (id == null) return; // cancelled — nothing to assign
-      if (index != null) {
-        _abilities[index] = SpeciesAbility(
-          abilityId: id,
-          unlockStage: _abilities[index].unlockStage,
-        );
-      } else {
-        _abilities.add(SpeciesAbility(abilityId: id));
-      }
-    });
   }
 
   /// A compact, at-a-glance summary of an ability — reused in the picker rows
@@ -1186,14 +1154,16 @@ class _AbilityPickerDialogState extends State<_AbilityPickerDialog> {
   @override
   Widget build(BuildContext context) {
     final q = _query.trim().toLowerCase();
-    final list = kAbilityDefs.values.where((a) {
-      if (q.isEmpty) return true;
-      return a.name.toLowerCase().contains(q) ||
-          a.id.toLowerCase().contains(q) ||
-          a.element.label.toLowerCase().contains(q) ||
-          a.kind.label.toLowerCase().contains(q);
-    }).toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final list =
+        kAbilityDefs.values.where((a) {
+          if (q.isEmpty) return true;
+          return a.name.toLowerCase().contains(q) ||
+              a.id.toLowerCase().contains(q) ||
+              a.element.label.toLowerCase().contains(q) ||
+              a.kind.label.toLowerCase().contains(q);
+        }).toList()..sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
     return Theme(
       data: buildDevModeTheme(),
       child: AlertDialog(
@@ -1244,14 +1214,18 @@ class _AbilityPickerDialogState extends State<_AbilityPickerDialog> {
                                       if (selected)
                                         const Padding(
                                           padding: EdgeInsets.only(right: 6),
-                                          child: Icon(Icons.check,
-                                              color: FoE.gold, size: 16),
+                                          child: Icon(
+                                            Icons.check,
+                                            color: FoE.gold,
+                                            size: 16,
+                                          ),
                                         ),
                                       Expanded(
                                         child: Text(
                                           a.name,
-                                          style: FoE.label(size: 14).copyWith(
-                                              color: FoE.parchment),
+                                          style: FoE.label(
+                                            size: 14,
+                                          ).copyWith(color: FoE.parchment),
                                         ),
                                       ),
                                     ],
@@ -1263,20 +1237,28 @@ class _AbilityPickerDialogState extends State<_AbilityPickerDialog> {
                                     children: [
                                       for (final b
                                           in _SpeciesDefFormState.abilitySummary(
-                                              a))
+                                            a,
+                                          ))
                                         Container(
                                           padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 2),
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
                                           decoration: FoE.panel(radius: 6),
-                                          child: Text(b, style: FoE.dim(size: 10)),
+                                          child: Text(
+                                            b,
+                                            style: FoE.dim(size: 10),
+                                          ),
                                         ),
                                     ],
                                   ),
                                   if (a.description.trim().isNotEmpty)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 4),
-                                      child: Text(a.description,
-                                          style: FoE.dim(size: 10)),
+                                      child: Text(
+                                        a.description,
+                                        style: FoE.dim(size: 10),
+                                      ),
                                     ),
                                 ],
                               ),
@@ -1291,8 +1273,10 @@ class _AbilityPickerDialogState extends State<_AbilityPickerDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Abbrechen',
-                style: FoE.label(size: 13).copyWith(color: FoE.textDim)),
+            child: Text(
+              'Abbrechen',
+              style: FoE.label(size: 13).copyWith(color: FoE.textDim),
+            ),
           ),
         ],
       ),

@@ -197,7 +197,10 @@ const Map<int, Map<String, int>> kNodeItemRewards = {
   10: {'potion': 1},
   13: {'revive_charm': 1}, // the party is 3 by now — one can fall
   16: {'minor_potion': 2, 'catch_lure': 1},
-  19: {'potion': 2, 'revive_charm': 1}, // the region boss: stock up for the wall
+  19: {
+    'potion': 2,
+    'revive_charm': 1,
+  }, // the region boss: stock up for the wall
 };
 
 // ── Was ein Knoten abwirft (user 2026-07-30) ────────────────

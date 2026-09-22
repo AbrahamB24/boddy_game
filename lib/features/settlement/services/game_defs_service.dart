@@ -67,9 +67,10 @@ class GameDefsService {
   /// are NOT NULL — and because un-retiring it should give back the def as it
   /// was, not an empty husk.
   Future<void> retireBuildingDef(BuildingDef def) async {
-    await supabase
-        .from('building_defs')
-        .upsert({...def.toDefRow(), 'retired': true});
+    await supabase.from('building_defs').upsert({
+      ...def.toDefRow(),
+      'retired': true,
+    });
   }
 
   Future<void> deleteBuildingDef(String id) async {

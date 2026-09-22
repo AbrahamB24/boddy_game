@@ -167,10 +167,10 @@ PairingResult simulatePairing(
   final median = actionCounts.isEmpty
       ? 0.0
       : actionCounts.length.isOdd
-          ? actionCounts[actionCounts.length ~/ 2].toDouble()
-          : (actionCounts[actionCounts.length ~/ 2 - 1] +
-                  actionCounts[actionCounts.length ~/ 2]) /
-              2.0;
+      ? actionCounts[actionCounts.length ~/ 2].toDouble()
+      : (actionCounts[actionCounts.length ~/ 2 - 1] +
+                actionCounts[actionCounts.length ~/ 2]) /
+            2.0;
 
   return PairingResult(
     aId: a.id,
@@ -208,9 +208,7 @@ int? levelToWinHalf(
     for (var run = 0; run < runs; run++) {
       final engine = CombatEngine(
         players: [meanCombatant(loser, level: loserLevel, isPlayerSide: true)],
-        enemies: [
-          meanCombatant(winner, level: baseLevel, isPlayerSide: false),
-        ],
+        enemies: [meanCombatant(winner, level: baseLevel, isPlayerSide: false)],
         rng: math.Random(seed + run),
       );
       var guard = 0;
@@ -336,9 +334,7 @@ List<TuneChange> proposeTuning({
       final to = tooShortDominates ? hp : atk;
       final delta = [for (final b in from.stageBase) b * 0.05];
       final newFrom = StatCurve(
-        stageBase: [
-          for (var i = 0; i < 3; i++) from.stageBase[i] - delta[i],
-        ],
+        stageBase: [for (var i = 0; i < 3; i++) from.stageBase[i] - delta[i]],
         growth: from.growth,
       );
       final newTo = StatCurve(
@@ -398,8 +394,7 @@ List<TuneChange> proposeTuning({
                 field: 'power',
                 oldValue: '${pick.power}',
                 newValue: '$newPower',
-                reason:
-                    '${s.name} wins ${(avg * 100).round()}% vs same rarity',
+                reason: '${s.name} wins ${(avg * 100).round()}% vs same rarity',
                 ability: _abilityWithPower(pick, newPower),
               ),
             );
@@ -448,23 +443,23 @@ List<TuneChange> proposeTuning({
 }
 
 AbilityDef _abilityWithPower(AbilityDef a, int power) => AbilityDef(
-      id: a.id,
-      name: a.name,
-      description: a.description,
-      element: a.element,
-      kind: a.kind,
-      target: a.target,
-      power: power,
-      priority: a.priority,
-      healPct: a.healPct,
-      lifestealPct: a.lifestealPct,
-      inflictMain: a.inflictMain,
-      inflictMainChance: a.inflictMainChance,
-      inflictDebuff: a.inflictDebuff,
-      inflictDebuffChance: a.inflictDebuffChance,
-      selfBuff: a.selfBuff,
-      selfPenaltyStat: a.selfPenaltyStat,
-      selfPenaltyMult: a.selfPenaltyMult,
-      selfPenaltyTurns: a.selfPenaltyTurns,
-      apCost: a.apCost,
-    );
+  id: a.id,
+  name: a.name,
+  description: a.description,
+  element: a.element,
+  kind: a.kind,
+  target: a.target,
+  power: power,
+  priority: a.priority,
+  healPct: a.healPct,
+  lifestealPct: a.lifestealPct,
+  inflictMain: a.inflictMain,
+  inflictMainChance: a.inflictMainChance,
+  inflictDebuff: a.inflictDebuff,
+  inflictDebuffChance: a.inflictDebuffChance,
+  selfBuff: a.selfBuff,
+  selfPenaltyStat: a.selfPenaltyStat,
+  selfPenaltyMult: a.selfPenaltyMult,
+  selfPenaltyTurns: a.selfPenaltyTurns,
+  apCost: a.apCost,
+);

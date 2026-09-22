@@ -31,7 +31,10 @@ class MessagesService {
           'and(sender_id.eq.$otherUserId,recipient_id.eq.$_myId)',
         )
         .order('created_at');
-    return (rows as List).cast<Map<String, dynamic>>().map(ChatMessage.fromMap).toList();
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map(ChatMessage.fromMap)
+        .toList();
   }
 
   /// The last 200 messages touching me, newest first — enough to build a
@@ -44,7 +47,10 @@ class MessagesService {
         .or('sender_id.eq.$_myId,recipient_id.eq.$_myId')
         .order('created_at', ascending: false)
         .limit(200);
-    return (rows as List).cast<Map<String, dynamic>>().map(ChatMessage.fromMap).toList();
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map(ChatMessage.fromMap)
+        .toList();
   }
 
   Future<void> markThreadRead(String otherUserId) async {

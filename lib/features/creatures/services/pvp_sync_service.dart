@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/supabase/supabase_client.dart';
@@ -22,12 +25,31 @@ class PvpAction {
   final String? abilityId;
   final String? targetId;
 
+  /// [CombatEngine.stateHash] AFTER this action was applied on the sender's
+  /// side — battle_screen.dart compares it to its own post-apply hash to
+  /// catch the two engines quietly diverging. Optional/nullable so an old
+  /// persisted action_log entry (from before this field existed) still
+  /// parses fine; a null just skips the check for that one action.
+  final int? stateHash;
+
+  /// The user id that actually SENT this action. [actorId] identifies a
+  /// combatant, not a person, and for 'flee' it carries no information at
+  /// all (see battle_screen.dart's `_confirmFlee` doc) — this is what lets
+  /// `_applyRemoteAction` tell "the OPPONENT gave up" apart from "I gave up"
+  /// when replaying my own past actions back from the persisted action_log
+  /// (reconnect catch-up replays BOTH sides' history through the same
+  /// method the live broadcast uses). Nullable so an old persisted entry
+  /// from before this field existed still parses.
+  final String? senderId;
+
   const PvpAction({
     required this.seq,
     required this.kind,
     required this.actorId,
     this.abilityId,
     this.targetId,
+    this.stateHash,
+    this.senderId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -36,6 +58,8 @@ class PvpAction {
     'actorId': actorId,
     if (abilityId != null) 'abilityId': abilityId,
     if (targetId != null) 'targetId': targetId,
+    if (stateHash != null) 'stateHash': stateHash,
+    if (senderId != null) 'senderId': senderId,
   };
 
   factory PvpAction.fromJson(Map<String, dynamic> m) => PvpAction(
@@ -44,6 +68,8 @@ class PvpAction {
     actorId: m['actorId'] as String,
     abilityId: m['abilityId'] as String?,
     targetId: m['targetId'] as String?,
+    stateHash: (m['stateHash'] as num?)?.toInt(),
+    senderId: m['senderId'] as String?,
   );
 }
 
@@ -59,16 +85,34 @@ class PvpSyncService {
   RealtimeChannel? _channel;
   int _nextSeq = 0;
   final Set<int> _seen = {};
+  Timer? _heartbeat;
+  String? _opponentId;
+
+  /// True while the opponent's client is tracked as present on this match's
+  /// channel — Realtime Presence, not the DB heartbeat (that one is for the
+  /// server-authoritative timeout claim; this one is for instant UI
+  /// feedback, see battle_screen.dart's connection banner). Starts `true`
+  /// (optimistic) so the banner doesn't flash on while presence sync is
+  /// still arriving right after `connect()`.
+  final ValueNotifier<bool> opponentOnline = ValueNotifier(true);
 
   /// Starts (or resumes, from [resumeFromSeq]) listening on [matchId]'s
   /// channel. [onRemoteAction] fires once per action, in [seq] order, never
   /// twice for the same seq — callers don't need their own dedupe.
+  ///
+  /// Also tracks Realtime Presence on the SAME channel ([opponentOnline])
+  /// and starts a periodic DB heartbeat ([PvpService.touchPresence]) — both
+  /// piggyback on the existing broadcast channel/connection rather than
+  /// opening a second one.
   void connect({
     required String matchId,
+    required String myUserId,
+    required String opponentUserId,
     required void Function(PvpAction action) onRemoteAction,
     int resumeFromSeq = 0,
   }) {
     _nextSeq = resumeFromSeq;
+    _opponentId = opponentUserId;
     _seen
       ..clear()
       ..addAll(List.generate(resumeFromSeq, (i) => i));
@@ -90,13 +134,37 @@ class PvpSyncService {
             onRemoteAction(action);
           },
         )
-        .subscribe();
+        .onPresenceSync((_) => _refreshOpponentOnline(channel))
+        .onPresenceJoin((_) => _refreshOpponentOnline(channel))
+        .onPresenceLeave((_) => _refreshOpponentOnline(channel))
+        .subscribe((status, error) {
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            channel.track({'user_id': myUserId});
+          }
+        });
     _channel = channel;
+    _heartbeat?.cancel();
+    _heartbeat = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _pvpService.touchPresence(matchId),
+    );
+    _pvpService.touchPresence(matchId); // don't wait 15s for the first one
+  }
+
+  void _refreshOpponentOnline(RealtimeChannel channel) {
+    final online = channel.presenceState().any(
+      (s) => s.presences.any((p) => p.payload['user_id'] == _opponentId),
+    );
+    opponentOnline.value = online;
   }
 
   void disconnect() {
+    _heartbeat?.cancel();
+    _heartbeat = null;
+    _channel?.untrack();
     _channel?.unsubscribe();
     _channel = null;
+    opponentOnline.dispose();
   }
 
   /// Sends MY chosen action: broadcasts it live and appends it to the
@@ -118,6 +186,8 @@ class PvpSyncService {
     required String actorId,
     String? abilityId,
     String? targetId,
+    int? stateHash,
+    String? senderId,
   }) async {
     final action = PvpAction(
       seq: _nextSeq++,
@@ -125,9 +195,14 @@ class PvpSyncService {
       actorId: actorId,
       abilityId: abilityId,
       targetId: targetId,
+      stateHash: stateHash,
+      senderId: senderId,
     );
     _seen.add(action.seq);
-    await _channel?.sendBroadcastMessage(event: 'action', payload: action.toJson());
+    await _channel?.sendBroadcastMessage(
+      event: 'action',
+      payload: action.toJson(),
+    );
     await _pvpService.appendAction(matchId, action.toJson());
     return action;
   }

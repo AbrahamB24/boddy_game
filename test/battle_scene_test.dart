@@ -42,8 +42,11 @@ void main() {
     );
     await tester.pump();
     final img = tester.widget<Image>(find.byType(Image));
-    expect(img.image, isA<NetworkImage>(),
-        reason: 'the region overrides the borrowed ground');
+    // Wrapped in a ResizeImage (user 2026-09-06's `cacheWidth` perf pass on
+    // battle_scene.dart) — that's how Image.network's cacheWidth argument
+    // works under the hood, so the NetworkImage itself is one level in now.
+    expect(img.image, isA<ResizeImage>(), reason: 'the region overrides the borrowed ground');
+    expect((img.image as ResizeImage).imageProvider, isA<NetworkImage>());
   });
 
   test('every era has its own palette, and none of them crash', () {

@@ -154,11 +154,16 @@ String buildingEffectLabel(String type) => switch (type) {
 };
 
 /// An effect value in ITS OWN unit — a percentage, a count, a rate.
-String formatBuildingEffect(String type, String key, double v) => switch (type) {
+String formatBuildingEffect(
+  String type,
+  String key,
+  double v,
+) => switch (type) {
   // Construction is the one production key that is NOT units/h.
-  'production' => key == WorkshopRole.kConstruction
-      ? '${_trim(v)} points'
-      : '${_trim(v)}${key.isEmpty ? '' : ' $key/h'}',
+  'production' =>
+    key == WorkshopRole.kConstruction
+        ? '${_trim(v)} points'
+        : '${_trim(v)}${key.isEmpty ? '' : ' $key/h'}',
   'resource' => '+${_trim(v * 100)} %',
   'expedition' || 'caravan' =>
     key == 'travel' ? '−${_trim(v * 100)} % travel' : '+${_trim(v * 100)} %',
@@ -307,15 +312,17 @@ List<EffectCardRow> buildingEffectCardRows(
       final v = buildingEffectValueAt(def, type, key, era, level);
       final at = v == 0 ? firstLevelWithEffect(def, type, key, era) : null;
       final emoji = withEmoji ? ' ${buildingEffectEmoji(type)}' : '';
-      rows.add(EffectCardRow(
-        label: key.isEmpty
-            ? buildingEffectLabel(type)
-            : '${buildingEffectLabel(type)} · $key',
-        value: at != null
-            ? 'from Lv $at$emoji'
-            : '${formatBuildingEffect(type, key, v)}$emoji',
-        pending: v == 0,
-      ));
+      rows.add(
+        EffectCardRow(
+          label: key.isEmpty
+              ? buildingEffectLabel(type)
+              : '${buildingEffectLabel(type)} · $key',
+          value: at != null
+              ? 'from Lv $at$emoji'
+              : '${formatBuildingEffect(type, key, v)}$emoji',
+          pending: v == 0,
+        ),
+      );
     }
   }
   return rows;
@@ -345,19 +352,21 @@ List<UpgradeLine> buildingEffectUpgradeLines(
       // resource, then the new number. Everything else names itself on the row
       // and shows the move (user 2026-07-30).
       final isStorage = type == 'storage';
-      lines.add(UpgradeLine(
-        label: isStorage
-            // Name the key when the type has more than one (resource/expedition).
-            ? key
-            : key.isEmpty
-                ? buildingEffectLabel(type)
-                : '${buildingEffectLabel(type)} · $key',
-        emoji: isStorage ? '' : buildingEffectEmoji(type),
-        now: formatBuildingEffect(type, key, now),
-        next: formatBuildingEffect(type, key, next),
-        group: isStorage ? buildingEffectLabel(type) : null,
-        onlyNext: isStorage,
-      ));
+      lines.add(
+        UpgradeLine(
+          label: isStorage
+              // Name the key when the type has more than one (resource/expedition).
+              ? key
+              : key.isEmpty
+              ? buildingEffectLabel(type)
+              : '${buildingEffectLabel(type)} · $key',
+          emoji: isStorage ? '' : buildingEffectEmoji(type),
+          now: formatBuildingEffect(type, key, now),
+          next: formatBuildingEffect(type, key, next),
+          group: isStorage ? buildingEffectLabel(type) : null,
+          onlyNext: isStorage,
+        ),
+      );
     }
   }
   // NO alphabetical sort (user 2026-07-30: "unten die gleiche Reihenfolge wie
@@ -385,21 +394,25 @@ List<UpgradeLine> workshopUpgradeLines(BuildingDef def, int from, int to) {
         : '';
     final slotsNow = effectiveSlots(role, from);
     final slotsNext = effectiveSlots(role, to);
-    lines.add(UpgradeLine(
-      label: 'Workers$suffix',
-      emoji: '👷',
-      now: '$slotsNow',
-      next: '$slotsNext',
-    ));
+    lines.add(
+      UpgradeLine(
+        label: 'Workers$suffix',
+        emoji: '👷',
+        now: '$slotsNow',
+        next: '$slotsNext',
+      ),
+    );
     String factor(int level) => '×${_trim(role.levelScale(level))}';
-    lines.add(UpgradeLine(
-      label: 'Per worker$suffix',
-      emoji: workshopRoleFeedsSystem(role.resource)
-          ? workshopRoleEmoji(role.resource)
-          : '⚒',
-      now: factor(from),
-      next: factor(to),
-    ));
+    lines.add(
+      UpgradeLine(
+        label: 'Per worker$suffix',
+        emoji: workshopRoleFeedsSystem(role.resource)
+            ? workshopRoleEmoji(role.resource)
+            : '⚒',
+        now: factor(from),
+        next: factor(to),
+      ),
+    );
   }
   return lines;
 }
@@ -516,19 +529,16 @@ String workshopRoleEffect(String resource, double power) {
     // Both breeder posts read the same curve — only the clock they shorten
     // differs (mating vs. incubation).
     WorkshopRole.kBreeding ||
-    WorkshopRole.kHatching =>
-      '−${pct(breedingTimeCut(power))}',
+    WorkshopRole.kHatching => '−${pct(breedingTimeCut(power))}',
     WorkshopRole.kHealSpeed => '−${pct(power.clamp(0.0, 0.9))}',
     WorkshopRole.kTradeRate => '−${pct(power.clamp(0.0, kMaxTradeDiscount))}',
     // Uncapped since 2026-07-29 — the runtime's own hyperbola, so the post
     // never promises the −60 % wall that no longer exists.
     WorkshopRole.kExpTravel ||
-    WorkshopRole.kCarTravel =>
-      '−${pct(power <= 0 ? 0 : power / (1 + power))}',
+    WorkshopRole.kCarTravel => '−${pct(power <= 0 ? 0 : power / (1 + power))}',
     WorkshopRole.kExpCarry ||
     WorkshopRole.kExpGoods ||
-    WorkshopRole.kCarCarry =>
-      '+${pct(power)}',
+    WorkshopRole.kCarCarry => '+${pct(power)}',
     // A COUNT of units, not a fraction and not a rate (user 2026-07-30): this
     // many more wood/stone/… the store can hold, per resource it stores. Rounded
     // because a ceiling of 190.4 is a ceiling of 190.

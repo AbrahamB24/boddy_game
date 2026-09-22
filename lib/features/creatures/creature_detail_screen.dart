@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/foe_theme.dart';
-import '../settlement/widgets/meander_strip.dart';
-import '../settlement/widgets/scroll_paper.dart'
-    show kParchmentInk, kParchmentLight, kParchmentMid;
-import '../common/widgets/app_back_button.dart';
+import '../../core/theme/cream_kit.dart';
 import '../../core/ui/snack.dart';
 import '../settlement/data/building_definitions.dart';
 import '../settlement/data/item_definitions.dart';
@@ -17,27 +14,14 @@ import 'models/creature_enums.dart';
 import 'models/creature_instance.dart';
 import 'models/species_def.dart';
 import 'services/combat_engine.dart';
+import 'combat_school_screen.dart';
 import 'widgets/creature_backdrop.dart';
+import 'widgets/creature_family.dart' show CreatureFigure;
 import 'widgets/creature_sprite.dart';
-import 'widgets/gene_bar_toggle.dart';
-import 'widgets/xp_arc.dart';
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import '../common/widgets/recess_bar.dart';
 import '../../core/ui/pressable.dart';
-
-/// The Abilities tab's own sort keys (user 2026-09-06). Equipped abilities
-/// always float to the top regardless of which of these is active — see
-/// [_CreatureDetailScreenState._sortedCurriculum].
-enum _AbilitySort {
-  stage('Unlock order'),
-  power('Power'),
-  apCost('AP cost'),
-  name('Name');
-
-  final String label;
-  const _AbilitySort(this.label);
-}
 
 // One creature, Pokédex-style (user 2026-07-17): the element backdrop up top
 // with the monster art straddling into a white sheet below, a short description
@@ -123,11 +107,6 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   // Which detail tab is shown: 0 General · 1 Stats · 2 Evolution · 3 Abilities.
   int _tab = 0;
 
-  /// The Abilities tab's own sort key (user 2026-09-06: "sortierfunktion
-  /// hinzufügen") — equipped abilities float to the top regardless of which
-  /// of these is picked; see [_sortedCurriculum].
-  _AbilitySort _abilitySort = _AbilitySort.stage;
-
   /// Which gene the Stats tab's bars are drawn from — see [GeneBarToggle].
   bool _barsShowGrowth = false;
 
@@ -148,12 +127,6 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     super.initState();
     _refLevel = widget.initialRefLevel;
   }
-
-  /// Ability ids currently expanded in the Abilities tab (user 2026-09-08:
-  /// "Buffs und Debuffs besser erklären, damit ich genau weiss, was diese
-  /// machen") — tap a row to see exactly what its effects do, in the same
-  /// words the battle-prep long-press sheet already uses.
-  final Set<String> _expandedAbilityIds = {};
 
   /// The Stats tab's "what is this for" popover (user 2026-09-06: "wenn ich
   /// auf die Namen der Stats klicke, soll eine kleine Box erscheinen ...
@@ -205,10 +178,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                     width: 220,
                     padding: const EdgeInsets.all(10),
                     decoration: ShapeDecoration(
-                      color: _paper(element, 0.14),
+                      // Dark glass in the element's own deep tone, like every
+                      // card on this page.
+                      color: Color.lerp(element, Colors.black, 0.62),
                       shape: FoE.facet(
                         radius: 10,
-                        side: BorderSide(color: element.withValues(alpha: 0.5)),
+                        side: const BorderSide(color: Color(0x59FFFFFF)),
                       ),
                     ),
                     child: Column(
@@ -269,39 +244,37 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   // nearly black and a light monster's white, and the dark-brown ink over it
   // would have been unreadable in one of those two directions.
 
-  /// The page in [element]'s hue at a fixed [lightness] — the higher value at
-  /// the top of the sheet, the lower at its foot.
-  ///
-  /// DARK since the app is (2026-07-31): the lightnesses the callers pass moved
-  /// from 0.90/0.80 to 0.16/0.10, and everything else about the rule is
-  /// unchanged. That is the point of fixing lightness here rather than blending
-  /// the raw element colour into the page — the tint follows the theme by
-  /// changing two numbers, and the ink over it stays legible by construction.
-  ///
-  /// A near-grey element keeps the plain page: pushing saturation into something
-  /// that has none invents a colour the monster does not have.
+  /// The sheet in the kit's paper — the higher [lightness] (the callers pass
+  /// 0.16 at the top of the sheet, 0.10 at its foot) giving the lighter end. LIGHT
+  /// since the Holz palette (user 2026-09-19); it was dark tinted paper before.
   static Color _paper(Color element, double lightness) {
-    final hsl = HSLColor.fromColor(element);
-    if (hsl.saturation < 0.08) {
-      return Color.lerp(kParchmentLight, kParchmentMid, 1 - lightness / 0.16)!;
-    }
-    return hsl
-        .withSaturation(hsl.saturation.clamp(0.22, 0.48))
-        .withLightness(lightness)
-        .toColor();
+    // The kit's paper (Holz), the higher lightness giving the lighter end — with
+    // a breath of the element's hue (7 %), so a fire monster's sheet is not quite
+    // a water monster's. The ink over it is the kit's, legible by construction.
+    final base = Color.lerp(
+      CreamPalette.paperBottom,
+      CreamPalette.paperTop,
+      ((lightness - 0.10) / 0.06).clamp(0.0, 1.0),
+    )!;
+    return Color.lerp(base, element, 0.07)!;
   }
 
-  static const _ink = kParchmentInk; // primary text
+  // ── THE PAGE IS THE ELEMENT (user 2026-09-21, "13" of the Monsterdetail
+  // proposals: "Monster in der Mitte"): the element colour runs over the WHOLE
+  // screen and everything on it is white on dark glass, so the text tones are
+  // white now, not the paper ink they were.
+  static const _ink = Colors.white; // primary text
   // Literal ARGB rather than withValues: these are used in `const` widgets all
   // over this file, and a computed colour is not a constant.
-  static const _inkDim = Color(0x94EDE3CB); // ink @ 58 %
-  // Bar / chip fill. A RECESS on the light sheet — it used to be the lightest
-  // tone in the palette, which on parchment made every track brighter than the
-  // paper around it.
-  static const _track = Color(0x21EDE3CB); // ink @ 13 %
+  static const _inkDim = Color(0xCCFFFFFF); // white @ 80 %
+  // Bar / chip fill: a lighter well in the dark glass.
+  static const _track = Color(0x33FFFFFF); // white @ 20 %
 
-  /// Ornament ink for the meander bordure — the page's own shade.
-  static const _ornament = Color(0x38EDE3CB); // ink @ 22 %
+  /// The dialogs and menus are still cream paper (they float above the page,
+  /// like everywhere else in the app), so THEY keep the dark brown ink.
+  static const _dlgInk = CreamPalette.ink;
+  static const _dlgDim = Color(0x942A1A0C); // ink @ 58 %
+  static const _dlgTrack = Color(0x212A1A0C); // ink @ 13 %
 
   /// True for the starter-preview use ([widget.previewCreature]) — gates off
   /// every action that assumes a real, owned, persisted creature (rename,
@@ -315,7 +288,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   /// preview mode: viewing an OWNED creature's own screen means you already
   /// own it, so the question never arises there.
   bool _isNewSpecies(CreatureInstance creature) =>
-      _isPreview && !_ctrl.creatures.any((c) => c.speciesId == creature.speciesId);
+      _isPreview &&
+      !_ctrl.creatures.any((c) => c.speciesId == creature.speciesId);
 
   CreatureInstance? get _creature {
     final preview = widget.previewCreature;
@@ -340,21 +314,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   // Rename dialog, styled to match this screen (dark sheet, Outfit font, the
   // creature's element as the accent) rather than the global FoE gold theme
   // (user 2026-07-18).
-  Future<void> _devEvolve(CreatureInstance creature) async {
-    final err = await _ctrl.devEvolve(creature);
-    if (!mounted) return;
-    if (err != null) {
-      context.snack(err, error: true);
-    } else {
-      setState(() {});
-      final name =
-          creature.species?.stageAt(creature.stage).name ?? 'its next form';
-      context.snack('🛠 Evolved to $name (Lv ${creature.level})');
-    }
-  }
-
   Future<void> _rename(CreatureInstance creature) async {
-    final element = creature.species?.element.color ?? FoE.gold;
+    final element = creature.species?.element.color ?? CreamPalette.tan;
     final controller = TextEditingController(text: creature.nickname ?? '');
     final name = await showDialog<String>(
       context: context,
@@ -364,7 +325,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         title: Text(
           'Rename',
           style: GoogleFonts.outfit(
-            color: _ink,
+            color: _dlgInk,
             fontSize: 18,
             fontWeight: FontWeight.w800,
           ),
@@ -373,12 +334,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           controller: controller,
           autofocus: true,
           cursorColor: element,
-          style: GoogleFonts.outfit(color: _ink, fontSize: 15),
+          style: GoogleFonts.outfit(color: _dlgInk, fontSize: 15),
           decoration: InputDecoration(
             hintText: 'Empty = species name',
-            hintStyle: GoogleFonts.outfit(color: _inkDim, fontSize: 13),
+            hintStyle: GoogleFonts.outfit(color: _dlgDim, fontSize: 13),
             enabledBorder: const UnderlineInputBorder(
-              borderSide: BorderSide(color: _track),
+              borderSide: BorderSide(color: _dlgTrack),
             ),
             focusedBorder: UnderlineInputBorder(
               borderSide: BorderSide(color: element, width: 2),
@@ -392,7 +353,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             child: Text(
               'Cancel',
               style: GoogleFonts.outfit(
-                color: _inkDim,
+                color: _dlgDim,
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
@@ -419,26 +380,31 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: FoE.panelDark,
-        shape: FoE.facet(
-          radius: 12,
-          side: const BorderSide(color: FoE.borderGold),
+        backgroundColor: CreamPalette.paperTop,
+        shape: FoE.facet(radius: 12, side: BorderSide(color: CreamPalette.tan)),
+        title: Text(
+          'Release?',
+          style: FoE.title(size: 15).copyWith(color: _dlgInk),
         ),
-        title: Text('Release?', style: FoE.title(size: 15)),
         content: Text(
           '${creature.displayName} leaves you forever.',
-          style: FoE.label(size: 13),
+          style: FoE.label(size: 13).copyWith(color: _dlgInk),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: FoE.dim(size: 13)),
+            child: Text(
+              'Cancel',
+              style: FoE.dim(size: 13).copyWith(color: _dlgDim),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
               'Release',
-              style: FoE.label(size: 13).copyWith(color: Colors.redAccent),
+              style: FoE.label(
+                size: 13,
+              ).copyWith(color: CreamPalette.warn, fontWeight: FontWeight.w800),
             ),
           ),
         ],
@@ -466,537 +432,414 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   }
 
   // ── Layout ────────────────────────────────────────────────
+  // "MONSTER IN DER MITTE" (user 2026-09-21, variant 13 of the Monsterdetail
+  // proposals). The element colour runs over the WHOLE screen; the monster
+  // stands large in the middle with its level and XP under it; the active tab's
+  // content is split into a LEFT and a RIGHT column of dark glass cards either
+  // side of it, so two areas are readable at once and the monster never leaves
+  // the screen. The four tabs sit along the bottom.
+  //
+  // Every tab body below still does what it did — what changed is that each now
+  // returns TWO columns ([_columnsFor]) instead of one long list.
   @override
   Widget build(BuildContext context) {
-    // The scaffold under the sheet takes the same tint — an overscroll bounce
-    // that revealed beige would say the page was two pages.
-    final scaffoldElement = _creature?.species?.element.color ?? FoE.gold;
+    final scaffoldElement =
+        _creature?.species?.element.color ?? CreamPalette.tan;
     return Scaffold(
-      backgroundColor: _paper(scaffoldElement, 0.10),
+      backgroundColor: Color.lerp(scaffoldElement, Colors.black, 0.35),
       body: ListenableBuilder(
         listenable: Listenable.merge([_ctrl, _settlement]),
         builder: (context, _) {
           final creature = _creature;
           if (creature == null) {
             return Center(
-              child: Text('Creature not found', style: FoE.label()),
+              child: Text(
+                'Creature not found',
+                style: FoE.label().copyWith(color: _ink),
+              ),
             );
           }
           final species = creature.species;
-          final element = species?.element.color ?? FoE.gold;
-          return SafeArea(
-            bottom: false,
-            child: LayoutBuilder(
-              builder: (context, c) {
-                final h = c.maxHeight;
-                final sheetTop = h * 0.30;
-                final imgTop = h * 0.03;
-                final imgH =
-                    h * 0.35; // spans imgTop..imgTop+imgH, over the seam
-                final contentTop = (imgTop + imgH) - sheetTop - 30;
-                return Stack(
-                  children: [
-                    // Element backdrop — the SAME as the Monsters-menu tile.
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: sheetTop + 40,
-                      child: species == null
-                          ? Container(color: element)
-                          : CreatureBackdrop(
-                              element: species.element,
-                              radius: 0,
-                              child: const SizedBox.expand(),
-                            ),
-                    ),
-                    // The sheet — rounded top, holds everything below the art,
-                    // and printed in this monster's own colour (2026-07-31).
-                    Positioned(
-                      top: sheetTop,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              _paper(element, 0.16),
-                              _paper(element, 0.10),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(30),
-                          ),
-                        ),
-                        // The bordure, on the sheet only — it is the page's
-                        // printed border, and the page here starts where the
-                        // element backdrop ends. It runs the sheet's FULL
-                        // height, right up to its rounded top edge (user
-                        // 2026-08-31: "soll auch hier bis ganz oben von dem
-                        // dunklen Balken gehen und quasi durch die Rundung
-                        // abgeschnitten werden") — the Container's own
-                        // Clip.antiAlias does the cutting; only the CONTENT
-                        // keeps the top padding that clears the art/seam.
-                        child: Stack(
-                          children: [
-                            Positioned(
-                              left: 14,
-                              top: 0,
-                              bottom: 0,
-                              width: 16,
-                              child: MeanderStrip(
-                                color: _ornament,
-                                fillHeight: true,
-                              ),
-                            ),
-                            Positioned(
-                              right: 14,
-                              top: 0,
-                              bottom: 0,
-                              width: 16,
-                              child: MeanderStrip(
-                                color: _ornament,
-                                flip: true,
-                                fillHeight: true,
-                              ),
-                            ),
-                            Padding(
-                              padding: EdgeInsets.only(top: contentTop),
-                              child: _sheet(creature, species, element),
-                            ),
-                          ],
-                        ),
+          final element = species?.element.color ?? CreamPalette.tan;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(
+                child: species == null
+                    ? ColoredBox(color: element)
+                    : CreatureBackdrop(
+                        element: species.element,
+                        radius: 0,
+                        child: const SizedBox.expand(),
                       ),
-                    ),
-                    // Monster art, straddling the backdrop and the white sheet.
-                    Positioned(
-                      top: imgTop,
-                      left: 0,
-                      right: 0,
-                      height: imgH,
-                      // Clip the shadow to where the coloured backdrop is
-                      // actually VISIBLE (in art-local coords): the dark sheet
-                      // is drawn over the backdrop from sheetTop down, so the
-                      // shadow must end at sheetTop — no shadow on the dark
-                      // sheet below (user request).
-                      child: IgnorePointer(
-                        child: _art(
-                          creature,
-                          backdropBottom: sheetTop - imgTop,
-                          displayHeight: imgH,
-                        ),
-                      ),
-                    ),
-                    // Controls over the backdrop: back button (left) and Power
-                    // (right) on ONE row so they sit at the same height (user
-                    // 2026-07-18). Power is just the ⚡ icon + number, no label.
-                    Positioned(
-                      top: 8,
-                      left: 4,
-                      right: 14,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          AppBackButton(
-                            color: Colors.white,
-                            onTap: () => Navigator.of(context).pop(),
-                          ),
-                          const Spacer(),
-                          // Power (⚡ + number) with the rarity in its own colour
-                          // right below it (user 2026-07-18).
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Text(
-                                    '⚡',
-                                    style: TextStyle(fontSize: 28),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '${totalPower(creature)}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 30,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (species != null)
-                                Text(
-                                  species.rarity.label,
-                                  style: TextStyle(
-                                    color: species.rarity.color,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+              ),
+              SafeArea(
+                child: DefaultTextStyle.merge(
+                  style: GoogleFonts.outfit(color: _ink),
+                  child: LayoutBuilder(
+                    builder: (context, c) =>
+                        _stage(context, c, creature, species, element),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
     );
   }
 
-  Widget _art(
-    CreatureInstance creature, {
-    required double backdropBottom,
-    required double displayHeight,
-  }) {
-    final url = creature.imageUrl;
-    if (url == null) {
-      return const Icon(Icons.pets, color: Colors.white70, size: 90);
-    }
-    // The drop shadow uses the element's own shadow tone — the same colour its
-    // type icon is embossed with (user request).
-    final shadowColor =
-        (creature.species?.element ?? CreatureElement.fire).shadowColor;
-    // Routed through the SAME loader every other screen uses for creature
-    // art (user 2026-09-02) — this used to be a bare Image.network, which is
-    // exactly what CreatureSprite itself now falls back to on Flutter Web
-    // (see its own doc comment) after the starter preview's art turned out
-    // to load unreliably there via CachedNetworkImage. Fixing that inside
-    // CreatureSprite covers every screen at once rather than special-casing
-    // it here.
-    Widget image() => CreatureSprite(
-      url: url,
-      fit: BoxFit.contain,
-      // Decode at DISPLAY size, not native (user 2026-08-29: "die
-      // Monsterassets werden sehr langsam geladen").
-      height: displayHeight,
-      fallback: const Icon(Icons.pets, color: Colors.white70, size: 90),
-    );
-    // 20% bigger, CENTRED again (user 2026-08-28: "Nein das Monster wieder
-    // auf die Position setzen wie vorher, aber den Schatten neu
-    // kalibrieren") — back to matching [CreatureCard]'s own fix, with the
-    // shadow's clip line recalibrated instead of giving up the centring.
-    const scale = 1.20;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Centring this Transform.scale maps every LOCAL y toward
-        // `center + (y - center) * scale`. The shadow's clip line is drawn
-        // in this same local space (see _TopRectClipper) and gets mapped by
-        // that SAME formula once the scale is applied around it — so
-        // without correction it lands at the wrong absolute y and the
-        // shadow bleeds onto the dark sheet below (user 2026-08-28: "der
-        // Schatten ... ragt in den dunklen Bereich"). Solving that formula
-        // for the LOCAL y that maps back to the true, fixed sheet boundary
-        // is this line — the inverse of the map the Transform.scale below
-        // applies.
-        final center = constraints.maxHeight / 2;
-        final adjustedClip = center + (backdropBottom - center) / scale;
-        return Transform.scale(
-          scale: scale,
-          alignment: Alignment.center,
-          child: Stack(
-            fit: StackFit.expand,
+  /// The whole screen ("Glas auf Farbe", variant 11, with the tab rail of variant
+  /// 3 — user 2026-09-21): the monster on the left with its level and XP under
+  /// it, a rail of four tabs next to it, and the header and the tab's content in
+  /// the space that is left.
+  Widget _stage(
+    BuildContext context,
+    BoxConstraints c,
+    CreatureInstance creature,
+    SpeciesDef? species,
+    Color element,
+  ) {
+    final w = c.maxWidth;
+    // A FRACTION of the width, clamped (responsiveness pass 2026-09-18) — a
+    // landscape phone's long axis runs from ~667 px to this app's 932 px cap.
+    final artW = (w * 0.27).clamp(190.0, 260.0);
+    const railW = 70.0;
+    const gap = 8.0;
+    final contentLeft = artW + railW + gap * 2;
+    return Stack(
+      children: [
+        // The monster, big, on the element colour.
+        Positioned(
+          left: 0,
+          width: artW,
+          top: 40,
+          bottom: 84,
+          child: IgnorePointer(child: _leftArt(creature)),
+        ),
+        // Level and XP under it.
+        Positioned(
+          left: 18,
+          width: artW - 36,
+          bottom: 10,
+          child: _levelBlock(creature, element),
+        ),
+        // The kit's one leaving button, top right like every other screen's
+        // (user 2026-09-22): an arrow, because this page opens over a list.
+        Positioned(
+          top: 8,
+          right: 12,
+          child: KitCloseButton(
+            back: true,
+            onTap: () => Navigator.of(context).pop(),
+          ),
+        ),
+        // THE TABS AS A RAIL (variant 3): they cost 70 px of width instead of a
+        // 56-px row of height, and the height is what the Stats page needs.
+        // Centred on the screen's height (user 2026-09-21).
+        Positioned(
+          left: artW + gap,
+          width: railW,
+          top: 12,
+          bottom: 12,
+          child: Center(child: _tabRail(element)),
+        ),
+        Positioned(
+          left: contentLeft,
+          right: 12,
+          top: 8,
+          bottom: 8,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Drop shadow behind the monster: the sprite's SHARP
-              // silhouette in the element's shadow tone, a bit SMALLER than
-              // the sprite and clipped to the coloured backdrop — so there
-              // is NO shadow on the dark sheet below (user request).
-              Positioned.fill(
-                child: ClipRect(
-                  clipper: _TopRectClipper(adjustedClip),
-                  child: Transform.translate(
-                    offset: const Offset(2, 8),
-                    child: Transform.scale(
-                      scale: 0.9,
-                      alignment: Alignment.bottomCenter,
-                      child: ColorFiltered(
-                        colorFilter: ColorFilter.mode(
-                          shadowColor,
-                          BlendMode.srcATop,
-                        ),
-                        child: image(),
+              Padding(
+                padding: const EdgeInsets.only(right: KitCloseButton.size + 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _header(creature, species, element)),
+                    // The way to the Combat School sits on the Abilities tab.
+                    if (_tab == 3 && !_isPreview && _hasCombatSchool)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: _learnPill(),
                       ),
-                    ),
-                  ),
+                  ],
                 ),
               ),
-              Positioned.fill(child: image()),
+              const SizedBox(height: 10),
+              Expanded(child: _body(creature, species, element)),
+              // The caller's footer (the starter preview's "Choose" button) stays
+              // put across all four tabs (user 2026-09-02).
+              if (widget.footer != null) ...[
+                const SizedBox(height: 8),
+                widget.footer!,
+              ],
             ],
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
-  Widget _sheet(CreatureInstance creature, SpeciesDef? species, Color element) {
-    final desc = species?.description ?? '';
+  /// LEVEL AND EP under the monster (user 2026-09-21, from a picture): "Level 26"
+  /// in bold white, a flat rounded bar — gold fill on a darker tone of the page —
+  /// and "3120 / 4400 EP" under it.
+  Widget _levelBlock(CreatureInstance creature, Color element) {
     final atMax = creature.level >= kCreatureMaxLevel;
     final need = atMax ? 1 : xpToNextLevel(creature.level);
-    final xpFrac = atMax ? 1.0 : (creature.xp / need).clamp(0.0, 1.0);
-    // Outfit for everything on the sheet: these Text widgets set colour/size but
-    // no fontFamily, so merging the game font in here flows through to all of
-    // them (and the tab bodies) without touching each style.
-    return DefaultTextStyle.merge(
-      style: GoogleFonts.outfit(),
-      child: Padding(
-        // CLEAR OF THE BORDURE (user 2026-07-29: "alles etwas weiter nach innen
-        // schieben, damit es nicht so nahe an der Dekoration ist"). The meander
-        // bands sit at 14 and run 16 wide (widened 2026-09-06 to match
-        // building_detail_dialog.dart; were 4/14), so they end at exactly 30 —
-        // 40 leaves the same ten pixels of paper on either side that 28 gave
-        // the old 18px edge; [ParchmentPage] does the same thing with its own
-        // 36 against the same bands.
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          children: [
-            // The arc stays exactly where it was (its 34px box pinned to the
-            // bottom of this 58px region = the old 24px gap above it). The Level
-            // sits in that gap, between the image and the arc; being last in the
-            // Stack it draws ON TOP of the arc's raised ends if they overlap
-            // (user 2026-07-18).
-            SizedBox(
-              width: double.infinity,
-              height: 58,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    height: 34,
-                    child: _xpBase(xpFrac),
+    final frac = atMax ? 1.0 : (creature.xp / need).clamp(0.0, 1.0);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Level ${creature.level}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 5),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: SizedBox(
+            height: 14,
+            width: double.infinity,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ColoredBox(color: Color.lerp(element, Colors.black, 0.45)!),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: frac,
+                    heightFactor: 1,
+                    child: const ColoredBox(color: CreamPalette.gold),
                   ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 25,
-                    child: Center(
-                      child: Text(
-                        'Level ${creature.level}',
-                        style: TextStyle(
-                          color: element,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          atMax ? 'MAX' : '${creature.xp} / $need EP',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.85),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The active tab's content. Every tab is laid out to fit the height it is given
+  /// without scrolling (user 2026-09-21).
+  Widget _body(CreatureInstance creature, SpeciesDef? species, Color element) =>
+      switch (_tab) {
+        1 => _statsBody(creature, element),
+        2 => _evolutionBody(creature),
+        3 => _abilityBody(creature),
+        _ => _generalBody(creature, element),
+      };
+
+  /// The monster's art with its element-tinted drop shadow — the same figure
+  /// every monster display uses ([CreatureFigure]), decoded at the size it is
+  /// drawn (user 2026-08-29: "die Monsterassets werden sehr langsam geladen").
+  Widget _leftArt(CreatureInstance creature) => LayoutBuilder(
+    builder: (context, constraints) => CreatureFigure(
+      imageUrl: creature.imageUrl,
+      element: creature.species?.element ?? CreatureElement.fire,
+      decodeSize: constraints.maxHeight,
+    ),
+  );
+
+  /// THE TAB RAIL: four keys with a symbol over a short word; the live one is
+  /// white, the others dark glass.
+  Widget _tabRail(Color element) {
+    const tabs = [
+      ('❤️', 'General'),
+      ('📊', 'Stats'),
+      ('🧬', 'Evolution'),
+      ('⚔️', 'Abilities'),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < tabs.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          Pressable(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _tab = i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOut,
+              height: 66,
+              width: double.infinity,
+              alignment: Alignment.center,
+              decoration: ShapeDecoration(
+                color: _tab == i ? Colors.white : const Color(0x47000000),
+                shape: FoE.facet(radius: 14),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(tabs[i].$1, style: const TextStyle(fontSize: 20)),
+                  const SizedBox(height: 3),
+                  Text(
+                    tabs[i].$2,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: _tab == i
+                          ? Color.lerp(element, Colors.black, 0.55)
+                          : _inkDim,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              atMax ? 'MAX' : '${creature.xp} / $need EP',
-              style: const TextStyle(
-                color: _inkDim,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Name + gender. The row is centre-aligned so the edit icon sits at
-            // the name's mid-height (not raised); only the gender is lifted into
-            // a superscript (user 2026-07-18).
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    creature.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _ink,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                Transform.translate(
-                  offset: const Offset(4, -7),
-                  child: Text(
-                    creature.gender.symbol,
-                    style: TextStyle(
-                      color: creature.gender.color,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                // Never caught before (user 2026-09-14) — same badge shape
-                // the build menu's own MAX/QUEUE FULL tag uses.
-                if (_isNewSpecies(creature))
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: ShapeDecoration(
-                        color: FoE.goldBright,
-                        shape: FoE.facet(radius: 6),
-                      ),
-                      child: Text(
-                        'NEW',
-                        style: FoE.dim(size: 9).copyWith(
-                          color: _ink,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                    ),
-                  ),
-                // Small edit (rename) button, right of the name/gender. Not
-                // owned yet in preview — nothing valid to rename.
-                if (!_isPreview)
-                  Pressable(
-                    onTap: () => _rename(creature),
-                    behavior: HitTestBehavior.opaque,
-                    child: const Padding(
-                      padding: EdgeInsets.only(left: 8),
-                      child: Icon(Icons.edit, size: 16, color: _inkDim),
-                    ),
-                  ),
-              ],
-            ),
-            if (desc.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                desc,
-                textAlign: TextAlign.center,
-                maxLines: 3,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Name, gender, rename, NEW — and under it the facts you always want:
+  /// level, power, rarity, element (they used to be spread over three corners).
+  Widget _header(
+    CreatureInstance creature,
+    SpeciesDef? species,
+    Color element,
+  ) {
+    const shadow = [
+      Shadow(color: Color(0x66000000), blurRadius: 4, offset: Offset(0, 1)),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                creature.displayName,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.start,
                 style: const TextStyle(
-                  color: _inkDim,
-                  fontSize: 12,
-                  height: 1.35,
+                  color: _ink,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
+                  shadows: shadow,
                 ),
               ),
-            ],
-            const SizedBox(height: 14),
-            _tabBar(element),
-            const SizedBox(height: 12),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: switch (_tab) {
-                  1 => _statsTab(creature, element),
-                  2 => _evolutionTab(creature),
-                  3 => _abilitiesTab(creature),
-                  _ => _generalTab(creature, element),
-                },
+            ),
+            Transform.translate(
+              offset: const Offset(4, -7),
+              child: Text(
+                creature.gender.symbol,
+                style: TextStyle(
+                  color: Color.lerp(creature.gender.color, Colors.white, 0.5),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  shadows: shadow,
+                ),
               ),
             ),
-            // The caller's footer (the starter preview's "Choose" button) —
-            // OUTSIDE the tab switch so it stays put across all four tabs
-            // (user 2026-09-02: "sollte der Button auf allen 4 Reiter unten
-            // sein"), unlike Release/dev, which only ever lived on General.
-            if (widget.footer != null) ...[
-              const SizedBox(height: 12),
-              widget.footer!,
+            // Never caught before (user 2026-09-14) — same badge shape the
+            // build menu's own MAX/QUEUE FULL tag uses.
+            if (_isNewSpecies(creature))
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: ShapeDecoration(
+                    color: CreamPalette.gold,
+                    shape: FoE.facet(radius: 6),
+                  ),
+                  child: Text(
+                    'NEW',
+                    style: FoE.dim(size: 9).copyWith(
+                      color: CreamPalette.ink,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ),
+            // Small edit (rename) button. Not owned yet in preview — nothing
+            // valid to rename.
+            if (!_isPreview)
+              Pressable(
+                onTap: () => _rename(creature),
+                behavior: HitTestBehavior.opaque,
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 8),
+                  child: Icon(Icons.edit, size: 15, color: _inkDim),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          alignment: WrapAlignment.start,
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            _chip(
+              'Lv ${creature.level}',
+              bg: CreamPalette.gold,
+              fg: CreamPalette.ink,
+            ),
+            _chip('⚡ ${totalPower(creature)}'),
+            if (species != null) ...[
+              _chip(species.rarity.label, dot: species.rarity.color),
+              _chip('${species.element.emoji} ${species.element.label}'),
             ],
           ],
         ),
-      ),
+      ],
     );
   }
 
-  // The XP bar as a wide platform under the monster's feet — an open-topped
-  // arc (the monster sits in the cup). Same gold fill + leading dot as the
-  // Monsters card; the greyed remainder shows how far to the next level.
-  //
-  // Layout height stays 34, but the arc is painted in a TALLER (57) area pinned
-  // to the bottom via OverflowBox — so the arc's bottom holds its place while
-  // the two ends curl higher (user 2026-07-18), without pushing the EP line
-  // below it down.
-  Widget _xpBase(double xpFrac) => SizedBox(
-    width: double.infinity,
-    height: 34,
-    child: OverflowBox(
-      alignment: Alignment.bottomCenter,
-      maxHeight: 57,
-      child: SizedBox(
-        height: 57,
-        child: CustomPaint(painter: XpArcPainter(xpFrac)),
-      ),
-    ),
-  );
-
-  /// ONE SEGMENTED CONTROL, NOT FOUR BUTTONS (user 2026-07-29: "der obere
-  /// Bereich gefällt mir, aber der Untere Bereich etwas anpassen").
-  ///
-  /// It was four outlined pills side by side, all four drawn in the element
-  /// colour — so the row read as four things you could press rather than one
-  /// setting with four positions, and three unselected outlines carried as much
-  /// colour as the selected one.
-  ///
-  /// Now it is a TRACK CUT INTO THE SHEET with one key raised in it: the groove
-  /// is dark along its top edge and lit along its bottom (a recess), and the
-  /// selected segment is the exact inverse (lit on top, casting below). The same
-  /// two-hairline grammar the header band and the settlement's corner keys use —
-  /// which is what makes "this one is pressed" legible without any colour at
-  /// all.
-  Widget _tabBar(Color element) {
-    const labels = ['General', 'Stats', 'Evolution', 'Abilities'];
-    return _recess(
-      radius: 19,
-      padding: const EdgeInsets.all(4),
-      child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++)
-            Expanded(child: _tabSegment(labels[i], i, element)),
-        ],
-      ),
-    );
-  }
-
-  Widget _tabSegment(String label, int index, Color element) {
-    final on = _tab == index;
-    return Pressable(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _tab = index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        alignment: Alignment.center,
-        // The selected key is ONE plane of the element's colour (2026-07-31):
-        // it used to be lit at the top and deep at the foot, which is a curve
-        // pretending to be a key.
+  Widget _chip(String text, {Color? bg, Color fg = Colors.white, Color? dot}) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
         decoration: ShapeDecoration(
-          color: on ? element : Colors.transparent,
-          shape: FoE.facet(radius: 15),
+          color: bg ?? const Color(0x47000000),
+          shape: FoE.facet(radius: 9),
         ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          // FLAT (2026-07-31): the selected key was a raised, casting button and
-          // the others were letters cut into a groove. Colour alone says which
-          // tab you are on — it always did, the relief was saying it a second
-          // time.
-          style: TextStyle(
-            color: on ? Colors.white : _inkDim,
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (dot != null) ...[
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              text,
+              style: TextStyle(
+                color: fg,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
-      ),
-    );
-  }
+      );
 
   /// A CARD ON THE SHEET — a raised leaf of lighter paper with a hairline and a
   /// small cast.
@@ -1009,11 +852,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     String? title,
     required Widget child,
     TextAlign titleAlign = TextAlign.left,
+    double gap = 9,
   }) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
+    padding: EdgeInsets.only(bottom: gap),
     child: _recess(
-      radius: 16,
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      radius: 14,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: title == null
           ? child
           : Column(
@@ -1024,6 +868,33 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 child,
               ],
             ),
+    ),
+  );
+
+  /// A [_panel] that TAKES THE HEIGHT it is given — put it in an [Expanded] slot
+  /// of a column. [header] sits on top and [child] gets what is left, so a column
+  /// with one of these ends exactly where its neighbour column does (user
+  /// 2026-09-21: "beide Seiten zusammen gleich hoch").
+  Widget _fillPanel({
+    Widget? header,
+    required Widget child,
+    int flex = 1,
+    double gap = 0,
+  }) => Expanded(
+    flex: flex,
+    child: Padding(
+      padding: EdgeInsets.only(bottom: gap),
+      child: _recess(
+        radius: 14,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (header != null) ...[header, const SizedBox(height: 8)],
+            Expanded(child: child),
+          ],
+        ),
+      ),
     ),
   );
 
@@ -1048,10 +919,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     width: double.infinity,
     padding: padding,
     decoration: ShapeDecoration(
-      color: kParchmentInk.withValues(alpha: 0.07),
+      // DARK GLASS over the element colour (variant 13): black at ~28 % keeps
+      // the page's hue and makes white text legible on any element.
+      color: const Color(0x47000000),
       shape: FoE.facet(
         radius: radius,
-        side: BorderSide(color: kParchmentInk.withValues(alpha: 0.14)),
+        side: const BorderSide(color: Color(0x24FFFFFF)),
       ),
     ),
     child: child,
@@ -1084,38 +957,34 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   );
 
   // ── Tabs ──────────────────────────────────────────────────
-  Widget _generalTab(CreatureInstance creature, Color element) {
+  /// GENERAL, two columns of the SAME height (user 2026-09-21: "Work oben rechts,
+  /// Strengths unten rechts mit 4 Werten, Condition und About links").
+  ///
+  /// LEFT: Condition (the HP bar, the heal / potion control, what it is busy with)
+  /// and under it About, which takes the rest. RIGHT: Work, which takes the rest,
+  /// and under it Strengths — its four best stats. Each column has exactly one
+  /// panel that stretches, so both end on the same line.
+  Widget _generalBody(CreatureInstance creature, Color element) {
     final hpFrac = creature.maxHp > 0 ? creature.hp / creature.maxHp : 0.0;
     // Keep the HP-bar colour thresholds identical to the collection card's
-    // _hpBar (2026-07-18): red is the signal for "needs attention", not only K.O.
-    final hpColor = hpFrac <= 0
-        ? FoE.danger
-        : hpFrac < 0.3
+    // (2026-07-18): red is the signal for "needs attention", not only K.O.
+    final hpColor = hpFrac < 0.3
         ? FoE.danger
         : hpFrac < 0.6
-        ? FoE.gold
-        : FoE.positive;
-    final top = topStats(creature);
-    // The Combat/Civil split bar was removed (user 2026-07-24): the split is now
-    // fixed for every species (≈49:51), so the bar looked identical on every
-    // monster and carried no information. Total Power still lives top-right.
-    // Only healing/potion now (user 2026-08-28: "Working.... Text löschen")
-    // — the passive-XP-rate caption this used to fall back to is gone; WHERE
-    // a monster works has its own box below now instead of a rate here.
+        ? CreamPalette.gold
+        : const Color(0xFF7CE0A8);
+    final top = topStats(creature, count: 4);
     final care = creature.isHealing
         ? _healingInline(creature, element)
         : creature.hp < creature.maxHp
         ? _potionInline(creature, element)
         : null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final busy = _busyLine(creature);
+    final left = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // No more "CONDITION" box or title (user 2026-08-28: "Condition Box
-        // und Text löschen") — the HP bar and, when relevant, the heal/potion
-        // control stay (a way to treat a hurt monster from this screen is
-        // worth keeping), just not framed as a card of their own any more.
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+        _panel(
+          title: 'Condition',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1124,155 +993,264 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 '${creature.hp} / ${creature.maxHp}',
                 hpFrac,
                 hpColor,
-                bottomPad: care == null ? 0 : 12,
+                bottomPad: care == null && busy == null ? 0 : 8,
               ),
-              if (care != null) care,
+              ?care,
+              if (busy != null)
+                Padding(
+                  padding: EdgeInsets.only(top: care == null ? 0 : 8),
+                  child: Text(
+                    busy,
+                    style: const TextStyle(color: _ink, fontSize: 11.5),
+                  ),
+                ),
             ],
           ),
         ),
-        _workPanel(creature),
+        _aboutPanel(creature),
+      ],
+    );
+    final right = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _workPanel(creature, gap: top.isEmpty ? 0 : 9),
         if (top.isNotEmpty)
           _panel(
             title: 'Strengths',
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            gap: 0,
+            child: Column(
               children: [
-                for (final s in top) _strengthChip(s, creature, element),
+                for (var i = 0; i < top.length; i += 2) ...[
+                  if (i > 0) const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(child: _strengthTile(top[i], creature)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: i + 1 < top.length
+                            ? _strengthTile(top[i + 1], creature)
+                            : const SizedBox(),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
-        // Not shown in preview (user 2026-09-02) — the caller's own footer
-        // takes this spot instead (see [_sheet]), since Release and the dev
-        // tools all assume a creature that is actually owned.
-        if (!_isPreview) ...[
-          // The starter never gets a Release button at all (user 2026-09-02:
-          // "Das Startmonster kann aber niemals entlassen werden") — it's
-          // the player's one permanent companion, not just a first pick.
-          if (!creature.isStarter) ...[
-            const SizedBox(height: 8),
-            _pillBtn(
-              'Release',
-              Colors.redAccent,
-              filled: false,
-              onTap: () => _release(creature),
-            ),
-          ],
-          if (_settlement.isDev) ...[
-            const SizedBox(height: 8),
-            _pillBtn(
-              '🛠 +500 XP (Dev)',
-              _inkDim,
-              filled: false,
-              onTap: () => _ctrl.devGainXp(creature, 500),
-            ),
-            // Straight to the next form: the level is raised to the threshold
-            // first, so the monster that comes out is a legitimate over-levelled
-            // one rather than a stage-2 body with stage-1 stats (user
-            // 2026-08-01). Hidden at the final stage — there is nothing to jump
-            // to, and a button that only ever refuses is worse than no button.
-            if (creature.hasNextStage) ...[
-              const SizedBox(height: 8),
-              _pillBtn(
-                '🛠 Evolve to ${creature.species?.stageAt(creature.stage + 1).name ?? 'next stage'} (Dev)',
-                _inkDim,
-                filled: false,
-                onTap: () => _devEvolve(creature),
-              ),
-            ],
-          ],
-        ],
+      ],
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: left),
+        const SizedBox(width: 10),
+        Expanded(child: right),
       ],
     );
   }
 
-  /// One of the creature's best stats, as a chip in the element colour.
-  ///
-  /// They were bare coloured words in a centred wrap, which at three of them
-  /// read as a sentence someone had forgotten to finish. A chip each says these
-  /// are three separate facts, and puts the number where the eye expects it.
-  Widget _strengthChip(
-    CreatureStat stat,
-    CreatureInstance creature,
-    Color element,
-  ) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    decoration: ShapeDecoration(
-      color: element.withValues(alpha: 0.14),
-      shape: FoE.facet(
-        radius: 11,
-        side: BorderSide(color: element.withValues(alpha: 0.5)),
+  /// What the monster is busy with besides a work post (which has its own card):
+  /// learning a move, waiting for a class, breeding, on a trip. Null when it is
+  /// simply free.
+  String? _busyLine(CreatureInstance creature) {
+    if (creature.isTraining) {
+      final id = creature.trainingAbilityId;
+      final name = id == null ? 'a move' : (kAbilityDefs[id]?.name ?? id);
+      return '📖 Learning $name at the Combat School · '
+          '${_fmt(creature.trainingRemaining)} left.';
+    }
+    if (creature.isQueuedForTraining) {
+      return '📖 Waiting in line at the Combat School.';
+    }
+    if (_ctrl.isOnExpedition(creature.id)) return '🎒 Away on an expedition.';
+    if (_ctrl.isBreeding(creature.id)) return '🥚 Busy breeding.';
+    if (creature.isQueuedForHealing) {
+      return '🩹 Waiting in line for a healing bed.';
+    }
+    return null;
+  }
+
+  /// Who it is: the species text, its stage, where it came from, and how many
+  /// of the species you own — and, small and out of the way in the corner, Release.
+  Widget _aboutPanel(CreatureInstance creature) {
+    final species = creature.species;
+    final desc = species?.description ?? '';
+    final parentA = creature.parentAId == null
+        ? null
+        : _ctrl.byId(creature.parentAId!);
+    final parentB = creature.parentBId == null
+        ? null
+        : _ctrl.byId(creature.parentBId!);
+    final origin = creature.isStarter
+        ? 'Your first companion.'
+        : (creature.parentAId != null || creature.parentBId != null)
+        ? 'Bred from ${parentA?.displayName ?? 'a released parent'} × '
+              '${parentB?.displayName ?? 'a released parent'}.'
+        : null;
+    final owned = _ctrl.creatures
+        .where((c) => c.speciesId == creature.speciesId)
+        .length;
+    Widget fact(String k, String v) => Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        children: [
+          Text(k, style: const TextStyle(color: _inkDim, fontSize: 11.5)),
+          const Spacer(),
+          Text(
+            v,
+            style: const TextStyle(
+              color: _ink,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+    // Not shown in preview (user 2026-09-02) — the caller's own footer takes that
+    // spot instead, since Release assumes a creature that is owned. The starter
+    // never gets a Release at all (user 2026-09-02: "Das Startmonster kann aber
+    // niemals entlassen werden").
+    final canRelease = !_isPreview && !creature.isStarter;
+    return _fillPanel(
+      header: _panelTitle(
+        'About',
+        // Release: readable, but a small link in the corner rather than a big
+        // button, and it asks again before it does anything (user 2026-09-21:
+        // "Release ist schwer zu erkennen und sollte nicht zu prominent sein,
+        // damit es nicht aus versehen angewählt wird").
+        trailing: canRelease ? _releaseLink(creature) : null,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (desc.isNotEmpty)
+              Text(
+                desc,
+                style: const TextStyle(
+                  color: _inkDim,
+                  fontSize: 11.5,
+                  height: 1.3,
+                ),
+              ),
+            if (origin != null) ...[
+              SizedBox(height: desc.isEmpty ? 0 : 6),
+              Text(
+                origin,
+                style: const TextStyle(
+                  color: _ink,
+                  fontSize: 11.5,
+                  height: 1.3,
+                ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            fact('Form', 'Stage ${creature.stage + 1} of 3'),
+            fact('Level', '${creature.level} / $kCreatureMaxLevel'),
+            if (!_isPreview) fact('You own', '$owned of this species'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Release as a small light-coral link — visible against the glass, nowhere near
+  /// as loud as the outlined button it replaces.
+  Widget _releaseLink(CreatureInstance creature) => Pressable(
+    behavior: HitTestBehavior.opaque,
+    onTap: () => _release(creature),
+    child: const Padding(
+      padding: EdgeInsets.fromLTRB(8, 2, 0, 2),
+      child: Text(
+        'Release…',
+        style: TextStyle(
+          color: Color(0xFFFFB4A2),
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          stat.label,
-          style: TextStyle(
-            color: Color.lerp(element, kParchmentInk, 0.25),
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          '${creature.statValue(stat)}',
-          style: TextStyle(
-            color: Color.lerp(element, kParchmentInk, 0.25),
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    ),
   );
+
+  /// One of the creature's best stats: name left, value right, on a lighter well
+  /// in the glass.
+  Widget _strengthTile(CreatureStat stat, CreatureInstance creature) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: ShapeDecoration(
+          color: const Color(0x29FFFFFF),
+          shape: FoE.facet(
+            radius: 10,
+            side: const BorderSide(color: Color(0x40FFFFFF)),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                stat.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: _inkDim,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '${creature.statValue(stat)}',
+              style: const TextStyle(
+                color: _ink,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      );
 
   // The two utility stats that ride along on expeditions — carry (loot hauled)
   // and catchRate (this creature's Fangwert). Neither is a workshop role, so
   // they live in their own group rather than under Work.
   static const _expeditionStats = [CreatureStat.carry, CreatureStat.catchRate];
 
-  Widget _statsTab(CreatureInstance creature, Color element) {
+  /// STATS, in two columns (user 2026-09-21: "Werte: muss umschaltbar sein für
+  /// Lvl 1, Max, pro Level etc.").
+  ///
+  /// LEFT: the two switches on top — WHICH LEVEL every number is worked out at
+  /// (now, level 1, max level) and WHICH GENE the bars draw (the value, or the
+  /// growth per level) — then Combat and Expedition. RIGHT: Work.
+  Widget _statsBody(CreatureInstance creature, Color element) {
     // The Lvl-1/Max preview (user 2026-09-14) overrides which level every
     // number below is computed at — see [_refLevel]'s own doc comment.
     final atLevel = _refLevel ?? creature.level;
     final values = {
-      for (final s in CreatureStat.values) s: creature.statValueAtLevel(s, atLevel),
+      for (final s in CreatureStat.values)
+        s: creature.statValueAtLevel(s, atLevel),
     };
     // "Beats your best" — only meaningful once a SHARED reference level is
-    // picked (comparing at each creature's own current level tells you
-    // nothing, which is exactly why the toggle exists). Excludes this
-    // creature itself, so viewing your own best individual doesn't just tie
-    // with itself; empty when nothing else of this species is owned yet
-    // (a fresh starter preview, or the very first of a species).
-    // Excludes this creature itself, so viewing your own best individual
-    // doesn't just tie with itself; empty when nothing else of this species
-    // is owned yet (a fresh starter preview, or the very first of a
-    // species).
+    // picked (comparing at each creature's own current level tells you nothing,
+    // which is exactly why the switch exists). Excludes this creature itself;
+    // empty when nothing else of this species is owned yet.
     final ownedRivals = _ctrl.creatures.where(
       (c) => c.speciesId == creature.speciesId && c.id != creature.id,
     );
-    // "Beats your best" on the VALUE — only meaningful once a SHARED
-    // reference level is picked (comparing at each creature's own current
-    // level tells you nothing, which is exactly why the toggle exists).
     final bestOwnedValue = {
       for (final s in CreatureStat.values)
         s: _refLevel == null
             ? null
             : bestOwnedStatAtLevel(ownedRivals, s, _refLevel!),
     };
-    // "Beats your best" on the GROWTH gene (user 2026-09-14: "die pro Stufe
-    // Statboni ebenfalls markieren") — this one needs NO reference level:
-    // growth-per-level is already a flat rate, comparable exactly as
-    // rolled, so it marks unconditionally regardless of the toggle above.
+    // "Beats your best" on the GROWTH gene (user 2026-09-14) — a flat rate,
+    // comparable exactly as rolled, so it marks regardless of the switch.
     final bestOwnedSlope = {
       for (final s in CreatureStat.values) s: bestOwnedGrowth(ownedRivals, s),
     };
-    // WHICH GENE THE BARS DRAW (user 2026-07-27) — the level-up caption is a
-    // switch now, the same one the breeding and Hatchery tables carry. The
-    // scale follows it: a growth of +1.6 against a stat of 80 would otherwise
-    // be a hairline on every row.
+    // WHICH GENE THE BARS DRAW (user 2026-07-27): the scale follows it, since a
+    // growth of +1.6 against a stat of 80 would otherwise be a hairline.
     final barValues = _barsShowGrowth
         ? {for (final s in CreatureStat.values) s: (creature.statSlope[s] ?? 0)}
         : {for (final s in CreatureStat.values) s: values[s]!.toDouble()};
@@ -1281,12 +1259,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         group.fold(0, (sum, s) => sum + values[s]!);
 
     // WHICH COLUMN READS AS THE HEADLINE follows the same switch the bars do
-    // (user 2026-08-31: "je nachdem was ich anwähle, ist das eine oder
-    // andere Fett und gross geschrieben") — value is bold/big by default,
-    // but with the toggle on GROWTH the row is read for its per-level gene,
-    // so growth takes the big/bold style and the current value steps back
-    // to the small/dim one instead of the two staying fixed regardless of
-    // which the bars themselves are plotting.
+    // (user 2026-08-31): the chosen gene is bold and big, the other steps back.
     const bigStyle = TextStyle(
       color: _ink,
       fontSize: 12,
@@ -1299,314 +1272,308 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     );
     final valueStyle = _barsShowGrowth ? smallStyle : bigStyle;
     final growthStyle = _barsShowGrowth ? bigStyle : smallStyle;
+    // Bars in a light tint of the element: the element colour itself would
+    // vanish on a page of the same colour.
+    final barColor = Color.lerp(element, Colors.white, 0.82)!;
+    const better = Color(0xFF7CE0A8);
 
-    // The group's summed value rides in its card's heading, over the value
-    // column, so it lines up with the rows beneath it.
+    // The group's summed value rides in its card's heading.
     Widget header(String label, int total) => _panelTitle(
       label,
-      trailing: Row(
-        children: [
-          SizedBox(
-            width: 32,
-            child: Text(
-              '$total',
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: _ink,
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          // Holds the total over the VALUE column now that growth sits to its
-          // right — a group's sum is a sum of values, not of growths.
-          const SizedBox(width: 42),
-        ],
+      trailing: Text(
+        '$total',
+        style: const TextStyle(
+          color: _ink,
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
 
     // A stat row: label · bar · current value · growth-per-level.
-    //
-    // Value BEFORE growth since 2026-07-27 ("lvl 1 und level up icon sind
-    // vertauscht") — the two number columns ran the other way round to the
-    // switch above them, so its halves sat over the wrong columns.
-    Widget row(CreatureStat stat, Color color) {
+    Widget row(CreatureStat stat) {
       final growth = creature.statSlope[stat] ?? 0;
-      // "Beats your best" on the value — only lit once [_refLevel] picks a
-      // shared level to compare at; see [bestOwnedValue]'s own comment above.
       final bestValue = bestOwnedValue[stat];
       final valueBeats = bestValue != null && values[stat]! > bestValue;
-      // Same marker on the growth gene, unconditionally (see
-      // [bestOwnedSlope]'s own comment above).
       final bestGrowth = bestOwnedSlope[stat];
       final growthBeats = bestGrowth != null && growth > bestGrowth;
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+      Widget num(String text, TextStyle style, bool beats) => SizedBox(
+        width: 44,
         child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            SizedBox(
-              width: 86,
-              // Tap the name for what the stat is actually used for (user
-              // 2026-09-06) — see [_showStatInfo] for why this is a
-              // hand-rolled popover rather than a [Tooltip].
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (details) =>
-                    _showStatInfo(details.globalPosition, stat, color),
-                child: Text(
-                  stat.label,
-                  style: const TextStyle(color: _ink, fontSize: 12),
-                ),
-              ),
-            ),
-            Expanded(
-              child: RecessBar(
-                value: maxVal > 0 ? barValues[stat]! / maxVal : 0,
-                color: color,
-                height: 10,
-              ),
-            ),
-            SizedBox(
-              width: 46,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (valueBeats)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 1),
-                      child: Icon(
-                        Icons.arrow_drop_up,
-                        size: 16,
-                        color: FoE.positive,
-                      ),
-                    ),
-                  Text(
-                    '${values[stat]}',
-                    textAlign: TextAlign.right,
-                    style: valueBeats
-                        ? valueStyle.copyWith(
-                            color: FoE.positive,
-                            fontWeight: FontWeight.w800,
-                          )
-                        : valueStyle,
-                  ),
-                ],
-              ),
-            ),
-            // Growth per level (the sampled slope gene) — same "beats your
-            // best" marker as the value column, see [growthBeats] above.
-            SizedBox(
-              width: 46,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (growthBeats)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 1),
-                      child: Icon(
-                        Icons.arrow_drop_up,
-                        size: 16,
-                        color: FoE.positive,
-                      ),
-                    ),
-                  Text(
-                    '+${growth.toStringAsFixed(1)}',
-                    textAlign: TextAlign.right,
-                    style: growthBeats
-                        ? growthStyle.copyWith(
-                            color: FoE.positive,
-                            fontWeight: FontWeight.w800,
-                          )
-                        : growthStyle,
-                  ),
-                ],
-              ),
+            if (beats) const Icon(Icons.arrow_drop_up, size: 16, color: better),
+            Text(
+              text,
+              textAlign: TextAlign.right,
+              style: beats
+                  ? style.copyWith(color: better, fontWeight: FontWeight.w800)
+                  : style,
             ),
           ],
         ),
       );
+      return Row(
+        children: [
+          SizedBox(
+            width: 76,
+            // Tap the name for what the stat is actually used for (user
+            // 2026-09-06) — see [_showStatInfo].
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) =>
+                  _showStatInfo(details.globalPosition, stat, element),
+              child: Text(
+                stat.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _ink, fontSize: 11.5),
+              ),
+            ),
+          ),
+          Expanded(
+            child: RecessBar(
+              value: maxVal > 0 ? barValues[stat]! / maxVal : 0,
+              color: barColor,
+              height: 9,
+            ),
+          ),
+          const SizedBox(width: 4),
+          num('${values[stat]}', valueStyle, valueBeats),
+          num('+${growth.toStringAsFixed(1)}', growthStyle, growthBeats),
+        ],
+      );
     }
 
-    // All bars in the type colour (user 2026-07-18). One CARD per group: the
-    // three used to be told apart by a blank six pixels, which at thirteen rows
-    // is not a separation at all.
-    Widget group(String label, List<CreatureStat> stats) => _panel(
+    // A group takes a share of its column's height in proportion to its rows (a
+    // row counts 10, a heading 16), and spreads its rows evenly over what it got.
+    Widget group(String label, List<CreatureStat> stats) => _fillPanel(
+      flex: stats.length * 10 + 16,
+      header: header(label, totalOf(stats)),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          header(label, totalOf(stats)),
-          const SizedBox(height: 10),
-          for (final s in stats) row(s, element),
-        ],
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [for (final s in stats) row(s)],
       ),
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final refIndex = switch (_refLevel) {
+      null => 0,
+      1 => 1,
+      _ => 2,
+    };
+    final controls = Row(
       children: [
-        // Both switches sit ABOVE the groups, once. Inside the first card
-        // either would look like a setting for Combat only.
-        Row(
-          children: [
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _levelRefToggle(),
-              ),
+        Expanded(
+          child: _glassSeg(
+            [
+              'Now · Lv ${creature.level}',
+              'Lv 1',
+              'Max · Lv $kCreatureMaxLevel',
+            ],
+            refIndex,
+            (i) => setState(
+              () => _refLevel = switch (i) {
+                1 => 1,
+                2 => kCreatureMaxLevel,
+                _ => null,
+              },
             ),
-            GeneBarToggle(
-              showGrowth: _barsShowGrowth,
-              onChanged: (v) => setState(() => _barsShowGrowth = v),
-              ink: _ink,
-              inkFaint: _inkDim,
-              accent: FoE.goldBright,
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 8),
-        group('Combat', kCombatStats),
-        group('Work', kCivilianStats),
-        group('Expedition', _expeditionStats),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _glassSeg(
+            ['Value', 'Per level'],
+            _barsShowGrowth ? 1 : 0,
+            (i) => setState(() => _barsShowGrowth = i == 1),
+          ),
+        ),
+      ],
+    );
+    // NO SCROLLING (user 2026-09-21: "die Werte sollen ohne Scrollen Platz
+    // haben"): the two switches in one row on top, then Combat and Expedition
+    // in one column and Work in the other. Combat and Expedition TOGETHER are
+    // exactly as tall as Work ("genau gleich hoch wie Work"): each column is a
+    // stack of panels that share its height, so both end on the same line.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        controls,
+        const SizedBox(height: 9),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    group('Combat', kCombatStats),
+                    const SizedBox(height: 9),
+                    group('Expedition', _expeditionStats),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [group('Work', kCivilianStats)],
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  /// Lvl 1 / Max segmented control (user 2026-09-14) — same bordered-track
-  /// look as [GeneBarToggle], but 2 independent toggles rather than one
-  /// either/or switch: tapping the already-active segment returns to showing
-  /// the creature at its own real level (both off = [_refLevel] null).
-  Widget _levelRefToggle() => Container(
-    height: 22,
+  /// A segmented switch on the glass: the live segment is white, the others
+  /// are plain text. One control for every "show it this way" choice on the
+  /// Stats tab.
+  Widget _glassSeg(
+    List<String> labels,
+    int selected,
+    ValueChanged<int> onSelected,
+  ) => Container(
+    height: 28,
+    padding: const EdgeInsets.all(2),
     decoration: ShapeDecoration(
-      shape: FoE.facet(
-        radius: 11,
-        side: BorderSide(color: _inkDim.withValues(alpha: 0.45)),
-      ),
+      color: const Color(0x33000000),
+      shape: FoE.facet(radius: 14),
     ),
     child: Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        _levelSegment(
-          'Lvl 1',
-          active: _refLevel == 1,
-          onTap: () => setState(() => _refLevel = _refLevel == 1 ? null : 1),
-        ),
-        _levelSegment(
-          'Max',
-          active: _refLevel == kCreatureMaxLevel,
-          onTap: () => setState(
-            () => _refLevel = _refLevel == kCreatureMaxLevel
-                ? null
-                : kCreatureMaxLevel,
+        for (var i = 0; i < labels.length; i++)
+          Expanded(
+            child: Pressable(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onSelected(i),
+              child: Container(
+                alignment: Alignment.center,
+                decoration: ShapeDecoration(
+                  color: i == selected ? Colors.white : Colors.transparent,
+                  shape: FoE.facet(radius: 12),
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    labels[i],
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: i == selected ? CreamPalette.ink : _inkDim,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
       ],
     ),
   );
 
-  Widget _levelSegment(
-    String label, {
-    required bool active,
-    required VoidCallback onTap,
-  }) => Pressable(
-    behavior: HitTestBehavior.opaque,
-    onTap: onTap,
-    child: Container(
-      height: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      alignment: Alignment.center,
-      decoration: ShapeDecoration(
-        color: active
-            ? FoE.goldBright.withValues(alpha: 0.16)
-            : Colors.transparent,
-        shape: FoE.facet(radius: 11),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: active ? FoE.goldBright : _inkDim,
-        ),
-      ),
-    ),
-  );
-
-  Widget _evolutionTab(CreatureInstance creature) {
+  /// EVOLUTION on ONE card that takes the whole width and height of the tab (user
+  /// 2026-09-21: "Evolution soll die gesamte Breite und Höhe ausnutzen"): the
+  /// three forms as large as the room allows, with the Evolve button underneath.
+  Widget _evolutionBody(CreatureInstance creature) {
     final species = creature.species;
     if (species == null) return const SizedBox();
-    final element = species.element.color;
     final isFinal = creature.stage >= 2;
     final reqLevel = isFinal ? 0 : species.evoLevelFrom(creature.stage);
     final levelOk = creature.level >= reqLevel;
     // The level is the only requirement (user 2026-07-26). The second gate — a
     // path-earned evolution feature — is gone, and with it the "Locked" state
-    // below that never said what it was locked on.
+    // that never said what it was locked on.
     final ready = levelOk && !_evolving && !_isPreview;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // The full 3-stage line: reached stages in full art, the ones to come
-        // as dark silhouettes (user 2026-07-18).
-        _panel(title: 'Line', child: _evoChain(species, creature)),
-        const SizedBox(height: 6),
-        // Final form now shows nothing here (user 2026-08-28: "Final form-
-        // fully evolved löschen") — the evo chain above already says a
-        // creature has reached its last stage; this line only repeated it.
-        if (!isFinal)
-          // Just the button — greyed out until the creature can evolve. No
-          // level number or requirement list (user 2026-07-18).
-          _pillBtn(
-            _evolving
-                ? 'Evolving…'
-                : ready
-                ? '✨ Evolve'
-                : 'Level too low',
-            element,
-            filled: true,
-            onTap: ready ? () => _evolve(creature) : null,
-          ),
-      ],
+    return _recess(
+      radius: 14,
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _panelTitle('Line'),
+          const SizedBox(height: 8),
+          // The full 3-stage line: reached stages in full art, the ones to come
+          // as pale silhouettes (user 2026-07-18).
+          Expanded(child: _evoChain(species, creature)),
+          // Final form shows nothing here (user 2026-08-28: "Final form — fully
+          // evolved löschen"): the line already says a creature has reached its
+          // last stage. Otherwise just the button — greyed until the creature can
+          // evolve, with no level number or requirement list (user 2026-07-18).
+          if (!isFinal) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    ready
+                        ? 'It is ready to evolve.'
+                        : 'It is not ready to evolve yet — keep levelling.',
+                    style: const TextStyle(
+                      color: _inkDim,
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                SizedBox(
+                  width: 240,
+                  child: _pillBtn(
+                    _evolving
+                        ? 'Evolving…'
+                        : ready
+                        ? '✨ Evolve'
+                        : 'Level too low',
+                    CreamPalette.gold,
+                    filled: true,
+                    ink: CreamPalette.ink,
+                    onTap: ready ? () => _evolve(creature) : null,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
-  // The evolution line, stage 0 → 1 → 2. A stage the creature has already
-  // reached shows its real art; a stage still to come shows a DARK SILHOUETTE
-  // of that stage's sprite. No box around the art, and the arrows are centred
-  // to the images' height (user 2026-07-18).
+  // The evolution line, stage 0 → 1 → 2. A stage you have SEEN shows its real art;
+  // one you have not is BLACKED OUT, exactly like the Bestiary (user 2026-09-21:
+  // "Evolutionsstufen sind ausgeschwärzt wie beim Bestiary, solange ich das
+  // Monster noch nicht entdeckt habe"). Seen = your best of the species has
+  // reached it — the Bestiary's own rule — or it is the form in front of you now
+  // (a wild one you are sizing up). The current form sits on a light plate; the
+  // arrows are centred to the art (user 2026-07-18).
   Widget _evoChain(SpeciesDef species, CreatureInstance creature) {
-    const arrowW = 24.0;
-    return LayoutBuilder(
-      builder: (context, cons) {
-        // Three nodes + two arrows share the row; each image is a nodeW square,
-        // so an arrow box of that height centres the arrow to the image.
-        final nodeW = (cons.maxWidth - 2 * arrowW) / 3;
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var s = 0; s < 3; s++) ...[
-              SizedBox(
-                width: nodeW,
-                child: _evoNode(
-                  species.stageAt(s),
-                  revealed: s <= creature.stage,
-                  current: s == creature.stage,
-                ),
-              ),
-              if (s < 2)
-                SizedBox(
-                  width: arrowW,
-                  height: nodeW,
-                  child: const Center(
-                    child: Icon(Icons.chevron_right, color: _inkDim, size: 20),
-                  ),
-                ),
-            ],
-          ],
-        );
-      },
+    var bestOwned = -1;
+    for (final c in _ctrl.creatures) {
+      if (c.speciesId == creature.speciesId && c.stage > bestOwned) {
+        bestOwned = c.stage;
+      }
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var s = 0; s < 3; s++) ...[
+          Expanded(
+            child: _evoNode(
+              species.stageAt(s),
+              revealed: s <= bestOwned || s == creature.stage,
+              current: s == creature.stage,
+            ),
+          ),
+          if (s < 2)
+            const Center(
+              child: Icon(Icons.chevron_right, color: _inkDim, size: 40),
+            ),
+        ],
+      ],
     );
   }
 
@@ -1616,403 +1583,593 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     required bool current,
   }) {
     final url = stage.imageUrl;
-    Widget art;
-    if (url == null) {
-      art = Icon(Icons.pets, color: revealed ? _inkDim : FoE.bg, size: 40);
-    } else {
-      // Same disk-cached loader as [_art] — see the comment there for why a
-      // bare Image.network on a brand-new URL is what produced the black
-      // starter-preview art.
-      final img = CreatureSprite(
-        url: url,
-        fit: BoxFit.contain,
-        height: 40,
-        fallback: Icon(
-          Icons.pets,
-          color: revealed ? _inkDim : FoE.bg,
-          size: 40,
-        ),
-      );
-      // Locked stage → paint every opaque pixel near-black for a silhouette.
-      art = revealed
-          ? img
-          : ColorFiltered(
-              colorFilter: const ColorFilter.mode(FoE.bg, BlendMode.srcATop),
-              child: img,
-            );
-    }
-    return Column(
-      children: [
-        // Just the image, no box (user 2026-07-18).
-        AspectRatio(aspectRatio: 1, child: art),
-        const SizedBox(height: 5),
-        Text(
-          revealed ? stage.name : '???',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: revealed ? _ink : _inkDim,
-            fontSize: 11,
-            fontWeight: current ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Everything this creature could ever learn — every stage, not just the
-  /// ones already reached (a locked row still shows, greyed, so the player
-  /// knows what evolving unlocks) — PLUS Attack itself (user 2026-09-06:
-  /// "Behandle Attack wie jede andere Fähigkeit"): it is still free,
-  /// universal and never trained (see [learnableAbilitiesFor]'s own doc on
-  /// why it is excluded from the real curriculum), but this SCREEN no
-  /// longer pins it in a block of its own above the loop — it flows through
-  /// the same list, the same [_sortedCurriculum] ranking and the same
-  /// [_abilitySort] as everything else. Unordered; see [_sortedCurriculum]
-  /// for what actually renders.
-  List<AbilityDef> _fullCurriculum(SpeciesDef species) {
-    final attack = kAbilityDefs['attack'];
-    return [
-      if (attack != null) attack,
-      ...learnableAbilitiesFor(species.element, 2),
-    ];
-  }
-
-  /// [_fullCurriculum], ordered for display (user 2026-09-06: "Die
-  /// ausgewählten Fähigkeiten sind immer zu oberst. Zusätzlich noch
-  /// Sortierfunktion hinzufügen") — an EQUIPPED ability always outranks a
-  /// merely-learned one, which always outranks a trainable-but-unlearned
-  /// one, which always outranks a locked one; [_abilitySort] only breaks
-  /// ties WITHIN that same rank; so learned-and-equipped is what genuinely
-  /// stays on top no matter which sort the player picks. Attack counts as
-  /// "equipped" here for exactly that reason — it is always active, so it
-  /// belongs in the same top tier, not a special one above it.
-  List<AbilityDef> _sortedCurriculum(
-    CreatureInstance creature,
-    SpeciesDef species,
-  ) {
-    int rank(AbilityDef a) {
-      if (a.id == 'attack' || creature.equippedAbilityIds.contains(a.id)) {
-        return 0;
-      }
-      if (creature.stage < a.unlockStage) return 3;
-      if (!creature.learnedAbilityIds.contains(a.id)) return 2;
-      return 1; // learned, not equipped
-    }
-
-    int byKey(AbilityDef a, AbilityDef b) => switch (_abilitySort) {
-      _AbilitySort.stage =>
-        a.unlockStage != b.unlockStage
-            ? a.unlockStage.compareTo(b.unlockStage)
-            : a.name.compareTo(b.name),
-      // Strongest first — the number a player picking "by power" wants up
-      // top, not buried at the bottom of an ascending list.
-      _AbilitySort.power => b.power.compareTo(a.power),
-      _AbilitySort.apCost => CombatEngine.abilityApCost(
-        a,
-      ).compareTo(CombatEngine.abilityApCost(b)),
-      _AbilitySort.name => a.name.compareTo(b.name),
-    };
-
-    return _fullCurriculum(species)..sort((a, b) {
-      final r = rank(a).compareTo(rank(b));
-      return r != 0 ? r : byKey(a, b);
-    });
-  }
-
-  /// The sort control above the curriculum — IDENTICAL to the Monsters
-  /// screen's own sort glyph (user 2026-09-06: "nimm die Filterfunktion
-  /// beim Monsterscreen ... Diese soll genau gleich aussehen"): a bare
-  /// icon-only [PopupMenuButton], not the earlier tap-to-cycle text chip,
-  /// so every sort control in the app reads as the same control. See
-  /// CollectionScreen._sortGlyphBtn — this is that button, verbatim, with
-  /// [_AbilitySort] in place of its own sort enum.
-  Widget _abilitySortControl() {
-    final engaged = _abilitySort != _AbilitySort.stage;
-    return Tooltip(
-      message: 'Sort: ${_abilitySort.label}',
-      child: PopupMenuButton<_AbilitySort>(
-        tooltip: '',
-        color: FoE.panelMid,
-        elevation: 10,
-        position: PopupMenuPosition.under,
-        padding: EdgeInsets.zero,
-        shape: FoE.facet(
-          radius: 12,
-          side: const BorderSide(color: FoE.borderGold),
-        ),
-        onSelected: (mode) => setState(() => _abilitySort = mode),
-        itemBuilder: (_) => [
-          for (final mode in _AbilitySort.values)
-            PopupMenuItem<_AbilitySort>(
-              value: mode,
-              height: 40,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      mode.label,
-                      style: FoE.label(size: 12).copyWith(
-                        color: mode == _abilitySort ? FoE.goldBright : _ink,
-                      ),
-                    ),
-                  ),
-                  if (mode == _abilitySort)
-                    Text(
-                      '✓',
-                      style: FoE.value(
-                        size: 13,
-                      ).copyWith(color: FoE.goldBright),
-                    ),
-                ],
+    final dim = revealed ? _inkDim : const Color(0x59FFFFFF);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      decoration: current
+          ? ShapeDecoration(
+              color: const Color(0x1FFFFFFF),
+              shape: FoE.facet(
+                radius: 14,
+                side: const BorderSide(color: Color(0x40FFFFFF)),
               ),
-            ),
-        ],
-        child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 9),
-          alignment: Alignment.center,
-          decoration: FoE.btn(active: engaged),
-          child: Icon(
-            Icons.swap_vert,
-            size: 17,
-            color: engaged ? Colors.white : FoE.goldBright,
+            )
+          : null,
+      child: Column(
+        children: [
+          Expanded(
+            child: url == null
+                ? Center(child: Icon(Icons.pets, color: dim, size: 60))
+                : LayoutBuilder(
+                    builder: (context, cons) {
+                      // Same disk-cached loader as [_art] — see the comment
+                      // there for why a bare Image.network on a brand-new URL is
+                      // what produced the black starter-preview art.
+                      final img = CreatureSprite(
+                        url: url,
+                        fit: BoxFit.contain,
+                        width: cons.maxWidth,
+                        height: cons.maxHeight,
+                        fallback: Center(
+                          child: Icon(Icons.pets, color: dim, size: 60),
+                        ),
+                      );
+                      // Not seen yet → every opaque pixel flat dark, so only the
+                      // shape shows: the Bestiary's own silhouette.
+                      return revealed
+                          ? img
+                          : ColorFiltered(
+                              colorFilter: const ColorFilter.mode(
+                                Color(0x99000000),
+                                BlendMode.srcIn,
+                              ),
+                              child: img,
+                            );
+                    },
+                  ),
           ),
-        ),
+          const SizedBox(height: 6),
+          Text(
+            revealed ? stage.name : '???',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: revealed ? _ink : _inkDim,
+              fontSize: 14,
+              fontWeight: current ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _abilitiesTab(CreatureInstance creature) {
-    final species = creature.species;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  static const _attackId = 'attack';
+
+  /// The equipped ids that fill slots 1..5: known to the catalog, never Attack
+  /// itself, and no more than [kMaxEquippedAbilities] (an old save may still hold
+  /// six). Slot n is `ids[n - 1]`, so display and edits must both go through this.
+  List<String> _slotIds(CreatureInstance creature) => [
+    for (final id in creature.equippedAbilityIds)
+      if (id != _attackId && kAbilityDefs.containsKey(id)) id,
+  ].take(kMaxEquippedAbilities).toList();
+
+  /// ABILITIES as six SLOTS (user 2026-09-21: "links und rechts je 3 übereinander
+  /// für das Maximum von 6 Fähigkeiten, Attacke ist auch eine davon"). Slot 0 is
+  /// Attack — free, universal, always in the fight, so it cannot be swapped — and
+  /// slots 1..5 are what the monster has equipped. Tap a slot to swap its ability
+  /// for another learned one; an empty slot is a "+" field.
+  Widget _abilityBody(CreatureInstance creature) {
+    final ids = _slotIds(creature);
+    final slots = <AbilityDef?>[
+      kAbilityDefs[_attackId],
+      for (var i = 0; i < kMaxEquippedAbilities; i++)
+        i < ids.length ? kAbilityDefs[ids[i]] : null,
+    ];
+    const perColumn = kMaxAbilitiesTotal ~/ 2;
+    Widget column(int from) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (species != null) ...[
-          Align(alignment: Alignment.centerRight, child: _abilitySortControl()),
-          const SizedBox(height: 8),
-          // Attack included (user 2026-09-06: "Behandle Attack wie jede
-          // andere Fähigkeit") — see [_fullCurriculum]/[_sortedCurriculum]
-          // for why it's folded into this one list instead of pinned above
-          // it, and [_learnedAbilityRow] for the one thing about it that
-          // still has to stay special (it can't be locked, trained or
-          // un-equipped).
-          for (final a in _sortedCurriculum(creature, species))
-            _panel(child: _learnedAbilityRow(creature, a)),
-        ] else if (kAbilityDefs['attack'] case final attack?)
-          _panel(child: _learnedAbilityRow(creature, attack)),
+        for (var i = from; i < from + perColumn; i++) ...[
+          if (i > from) const SizedBox(height: 9),
+          Expanded(child: _abilitySlot(creature, i, slots[i])),
+        ],
+      ],
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: column(0)),
+        const SizedBox(width: 10),
+        Expanded(child: column(perColumn)),
       ],
     );
   }
 
-  /// One row in the curriculum: locked (stage not reached), learnable but
-  /// not yet known (train at the Combat School — no action here, this
-  /// screen is read-only about what's trainable), or learned (equip toggle,
-  /// capped at [kMaxEquippedAbilities]).
-  ///
-  /// Attack (user 2026-09-03: free, universal, never trained — see
-  /// [learnableAbilitiesFor]'s own doc) is the one id that can never be
-  /// locked, trained or un-equipped, so it still needs its own trailing
-  /// state — but it renders through this exact same row/panel as everything
-  /// else now (user 2026-09-06: "Behandle Attack wie jede andere
-  /// Fähigkeit"), not a separate block above the loop.
-  Widget _learnedAbilityRow(CreatureInstance creature, AbilityDef ability) {
-    if (ability.id == 'attack') {
-      return _abilityRow(
-        ability: ability,
-        // NOT "Always equipped" — Attack sits outside the equip system
-        // entirely and never occupies one of the [kMaxEquippedAbilities]
-        // slots the toggle below spends.
-        trailing: const Text(
-          'Always available',
-          style: TextStyle(
-            color: FoE.positive,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
+  /// One of the six slots: the ability as a card in its own element's colour, or
+  /// the "+" field of an empty slot.
+  Widget _abilitySlot(CreatureInstance creature, int slot, AbilityDef? a) {
+    final canEdit = !_isPreview && slot > 0;
+    if (a == null) {
+      // Slot 0 with no Attack in the catalog (not loaded yet) — a plain tile.
+      if (slot == 0) {
+        return _recess(
+          radius: 14,
+          child: const Center(
+            child: Text(
+              'Attack',
+              style: TextStyle(
+                color: _ink,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
-        ),
-      );
-    }
-    final locked = creature.stage < ability.unlockStage;
-    final learned = creature.learnedAbilityIds.contains(ability.id);
-    final equipped = creature.equippedAbilityIds.contains(ability.id);
-    final atCap = creature.equippedAbilityIds.length >= kMaxEquippedAbilities;
-
-    Widget trailing;
-    if (locked) {
-      trailing = Text(
-        'Stage ${ability.unlockStage + 1}',
-        style: const TextStyle(
-          color: _inkDim,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      );
-    } else if (!learned) {
-      trailing = const Text(
-        'Train at the\nCombat School',
-        textAlign: TextAlign.right,
-        style: TextStyle(color: _inkDim, fontSize: 11, height: 1.2),
-      );
-    } else {
-      final canToggle = !_isPreview && (equipped || !atCap);
-      trailing = Pressable(
+        );
+      }
+      return Pressable(
         behavior: HitTestBehavior.opaque,
-        onTap: canToggle
-            ? () => _toggleEquipped(creature, ability.id, !equipped)
-            : null,
-        child: Opacity(
-          opacity: canToggle ? 1 : 0.4,
-          child: Row(
+        onTap: canEdit ? () => _openSlotDialog(creature, slot, null) : null,
+        child: Container(
+          alignment: Alignment.center,
+          decoration: ShapeDecoration(
+            color: const Color(0x14FFFFFF),
+            shape: FoE.facet(
+              radius: 14,
+              side: const BorderSide(color: Color(0x66FFFFFF), width: 1.4),
+            ),
+          ),
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                equipped ? Icons.check_box : Icons.check_box_outline_blank,
-                size: 20,
-                color: equipped ? FoE.positive : _inkDim,
-              ),
-              const SizedBox(width: 4),
+              const Icon(Icons.add, size: 34, color: Color(0xB3FFFFFF)),
               Text(
-                equipped ? 'Equipped' : 'Equip',
-                style: TextStyle(
-                  color: equipped ? FoE.positive : _inkDim,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+                canEdit ? 'Add ability' : 'Empty slot',
+                style: const TextStyle(color: _inkDim, fontSize: 11),
               ),
             ],
           ),
         ),
       );
     }
-
-    return _abilityRow(
-      ability: ability,
-      trailing: trailing,
-      dim: locked || !learned,
+    return _abilityCard(
+      a,
+      icon: slot == 0
+          ? Icons.lock_outline
+          : canEdit
+          ? Icons.swap_horiz
+          : Icons.info_outline,
+      onTap: () => _openSlotDialog(creature, slot, a),
     );
   }
 
-  Future<void> _toggleEquipped(
-    CreatureInstance creature,
-    String abilityId,
-    bool on,
-  ) async {
-    final next = List<String>.from(creature.equippedAbilityIds);
-    if (on) {
-      if (!next.contains(abilityId)) next.add(abilityId);
-    } else {
-      next.remove(abilityId);
-    }
-    await _ctrl.setEquipped(creature, next);
-    if (mounted) setState(() {});
-  }
-
-  Widget _abilityRow({
-    required AbilityDef ability,
-    required Widget trailing,
-    bool dim = false,
+  /// One ability as a card in its element's colour (a self-buff in violet): name,
+  /// AP, kind and power, its text. The corner icon says what a tap does — swap it,
+  /// look at it, or (Attack) that it is fixed.
+  Widget _abilityCard(
+    AbilityDef a, {
+    required IconData icon,
+    required VoidCallback onTap,
   }) {
-    // Whether there is anything worth tapping to reveal — a plain hit with
-    // no effect and no extra-hit chance has nothing more to say.
-    final expandable = ability.effects.isNotEmpty || ability.extraHitChance > 0;
-    final expanded = expandable && _expandedAbilityIds.contains(ability.id);
-    return Opacity(
-      opacity: dim ? 0.6 : 1,
-      child: Pressable(
-        behavior: HitTestBehavior.opaque,
-        onTap: expandable
-            ? () => setState(() {
-                if (expanded) {
-                  _expandedAbilityIds.remove(ability.id);
-                } else {
-                  _expandedAbilityIds.add(ability.id);
-                }
-              })
-            : null,
+    final base = a.kind == AbilityKind.buff
+        ? const Color(0xFF7A6A9C)
+        : a.element.color;
+    const white = Colors.white;
+    return Pressable(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(11, 8, 9, 7),
+        decoration: ShapeDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(base, Colors.white, 0.08)!,
+              Color.lerp(base, Colors.black, 0.5)!,
+            ],
+          ),
+          shape: FoE.facet(
+            radius: 14,
+            side: const BorderSide(color: Color(0x33FFFFFF)),
+          ),
+          shadows: const [
+            BoxShadow(color: Color(0x47000000), offset: Offset(0, 3)),
+          ],
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Text(
-                  ability.element.emoji,
-                  style: const TextStyle(fontSize: 18),
-                ),
-                const SizedBox(width: 10),
+                Text(a.element.emoji, style: const TextStyle(fontSize: 15)),
+                const SizedBox(width: 6),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        ability.name,
-                        style: const TextStyle(
-                          color: _ink,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        '${ability.kind.label} · Power ${ability.power} · '
-                        '${CombatEngine.abilityApCost(ability)} AP',
-                        style: const TextStyle(color: _inkDim, fontSize: 11),
-                      ),
-                    ],
+                  child: Text(
+                    a.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: white,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                if (expandable)
-                  Icon(
-                    expanded ? Icons.expand_less : Icons.expand_more,
-                    size: 18,
-                    color: _inkDim,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 1,
                   ),
-                const SizedBox(width: 4),
-                trailing,
+                  decoration: ShapeDecoration(
+                    color: const Color(0x59000000),
+                    shape: FoE.facet(radius: 9),
+                  ),
+                  child: Text(
+                    '${CombatEngine.abilityApCost(a)} AP',
+                    style: const TextStyle(
+                      color: white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(icon, size: 16, color: const Color(0xCCFFFFFF)),
               ],
             ),
-            if (expanded) ...[
-              const SizedBox(height: 6),
-              if (ability.extraHitChance > 0)
-                _abilityEffectLine(
-                  Icons.blur_on,
-                  ability.extraHitSameTarget
-                      ? 'May hit the SAME target again: 2nd hit '
-                            '${(ability.extraHitChance * 100).round()} % '
-                            'chance, 3rd '
-                            '${(ability.extraHitChance * ability.extraHitChance * 100).round()} %.'
-                      : 'May also hit ANOTHER enemy: 2nd hit '
-                            '${(ability.extraHitChance * 100).round()} % '
-                            'chance, 3rd '
-                            '${(ability.extraHitChance * ability.extraHitChance * 100).round()} % '
-                            '— does nothing extra alone.',
+            const SizedBox(height: 2),
+            Text(
+              _kindLine(a),
+              style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 10.5),
+            ),
+            if (a.description.isNotEmpty)
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(
+                    a.description,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xEBFFFFFF),
+                      fontSize: 10.5,
+                      height: 1.25,
+                    ),
+                  ),
                 ),
-              for (final e in ability.effects)
-                _abilityEffectLine(
-                  Icons.info_outline,
-                  describeAbilityEffect(e).join('\n'),
-                ),
-            ],
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _abilityEffectLine(IconData icon, String text) => Padding(
-    padding: const EdgeInsets.only(top: 4, left: 28),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 14, color: _inkDim),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(color: _inkDim, fontSize: 11),
+  static String _kindLine(AbilityDef a) => a.kind == AbilityKind.buff
+      ? a.kind.label
+      : '${a.kind.label} · Power ${a.power}';
+
+  /// What an ability's effects do, one line each, in the same words the
+  /// battle-prep long-press sheet uses (user 2026-09-08).
+  List<String> _effectTexts(AbilityDef a) => [
+    if (a.extraHitChance > 0)
+      a.extraHitSameTarget
+          ? 'May hit the SAME target again: 2nd hit '
+                '${(a.extraHitChance * 100).round()} % chance, 3rd '
+                '${(a.extraHitChance * a.extraHitChance * 100).round()} %.'
+          : 'May also hit ANOTHER enemy: 2nd hit '
+                '${(a.extraHitChance * 100).round()} % chance, 3rd '
+                '${(a.extraHitChance * a.extraHitChance * 100).round()} % '
+                '— does nothing extra alone.',
+    for (final e in a.effects) describeAbilityEffect(e).join('\n'),
+  ];
+
+  /// THE SWAP DIALOG. A filled slot shows what the ability does in full and the
+  /// other abilities the monster has learned; tap one to put it in this slot. An
+  /// empty slot shows the same list to fill it. A preview (not owned) only shows
+  /// the details.
+  Future<void> _openSlotDialog(
+    CreatureInstance creature,
+    int slot,
+    AbilityDef? current,
+  ) {
+    final canEdit = !_isPreview && slot > 0;
+    final taken = creature.equippedAbilityIds.toSet();
+    final candidates = <AbilityDef>[];
+    if (canEdit) {
+      for (final id in creature.learnedAbilityIds) {
+        final def = kAbilityDefs[id];
+        if (def == null || id == _attackId || taken.contains(id)) continue;
+        if (creature.stage < def.unlockStage) continue;
+        candidates.add(def);
+      }
+    }
+    candidates.sort((a, b) {
+      final byPower = b.power.compareTo(a.power);
+      return byPower != 0 ? byPower : a.name.compareTo(b.name);
+    });
+    final effects = current == null ? const <String>[] : _effectTexts(current);
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: CreamPalette.paperTop,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        shape: FoE.facet(radius: 14, side: BorderSide(color: CreamPalette.tan)),
+        child: Stack(
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      current?.name ?? 'Add an ability',
+                      style: FoE.title(size: 16).copyWith(color: _dlgInk),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 236,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: SingleChildScrollView(
+                              child: current == null
+                                  ? Text(
+                                      candidates.isEmpty
+                                          ? 'This slot is empty. It has nothing '
+                                                'else learned yet.'
+                                          : 'This slot is empty. Pick one of the '
+                                                'abilities it has learned.',
+                                      style: FoE.label(
+                                        size: 12.5,
+                                      ).copyWith(color: _dlgDim),
+                                    )
+                                  : Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${current.element.emoji} '
+                                          '${_kindLine(current)} · '
+                                          '${CombatEngine.abilityApCost(current)} AP',
+                                          style: FoE.label(size: 12.5).copyWith(
+                                            color: _dlgInk,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        if (current.description.isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            current.description,
+                                            style: FoE.label(
+                                              size: 12.5,
+                                            ).copyWith(color: _dlgInk),
+                                          ),
+                                        ],
+                                        for (final line in effects)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 6,
+                                            ),
+                                            child: Text(
+                                              line,
+                                              style: FoE.label(
+                                                size: 12,
+                                              ).copyWith(color: _dlgDim),
+                                            ),
+                                          ),
+                                        if (slot == 0)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 8,
+                                            ),
+                                            child: Text(
+                                              'Attack is always in the fight and '
+                                              'cannot be swapped.',
+                                              style: FoE.label(
+                                                size: 12,
+                                              ).copyWith(color: _dlgDim),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                          if (canEdit) ...[
+                            const SizedBox(width: 14),
+                            Expanded(
+                              flex: 6,
+                              child: candidates.isEmpty
+                                  ? Text(
+                                      'Nothing else learned yet.',
+                                      style: FoE.label(
+                                        size: 12.5,
+                                      ).copyWith(color: _dlgDim),
+                                    )
+                                  : ListView(
+                                      padding: EdgeInsets.zero,
+                                      children: [
+                                        for (final c in candidates)
+                                          _candidateTile(
+                                            ctx,
+                                            creature,
+                                            slot,
+                                            c,
+                                          ),
+                                      ],
+                                    ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        if (canEdit && current != null)
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _setSlot(creature, slot, null);
+                            },
+                            child: Text(
+                              'Empty this slot',
+                              style: FoE.dim(size: 13).copyWith(
+                                color: CreamPalette.warn,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        const Spacer(),
+                        if (canEdit && _hasCombatSchool)
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _openCombatSchool();
+                            },
+                            child: Text(
+                              '📖 Learn new abilities',
+                              style: FoE.label(size: 13).copyWith(
+                                color: CreamPalette.accent,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // The kit's one leaving button, top right (user 2026-09-22).
+            const Positioned(top: 8, right: 8, child: KitCloseButton()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// One learned ability in the swap dialog's list.
+  Widget _candidateTile(
+    BuildContext ctx,
+    CreatureInstance creature,
+    int slot,
+    AbilityDef a,
+  ) {
+    final base = a.kind == AbilityKind.buff
+        ? const Color(0xFF7A6A9C)
+        : a.element.color;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Pressable(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          Navigator.pop(ctx);
+          _setSlot(creature, slot, a.id);
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+          decoration: ShapeDecoration(
+            color: base.withValues(alpha: 0.14),
+            shape: FoE.facet(
+              radius: 10,
+              side: BorderSide(color: base.withValues(alpha: 0.7), width: 1.4),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(a.element.emoji, style: const TextStyle(fontSize: 15)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      a.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: FoE.label(
+                        size: 13,
+                      ).copyWith(color: _dlgInk, fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      '${_kindLine(a)} · ${CombatEngine.abilityApCost(a)} AP',
+                      style: FoE.dim(size: 11).copyWith(color: _dlgDim),
+                    ),
+                    if (a.description.isNotEmpty)
+                      Text(
+                        a.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: FoE.dim(size: 11).copyWith(color: _dlgDim),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+  /// Puts [abilityId] into [slot] (1..5), or empties the slot when it is null.
+  /// The equipped list has no holes, so an empty slot is always past its end and
+  /// emptying one pulls the ones after it up.
+  Future<void> _setSlot(
+    CreatureInstance creature,
+    int slot,
+    String? abilityId,
+  ) async {
+    final next = _slotIds(creature);
+    final at = slot - 1;
+    if (abilityId == null) {
+      if (at < next.length) next.removeAt(at);
+    } else if (at < next.length) {
+      next[at] = abilityId;
+    } else {
+      next.add(abilityId);
+    }
+    await _ctrl.setEquipped(creature, next);
+    if (mounted) setState(() {});
+  }
+
+  /// Whether a finished Combat School stands in the settlement — where a move
+  /// is actually learned (user 2026-09-05).
+  bool get _hasCombatSchool => _settlement.buildings.any(
+    (b) => b.buildingTypeId == kCombatSchoolBuildingId && b.isComplete,
+  );
+
+  void _openCombatSchool() => Navigator.of(
+    context,
+  ).push(MaterialPageRoute<void>(builder: (_) => const CombatSchoolScreen()));
+
+  /// The Abilities tab's way to the Combat School, beside the name.
+  Widget _learnPill() => Pressable(
+    behavior: HitTestBehavior.opaque,
+    onTap: _openCombatSchool,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: ShapeDecoration(
+        color: CreamPalette.gold,
+        shape: FoE.facet(radius: 12),
+      ),
+      child: const Text(
+        '📖 Learn new',
+        style: TextStyle(
+          color: CreamPalette.ink,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     ),
   );
 
@@ -2059,6 +2216,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     String label,
     Color color, {
     required bool filled,
+    Color ink = Colors.white,
     VoidCallback? onTap,
   }) => SizedBox(
     width: double.infinity,
@@ -2079,7 +2237,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           child: Text(
             label,
             style: TextStyle(
-              color: filled ? Colors.white : color,
+              color: filled ? ink : color,
               fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
@@ -2211,13 +2369,14 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   /// hinzufügen"), and the rate/ETA the old Condition box's caption used to
   /// carry, back but living HERE (same day: "Ep pro Stunde hinzufügen und
   /// wie lange es geht, bis das nächste Level erreicht wird").
-  Widget _workPanel(CreatureInstance creature) {
+  Widget _workPanel(CreatureInstance creature, {double gap = 0}) {
     final id = creature.assignedBuildingId;
     final buildings = SettlementController().buildings;
     final idx = id == null ? -1 : buildings.indexWhere((b) => b.id == id);
     if (idx < 0) {
-      return _panel(
-        title: 'Work',
+      return _fillPanel(
+        header: _panelTitle('Work'),
+        gap: gap,
         child: const Text(
           '💤 Not stationed anywhere.',
           style: TextStyle(color: _inkDim, fontSize: 12),
@@ -2246,75 +2405,68 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             ' to Lv ${creature.level + 1}.';
       }
     }
-    return _panel(
-      title: 'Work',
-      // Back to the LEFT, title included (user 2026-08-29: "tausche es
-      // wieder: ... text links" — undoes that same day's right-align).
-      child: SizedBox(
-        width: double.infinity,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Padding(
-              // Room on the RIGHT again for the icon, which moved back
-              // there too (user 2026-08-29: "tausche es wieder: ... Icon
-              // rechts").
-              padding: const EdgeInsets.only(right: 130),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // White, not the dim ink (user 2026-08-29: "Name des
-                  // Gebäudes in weiss, damit es besser auffällt") — the
-                  // only line in the box worth making stand out; the rate
-                  // and ETA under it stay dim.
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (rateXpLine != null) ...[
-                    const SizedBox(height: 6),
+    return _fillPanel(
+      header: _panelTitle('Work'),
+      gap: gap,
+      // The panel is as tall as the column it sits in (General puts it above
+      // Strengths, and the two columns are the same height — user 2026-09-21),
+      // so the building's picture is sized to the room there is instead of a
+      // fixed 185 px.
+      child: LayoutBuilder(
+        builder: (context, cons) {
+          final iconW = (cons.maxHeight * 1.1).clamp(90.0, 170.0);
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Padding(
+                padding: EdgeInsets.only(right: iconW * 0.62),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // White, not the dim ink (user 2026-08-29): the only line
+                    // in the box worth making stand out.
                     Text(
-                      rateXpLine,
-                      style: const TextStyle(color: _inkDim, fontSize: 11),
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
+                    if (rateXpLine != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        rateXpLine,
+                        style: const TextStyle(color: _inkDim, fontSize: 11),
+                      ),
+                    ],
+                    if (etaLine != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        etaLine,
+                        style: const TextStyle(color: _inkDim, fontSize: 11),
+                      ),
+                    ],
                   ],
-                  if (etaLine != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      etaLine,
-                      style: const TextStyle(color: _inkDim, fontSize: 11),
-                    ),
-                  ],
-                ],
+                ),
               ),
-            ),
-            // [ShadowedBuildingIcon] — the exact widget the build-menu
-            // cards and the map's building-detail dialog use: natural
-            // aspect, standing on its own cast shadow. Bottom-anchored ONLY
-            // (no `top`) is what makes it rise up past its own slot on its
-            // own — the slot behind it (the text column) is far shorter
-            // than the icon's own rendered height, so the art's top simply
-            // ends up above the card without a guessed offset for it.
-            Positioned(
-              right: -16,
-              bottom: -6,
-              // The extra Transform.scale tried here (user 2026-08-29) was
-              // taken back out the same day ("Icon zoom wieder
-              // hinausnehmen bei work") — plain width again.
-              child: ShadowedBuildingIcon(
-                imageUrl: null,
-                defId: building.buildingTypeId,
-                width: 185,
+              // [ShadowedBuildingIcon] — the exact widget the build-menu cards
+              // and the map's building-detail dialog use. Bottom-anchored ONLY
+              // (no `top`) is what makes it rise past its own slot.
+              Positioned(
+                right: -8,
+                bottom: -4,
+                child: ShadowedBuildingIcon(
+                  imageUrl: null,
+                  defId: building.buildingTypeId,
+                  width: iconW,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -2327,15 +2479,4 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     if (hours < 48) return '${hours.round()}h';
     return '${(hours / 24).round()}d';
   }
-}
-
-/// Clips a child to the top [height] pixels of its box — used to keep the
-/// monster's drop shadow on the coloured backdrop and off the dark sheet below.
-class _TopRectClipper extends CustomClipper<Rect> {
-  final double height;
-  const _TopRectClipper(this.height);
-  @override
-  Rect getClip(Size size) => Rect.fromLTWH(0, 0, size.width, height);
-  @override
-  bool shouldReclip(_TopRectClipper old) => old.height != height;
 }

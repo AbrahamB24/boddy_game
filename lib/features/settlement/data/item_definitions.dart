@@ -157,7 +157,8 @@ class ItemDef {
     kind: row['kind'] != null
         ? ItemKind.parse(row['kind'] as String?)
         : ItemKind.heal,
-    magnitude: (row['magnitude'] as num?)?.toDouble() ??
+    magnitude:
+        (row['magnitude'] as num?)?.toDouble() ??
         (row['heal_hp'] as num?)?.toDouble() ??
         0,
     resourceId: row['resource_id'] as String?,
@@ -243,7 +244,8 @@ const _kHandWrittenItems = <String, ItemDef>{
     id: 'revive_charm',
     name: 'Revive Charm',
     emoji: '💗',
-    description: 'Revives one K.O.'
+    description:
+        'Revives one K.O.'
         'd monster to 50% of its max HP.',
     kind: ItemKind.revive,
     magnitude: 0.5,
@@ -552,7 +554,8 @@ PackClass packClassOf(String resourceId) {
 }
 
 /// The amounts [resourceId] is packaged in, smallest first.
-List<int> packSizesFor(String resourceId) => kPackSizes[packClassOf(resourceId)]!;
+List<int> packSizesFor(String resourceId) =>
+    kPackSizes[packClassOf(resourceId)]!;
 
 /// The id a package carries — `pack_wood_500`, `pack_meat_50`.
 ///
@@ -598,24 +601,28 @@ String packEmoji(int amount) => amount >= 10000
     : '🧺';
 
 /// One package as an item def.
-ItemDef packDef(String resourceId, String resourceName, String emoji, int amount) =>
-    ItemDef(
-      id: packId(resourceId, amount),
-      name: '$resourceName $amount',
-      emoji: packEmoji(amount),
-      description:
-          'Opens into $amount $emoji $resourceName. May take your stores over '
-          'their ceiling — nothing of it is produced until they are back under.',
-      kind: ItemKind.resourcePack,
-      magnitude: amount.toDouble(),
-      resourceId: resourceId,
-      // Not craftable and not for sale: a package is something the path HANDS
-      // you. Letting the Workshop print them, or the market buy them, would make
-      // the overflow rule a way around storage rather than a reward for a battle.
-      craftSeconds: 0,
-      buyPrice: 0,
-      sellPrice: 0,
-    );
+ItemDef packDef(
+  String resourceId,
+  String resourceName,
+  String emoji,
+  int amount,
+) => ItemDef(
+  id: packId(resourceId, amount),
+  name: '$resourceName $amount',
+  emoji: packEmoji(amount),
+  description:
+      'Opens into $amount $emoji $resourceName. May take your stores over '
+      'their ceiling — nothing of it is produced until they are back under.',
+  kind: ItemKind.resourcePack,
+  magnitude: amount.toDouble(),
+  resourceId: resourceId,
+  // Not craftable and not for sale: a package is something the path HANDS
+  // you. Letting the Workshop print them, or the market buy them, would make
+  // the overflow rule a way around storage rather than a reward for a battle.
+  craftSeconds: 0,
+  buyPrice: 0,
+  sellPrice: 0,
+);
 
 /// Every package the game knows, keyed by id — each resource on its own ladder.
 Map<String, ItemDef> buildPackDefs() {

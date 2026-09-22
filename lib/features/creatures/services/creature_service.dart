@@ -35,7 +35,9 @@ class CreatureService {
         .eq('user_id', userId)
         .order('caught_at');
     return (rows as List)
-        .map((r) => CreatureInstance.fromRow((r as Map).cast<String, dynamic>()))
+        .map(
+          (r) => CreatureInstance.fromRow((r as Map).cast<String, dynamic>()),
+        )
         .toList();
   }
 

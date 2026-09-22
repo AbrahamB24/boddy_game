@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 
 import '../data/resource_icons.dart';
-import '../../../core/theme/foe_theme.dart';
+import 'dev_foe.dart';
 import '../data/gather_defs.dart';
 import '../data/goods_definitions.dart';
 import '../services/game_defs_controller.dart';
@@ -40,8 +40,9 @@ class _GatherDefsTabState extends State<GatherDefsTab> {
       await GameDefsController().saveGatherDef(def);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Save failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
       }
     }
     if (mounted) setState(() => _saving = null);
@@ -67,8 +68,10 @@ class _GatherDefsTabState extends State<GatherDefsTab> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Sample group (preview only)',
-            style: FoE.label(size: 13).copyWith(color: FoE.gold)),
+        Text(
+          'Sample group (preview only)',
+          style: FoE.label(size: 13).copyWith(color: FoE.gold),
+        ),
         Text(
           'The numbers below are worked out for this group — it is not saved.',
           style: FoE.dim(size: 10),
@@ -121,8 +124,7 @@ class _GatherDefsTabState extends State<GatherDefsTab> {
               Text(emoji, style: const TextStyle(fontSize: 18)),
               const SizedBox(width: 8),
               Expanded(child: Text(name, style: FoE.title(size: 14))),
-              if (!authored)
-                Text('Standard', style: FoE.dim(size: 10)),
+              if (!authored) Text('Standard', style: FoE.dim(size: 10)),
             ],
           ),
           const SizedBox(height: 10),
@@ -132,8 +134,7 @@ class _GatherDefsTabState extends State<GatherDefsTab> {
                 child: _numField(
                   label: 'Units per carry point',
                   value: def.unitsPerCarry,
-                  onChanged: (v) =>
-                      _save(def.copyWith(unitsPerCarry: v)),
+                  onChanged: (v) => _save(def.copyWith(unitsPerCarry: v)),
                   commitOnSubmit: true,
                 ),
               ),
@@ -175,7 +176,10 @@ class _GatherDefsTabState extends State<GatherDefsTab> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(10),
-            decoration: ShapeDecoration(color: FoE.panelDark, shape: FoE.facet(radius: 8)),
+            decoration: ShapeDecoration(
+              color: FoE.panelDark,
+              shape: FoE.facet(radius: 8),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -186,7 +190,7 @@ class _GatherDefsTabState extends State<GatherDefsTab> {
                   rate <= 0
                       ? '—'
                       : '${_fmt(haul)} in ${_fmtHours(haul / rate)}'
-                          '${cap > def.spotCapacity ? ' (Spot leer)' : ''}',
+                            '${cap > def.spotCapacity ? ' (Spot leer)' : ''}',
                 ),
                 _previewRow(
                   'Spot voll nach',

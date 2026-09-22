@@ -131,11 +131,21 @@ const kGoodsDefs = <String, GoodsDef>{
   // 2's, taking the slot honey and herbs used to share.
   'meat': GoodsDef(id: 'meat', name: 'Meat', emoji: '🥩', regionOrder: 2),
   'wine': GoodsDef(id: 'wine', name: 'Wine', emoji: '🍷', regionOrder: 3),
-  'spices': GoodsDef(id: 'spices', name: 'Spices', emoji: '🌶️', regionOrder: 4),
+  'spices': GoodsDef(
+    id: 'spices',
+    name: 'Spices',
+    emoji: '🌶️',
+    regionOrder: 4,
+  ),
   'salt': GoodsDef(id: 'salt', name: 'Salt', emoji: '🧂', regionOrder: 5),
   'coffee': GoodsDef(id: 'coffee', name: 'Coffee', emoji: '☕', regionOrder: 6),
   'tea': GoodsDef(id: 'tea', name: 'Tea', emoji: '🍵', regionOrder: 7),
-  'perfume': GoodsDef(id: 'perfume', name: 'Perfume', emoji: '🌸', regionOrder: 8),
+  'perfume': GoodsDef(
+    id: 'perfume',
+    name: 'Perfume',
+    emoji: '🌸',
+    regionOrder: 8,
+  ),
 
   // ── The fresh raw each region unlocks (region II on). Region I's raws are
   //    wood AND stone — both live on ResourceModel's own fields, so they are
@@ -329,6 +339,15 @@ List<GoodsDef> luxuriesOfRegion(int regionOrder) =>
         .toList()
       ..sort((a, b) => a.id.compareTo(b.id));
 
+/// EVERY RESOURCE REGION [regionOrder] itself deals in, by id: its build pair
+/// (region I: wood and stone, which are not goods) and its luxury. What one era's
+/// shelf on the Resources page holds. Gold belongs to no region and is not here.
+List<String> resourceIdsOfRegion(int regionOrder) => [
+  if (regionOrder <= 1) ...const ['wood', 'stone'] else
+    for (final g in buildGoodsOfRegion(regionOrder)) g.id,
+  for (final g in luxuriesOfRegion(regionOrder)) g.id,
+];
+
 /// What one unit of [goodId] costs in RAW resources, all the way down the
 /// ladder. The economy's headline number — 1 Crystal Vault = 128 wood +
 /// 128 stone + 64 clay + 32 lime + 16 ore + 8 coal + 4 sand + 2 crystal — and
@@ -338,9 +357,10 @@ Map<String, double> rawCostOf(String goodId, {double units = 1}) {
   if (def == null || def.refinedFrom.isEmpty) return {goodId: units};
   final out = <String, double>{};
   def.refinedFrom.forEach((input, per) {
-    rawCostOf(input, units: units * per).forEach(
-      (raw, n) => out[raw] = (out[raw] ?? 0) + n,
-    );
+    rawCostOf(
+      input,
+      units: units * per,
+    ).forEach((raw, n) => out[raw] = (out[raw] ?? 0) + n);
   });
   return out;
 }

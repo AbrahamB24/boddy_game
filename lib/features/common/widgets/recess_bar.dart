@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 
-import '../../settlement/widgets/scroll_paper.dart' show kParchmentInk;
+import '../../../core/theme/cream_kit.dart' show kBoxInk;
 
 /// EVERY BAR IN THE GAME (user 2026-07-29: "jetzt alle Balken im gleichen
 /// Effekt gestalten" + "ev. etwas dicker machen, damit es sichtbar ist").
@@ -61,7 +61,8 @@ class RecessBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final v = value.isNaN ? 0.0 : value.clamp(0.0, 1.0);
     final r = height / 2;
-    final wallInk = onDark ? Colors.black : kParchmentInk;
+    // Navy walls: the trough sits on cream cards in the building-dialog template.
+    final wallInk = onDark ? Colors.black : kBoxInk;
     return SizedBox(
       height: height,
       child: LayoutBuilder(
@@ -72,7 +73,7 @@ class RecessBar extends StatelessWidget {
               ? 0.0
               : (c.maxWidth * v).clamp(height, c.maxWidth).toDouble();
           return ClipPath(
-      clipper: ShapeBorderClipper(shape: FoE.facet(radius: r)),
+            clipper: ShapeBorderClipper(shape: FoE.facet(radius: r)),
             child: Stack(
               children: [
                 Positioned.fill(

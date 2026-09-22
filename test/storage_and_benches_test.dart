@@ -205,6 +205,34 @@ void main() {
       expect(ctrl.storageCapacity('wood'), sources.single.$3);
     });
 
+    test('the Castle also holds the starting fish, no Storehouse needed', () {
+      // user 2026-09-20: "der Startstorage kommt vom Castle und nicht von der
+      // Siedlung" — fish is the one luxury held from minute one.
+      final ctrl = SettlementController()
+        ..buildings = [
+          PlacedBuilding(
+            id: 'b_castle',
+            settlementId: 's',
+            buildingTypeId: 'castle',
+            gridX: 0,
+            gridY: 0,
+            level: 1,
+            constructionSecondsRequired: 0,
+            constructionSecondsBuilt: 0,
+            isComplete: true,
+            placedAt: DateTime.utc(2026),
+          ),
+        ]
+        ..introStep = IntroStep.firstNode;
+      addTearDown(() {
+        ctrl.buildings = [];
+        ctrl.introStep = IntroStep.done;
+      });
+      final sources = ctrl.storageSourcesByBuilding('fish');
+      expect(sources.map((s) => s.$2.id), ['castle']);
+      expect(ctrl.storageCapacity('fish'), sources.single.$3);
+    });
+
     test('gold has its own ceiling, and it is not the goods one', () {
       final ctrl = SettlementController();
       expect(

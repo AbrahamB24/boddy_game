@@ -2,11 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/ui/snack.dart';
 import '../common/widgets/parchment_page.dart';
-import '../common/widgets/plain_icon_button.dart';
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
 import '../settlement/settlement_controller.dart';
@@ -16,6 +16,7 @@ import 'models/creature_instance.dart';
 import 'models/path_node.dart' show regionForBattle;
 import 'models/species_def.dart' show kSpeciesDefs;
 import 'widgets/creature_sprite.dart' show decodeWidthFor;
+import 'widgets/overworld_card.dart';
 import 'battle_prep_screen.dart';
 import 'battle_screen.dart';
 import 'services/battle_rewards.dart';
@@ -37,6 +38,11 @@ import 'services/region_dungeon.dart'
 // with the tech system, and the resource spots + hunt moved to the Expeditions
 // screen on the main nav, so this file has exactly one kind of node and one tap
 // action. Geometry + state live in services/overworld_layout.dart.
+//
+// "Variante 4" (user 2026-09-20, Holz kit): the road on the left, and beside it
+// a cream card for the battle you have picked — its ENEMIES and its REWARD, and
+// nothing else — with the gold button that goes on to the preparation. Tapping a
+// node PICKS it (the card follows); tapping the picked one again fights it.
 class OverworldScreen extends StatefulWidget {
   const OverworldScreen({super.key});
 
@@ -66,10 +72,26 @@ class _OverworldScreenState extends State<OverworldScreen>
   bool get _tutorialLocksThisScreen =>
       _settlement.introStep == IntroStep.firstNode;
 
+  /// The battle number the player has picked on the map; null = the current one.
+  int? _selected;
+
+  /// The foes of each battle, worked out once for the card. (They are seeded by
+  /// area + battle number, or authored on the node — the same list every time —
+  /// but a Combatant is mutable, so a FIGHT always builds its own fresh ones;
+  /// these are for looking at.) The tutorial's scripted first fight is never
+  /// cached: it depends on the starter, which may not be loaded yet.
+  final Map<int, List<Combatant>> _foesSeen = {};
+
+  /// The size of the map's own viewport (the screen less the card).
+  Size? _viewSize;
+
   @override
   void initState() {
     super.initState();
     _settlement.addListener(_onChange);
+    // The scripted first fight's enemy depends on the starter, which loads a
+    // moment after this screen opens.
+    CreaturesController().addListener(_onChange);
     CreaturesController().load();
     WidgetsBinding.instance.addPostFrameCallback((_) => _centerOnCurrent());
   }
@@ -77,6 +99,7 @@ class _OverworldScreenState extends State<OverworldScreen>
   @override
   void dispose() {
     _settlement.removeListener(_onChange);
+    CreaturesController().removeListener(_onChange);
     _pulse.dispose();
     _transform.dispose();
     super.dispose();
@@ -102,6 +125,22 @@ class _OverworldScreenState extends State<OverworldScreen>
 
   Size get _canvas => overworldCanvasSize(_nodes);
 
+  /// The node the card is about: the picked one, else the current battle, else
+  /// (a fully cleared line) the last.
+  OverworldNode? get _selectedNode {
+    final nodes = _nodes;
+    if (nodes.isEmpty) return null;
+    if (_selected != null) {
+      for (final n in nodes) {
+        if (n.battleNumber == _selected) return n;
+      }
+    }
+    for (final n in nodes) {
+      if (n.state == OverworldNodeState.current) return n;
+    }
+    return nodes.reduce((a, b) => a.pathIndex >= b.pathIndex ? a : b);
+  }
+
   // ── Keine Balken links und rechts (user 2026-07-31) ─────────
   // "balken links und rechts dürfen nicht sichtbar sein, daher den zoom
   //  anpassen."
@@ -113,22 +152,45 @@ class _OverworldScreenState extends State<OverworldScreen>
   // The fix is the zoom, not the canvas: the map opens at exactly the scale that
   // makes those 300 cover the width, and cannot go below it. Widening the canvas
   // instead would have moved every node's x and left the lane off-centre.
-  /// The scale at which the canvas covers the screen on both axes. The rule
-  /// itself lives with the rest of the geometry, in overworld_layout.
-  double _fillScale(Size screen) => overworldFillScale(screen, _canvas);
+  /// The scale at which the canvas covers the map viewport on both axes. The
+  /// rule itself lives with the rest of the geometry, in overworld_layout.
+  double _fillScale(Size view) => overworldFillScale(view, _canvas);
+
+  /// LANDSCAPE (2026-09-18): the lane is a fixed 300 wide, so filling a 900px
+  /// long axis with it would zoom 3x and turn every node into a 170px disc on
+  /// a 430px-tall phone. The zoom is capped instead, and the canvas is WIDENED
+  /// to whatever the screen then needs, with the lane centred in it and the
+  /// grass running edge to edge - the side bars stay hidden without the giant
+  /// nodes.
+  ///
+  /// 1.15 (user 2026-09-20: "zoome etwas heraus, damit ich mehr vom Weg sehe"),
+  /// down from 1.5 — about a third more of the road on screen at once.
+  static const double _kMaxScale = 1.15;
+
+  /// Never below what keeps the scaled canvas as tall as the view: a short
+  /// trail (few battles) would otherwise show bare ground under it now that the
+  /// cap is lower.
+  double _scaleFor(Size view) {
+    final coverHeight = _canvas.height > 0 ? view.height / _canvas.height : 0.0;
+    return math.max(math.min(_fillScale(view), _kMaxScale), coverHeight);
+  }
+
+  /// The canvas's own width once widened to [view] at [_scaleFor]'s zoom.
+  double _canvasWidthFor(Size view) =>
+      math.max(_canvas.width, view.width / _scaleFor(view));
 
   /// Opens centred on the CURRENT battle — where the player is on the line — so
   /// the next fight is the first thing they see. Falls back to the foot.
   void _centerOnCurrent() {
     if (!mounted) return;
-    final size = MediaQuery.of(context).size;
+    final size = _viewSize ?? MediaQuery.of(context).size;
     final canvas = _canvas;
     OverworldNode? current;
     for (final n in _nodes) {
       if (n.state == OverworldNodeState.current) current = n;
     }
     final focusY = current?.pos.dy ?? (canvas.height - _bottomFocus);
-    final fill = _fillScale(size);
+    final fill = _scaleFor(size);
     // Screen y of a canvas point is `fill * y + ty`, so the clamp is against the
     // SCALED height — at 1.37× a 3 000-long trail is 4 100 tall, and clamping
     // against the unscaled figure would have parked the view in empty space
@@ -148,19 +210,14 @@ class _OverworldScreenState extends State<OverworldScreen>
 
   static const double _bottomFocus = 160;
 
-  /// The fill the transform was last built for — see [build].
+  /// The fill the transform was last built for — see [_map].
   double? _appliedFill;
 
   @override
   Widget build(BuildContext context) {
-    final fill = _fillScale(MediaQuery.sizeOf(context));
-    // The scale is FIXED, so nothing corrects it after a size change any more —
-    // a rotation would leave yesterday's zoom and today's bars. Re-centring on
-    // the next frame restores both the fill and the "you are here" framing.
-    if (_appliedFill != null && (_appliedFill! - fill).abs() > 0.0001) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _centerOnCurrent());
-    }
-    _appliedFill = fill;
+    final screenW = MediaQuery.sizeOf(context).width;
+    // The same deck width the battle screen uses, so the two pages match.
+    final cardW = (screenW * 0.34).clamp(270.0, 340.0);
     // Back is blocked for the whole tutorial visit (user 2026-09-02: "zurück
     // sollte nicht anwählbar sein") — both the system gesture/hardware
     // button (PopScope) and the header's own arrow, which _topBar hides
@@ -168,85 +225,34 @@ class _OverworldScreenState extends State<OverworldScreen>
     return PopScope(
       canPop: !_tutorialLocksThisScreen,
       child: Scaffold(
-        backgroundColor: FoE.mapBase,
+        backgroundColor: CreamPalette.groundBottom,
         body: Stack(
           children: [
-            Positioned.fill(
-              child: InteractiveViewer(
-                transformationController: _transform,
-                // ── NO ZOOM AT ALL (user 2026-07-31: "zoom bei der map
-                // rausnehmen") ──
-                //
-                // The map is a single lane you walk up: there is nothing to see
-                // wider and nothing to read closer, so a pinch could only ever put
-                // it in a state you then had to undo — and every such state is one
-                // where the bare background shows. What is left is a scroll.
-                //
-                // The bounds are pinned to the fill anyway, so even a programmatic
-                // scale (or a future gesture) cannot go anywhere else.
-                scaleEnabled: false,
-                minScale: fill,
-                maxScale: fill,
-                // NO MARGIN AT ALL (user 2026-07-31: "oben und unten will ich die
-                // balken auch nicht sehen"). Every pixel of slack here is a pixel
-                // of bare background you can drag into view — 200 of them at the
-                // top and bottom is exactly what put the beige strips above the
-                // boss and below the first battle.
-                boundaryMargin: EdgeInsets.zero,
-                constrained: false,
-                child: SizedBox(
-                  width: _canvas.width,
-                  height: _canvas.height,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned.fill(
-                        child: RepaintBoundary(
-                          child: Image.asset(
-                            'assets/images/overworld_grass.png',
-                            fit: BoxFit.cover,
-                            filterQuality: FilterQuality.medium,
-                            // Capped, not native 1080x1080 (user 2026-09-06:
-                            // "performance deutlich verbessern") — a 4.4 MB
-                            // RGBA decode for a texture that only ever tiles
-                            // BoxFit.cover across the canvas's own width.
-                            cacheWidth: decodeWidthFor(context, _canvas.width),
-                          ),
-                        ),
-                      ),
-                      // Atmosphere: a soft dark vignette gives the map depth and
-                      // keeps the top bar legible over bright grass.
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  FoE.bg.withValues(alpha: 0.45),
-                                  FoE.bg.withValues(alpha: 0.0),
-                                  FoE.bg.withValues(alpha: 0.0),
-                                  FoE.bg.withValues(alpha: 0.35),
-                                ],
-                                stops: const [0.0, 0.18, 0.82, 1.0],
-                              ),
+            SafeArea(
+              // The fight card runs the full height of the screen (user
+              // 2026-09-22: "Next fight Kachel geht bis zum oberen Rand"), so the
+              // wood band with Survival and the way out sits over the road only.
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _topBar(),
+                        Expanded(
+                          child: ClipRect(
+                            child: LayoutBuilder(
+                              builder: (context, box) => _map(box.biggest),
                             ),
                           ),
                         ),
-                      ),
-                      Positioned.fill(
-                        child: RepaintBoundary(
-                          child: CustomPaint(painter: _TrailPainter(_nodes)),
-                        ),
-                      ),
-                      for (final node in _nodes) _nodeWidget(node),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+                  _card(cardW),
+                ],
               ),
             ),
-            Positioned(top: 0, left: 0, right: 0, child: _topBar()),
             // Up from the very first frame of the tutorial visit, not after a
             // separate dismissible popup — lights up battle 1 alone and
             // dead-zones everything else (the header's back arrow included),
@@ -266,37 +272,197 @@ class _OverworldScreenState extends State<OverworldScreen>
     );
   }
 
-  /// THE bar (user 2026-07-31: "überall wo es einen header hat, soll dieser
-  /// immer genau gleich aussehen"). This screen had its own: a flat box, its own
-  /// padding, its own back button and its own title size — three values that had
-  /// all drifted from the shared one.
-  Widget _topBar() => SafeArea(
-    bottom: false,
-    child: ParchmentHeader(
-      title: 'Overworld',
-      // No arrow at all while back is blocked — a visible one that just
-      // refuses to do anything reads as broken (user 2026-09-02: "zurück
-      // sollte nicht anwählbar sein").
-      showBack: !_tutorialLocksThisScreen,
-      // Survival Mode's entry point (user 2026-09-06) — hidden during the
-      // tutorial for the same reason the back arrow is: a lit control that
-      // leads off the guided chain reads as broken, not as a bonus feature.
-      trailing: _tutorialLocksThisScreen
-          ? null
-          : PlainIconButton(
-              icon: Icons.whatshot_rounded,
-              size: 22,
-              color: ParchmentHeader.engravedInk,
-              shadows: ParchmentHeader.engraved(depth: 1.2),
-              onTap: () => openSurvivalMode(context),
+  /// The road: a scroll of grass with the trail and its nodes, sized to [view].
+  Widget _map(Size view) {
+    _viewSize = view;
+    final fill = _scaleFor(view);
+    final canvasW = _canvasWidthFor(view);
+    final laneDx = (canvasW - _canvas.width) / 2;
+    // The scale is FIXED, so nothing corrects it after a size change any more —
+    // a rotation would leave yesterday's zoom and today's bars. Re-centring on
+    // the next frame restores both the fill and the "you are here" framing.
+    if (_appliedFill != null && (_appliedFill! - fill).abs() > 0.0001) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _centerOnCurrent());
+    }
+    _appliedFill = fill;
+    final picked = _selectedNode?.battleNumber;
+    return InteractiveViewer(
+      transformationController: _transform,
+      // ── NO ZOOM AT ALL (user 2026-07-31: "zoom bei der map
+      // rausnehmen") ──
+      //
+      // The map is a single lane you walk up: there is nothing to see
+      // wider and nothing to read closer, so a pinch could only ever put
+      // it in a state you then had to undo — and every such state is one
+      // where the bare background shows. What is left is a scroll.
+      //
+      // The bounds are pinned to the fill anyway, so even a programmatic
+      // scale (or a future gesture) cannot go anywhere else.
+      scaleEnabled: false,
+      minScale: fill,
+      maxScale: fill,
+      // NO MARGIN AT ALL (user 2026-07-31: "oben und unten will ich die
+      // Balken auch nicht sehen"). Every pixel of slack here is a pixel
+      // of bare background you can drag into view — 200 of them at the
+      // top and bottom is exactly what put the beige strips above the
+      // boss and below the first battle.
+      boundaryMargin: EdgeInsets.zero,
+      constrained: false,
+      child: SizedBox(
+        width: canvasW,
+        height: _canvas.height,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: RepaintBoundary(
+                child: Image.asset(
+                  'assets/images/overworld_grass.png',
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.medium,
+                  // Capped, not native 1080x1080 (user 2026-09-06:
+                  // "performance deutlich verbessern") — a 4.4 MB
+                  // RGBA decode for a texture that only ever tiles
+                  // BoxFit.cover across the canvas's own width.
+                  cacheWidth: decodeWidthFor(context, canvasW),
+                ),
+              ),
             ),
+            // Atmosphere: a soft dark vignette gives the map depth.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        FoE.bg.withValues(alpha: 0.25),
+                        FoE.bg.withValues(alpha: 0.0),
+                        FoE.bg.withValues(alpha: 0.0),
+                        FoE.bg.withValues(alpha: 0.35),
+                      ],
+                      stops: const [0.0, 0.12, 0.82, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // The lane itself, centred in the widened canvas.
+            Positioned(
+              left: laneDx,
+              top: 0,
+              width: _canvas.width,
+              height: _canvas.height,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: RepaintBoundary(
+                      child: CustomPaint(painter: _TrailPainter(_nodes)),
+                    ),
+                  ),
+                  for (final node in _nodes)
+                    _nodeWidget(node, picked: node.battleNumber == picked),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The wood band on top, like the battle's: back, the title, and the door to
+  /// Survival Mode (user 2026-09-06) — both hidden during the tutorial, because
+  /// a lit control that leads off the guided chain reads as broken, not as a
+  /// bonus feature (user 2026-09-02: "zurück sollte nicht anwählbar sein").
+  Widget _topBar() => ParchmentHeader.band(
+    height: 46,
+    fill: CreamPalette.groundTop,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        children: [
+          const Text(
+            'Overworld',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: CreamPalette.paperTop,
+            ),
+          ),
+          const Spacer(),
+          if (!_tutorialLocksThisScreen)
+            Pressable(
+              onTap: () => openSurvivalMode(context),
+              child: Container(
+                height: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: raisedTile(radius: 12),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.whatshot_rounded,
+                      size: 16,
+                      color: CreamPalette.warn,
+                    ),
+                    SizedBox(width: 5),
+                    Text(
+                      'Survival',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: kBoxInk,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // The kit's one leaving button, right end of the title row like every
+          // other screen (user 2026-09-22).
+          if (!_tutorialLocksThisScreen) ...[
+            const SizedBox(width: 10),
+            const KitCloseButton(),
+          ],
+        ],
+      ),
     ),
   );
 
+  /// The card beside the road, on the same wood ground the battle's deck stands
+  /// on.
+  Widget _card(double width) {
+    final node = _selectedNode;
+    return Container(
+      width: width,
+      decoration: const BoxDecoration(gradient: kMenuGround),
+      // The same 10 px above as below and beside it.
+      padding: const EdgeInsets.fromLTRB(8, 10, 10, 10),
+      child: node == null
+          ? const SizedBox.shrink()
+          : OverworldFightCard(
+              battleNumber: node.battleNumber,
+              isBoss: node.isBoss,
+              state: node.state,
+              enemies: _foesFor(node),
+              // Only the current battle grants its unlocks (a re-fight is XP
+              // only, see [_launchBattle]); the ones still ahead show what they
+              // will grant once they are the current one.
+              rewards: node.state == OverworldNodeState.done
+                  ? const []
+                  : battleRewardsFor(node.battleNumber),
+              onFight: () => _launchBattle(node),
+            ),
+    );
+  }
+
   // ── Nodes ──────────────────────────────────────────────────
-  Widget _nodeWidget(OverworldNode node) {
+  Widget _nodeWidget(OverworldNode node, {required bool picked}) {
     // Bosses read as the landmark capping each region — a touch larger.
-    final size = node.isBoss ? 68.0 : 58.0;
+    final size = node.isBoss ? 56.0 : 46.0;
     // The tutorial's ONE lit target while it's locking this screen (user
     // 2026-09-02: "highlighte den 1. Node") — see the IntroSpotlightOverlay
     // in [build].
@@ -307,15 +473,73 @@ class _OverworldScreenState extends State<OverworldScreen>
       node: node,
       size: size,
       pulse: _pulse,
-      onTap: () => _launchBattle(node),
+      picked: picked,
+      onTap: () => _onNodeTap(node),
     );
     return Positioned(
       left: node.pos.dx - size / 2,
       top: node.pos.dy - size / 2,
-      child: anchorKey == null
-          ? map
-          : KeyedSubtree(key: anchorKey, child: map),
+      child: anchorKey == null ? map : KeyedSubtree(key: anchorKey, child: map),
     );
+  }
+
+  /// A tap PICKS a node (the card follows); a tap on the node already picked
+  /// fights it — so the tutorial's "tap the first battle" still goes straight in,
+  /// the current battle being picked from the start.
+  void _onNodeTap(OverworldNode node) {
+    if (node.battleNumber == _selectedNode?.battleNumber) {
+      _launchBattle(node);
+    } else {
+      setState(() => _selected = node.battleNumber);
+    }
+  }
+
+  // ── Foes ───────────────────────────────────────────────────
+
+  /// The tutorial's first two nodes can't be lost: while either is the current
+  /// step, its enemies fight at kJumpstartEnemyStatMult.
+  IntroStep? _introStepFor(OverworldNode node) => switch (node.battleNumber) {
+    1 => IntroStep.firstNode,
+    2 => IntroStep.secondNode,
+    _ => null,
+  };
+
+  bool _guaranteedWin(OverworldNode node) {
+    final step = _introStepFor(node);
+    return step != null && _settlement.introStep == step;
+  }
+
+  /// The foes [node] fields, freshly built. Battle 1's fight is fully scripted
+  /// (user 2026-09-03): a hand-picked, type-effective enemy at its natural stats
+  /// rather than a random pick scaled uniformly down — see
+  /// scriptedFirstBattleEnemy's own doc for why.
+  List<Combatant>? _buildFoes(OverworldNode node, AreaDef area) {
+    final guaranteedWin = _guaranteedWin(node);
+    if (node.battleNumber == 1 && guaranteedWin) {
+      final starterElement =
+          CreaturesController().creatures.firstOrNull?.species?.element;
+      final enemy = starterElement == null
+          ? null
+          : scriptedFirstBattleEnemy(area, starterElement);
+      return enemy == null ? null : [enemy];
+    }
+    return spawnPathBattle(
+      area,
+      node.battleNumber,
+      statScale: guaranteedWin ? kJumpstartEnemyStatMult : 1.0,
+    );
+  }
+
+  /// The foes for the card — remembered, so a rebuild is not a re-spawn.
+  List<Combatant>? _foesFor(OverworldNode node) {
+    final area = areaForBattle(node.battleNumber);
+    if (area == null) return null;
+    if (_guaranteedWin(node)) return _buildFoes(node, area);
+    final seen = _foesSeen[node.battleNumber];
+    if (seen != null) return seen;
+    final built = _buildFoes(node, area);
+    if (built != null) _foesSeen[node.battleNumber] = built;
+    return built;
   }
 
   Future<void> _launchBattle(OverworldNode node) async {
@@ -328,33 +552,8 @@ class _OverworldScreenState extends State<OverworldScreen>
       context.snack('No monsters live this far yet.');
       return;
     }
-    // The tutorial's first two nodes can't be lost: while either is the
-    // current step, its enemies fight at kJumpstartEnemyStatMult.
-    final introNodeStep = switch (node.battleNumber) {
-      1 => IntroStep.firstNode,
-      2 => IntroStep.secondNode,
-      _ => null,
-    };
-    final guaranteedWin =
-        introNodeStep != null && _settlement.introStep == introNodeStep;
-    // Battle 1's fight is fully scripted (user 2026-09-03): a hand-picked,
-    // type-effective enemy at its natural stats rather than a random pick
-    // scaled uniformly down — see scriptedFirstBattleEnemy's own doc for why.
-    List<Combatant>? enemies;
-    if (node.battleNumber == 1 && guaranteedWin) {
-      final starterElement =
-          CreaturesController().creatures.firstOrNull?.species?.element;
-      final enemy = starterElement == null
-          ? null
-          : scriptedFirstBattleEnemy(area, starterElement);
-      if (enemy != null) enemies = [enemy];
-    } else {
-      enemies = spawnPathBattle(
-        area,
-        node.battleNumber,
-        statScale: guaranteedWin ? kJumpstartEnemyStatMult : 1.0,
-      );
-    }
+    final introNodeStep = _introStepFor(node);
+    final enemies = _buildFoes(node, area);
     if (enemies == null || enemies.isEmpty) {
       context.snack('No monsters live here yet (Dev Mode → Species).');
       return;
@@ -412,6 +611,8 @@ class _OverworldScreenState extends State<OverworldScreen>
       await _settlement.advanceBattlesCleared(toBattle: node.battleNumber);
       if (node.isBoss) await _grantBossRewards(area, node.battleNumber);
       if (introNodeStep != null) await _settlement.advanceIntro(introNodeStep);
+      // The card moves on to the next battle.
+      _selected = null;
     }
     if (!mounted) return;
     // Straight back to the settlement after the tutorial's FIRST fight (user
@@ -456,10 +657,15 @@ class _OverworldScreenState extends State<OverworldScreen>
 }
 
 // ── Node ────────────────────────────────────────────────────
+/// A Holz medallion (user 2026-09-20): gold with a check once cleared, cream with
+/// a glowing gold rim and its number when it is the one you are on, grey with a
+/// lock while it is out of reach; a boss wears a crown and a dark-wood ring. The
+/// one PICKED (whose card is showing) gets a white ring.
 class _MapNode extends StatelessWidget {
   final OverworldNode node;
   final double size;
   final VoidCallback onTap;
+  final bool picked;
 
   /// Drives the current node's breathing glow.
   final Animation<double> pulse;
@@ -469,49 +675,59 @@ class _MapNode extends StatelessWidget {
     required this.size,
     required this.onTap,
     required this.pulse,
+    required this.picked,
   });
 
-  // The boss is the landmark that caps a region; a regular fight is a threat.
-  Color get _accent => node.isBoss ? FoE.gold : FoE.danger;
+  static const Color _wood = Color(0xFF5C3B22);
 
   @override
   Widget build(BuildContext context) {
     final done = node.state == OverworldNodeState.done;
     final locked = node.state == OverworldNodeState.locked;
     final current = node.state == OverworldNodeState.current;
-    final accent = _accent;
+    final boss = node.isBoss;
 
-    // The disc: a filled, softly shadowed token. Done nodes fill with their
-    // accent; the rest read as carved stone (light → dark gradient).
+    final Gradient face = done
+        ? const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFD97A), CreamPalette.gold],
+          )
+        : locked
+        ? const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [CreamPalette.lockedTop, CreamPalette.lockedBottom],
+          )
+        : const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [CreamPalette.tileTop, CreamPalette.tileBottom],
+          );
+    final rim = current
+        ? CreamPalette.gold
+        : locked
+        ? CreamPalette.lockedShadow
+        : CreamPalette.goldDeep;
+    final drop = locked ? CreamPalette.lockedShadow : CreamPalette.goldDeep;
+
     Widget disc = Container(
       width: size,
       height: size,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: done
-              ? [accent.withValues(alpha: 0.9), accent.withValues(alpha: 0.55)]
-              : [FoE.panelLight, FoE.panelDark],
-        ),
-        border: Border.all(
-          color: accent.withValues(alpha: locked ? 0.35 : 1),
-          width: (current || node.isBoss) ? 3 : 2,
-        ),
+        gradient: face,
         boxShadow: [
-          BoxShadow(
-            color: FoE.bg.withValues(alpha: 0.55),
-            offset: const Offset(0, 3),
-            blurRadius: 0,
-          ),
+          BoxShadow(color: rim, spreadRadius: current ? 3 : 2),
+          if (boss && !current) const BoxShadow(color: _wood, spreadRadius: 6),
+          BoxShadow(color: drop, offset: const Offset(0, 3)),
         ],
       ),
-      alignment: Alignment.center,
-      child: _discContent(done, locked),
+      child: _content(done, locked),
     );
 
-    // "You are here": the current node breathes a soft accent glow.
+    // "You are here": the current node breathes a soft gold glow.
     if (current) {
       disc = AnimatedBuilder(
         animation: pulse,
@@ -522,9 +738,9 @@ class _MapNode extends StatelessWidget {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: accent.withValues(alpha: 0.30 + 0.35 * t),
+                  color: CreamPalette.gold.withValues(alpha: 0.30 + 0.35 * t),
                   blurRadius: 0 + 14 * t,
-                  spreadRadius: 1 + 3 * t,
+                  spreadRadius: 4 + 3 * t,
                 ),
               ],
             ),
@@ -542,26 +758,58 @@ class _MapNode extends StatelessWidget {
       // "«battle n» und der Balken unten mit den Infos löschen"
       //
       // The disc already says which fight this is (its number, a crown for a
-      // boss, a tick for a cleared one) and the prep screen says the rest the
-      // moment you tap it. The caption repeated the number, and the badge
-      // stacked level, foe count and party size under every single node — three
-      // rows of chrome per stop, on a map whose whole subject is one line.
-      child: SizedBox(width: size, child: disc),
+      // boss, a tick for a cleared one) and the card beside the map says the
+      // rest the moment you pick it.
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            // The picked one wears a white ring, clear of the boss's wood one.
+            if (picked)
+              Positioned(
+                left: boss ? -11 : -8,
+                right: boss ? -11 : -8,
+                top: boss ? -11 : -8,
+                bottom: boss ? -11 : -8,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
+                  ),
+                ),
+              ),
+            disc,
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _discContent(bool done, bool locked) {
-    if (locked) return Icon(Icons.lock, size: size * 0.34, color: FoE.textDim);
-    if (done) {
-      return Icon(Icons.check_rounded, size: size * 0.52, color: Colors.white);
+  Widget _content(bool done, bool locked) {
+    // A boss reads as a crown whatever its state; a regular fight is a tick, its
+    // number, or a lock.
+    if (node.isBoss) {
+      return Opacity(
+        opacity: locked ? 0.5 : 1,
+        child: Text('👑', style: TextStyle(fontSize: size * 0.46)),
+      );
     }
-    // Boss reads as a crown; a regular fight shows its number.
-    if (node.isBoss) return Text('👑', style: TextStyle(fontSize: size * 0.44));
+    if (locked) {
+      return Icon(Icons.lock, size: size * 0.4, color: kBoxInkFaint);
+    }
+    if (done) {
+      return Icon(Icons.check_rounded, size: size * 0.52, color: kBoxInk);
+    }
     return Text(
       '${node.battleNumber}',
       style: TextStyle(
-        color: FoE.parchment,
-        fontSize: 20,
+        color: kBoxInk,
+        fontSize: size * 0.42,
         fontWeight: FontWeight.w800,
       ),
     );
@@ -577,7 +825,7 @@ class _TrailPainter extends CustomPainter {
 
   static const _roadShadow = Color(0x55000000);
   static const _roadEdge = Color(0xCC1B2329);
-  static const _roadFill = FoE.gold;
+  static const _roadFill = CreamPalette.gold;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -641,7 +889,7 @@ class _TrailPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
         ..strokeCap = StrokeCap.round
-        ..color = FoE.goldBright.withValues(alpha: 0.7),
+        ..color = const Color(0xFFFFD97A).withValues(alpha: 0.8),
       dash: 9,
       gap: 9,
     );

@@ -3,7 +3,11 @@ import 'dart:async';
 import 'dart:math' show max;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/theme/strategy_theme.dart'
+    show chunkyDecoration, strategyDarken;
+import '../../../core/ui/duration_format.dart';
 import '../../../core/ui/snack.dart';
 import '../../creatures/models/creature_enums.dart' show kHealingHutBuildingId;
 import '../../onboarding/intro_flow.dart';
@@ -11,14 +15,15 @@ import '../../onboarding/intro_spotlight.dart';
 import '../data/building_art.dart';
 import '../data/building_definitions.dart';
 import '../data/iso_grid.dart';
+import '../data/resource_icons.dart';
 import '../data/road_tiles.dart';
 import '../sheets/building_detail_dialog.dart';
 import '../models/placed_building.dart';
 import '../settlement_controller.dart';
+import '../../social/social_actions.dart' show confirmDialog;
 import 'building_icon.dart';
 import 'building_life.dart';
 import 'terrain_layer.dart';
-import 'scroll_paper.dart' show kActionGreen, kParchmentDeep;
 import '../../../core/ui/pressable.dart';
 
 class SettlementMap extends StatefulWidget {
@@ -35,16 +40,39 @@ class SettlementMap extends StatefulWidget {
   final VoidCallback? onExitEditMode;
   final VoidCallback? onExitRoadMode;
 
-  /// The Builder Camp's dialog opens the Build menu (user 2026-07-29) — and the
-  /// menu is the SCREEN's business, not the map's: what it returns puts the map
-  /// into placement or road mode, which is state the screen owns.
-  final VoidCallback? onOpenBuildMenu;
+  /// Distinguishes the TWO doors into edit mode (user 2026-09-22: "wenn ich
+  /// lange auf ein Gebäude drücke, [soll] ich nur dieses [verschieben] …
+  /// Dafür gibt es ja jetzt den Bearbeitungsmodus"):
+  ///
+  /// * `false` — a long-press picked this building up. It is a single
+  ///   errand: [_confirmAim] leaves edit mode again the moment this ONE move
+  ///   lands, exactly like moving it used to work before Umbaumodus existed.
+  /// * `true` — opened explicitly (the Build menu's own right-edge button),
+  ///   for a session that rearranges as many buildings as the player likes
+  ///   and also offers "Alle Gebäude zurücknehmen" (see
+  ///   SettlementController.recallAllBuildings) — the FoE-style tool that
+  ///   takes the whole city off the map at once so a full replan never has
+  ///   to shuffle around whatever is still standing in the way.
+  ///
+  /// Tapping a building directly ON THE MAP moves just that one exactly as
+  /// before either way — this only changes what happens to the SESSION once
+  /// that move confirms.
+  final bool persistentEditMode;
 
   /// A building the map should show as SELECTED — what a just-built one is set
   /// to (user 2026-07-30), so the drag that positions it needs no extra tap to
   /// pick it up first. Changing this value selects; null leaves the selection
   /// alone.
   final String? selectBuildingId;
+
+  /// Fires true the moment something starts being aimed (a fresh purchase, a
+  /// direct move, or [selectBuildingId] handing one over) and false the
+  /// moment that session's ghost is gone — confirmed OR cancelled (user
+  /// 2026-09-22): the screen's own Umbaumodus tray carousel has to get out
+  /// of the way while the player is actually positioning a ghost, the same
+  /// way it already hides while a brand-new purchase is being aimed. Fired
+  /// from a post-frame callback, never mid-build — see [_notifyAiming].
+  final ValueChanged<bool>? onAimingChanged;
 
   const SettlementMap({
     super.key,
@@ -56,8 +84,9 @@ class SettlementMap extends StatefulWidget {
     this.onEnterEditMode,
     this.onExitEditMode,
     this.onExitRoadMode,
-    this.onOpenBuildMenu,
+    this.persistentEditMode = false,
     this.selectBuildingId,
+    this.onAimingChanged,
   });
 
   @override
@@ -128,6 +157,29 @@ class SettlementMapState extends State<SettlementMap>
   Offset? _dragAt; // last pointer position, in the map widget's coordinates
   Timer? _edgeTimer;
 
+  // ── Pinch-to-zoom THROUGH the grab box (user 2026-09-17: "der zoom
+  // funktioniert während des Platzierens eines Gebäudes nicht") ──
+  // The grab box below has to win single-finger gestures outright — a plain
+  // pan/drag recognizer sitting over the ghost is what stops a finger
+  // grabbing the building from also panning the map underneath it (see the
+  // box's own comment). But a plain pan recognizer, once it owns a pointer,
+  // never lets a SECOND finger that lands mid-gesture reach
+  // InteractiveViewer's own scale recognizer underneath — Flutter routes
+  // that second pointer's arena to whatever already claimed the first, not
+  // to a sibling. A `ScaleGestureRecognizer` (onScale*, not onPan*) is the
+  // one recognizer that natively keeps tracking a gesture as MORE fingers
+  // join it, so it is what has to own the box either way; pinch then simply
+  // needs its own arithmetic here, since InteractiveViewer's recognizer
+  // never gets the chance to supply it.
+  //
+  // Anchored to the matrix/focal point from the moment the SECOND finger
+  // joined ([_pinchBaseMatrix]/[_pinchBaseFocal]), not updated frame to
+  // frame — so the map point first pinched stays under the fingers for the
+  // whole gesture instead of drifting from compounding per-frame rounding.
+  Matrix4? _pinchBaseMatrix;
+  double? _pinchBaseGestureScale;
+  Offset? _pinchBaseFocal;
+
   final _txCtrl = TransformationController();
   bool _txInitialized = false;
 
@@ -144,6 +196,28 @@ class SettlementMapState extends State<SettlementMap>
   /// The last viewport the map was laid out in — the focus maths needs it, and
   /// only [build] knows it.
   Size? _viewport;
+
+  /// The camera's starting pose: fully zoomed out, looking at the STARTING PLOT.
+  ///
+  /// It used to be the middle of the whole map, but the plot sits near the map's
+  /// top edge (user 2026-09-18: "ich sollte ... die ganze Baufläche sehen
+  /// können") — so a phone opened onto empty ground with the settlement half
+  /// out of frame. Clamped like every other camera move, so it can never show
+  /// the void beyond the map.
+  Matrix4 _homeTransform(double scale, Size view) {
+    final home = gridToScreen(
+      kInitialPlotX + kInitialPlotSize / 2,
+      kInitialPlotY + kInitialPlotSize / 2,
+    );
+    return clampMapTransform(
+      mapTransform(
+        scale,
+        view.width / 2 - home.dx * scale,
+        view.height / 2 - home.dy * scale,
+      ),
+      view,
+    );
+  }
 
   /// Pans (never zooms) so [b] sits in the middle, clamped to the map's edges so
   /// the move can never reveal the void beyond it. Keeping the zoom is
@@ -255,25 +329,47 @@ class SettlementMapState extends State<SettlementMap>
         ? null
         : widget.ctrl.buildings.where((x) => x.id == moveId).firstOrNull;
     if (moveId != null && b == null) return;
+    // A building coming OUT OF THE UMBAUMODUS TRAY (user 2026-09-22) has no
+    // real position to focus — its gridX/gridY are stale (see
+    // PlacedBuilding.isStored) and may already sit under whatever else was
+    // placed since it was recalled. Treated like a brand-new purchase
+    // instead: dropped wherever the camera already is, exactly the "mittig
+    // im Screen" promise below gives a fresh building.
+    final fromStorage = b?.isStored ?? false;
     _stopDrag();
     setState(() {
       _dropChainState();
       _aimType = typeId;
       _aimMoveId = moveId;
-      _aimX = b?.gridX;
-      _aimY = b?.gridY;
+      _aimX = fromStorage ? null : b?.gridX;
+      _aimY = fromStorage ? null : b?.gridY;
     });
-    // "…dann erscheint es mittig im Screen." For something already on the map
-    // that means bringing the CAMERA to it; for something new it means dropping
-    // it on whatever the camera is already looking at. After the frame, because
-    // both need the viewport this build is about to report.
+    // "…dann erscheint es mittig im Screen." For something already standing
+    // that means bringing the CAMERA to it; for something new — or something
+    // coming out of storage — it means dropping it on whatever the camera is
+    // already looking at. After the frame, because both need the viewport
+    // this build is about to report.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _aimType != typeId || _aimMoveId != moveId) return;
-      if (b != null) {
+      if (b != null && !fromStorage) {
         focusBuilding(b);
       } else {
         _dropGhostAtCentre(def);
       }
+    });
+    _notifyAiming(true);
+  }
+
+  /// See [SettlementMap.onAimingChanged]. Deferred to a post-frame callback
+  /// — never called mid-build — because it can end up asking an ANCESTOR
+  /// (the settlement screen) to [State.setState] of its own, which a widget
+  /// still inside [_startAim]/[_clearAim]'s own `setState` call has no
+  /// business triggering synchronously.
+  void _notifyAiming(bool aiming) {
+    final cb = widget.onAimingChanged;
+    if (cb == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) cb(aiming);
     });
   }
 
@@ -315,6 +411,7 @@ class SettlementMapState extends State<SettlementMap>
       _aimX = null;
       _aimY = null;
     });
+    _notifyAiming(false);
   }
 
   /// The ✗. Also tells the SCREEN, whose `pendingTypeId` / `roadMode` opened
@@ -364,8 +461,16 @@ class SettlementMapState extends State<SettlementMap>
       return;
     }
     _closeSessionMode();
-    // Edit mode deliberately STAYS on after a move (user 2026-07-20), so
-    // several buildings can be rearranged in one visit.
+    // Edit mode STAYS on after a move in a PERSISTENT session (user
+    // 2026-07-20/2026-09-22: opened from the Build menu's own right-edge
+    // button), so several buildings — or the whole Umbaumodus tray — can be rearranged
+    // in one visit. A single-shot session (a long-press picked this
+    // building up outside any mode) is one errand: it closes the moment
+    // this ONE move lands, exactly like a plain move used to work before
+    // Umbaumodus existed.
+    if (moveId != null && !widget.persistentEditMode) {
+      widget.onExitEditMode?.call();
+    }
     // Guided tutorial (user 2026-09-06): straight from a fresh Healing Hut
     // placement into its own detail dialog — instant-build-with-gold is one
     // tap away there, rather than leaving the player back on the bare map to
@@ -494,11 +599,11 @@ class SettlementMapState extends State<SettlementMap>
     });
   }
 
-  void _ghostDragStart(DragStartDetails d) {
+  void _ghostDragStart(Offset globalPosition) {
     final type = _aimType;
     final def = type == null ? null : kBuildingDefs[type];
     if (def == null || _aimX == null || _aimY == null) return;
-    final local = _mapLocal(d.globalPosition);
+    final local = _mapLocal(globalPosition);
     final (col, row) = _cellAt(local);
     setState(() {
       _dragging = true;
@@ -515,9 +620,9 @@ class SettlementMapState extends State<SettlementMap>
     );
   }
 
-  void _ghostDragUpdate(DragUpdateDetails d) {
+  void _ghostDragUpdate(Offset globalPosition) {
     if (!_dragging) return;
-    final local = _mapLocal(d.globalPosition);
+    final local = _mapLocal(globalPosition);
     _dragAt = local;
     _moveGhostTo(local);
   }
@@ -527,6 +632,80 @@ class SettlementMapState extends State<SettlementMap>
     _edgeTimer = null;
     _dragAt = null;
     if (_dragging && mounted) setState(() => _dragging = false);
+  }
+
+  /// The grab box's own [GestureDetector.onScaleStart] — see the fields'
+  /// doc comment for why this has to be scale-based rather than pan-based.
+  /// A gesture starting with two fingers already down (rare, but possible)
+  /// skips straight to pinch instead of grabbing the building with a
+  /// meaningless single-finger position.
+  void _ghostScaleStart(ScaleStartDetails d) {
+    if (d.pointerCount >= 2) {
+      _beginPinch(d.focalPoint);
+      return;
+    }
+    _ghostDragStart(d.focalPoint);
+  }
+
+  void _ghostScaleUpdate(ScaleUpdateDetails d) {
+    if (d.pointerCount >= 2) {
+      if (_pinchBaseMatrix == null) {
+        _stopDrag(); // a second finger joined mid-drag — hand off to pinch
+        _beginPinch(d.focalPoint, gestureScale: d.scale);
+        return;
+      }
+      _applyPinch(d.focalPoint, d.scale);
+      return;
+    }
+    // Down to one finger — either it always was, or the other one just
+    // lifted mid-pinch. Either way there is no live pinch any more; falling
+    // through into a resumed drag from an unrelated position would jump the
+    // building, so this only ever starts a FRESH drag, never resumes one.
+    if (_pinchBaseMatrix != null) {
+      _pinchBaseMatrix = null;
+      _pinchBaseGestureScale = null;
+      _pinchBaseFocal = null;
+      return;
+    }
+    _ghostDragUpdate(d.focalPoint);
+  }
+
+  void _ghostScaleEnd(ScaleEndDetails d) {
+    _pinchBaseMatrix = null;
+    _pinchBaseGestureScale = null;
+    _pinchBaseFocal = null;
+    _stopDrag();
+  }
+
+  void _beginPinch(Offset focal, {double gestureScale = 1}) {
+    _stopDrag();
+    _pinchBaseMatrix = _txCtrl.value.clone();
+    _pinchBaseGestureScale = gestureScale;
+    _pinchBaseFocal = focal;
+  }
+
+  /// Re-derives the map transform from the PINCH'S OWN baseline each call
+  /// (not incrementally from the last frame) — see the fields' doc comment.
+  /// [_enforceBounds] (registered on [_txCtrl]) clamps whatever comes out of
+  /// this to the same scale/pan bounds every other writer of the transform
+  /// already honours, so an out-of-range pinch is corrected there rather
+  /// than needing its own clamping here.
+  void _applyPinch(Offset focal, double gestureScale) {
+    final base = _pinchBaseMatrix!;
+    final baseFocal = _pinchBaseFocal!;
+    final baseScale = base.getMaxScaleOnAxis();
+    final baseTranslation = base.getTranslation();
+    final newScale = baseScale * (gestureScale / _pinchBaseGestureScale!);
+    // The map-space point that sat under the fingers when the pinch began —
+    // keeping IT under the (moving) focal point is what makes the zoom feel
+    // anchored to the fingers instead of to the map's corner.
+    final anchorX = (baseFocal.dx - baseTranslation.x) / baseScale;
+    final anchorY = (baseFocal.dy - baseTranslation.y) / baseScale;
+    _txCtrl.value = mapTransform(
+      newScale,
+      focal.dx - anchorX * newScale,
+      focal.dy - anchorY * newScale,
+    );
   }
 
   // ── Scrolling the map under the ghost ─────────────────────
@@ -597,26 +776,6 @@ class SettlementMapState extends State<SettlementMap>
     }
     final ta = a.getTranslation(), tb = b.getTranslation();
     return (ta.x - tb.x).abs() < 1e-6 && (ta.y - tb.y).abs() < 1e-6;
-  }
-
-  /// One arrow tap outside a chain: a single cell in that direction. Plots move
-  /// by their own 5-cell snap, so their arrow does something visible.
-  void _nudge(int dx, int dy) {
-    final type = _aimType;
-    final def = type == null ? null : kBuildingDefs[type];
-    if (def == null || _aimX == null || _aimY == null) return;
-    final step = def.isBuildPlot ? 5 : 1;
-    final gx = (_aimX! + dx * step).clamp(0, kGridCols - def.gridW);
-    final gy = (_aimY! + dy * step).clamp(0, kGridRows - def.gridH);
-    if (gx == _aimX && gy == _aimY) {
-      Feel.deny();
-      return;
-    }
-    Feel.tap();
-    setState(() {
-      _aimX = gx;
-      _aimY = gy;
-    });
   }
 
   // ── Tap inside InteractiveViewer ──────────────────────────
@@ -718,54 +877,55 @@ class SettlementMapState extends State<SettlementMap>
   void _showDeleteConfirmation(String id, BuildingDef def) {
     showDialog<bool>(
       context: context,
+      // The map behind goes brown with the kit.
+      barrierColor: CreamPalette.dim,
       builder: (_) => Dialog(
         backgroundColor: Colors.transparent,
-        child: Container(
-          width: 260,
-          // FoE.panel() itself, plus a drop shadow (user 2026-09-05: "bei
-          // solchen Menüs, welche überlagert angezeigt werden bitte einen
-          // Schatten hinzufügen") — this sits over the live map, same as
-          // the building detail dialog it confirms deleting FROM.
-          decoration: ShapeDecoration(
-            color: FoE.panelMid,
-            shadows: FoE.drop(),
-            shape: FoE.facet(radius: 12, side: BorderSide(color: FoE.border)),
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  BuildingIcon(imageUrl: def.imageUrl, defId: def.id, size: 18),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'Delete ${def.name}?',
-                      style: FoE.title(size: 14),
+        // A cream card on the live map, like the building detail dialog it
+        // confirms deleting FROM.
+        child: SizedBox(
+          width: 280,
+          child: creamCard(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    BuildingIcon(
+                      imageUrl: def.imageUrl,
+                      defId: def.id,
+                      size: 22,
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'This cannot be undone.',
-                style: FoE.dim().copyWith(color: FoE.textDim),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _dialogBtn('Cancel', () => Navigator.pop(context, false)),
-                  _dialogBtn(
-                    'Delete',
-                    () => Navigator.pop(context, true),
-                    danger: true,
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Delete ${def.name}?',
+                        style: FoE.title(size: 15).copyWith(color: kBoxInk),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This cannot be undone.',
+                  style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _dialogBtn('Cancel', () => Navigator.pop(context, false)),
+                    _dialogBtn(
+                      'Delete',
+                      () => Navigator.pop(context, true),
+                      danger: true,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -780,26 +940,26 @@ class SettlementMapState extends State<SettlementMap>
     });
   }
 
+  /// The dialog's two buttons: Cancel raised cream, Delete in the warning
+  /// colour with paper-coloured ink.
   Widget _dialogBtn(String label, VoidCallback onTap, {bool danger = false}) =>
       Pressable(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          decoration: ShapeDecoration(
-            color: danger
-                ? Colors.red.shade900.withValues(alpha: 0.4)
-                : FoE.panelMid,
-            shape: FoE.facet(
-              radius: 6,
-              side: BorderSide(
-                color: danger ? Colors.red.shade700 : FoE.border,
-              ),
-            ),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+          decoration: danger
+              ? chunkyDecoration(
+                  fill: CreamPalette.warn,
+                  deep: strategyDarken(CreamPalette.warn, 0.35),
+                  radius: 14,
+                  shadowOffset: 3,
+                )
+              : raisedTile(radius: 14),
           child: Text(
             label,
-            style: FoE.label().copyWith(
-              color: danger ? Colors.red.shade300 : FoE.textDim,
+            style: FoE.label(size: 14).copyWith(
+              color: danger ? CreamPalette.paperTop : kBoxInk,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ),
@@ -815,6 +975,9 @@ class SettlementMapState extends State<SettlementMap>
       // would still pop up its detail sheet instead of doing nothing / letting
       // the tap reach whatever real building sits on that same tile.
       if (def.isBuildPlot && b.isComplete) continue;
+      // A STORED building (Umbaumodus tray) isn't standing anywhere — its
+      // gridX/gridY are stale and must never catch a tap.
+      if (b.isStored) continue;
       if (col >= b.gridX &&
           col < b.gridX + def.gridW &&
           row >= b.gridY &&
@@ -826,12 +989,8 @@ class SettlementMapState extends State<SettlementMap>
   }
 
   // ── Detail dialog (normal mode) ───────────────────────────
-  void _showDetail(PlacedBuilding b) => showBuildingDetailDialog(
-    context,
-    widget.ctrl,
-    b,
-    onOpenBuildMenu: widget.onOpenBuildMenu,
-  );
+  void _showDetail(PlacedBuilding b) =>
+      showBuildingDetailDialog(context, widget.ctrl, b, onMap: true);
 
   /// The buildings to paint, in order. [roads] picks the ground layer or the
   /// things standing on it.
@@ -839,10 +998,53 @@ class SettlementMapState extends State<SettlementMap>
   /// A def that has gone missing counts as NOT a road: it draws nothing either
   /// way, and guessing "ground" for something unknown is how a hole in the map
   /// ends up under everything.
+  ///
+  /// Sorted once per `buildings` list, not once per build: the settlement
+  /// screen rebuilds this map on every controller notification (the 10 s tick,
+  /// a chat message, a resource change …) and the sort — with a def lookup per
+  /// comparison — is the heaviest part of a build. The controller replaces the
+  /// list on every real change, so its identity is a sound key.
   List<PlacedBuilding> _sortedForPainting({required bool roads}) {
+    final source = widget.ctrl.buildings;
+    if (!identical(_sortedFor, source)) {
+      _sortedFor = source;
+      _sortedRoads = _sortLayer(source, roads: true);
+      _sortedStanding = _sortLayer(source, roads: false);
+      // Demolished buildings must not linger in the tile cache.
+      if (_tileCache.length > source.length) {
+        final live = {for (final b in source) b.id};
+        _tileCache.removeWhere((id, _) => !live.contains(id));
+      }
+    }
+    return roads ? _sortedRoads : _sortedStanding;
+  }
+
+  List<PlacedBuilding>? _sortedFor;
+  List<PlacedBuilding> _sortedRoads = const [];
+  List<PlacedBuilding> _sortedStanding = const [];
+
+  /// Built tiles, reused while their building and the few things a tile
+  /// depends on besides it are unchanged — see [_buildingTile]. A tile is a
+  /// pure function of (the building, [_tileSignature]); handing Flutter the
+  /// SAME widget instance lets it skip that whole subtree instead of
+  /// re-running ~200 tile builds on every notification.
+  final Map<
+    String,
+    ({PlacedBuilding building, BuildingDef def, int signature, Widget tile})
+  >
+  _tileCache = {};
+
+  List<PlacedBuilding> _sortLayer(
+    List<PlacedBuilding> source, {
+    required bool roads,
+  }) {
     final out = [
-      for (final b in widget.ctrl.buildings)
-        if ((kBuildingDefs[b.buildingTypeId]?.isRoad ?? false) == roads) b,
+      for (final b in source)
+        // A STORED building (Umbaumodus tray) isn't standing anywhere — it
+        // paints in neither layer.
+        if (!b.isStored &&
+            (kBuildingDefs[b.buildingTypeId]?.isRoad ?? false) == roads)
+          b,
     ];
     out.sort((a, b) {
       final ad = kBuildingDefs[a.buildingTypeId];
@@ -920,7 +1122,7 @@ class SettlementMapState extends State<SettlementMap>
     final out = <String>{};
     for (final b in widget.ctrl.buildings) {
       final d = kBuildingDefs[b.buildingTypeId];
-      if (d == null || d.isRoad || d.isBuildPlot) continue;
+      if (d == null || d.isRoad || d.isBuildPlot || b.isStored) continue;
       if (b.id == _aimMoveId) continue;
       // In front of the ghost, not behind it — anything behind is already
       // hidden BY the ghost, and fading it would reveal nothing.
@@ -992,11 +1194,9 @@ class SettlementMapState extends State<SettlementMap>
 
         if (!_txInitialized) {
           _txInitialized = true;
-          final tx = (constraints.maxWidth - mapW * minScale) / 2;
-          final ty = (constraints.maxHeight - mapH * minScale) / 2;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
-            _txCtrl.value = mapTransform(minScale, tx, ty);
+            _txCtrl.value = _homeTransform(minScale, view);
           });
         } else if (resized) {
           // The viewport can change under a transform that was legal when it
@@ -1011,14 +1211,7 @@ class SettlementMapState extends State<SettlementMap>
               _txCtrl.value = clampMapTransform(_txCtrl.value, view);
               return;
             }
-            _txCtrl.value = clampMapTransform(
-              mapTransform(
-                minScale,
-                (view.width - mapW * minScale) / 2,
-                (view.height - mapH * minScale) / 2,
-              ),
-              view,
-            );
+            _txCtrl.value = _homeTransform(minScale, view);
           });
         }
 
@@ -1136,12 +1329,8 @@ class SettlementMapState extends State<SettlementMap>
             // Bottom is also simply the right place: it's in thumb reach, and
             // the settlement screen hides its quick menu while a mode is
             // active, so nothing else is competing for the space.
-            if (_chaining)
-              _bottomBanner(_chainBanner())
-            else if (showGhost)
-              _bottomBanner(_aimBanner(ghostDef))
-            else if (widget.editMode)
-              _bottomBanner(_editIdleBanner()),
+            if (!_chaining && !showGhost && widget.editMode)
+              _bottomBanner(_editIdleBanner(), maxWidth: 620),
           ],
         );
       },
@@ -1155,14 +1344,66 @@ class SettlementMapState extends State<SettlementMap>
   Widget _buildingTile(PlacedBuilding b, {bool faded = false}) {
     final def = kBuildingDefs[b.buildingTypeId];
     if (def == null) return const SizedBox.shrink();
-    // The building being moved keeps standing where it was, ghosted: the ✗ is
-    // still on the table, so "where it came from" is live information.
+    // Everything a tile looks like, other than the building itself, folded
+    // into one int. `PlacedBuilding` is immutable (every change is a copyWith
+    // into a new list), so an unchanged building is the SAME object from one
+    // tick to the next and (building identity, signature) is a complete cache
+    // key.
     final isGhostSrc = b.id == _aimMoveId;
     final isDisconnected =
         b.isComplete &&
         !def.isRoad &&
         !def.isMainBuilding &&
         !widget.ctrl.connectedBuildingIds.contains(b.id);
+    final roadMask = def.isRoad ? _roadMaskOf(b) : 0;
+    final isHealAnchor =
+        b.buildingTypeId == kHealingHutBuildingId &&
+        widget.ctrl.introStep == IntroStep.assignHealer;
+    final signature =
+        (faded ? 1 : 0) |
+        (isGhostSrc ? 2 : 0) |
+        (isDisconnected ? 4 : 0) |
+        (isHealAnchor ? 8 : 0) |
+        (roadMask << 4);
+    final hit = _tileCache[b.id];
+    // The def is part of the key: Dev Mode replaces defs (art, footprint)
+    // without touching the placed buildings.
+    if (hit != null &&
+        identical(hit.building, b) &&
+        identical(hit.def, def) &&
+        hit.signature == signature) {
+      return hit.tile;
+    }
+    final tile = _composeTile(
+      b,
+      def,
+      faded: faded,
+      isGhostSrc: isGhostSrc,
+      isDisconnected: isDisconnected,
+      isHealAnchor: isHealAnchor,
+      roadMask: roadMask,
+    );
+    _tileCache[b.id] = (
+      building: b,
+      def: def,
+      signature: signature,
+      tile: tile,
+    );
+    return tile;
+  }
+
+  int _roadMaskOf(PlacedBuilding b) =>
+      roadMask(widget.ctrl.roadCells, b.gridX, b.gridY);
+
+  Widget _composeTile(
+    PlacedBuilding b,
+    BuildingDef def, {
+    required bool faded,
+    required bool isGhostSrc,
+    required bool isDisconnected,
+    required bool isHealAnchor,
+    required int roadMask,
+  }) {
     // ── ISOMETRIC PLACEMENT (2026-08-01) ──
     // The box is the footprint's own bounding rectangle (isoBounds), and the
     // art fills its width and hangs from its bottom, running upward as far as
@@ -1174,91 +1415,80 @@ class SettlementMapState extends State<SettlementMap>
     // the same thing only for a square footprint, and a 2×1 building placed
     // that way sits half a tile off its own ground.
     final iso = isoBounds(b.gridX, b.gridY, def.gridW, def.gridH);
+    final content = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Isolated raster: the whole buildings layer rebuilds on every 5s
+        // tick, but a tile's art only changes when the building does, so a
+        // RepaintBoundary keeps the tick from repainting all ~200 tiles.
+        // Doubles as the guided tutorial's spotlight anchor for this ONE
+        // building during assignHealer (user 2026-09-06: "lass mich das
+        // Gebäude anklicken") — see SettlementScreen._soloQuickPadAnchor.
+        RepaintBoundary(
+          key: isHealAnchor
+              ? IntroSpotlightAnchors.of('map-healing-hut')
+              : null,
+          child: _BuildingTile(
+            def: def,
+            building: b,
+            // Which junction this road is. Computed by the map rather than
+            // the tile because only the map can see the neighbours, and it
+            // has the controller's cached cell set to see them cheaply.
+            roadMask: roadMask,
+          ),
+        ),
+        // ── SIGNS OF LIFE (user 2026-08-04) ──
+        // Smoke and lamplight, over the sprite and inside its own box.
+        // Only on a FINISHED, RUNNING building: a site under construction
+        // has nobody in it, and a paused one has been told to stop — a
+        // chimney still smoking would say the opposite of what the pause
+        // overlay says, and the player would believe the smoke.
+        if (b.isComplete && !b.isPaused && !def.isRoad && !def.isBuildPlot)
+          Positioned.fill(
+            child: _LifeOverlay(def: def, seed: b.id.hashCode),
+          ),
+        if (isDisconnected)
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _FootprintPainter(
+                w: def.gridW,
+                h: def.gridH,
+                color: FoE.danger,
+                outline: false,
+              ),
+            ),
+          ),
+        if (isDisconnected)
+          const Positioned(
+            top: 1,
+            left: 1,
+            child: Text('🚫', style: TextStyle(fontSize: 12)),
+          ),
+        // PAUSED, on the map (user 2026-08-01): a switch you cannot see
+        // from the outside is one you forget you flipped — and a building
+        // that has quietly produced nothing for a week looks exactly like a
+        // building that is working. "Schlaf-Z mit der Graustufe von 1" (user
+        // 2026-09-22): the art itself is greyed (see [_BuildingTile]) and sleepy
+        // Zs rise where the smoke would — the dark rectangle over the whole field
+        // (the ground included) and the 12 px ⏸ are gone.
+        if (b.isPaused && b.isComplete && !def.isRoad && !def.isBuildPlot)
+          Positioned.fill(
+            child: _SleepOverlay(def: def, seed: b.id.hashCode),
+          ),
+      ],
+    );
     return Positioned(
       left: iso.left,
       top: iso.top,
       width: iso.width,
       height: iso.height,
-      child: Opacity(
-        opacity: isGhostSrc
-            ? 0.3
-            : faded
-            ? 0.3
-            : 1.0,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // Isolated raster: the whole buildings layer rebuilds on every 5s
-            // tick, but a tile's art only changes when the building does, so a
-            // RepaintBoundary keeps the tick from repainting all ~200 tiles.
-            // Doubles as the guided tutorial's spotlight anchor for this ONE
-            // building during assignHealer (user 2026-09-06: "lass mich das
-            // Gebäude anklicken") — see SettlementScreen._soloQuickPadAnchor.
-            RepaintBoundary(
-              key:
-                  b.buildingTypeId == kHealingHutBuildingId &&
-                      widget.ctrl.introStep == IntroStep.assignHealer
-                  ? IntroSpotlightAnchors.of('map-healing-hut')
-                  : null,
-              child: _BuildingTile(
-                def: def,
-                building: b,
-                // Which junction this road is. Computed here rather than in the
-                // tile because only the map can see the neighbours, and it has
-                // the controller's cached cell set to see them cheaply.
-                roadMask: def.isRoad
-                    ? roadMask(widget.ctrl.roadCells, b.gridX, b.gridY)
-                    : 0,
-              ),
-            ),
-            // ── SIGNS OF LIFE (user 2026-08-04) ──
-            // Smoke and lamplight, over the sprite and inside its own box.
-            // Only on a FINISHED, RUNNING building: a site under construction
-            // has nobody in it, and a paused one has been told to stop — a
-            // chimney still smoking would say the opposite of what the pause
-            // overlay says, and the player would believe the smoke.
-            if (b.isComplete && !b.isPaused && !def.isRoad && !def.isBuildPlot)
-              Positioned.fill(
-                child: _LifeOverlay(def: def, seed: b.id.hashCode),
-              ),
-            if (isDisconnected)
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _FootprintPainter(
-                    w: def.gridW,
-                    h: def.gridH,
-                    color: FoE.danger,
-                    outline: false,
-                  ),
-                ),
-              ),
-            if (isDisconnected)
-              const Positioned(
-                top: 1,
-                left: 1,
-                child: Text('🚫', style: TextStyle(fontSize: 12)),
-              ),
-            // PAUSED, on the map (user 2026-08-01): a switch you cannot see
-            // from the outside is one you forget you flipped — and a building
-            // that has quietly produced nothing for a week looks exactly like a
-            // building that is working.
-            if (b.isPaused && b.isComplete) ...[
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: FoE.bg.withValues(alpha: 0.45),
-                  ),
-                ),
-              ),
-              const Positioned(
-                bottom: 1,
-                right: 1,
-                child: Text('⏸️', style: TextStyle(fontSize: 12)),
-              ),
-            ],
-          ],
-        ),
-      ),
+      // Only when it actually IS see-through. RenderOpacity is a repaint
+      // boundary that composites through an OpacityLayer at ANY alpha above
+      // zero — 1.0 included — so wrapping every tile unconditionally cost a
+      // pointless layer per building, ~200 of them, on every frame.
+      child: isGhostSrc || faded
+          ? Opacity(opacity: 0.3, child: content)
+          : content,
     );
   }
 
@@ -1357,18 +1587,20 @@ class SettlementMapState extends State<SettlementMap>
       );
 
   /// One direction arrow, sitting just outside the edge it belongs to and
-  /// pointing the way it would move things.
+  /// pointing the way it would move things. Amber while laying road, the
+  /// warning colour while tearing it up (the kit's own colours).
   Widget _arrowButton({
     required Offset at,
     required int dx,
     required int dy,
     required double size,
-    required Color color,
+    required bool erase,
     required VoidCallback onTap,
   }) {
     final angle = isoScreenAngle(dx, dy);
     final centre =
         at + Offset(math.cos(angle), math.sin(angle)) * (size * 0.55);
+    final fill = erase ? CreamPalette.warn : CreamPalette.gold;
     return Positioned(
       left: centre.dx - size / 2,
       top: centre.dy - size / 2,
@@ -1378,14 +1610,14 @@ class SettlementMapState extends State<SettlementMap>
           width: size,
           height: size,
           decoration: BoxDecoration(
-            color: color,
+            color: fill,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 1.5),
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                color: Color(0x66000000),
-                blurRadius: 4,
-                offset: Offset(0, 2),
+                color: erase
+                    ? strategyDarken(fill, 0.35)
+                    : CreamPalette.goldDeep,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
@@ -1394,7 +1626,7 @@ class SettlementMapState extends State<SettlementMap>
             child: Icon(
               Icons.arrow_forward_rounded,
               size: size * 0.58,
-              color: Colors.white,
+              color: erase ? CreamPalette.paperTop : CreamPalette.ink,
             ),
           ),
         ),
@@ -1402,87 +1634,322 @@ class SettlementMapState extends State<SettlementMap>
     );
   }
 
-  Widget _roundButton({
+  /// A round kit button inside the tag: raised cream (cancel, delete) or amber
+  /// (confirm). A disabled one is the grey a card you cannot afford wears.
+  Widget _tagButton({
     required IconData icon,
-    required Color color,
-    required double size,
-    required VoidCallback onTap,
-  }) => Pressable(
-    onTap: onTap,
-    child: Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 5,
-            offset: Offset(0, 2),
+    required String label,
+    required VoidCallback? onTap,
+    bool primary = false,
+    Color? ink,
+  }) {
+    final enabled = onTap != null;
+    const size = 40.0;
+    return Semantics(
+      label: label,
+      button: true,
+      enabled: enabled,
+      child: Pressable(
+        onTap: onTap,
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: primary && enabled
+                ? null
+                : LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: enabled
+                        ? const [CreamPalette.tileTop, CreamPalette.tileBottom]
+                        : const [
+                            CreamPalette.lockedTop,
+                            CreamPalette.lockedBottom,
+                          ],
+                  ),
+            color: primary && enabled ? CreamPalette.gold : null,
+            boxShadow: [
+              BoxShadow(
+                color: !enabled
+                    ? CreamPalette.lockedShadow
+                    : primary
+                    ? CreamPalette.goldDeep
+                    : CreamPalette.tanShadow,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-        ],
+          child: Icon(
+            icon,
+            size: 22,
+            color: !enabled
+                ? CreamPalette.ink.withValues(alpha: 0.4)
+                : (ink ?? CreamPalette.ink),
+          ),
+        ),
       ),
-      child: Icon(icon, color: Colors.white, size: size * 0.55),
-    ),
+    );
+  }
+
+  // The tag's little facts: a glyph and a figure, in the card's own ink.
+  Widget _tagFact(IconData icon, String text, {Color? colour}) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 12, color: colour ?? kBoxInkSoft),
+      const SizedBox(width: 3),
+      Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: colour ?? kBoxInkSoft,
+        ),
+      ),
+    ],
   );
 
-  /// The ✓/✗ pair, ABOVE whatever is being aimed and always on screen — a
-  /// confirm button that has slid off the top edge is a session you cannot
-  /// leave (which is how the road banner got buried once already).
-  Widget _confirmBar({
+  /// One cost, its glyph and its figure — the figure in the warning colour when
+  /// the stock falls short of it.
+  Widget _tagCost(String key, double value, Map<String, double> stock) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(resourceEmoji(key), style: const TextStyle(fontSize: 12)),
+      const SizedBox(width: 2),
+      Text(
+        '${value.ceil()}',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: (stock[key] ?? 0) >= value ? kBoxInk : CreamPalette.warn,
+        ),
+      ),
+    ],
+  );
+
+  /// THE NAME TAG (user 2026-09-19, "Namensschild"): one cream card hanging on
+  /// whatever is being aimed — its name, the facts that decide whether to build
+  /// it (footprint, time, cost), a line saying whether it fits and, when it does
+  /// not, WHY, and the ✗ / ✓ (and 🗑 for a building that already stands). It
+  /// replaces the loose round buttons and the banner along the bottom.
+  ///
+  /// It floats above the anchor and always on screen — a confirm button that has
+  /// slid off the top edge is a session you cannot leave (which is how the road
+  /// banner got buried once already): when there is no room above it hangs
+  /// BELOW instead. A disabled ✓ (no [onOk]) is a spot the game would refuse.
+  ///
+  /// [gap] is how far the tag floats clear of the anchor — the chain needs the
+  /// bigger one to clear its arrows.
+  Widget _nameTag({
     required Rect anchor,
-    required VoidCallback onOk,
+    required String title,
+    required List<Widget> facts,
+    required String? status,
+    required bool ok,
+    required VoidCallback? onOk,
     required VoidCallback onCancel,
+    String cancelLabel = 'Cancel',
+    VoidCallback? onDelete,
+    double gap = 14,
   }) {
     final view = _viewport ?? const Size(400, 800);
-    const barW = 108.0;
-    // math.max on the upper bound: clamp() throws when the two ends cross, and
-    // on a viewport narrower than the bar itself they would.
-    final left = (anchor.center.dx - barW / 2)
-        .clamp(8.0, math.max(8.0, view.width - barW - 8))
+    final w = math.min(344.0, view.width - 16);
+    // Shorter when there is no status line to show.
+    final h = status == null ? 64.0 : 84.0;
+    final left = (anchor.center.dx - w / 2)
+        .clamp(8.0, math.max(8.0, view.width - w - 8))
         .toDouble();
-    // 80, not "just above": the up-and-right arrow reaches ~30px over the
-    // footprint's north corner, and on a ROAD — whose box IS one tile — a
-    // tighter gap puts the ✓ under the arrow the player is tapping.
-    final top = (anchor.top - 80)
-        .clamp(8.0, math.max(8.0, view.height - 100))
+    final above = anchor.top - gap - h >= 8;
+    final top = (above ? anchor.top - gap - h : anchor.bottom + gap)
+        .clamp(8.0, math.max(8.0, view.height - h - 8))
         .toDouble();
+    // The notch points at the anchor, and stays inside the card's own width.
+    final notchX = (anchor.center.dx - left).clamp(24.0, w - 24).toDouble();
     return Positioned(
       left: left,
       top: top,
-      width: barW,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      width: w,
+      height: h,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          _roundButton(
-            icon: Icons.close_rounded,
-            color: kParchmentDeep,
-            size: 40,
-            onTap: onCancel,
+          Positioned(
+            left: notchX - 8,
+            top: above ? h - 9 : -7,
+            child: Transform.rotate(
+              angle: math.pi / 4,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: above
+                      ? CreamPalette.paperBottom
+                      : CreamPalette.paperTop,
+                  borderRadius: BorderRadius.circular(3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: CreamPalette.tanShadow,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          _roundButton(
-            icon: Icons.check_rounded,
-            color: kActionGreen,
-            size: 40,
-            onTap: onOk,
+          Positioned.fill(
+            child: creamCard(
+              padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: FoE.title(size: 14.5).copyWith(color: kBoxInk),
+                        ),
+                        const SizedBox(height: 3),
+                        // ONE line, always (user 2026-09-19: "immer die drei
+                        // Ressourcen nebeneinander"): footprint, time and every
+                        // cost side by side, scaled down rather than wrapped onto
+                        // a second line the tag has no height for.
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (var i = 0; i < facts.length; i++) ...[
+                                if (i > 0) const SizedBox(width: 10),
+                                facts[i],
+                              ],
+                            ],
+                          ),
+                        ),
+                        // A line only when there is something to say — a spot
+                        // that fits says nothing, and a footprint on top of a
+                        // building is already red (user 2026-09-19: "damit
+                        // alles kleiner wird").
+                        if (status != null) ...[
+                          const SizedBox(height: 5),
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: ok
+                                      ? CreamPalette.better
+                                      : CreamPalette.warn,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  status,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: ok
+                                        ? CreamPalette.better
+                                        : CreamPalette.warn,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (onDelete != null) ...[
+                    _tagButton(
+                      icon: Icons.delete_outline_rounded,
+                      label: 'Delete',
+                      onTap: onDelete,
+                      ink: CreamPalette.warn,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  _tagButton(
+                    icon: Icons.close_rounded,
+                    label: cancelLabel,
+                    onTap: onCancel,
+                  ),
+                  const SizedBox(width: 6),
+                  _tagButton(
+                    icon: Icons.check_rounded,
+                    label: 'Confirm',
+                    onTap: onOk,
+                    primary: true,
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// Everything that hangs off the ghost: the box you grab it by, the four
-  /// arrows, the ✓/✗ and — when the ghost is a building that already stands —
-  /// the 🗑.
+  /// Whether the aimed spot is good, and if not why — the words the tag's status
+  /// line shows. Placement rules first (the footprint), then what a NEW building
+  /// still needs: its cost, and a free slot in the build queue. A building being
+  /// moved costs nothing.
+  ({String? text, bool ok}) _aimStatus(BuildingDef def, int gx, int gy) {
+    final problem = widget.ctrl.placementProblem(
+      def.id,
+      gx,
+      gy,
+      excludeId: _aimMoveId,
+    );
+    // On top of another building has no words: the footprint is red already.
+    if (problem != null) return (text: problem.label, ok: false);
+    if (_aimMoveId == null) {
+      final stock = widget.ctrl.resources?.asMap ?? const <String, double>{};
+      final missing = [
+        for (final e in def.resourceCost.entries)
+          if ((stock[e.key] ?? 0) < e.value)
+            '${resourceEmoji(e.key)} ${(e.value - (stock[e.key] ?? 0)).ceil()}',
+      ];
+      if (missing.isNotEmpty) {
+        return (text: 'Missing ${missing.join('  ')}', ok: false);
+      }
+      final queueFull =
+          def.constructionSeconds > 0 &&
+          widget.ctrl.activeConstructionCount >= widget.ctrl.maxBuildSlots &&
+          widget.ctrl.queuedConstructionCount >= widget.ctrl.maxQueueSlots;
+      if (queueFull) return (text: 'The build queue is full', ok: false);
+    }
+    // A spot that fits says nothing.
+    return (text: null, ok: true);
+  }
+
+  /// Everything that hangs off the ghost: the box you grab it by and the name
+  /// tag with its ✗ / ✓ (and 🗑 when the ghost is a building that already
+  /// stands).
+  ///
+  /// No nudge arrows here any more (user 2026-09-17: "brauche ich die Pfeile
+  /// fürs verschieben nicht, da ich es mit drag n drop mache") — the grab box
+  /// below already IS the move gesture; [_chainControls] keeps its own
+  /// arrows, since laying a road has no drag to replace them with.
   List<Widget> _aimControls(BuildingDef def, int gx, int gy) {
     final rect = MatrixUtils.transformRect(
       _txCtrl.value,
       _artRect(def, gx, gy),
     );
-    final canDelete =
-        _aimMoveId != null && !def.isMainBuilding && !def.isBuildPlot;
+    final moving = _aimMoveId != null;
+    final canDelete = moving && !def.isMainBuilding && !def.isBuildPlot;
+    final status = _aimStatus(def, gx, gy);
+    final stock = widget.ctrl.resources?.asMap ?? const <String, double>{};
     return [
       // THE GRAB BOX, and nothing wider. It covers the building alone, so a
       // finger set down beside it reaches the InteractiveViewer underneath and
@@ -1495,44 +1962,49 @@ class SettlementMapState extends State<SettlementMap>
         height: rect.height,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPanStart: _ghostDragStart,
-          onPanUpdate: _ghostDragUpdate,
-          onPanEnd: (_) => _stopDrag(),
-          onPanCancel: _stopDrag,
+          onScaleStart: _ghostScaleStart,
+          onScaleUpdate: _ghostScaleUpdate,
+          onScaleEnd: _ghostScaleEnd,
         ),
       ),
-      for (final (dx, dy) in const [(1, 0), (-1, 0), (0, 1), (0, -1)])
-        _arrowButton(
-          at: _edgeAnchor(gx, gy, def.gridW, def.gridH, dx, dy),
-          dx: dx,
-          dy: dy,
-          size: 28,
-          color: FoE.accentBlue,
-          onTap: () => _nudge(dx, dy),
-        ),
-      if (canDelete)
-        Positioned(
-          left: rect.right + 2,
-          top: rect.bottom - 34,
-          child: _roundButton(
-            icon: Icons.delete_outline_rounded,
-            color: Colors.red.shade700,
-            size: 32,
-            onTap: _deleteAimed,
-          ),
-        ),
-      _confirmBar(anchor: rect, onOk: _confirmAim, onCancel: _cancelAim),
+      _nameTag(
+        anchor: rect,
+        title: def.name,
+        facts: [
+          _tagFact(Icons.crop_square, '${def.gridW}×${def.gridH}'),
+          if (moving)
+            _tagFact(Icons.open_with, 'Moving')
+          else ...[
+            if (def.constructionSeconds > 0)
+              _tagFact(Icons.schedule, fmtDuration(def.constructionSeconds)),
+            if (def.resourceCost.isEmpty)
+              _tagFact(Icons.sell_outlined, 'Free')
+            else
+              for (final e in def.resourceCost.entries)
+                _tagCost(e.key, e.value, stock),
+          ],
+        ],
+        status: status.text,
+        ok: status.ok,
+        // A spot the game would refuse gets a grey ✓ — pressing it would only
+        // bring up the reason the tag already states.
+        onOk: status.ok ? _confirmAim : null,
+        onCancel: _cancelAim,
+        onDelete: canDelete ? _deleteAimed : null,
+      ),
     ];
   }
 
   /// The chain's arrows: bigger than the aiming ones ("dann werden die Pfeile
-  /// aktiv (grösser)"), green while laying road and RED while tearing it up.
+  /// aktiv (grösser)"), amber while laying road and red while tearing it up. The
+  /// tag follows the head of the chain, so the way out is always beside the
+  /// tile you just touched rather than back where you started.
   List<Widget> _chainControls() {
-    final colour = _chainErase ? Colors.red.shade700 : kActionGreen;
     final rect = MatrixUtils.transformRect(
       _txCtrl.value,
       isoBounds(_chainX, _chainY, 1, 1),
     );
+    final laying = widget.ctrl.introStep == IntroStep.buildRoad;
     return [
       for (final (dx, dy) in const [(1, 0), (-1, 0), (0, 1), (0, -1)])
         _arrowButton(
@@ -1540,99 +2012,209 @@ class SettlementMapState extends State<SettlementMap>
           dx: dx,
           dy: dy,
           size: 40,
-          color: colour,
+          erase: _chainErase,
           onTap: () => _chainStep(dx, dy),
         ),
-      // The ✓/✗ follow the head of the chain, so the way out is always beside
-      // the tile you just touched rather than back where you started.
-      _confirmBar(anchor: rect, onOk: _endChain, onCancel: _undoChain),
+      _nameTag(
+        anchor: rect,
+        // Clears the arrow above the head tile.
+        gap: 64,
+        title: _chainErase ? 'Removing road' : 'Road',
+        facts: [
+          _tagFact(
+            _chainErase ? Icons.remove_road : Icons.add_road,
+            _chainErase
+                ? '${_chainRemoved.length} removed'
+                : '${_chainBuilt.length} laid',
+          ),
+          _tagFact(Icons.sell_outlined, 'Free'),
+        ],
+        status: _chainErase
+            ? 'Tap an arrow to pull up the next road'
+            : laying
+            // Reminds the player WHERE, not just how (user 2026-09-06).
+            ? 'Keep going until it reaches the Healing Hut'
+            : 'Tap an arrow to lay the next road',
+        ok: true,
+        onOk: _endChain,
+        // ✗ takes the WHOLE run back — see [_undoChain].
+        cancelLabel: 'Take the whole run back',
+        onCancel: _undoChain,
+      ),
     ];
   }
 
-  // ── Banners ───────────────────────────────────────────────
-  /// Places a mode banner at the bottom of the map, clear of the header and
-  /// inside the device's safe area.
-  Widget _bottomBanner(Widget child) => Positioned(
+  // ── The move mode's bar ───────────────────────────────────
+  /// Places a bar at the bottom of the map, clear of the header and inside the
+  /// device's safe area, capped in width so it is not a banner across a wide
+  /// screen.
+  Widget _bottomBanner(Widget child, {double maxWidth = 520}) => Positioned(
     left: 10,
     right: 10,
     bottom: 10 + MediaQuery.of(context).viewPadding.bottom,
-    child: child,
-  );
-
-  Widget _bannerShell({
-    required Widget leading,
-    required String text,
-    required Color colour,
-    Widget? trailing,
-  }) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    decoration: FoE.panel(radius: 8, overrideBorder: colour),
-    child: Row(
-      children: [
-        leading,
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(text, style: FoE.label().copyWith(color: colour)),
-        ),
-        if (trailing != null) ...[const SizedBox(width: 8), trailing],
-      ],
+    child: Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: child,
+      ),
     ),
   );
 
-  Widget _doneButton(String label, Color colour, VoidCallback onTap) =>
-      Pressable(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: ShapeDecoration(
-            color: FoE.panelDark,
-            shape: FoE.facet(radius: 5, side: BorderSide(color: colour)),
+  /// Edit mode with nothing picked up: what to do, and the way out.
+  ///
+  /// Two tools live here now (user 2026-09-22): moving one building at a
+  /// time, unchanged, and — in a PERSISTENT session only, see
+  /// [SettlementMap.persistentEditMode] — "Alle Gebäude/Straßen
+  /// zurücknehmen", the FoE-style tool that takes the whole city off the map
+  /// into a tray. The TRAY ITSELF is no longer shown here (2026-09-22, "das
+  /// Baumenü soll geöffnet werden… genau gleiche Oberfläche, aber nur mit
+  /// den gespeicherten Gebäuden") — the settlement screen puts the Build
+  /// carousel itself up in its place (see SettlementScreen._showTrayCarousel
+  /// and BuildingCarousel's `trayBuildings`), so this banner has nothing left
+  /// to draw while the tray is non-empty.
+  Widget _editIdleBanner() {
+    if (widget.ctrl.hasStoredBuildings) return const SizedBox.shrink();
+    final canRecallBuildings =
+        widget.persistentEditMode && widget.ctrl.recallableBuildings.isNotEmpty;
+    final canRecallRoads =
+        widget.persistentEditMode && widget.ctrl.recallableRoads.isNotEmpty;
+    return creamCard(
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.open_with, size: 18, color: kBoxAccent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Tap a building to pick it up',
+                  style: FoE.label(size: 13).copyWith(color: kBoxInk),
+                ),
+              ),
+              if (!widget.persistentEditMode) ...[
+                const SizedBox(width: 8),
+                _doneButton(),
+              ],
+            ],
           ),
-          child: Text(
-            label,
-            style: FoE.label(size: 11).copyWith(color: colour),
-          ),
-        ),
+          // The bulk tools are only on offer in a real Umbaumodus session —
+          // a long-press's single-shot errand has no use for them, and no
+          // "Fertig" to gate anyway (it closes itself on its own move).
+          if (canRecallBuildings) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: _recallAllButton()),
+                if (!canRecallRoads) ...[
+                  const SizedBox(width: 8),
+                  _doneButton(),
+                ],
+              ],
+            ),
+          ],
+          if (canRecallRoads) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: _recallAllRoadsButton()),
+                const SizedBox(width: 8),
+                _doneButton(),
+              ],
+            ),
+          ],
+          if (widget.persistentEditMode &&
+              !canRecallBuildings &&
+              !canRecallRoads) ...[
+            const SizedBox(height: 10),
+            Align(alignment: Alignment.centerRight, child: _doneButton()),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// "Recall all buildings" — asks first, since it visibly upends the whole
+  /// town at once. The dialog is the one confirmation this tool gets;
+  /// backing out afterwards (the tray carousel's own Cancel button, see
+  /// SettlementScreen._cancelUmbaumodus) needs none, because it only ever
+  /// puts things back the way they already were.
+  Widget _recallAllButton() => _recallButton(
+    icon: Icons.inventory_2_outlined,
+    label: 'Recall all buildings',
+    dialogTitle: 'Recall every building?',
+    dialogBody:
+        'Everything except the Castle, roads and Building Plots comes '
+        'off the map and waits in the Build menu until you place it '
+        'again. Closing before you place everything undoes the whole '
+        'thing, so nothing is ever lost either way.',
+    onConfirmed: widget.ctrl.recallAllBuildings,
+  );
+
+  /// "Recall all roads" (user 2026-09-22: "es braucht auch noch einen
+  /// Button, um alle Strassen aufzuheben") — its OWN button, since roads
+  /// were deliberately left out of [_recallAllButton] (their own erase-chain
+  /// tool already covers reworking a network, and thirty tiny road tiles
+  /// would drown out the real buildings in the tray). Shares the same tray
+  /// and the same undo-on-close as the buildings tool.
+  Widget _recallAllRoadsButton() => _recallButton(
+    icon: Icons.route,
+    label: 'Recall all roads',
+    dialogTitle: 'Recall every road?',
+    dialogBody:
+        'Every road tile comes off the map and waits in the Build menu '
+        'until you place it again. Closing before you place everything '
+        'undoes the whole thing, so nothing is ever lost either way.',
+    onConfirmed: widget.ctrl.recallAllRoads,
+  );
+
+  Widget _recallButton({
+    required IconData icon,
+    required String label,
+    required String dialogTitle,
+    required String dialogBody,
+    required Future<void> Function() onConfirmed,
+  }) => Pressable(
+    onTap: () async {
+      final ok = await confirmDialog(
+        context,
+        title: dialogTitle,
+        body: dialogBody,
+        confirmLabel: 'Recall all',
       );
-
-  Widget _aimBanner(BuildingDef def) => _bannerShell(
-    leading: BuildingIcon(imageUrl: def.imageUrl, defId: def.id, size: 16),
-    colour: FoE.accentBlue,
-    text: def.isRoad
-        ? (widget.ctrl.introStep == IntroStep.buildRoad
-              // Reminds the player WHERE, not just how (user 2026-09-06) —
-              // the generic drag/confirm banner never said what the road
-              // was actually for.
-              ? 'Connect the Healing Hut to your Castle, then ✓ to keep '
-                    'going'
-              : 'Drag the road into place, then ✓ to keep going')
-        : _aimMoveId != null
-        ? 'Drag ${def.name} where you want it  ·  ✓ to keep, ✗ to leave it'
-        : 'Drag ${def.name} where you want it  ·  ✓ to build it here',
-  );
-
-  Widget _chainBanner() => _bannerShell(
-    leading: Text(
-      _chainErase ? '⛏️' : '🛤️',
-      style: const TextStyle(fontSize: 16),
+      if (!ok || !mounted) return;
+      Feel.tap();
+      await onConfirmed();
+    },
+    child: Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      alignment: Alignment.center,
+      decoration: raisedTile(radius: 10),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: kBoxAccent),
+          const SizedBox(width: 6),
+          Text(label, style: FoE.label(size: 12).copyWith(color: kBoxInk)),
+        ],
+      ),
     ),
-    colour: _chainErase ? FoE.danger : Colors.greenAccent,
-    text: _chainErase
-        ? 'Tap a red arrow to pull up the next road  ·  ✗ puts them all back'
-        : widget.ctrl.introStep == IntroStep.buildRoad
-        ? 'Keep going until it reaches the Healing Hut  ·  ✗ takes the '
-              'whole run back'
-        : 'Tap an arrow to lay the next road  ·  ✗ takes the whole run back',
   );
 
-  Widget _editIdleBanner() => _bannerShell(
-    leading: const Icon(Icons.open_with, color: FoE.accentBlue, size: 16),
-    colour: FoE.accentBlue,
-    text: 'Tap a building to pick it up',
-    trailing: _doneButton(
-      'Done',
-      FoE.accentBlue,
-      () => widget.onExitEditMode?.call(),
+  Widget _doneButton() => Pressable(
+    onTap: () => widget.onExitEditMode?.call(),
+    child: Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      alignment: Alignment.center,
+      decoration: goldButton(),
+      child: Text(
+        'Done',
+        style: FoE.title(size: 14).copyWith(color: goldButtonInk()),
+      ),
     ),
   );
 }
@@ -1743,19 +2325,47 @@ class _BuildingTile extends StatelessWidget {
       return Stack(
         clipBehavior: Clip.none,
         children: [
+          // Its shadow on the ground, UNDER the art — see
+          // [BuildingGroundShadow]. A survey marker (an unbuilt plot) is not a
+          // thing that stands, so it casts none.
+          if (!def.isBuildPlot)
+            Positioned(
+              left: art.left,
+              width: art.width,
+              bottom: bounds.height - art.bottom,
+              child: BuildingGroundShadow(
+                imageUrl: def.imageUrl,
+                defId: def.id,
+                width: art.width,
+                dimmed: !done,
+              ),
+            ),
           Positioned(
             left: art.left,
             width: art.width,
             // The box is the footprint's; the picture may sit lower than its
             // foot when the art has air under the base.
             bottom: bounds.height - art.bottom,
-            child: BuildingIcon(
-              imageUrl: def.imageUrl,
-              defId: def.id,
-              width: art.width,
-              anchorBottomOverflowTop: true,
-              dimmed: !done,
-            ),
+            child: building.isPaused && building.isComplete
+                // PAUSED (user 2026-09-22, "Schlaf-Z mit der Graustufe"): the art
+                // loses its colour and a little of its light — see [kPausedFilter].
+                ? ColorFiltered(
+                    colorFilter: kPausedFilter,
+                    child: BuildingIcon(
+                      imageUrl: def.imageUrl,
+                      defId: def.id,
+                      width: art.width,
+                      anchorBottomOverflowTop: true,
+                      dimmed: !done,
+                    ),
+                  )
+                : BuildingIcon(
+                    imageUrl: def.imageUrl,
+                    defId: def.id,
+                    width: art.width,
+                    anchorBottomOverflowTop: true,
+                    dimmed: !done,
+                  ),
           ),
           ..._statusOverlays(done: done, queued: queued),
         ],
@@ -1889,17 +2499,47 @@ class _LifeOverlay extends StatelessWidget {
           width: art.width,
           height: h,
           bottom: local.height - art.bottom,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              LampGlow(phaseSeed: seed),
-              if (chimney != null)
-                ChimneySmoke(
-                  anchorX: chimney.$1,
-                  anchorY: chimney.$2,
-                  phaseSeed: seed,
-                ),
-            ],
+          // ONE widget, not a Stack of two (2026-09-21): the glow and the
+          // smoke share this box and the same clock, so they share a painter
+          // and a repaint layer — see [BuildingLife].
+          child: BuildingLife(chimney: chimney, phaseSeed: seed),
+        ),
+      ],
+    );
+  }
+}
+
+/// A paused building's Zs, in the same box the smoke has (see [_LifeOverlay]) —
+/// from the chimney where the building has one, over the roof otherwise.
+class _SleepOverlay extends StatelessWidget {
+  final BuildingDef def;
+  final int seed;
+
+  const _SleepOverlay({required this.def, required this.seed});
+
+  @override
+  Widget build(BuildContext context) {
+    final anchor = kChimneyAnchor[def.id] ?? (0.58, 0.16);
+    final local = isoLocalBounds(def.gridW, def.gridH);
+    final box = artBoxOf(def);
+    final art = artPlacement(
+      local,
+      baseWidth: box.baseWidth,
+      anchorX: box.anchorX,
+      lift: box.lift,
+    );
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: art.left,
+          width: art.width,
+          height: art.width * 1.25,
+          bottom: local.height - art.bottom,
+          child: SleepZ(
+            anchorX: anchor.$1,
+            anchorY: anchor.$2,
+            phaseSeed: seed,
           ),
         ),
       ],

@@ -70,6 +70,7 @@ class GameDefsController extends ChangeNotifier {
     Map<String, T> fallback,
     List<Map<String, dynamic>> rows,
     T Function(Map<String, dynamic>) fromRow, {
+
     /// Collects the ids this merge subtracted. Only the building table has a
     /// `retired` column today; for every other table the flag is simply absent,
     /// so the check costs nothing and the day a second table needs it, it works.
@@ -200,7 +201,12 @@ class GameDefsController extends ChangeNotifier {
         rows[1],
         AreaDef.fromDefRow,
       );
-      mergeDefRows(kPathNodes, kFallbackPathNodes, rows[2], PathNode.fromDefRow);
+      mergeDefRows(
+        kPathNodes,
+        kFallbackPathNodes,
+        rows[2],
+        PathNode.fromDefRow,
+      );
       mergeDefRows(kItemDefs, kFallbackItemDefs, rows[3], ItemDef.fromDefRow);
       mergeDefRows(
         kGatherDefs,
@@ -251,5 +257,4 @@ class GameDefsController extends ChangeNotifier {
       )
       ..subscribe();
   }
-
 }

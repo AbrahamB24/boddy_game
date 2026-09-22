@@ -77,7 +77,8 @@ class BreedingJob {
 
   /// A finished mating whose egg is ready to collect: still flagged `breeding`
   /// but past its lay time (promoted to [egg] on the next sync).
-  bool get isLaidEgg => status == BreedingStatus.egg ||
+  bool get isLaidEgg =>
+      status == BreedingStatus.egg ||
       (status == BreedingStatus.breeding && isReady);
 
   /// A `hatching` job whose incubation has finished — ready to hatch.
@@ -93,19 +94,18 @@ class BreedingJob {
     DateTime? readyAt,
     Map<CreatureStat, double>? childBase,
     Map<CreatureStat, double>? childSlope,
-  }) =>
-      BreedingJob(
-        id: id,
-        userId: userId,
-        parentAId: parentAId,
-        parentBId: parentBId,
-        speciesId: speciesId,
-        startedAt: startedAt,
-        readyAt: readyAt ?? this.readyAt,
-        status: status ?? this.status,
-        childBase: childBase ?? this.childBase,
-        childSlope: childSlope ?? this.childSlope,
-      );
+  }) => BreedingJob(
+    id: id,
+    userId: userId,
+    parentAId: parentAId,
+    parentBId: parentBId,
+    speciesId: speciesId,
+    startedAt: startedAt,
+    readyAt: readyAt ?? this.readyAt,
+    status: status ?? this.status,
+    childBase: childBase ?? this.childBase,
+    childSlope: childSlope ?? this.childSlope,
+  );
 
   /// Reads a stat→value jsonb map, tolerating a missing column (pre-0027) and
   /// a stat that has since been retired.
@@ -118,8 +118,9 @@ class BreedingJob {
   }
 
   /// The inverse — always the CURRENT stat names, so a row heals itself.
-  static Map<String, double> genesToJson(Map<CreatureStat, double> genes) =>
-      {for (final e in genes.entries) e.key.name: e.value};
+  static Map<String, double> genesToJson(Map<CreatureStat, double> genes) => {
+    for (final e in genes.entries) e.key.name: e.value,
+  };
 
   factory BreedingJob.fromRow(Map<String, dynamic> row) => BreedingJob(
     id: row['id'] as String,

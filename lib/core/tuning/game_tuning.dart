@@ -185,10 +185,7 @@ class GameTuning extends ChangeNotifier {
       final rows = await supabase
           .from('game_config')
           .select('key, value')
-          .inFilter(
-            'key',
-            [for (final g in TuningGroup.values) g.configKey],
-          );
+          .inFilter('key', [for (final g in TuningGroup.values) g.configKey]);
       for (final row in (rows as List)) {
         final v = (row as Map)['value'];
         if (v is! Map) continue;
@@ -231,4 +228,3 @@ class GameTuning extends ChangeNotifier {
 
 /// Declaration lookup, built once.
 final Map<String, Dial> _dialById = {for (final d in kDials) d.id: d};
-

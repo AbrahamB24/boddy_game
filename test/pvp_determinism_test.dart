@@ -93,6 +93,10 @@ void main() {
       );
     }
     expect(engineA.outcome, engineB.outcome);
+    // The PvP desync check (battle_screen.dart's _handleDesync) leans on
+    // this being true for any two engines that really are in sync — this
+    // is that guarantee, asserted directly.
+    expect(engineA.stateHash, engineB.stateHash);
 
     engineA.dispose();
     engineB.dispose();

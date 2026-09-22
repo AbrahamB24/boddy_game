@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
-import '../../settlement/widgets/scroll_paper.dart' show kParchmentInk;
+import '../../../core/theme/cream_kit.dart' show CreamPalette, kBoxInk;
 import '../creature_detail_screen.dart';
 import '../models/breeding_job.dart';
 import '../models/creature_enums.dart';
@@ -26,9 +26,9 @@ import '../../common/widgets/recess_bar.dart';
 
 /// The parchment screens' accent gold, as every page reached from a building
 /// declares it.
-const Color _kAccent = FoE.gold;
-final Color _kInkSoft = kParchmentInk.withValues(alpha: 0.78);
-final Color _kInkFaint = kParchmentInk.withValues(alpha: 0.55);
+const Color _kAccent = CreamPalette.accent;
+final Color _kInkSoft = kBoxInk.withValues(alpha: 0.78);
+final Color _kInkFaint = kBoxInk.withValues(alpha: 0.55);
 
 /// WHO MADE IT AND WHEN (user 2026-07-27). Two facts the genes cannot give you:
 /// which pair this came from, and how long it has been sitting.
@@ -99,7 +99,9 @@ class EggFacts extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _ParentCard(c: dad, gender: CreatureGender.male)),
+              Expanded(
+                child: _ParentCard(c: dad, gender: CreatureGender.male),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: _ParentCard(c: mum, gender: CreatureGender.female),
@@ -181,9 +183,7 @@ class _ParentCard extends StatelessWidget {
                         creature.displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: FoE.label(
-                          size: 12,
-                        ).copyWith(color: kParchmentInk),
+                        style: FoE.label(size: 12).copyWith(color: kBoxInk),
                       ),
                     ),
                   ],
@@ -243,7 +243,7 @@ class _EggGeneTableState extends State<EggGeneTable> {
         child: Text(
           'This egg was laid before its child was frozen onto it — its stats '
           'are rolled when it hatches.',
-          style: TextStyle(fontSize: 12, color: kParchmentInk),
+          style: TextStyle(fontSize: 12, color: kBoxInk),
         ),
       );
     }
@@ -300,7 +300,7 @@ class _EggGeneTableState extends State<EggGeneTable> {
               child: Text(
                 '${v.round()}',
                 textAlign: TextAlign.right,
-                style: FoE.value(size: 12).copyWith(color: kParchmentInk),
+                style: FoE.value(size: 12).copyWith(color: kBoxInk),
               ),
             ),
             SizedBox(
@@ -328,7 +328,7 @@ class _EggGeneTableState extends State<EggGeneTable> {
               GeneBarToggle(
                 showGrowth: _showGrowth,
                 onChanged: (v) => setState(() => _showGrowth = v),
-                ink: kParchmentInk,
+                ink: kBoxInk,
                 inkFaint: _kInkFaint,
                 accent: _kAccent,
               ),

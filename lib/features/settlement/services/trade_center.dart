@@ -127,11 +127,11 @@ int itemSellValue(ItemDef def, {double discount = 0}) {
 /// The shop's stock, cheapest first — every sold item, whether the player has
 /// the recipe or not (buying is the alternative to crafting, not a shortcut
 /// through it).
-List<ItemDef> shopStock() => kItemDefs.values.where(itemIsSold).toList()
-  ..sort((a, b) {
-    final byPrice = a.buyPrice.compareTo(b.buyPrice);
-    return byPrice != 0 ? byPrice : a.name.compareTo(b.name);
-  });
+List<ItemDef> shopStock() =>
+    kItemDefs.values.where(itemIsSold).toList()..sort((a, b) {
+      final byPrice = a.buyPrice.compareTo(b.buyPrice);
+      return byPrice != 0 ? byPrice : a.name.compareTo(b.name);
+    });
 
 // ── What is tradeable at all ────────────────────────────────
 
@@ -146,3 +146,30 @@ List<String> tradeableResources(int regionOrder) => [
   for (final g in goodsForRegion(regionOrder)) g.id,
   for (final g in materialsForRegion(regionOrder)) g.id,
 ];
+
+// ── Grouped by era ──────────────────────────────────────────
+
+/// The era (region) a tradeable resource belongs to. Wood and stone are region
+/// I's own fields; everything else says so itself.
+int tradeEraOf(String resource) => kGoodsDefs[resource]?.regionOrder ?? 1;
+
+/// One era's tradeable resources — what the Market lays side by side in a row.
+class TradeEra {
+  final int era;
+  final List<String> resources;
+
+  const TradeEra(this.era, this.resources);
+}
+
+/// [tradeableResources] grouped by era, NEWEST FIRST: the era you are in is the
+/// one you trade, the older ones wait underneath. Every era holds its raw(s),
+/// its luxury and its element, which in this ladder is exactly three (region I:
+/// wood, stone, fish) — so a row of three is a whole era.
+List<TradeEra> tradeableByEra(int regionOrder) {
+  final byEra = <int, List<String>>{};
+  for (final r in tradeableResources(regionOrder)) {
+    byEra.putIfAbsent(tradeEraOf(r), () => []).add(r);
+  }
+  final eras = byEra.keys.toList()..sort((a, b) => b.compareTo(a));
+  return [for (final e in eras) TradeEra(e, byEra[e]!)];
+}

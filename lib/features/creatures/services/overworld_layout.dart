@@ -88,7 +88,9 @@ AreaDef? areaForBattle(int battleNumber) =>
 /// The canvas the [nodes] need — width is fixed (one lane), height is the
 /// bounding box plus a margin so the trail is never clipped.
 Size overworldCanvasSize(List<OverworldNode> nodes) {
-  if (nodes.isEmpty) return const Size(_canvasWidth, _topMargin + _bottomMargin);
+  if (nodes.isEmpty) {
+    return const Size(_canvasWidth, _topMargin + _bottomMargin);
+  }
   var maxY = 0.0;
   for (final n in nodes) {
     maxY = math.max(maxY, n.pos.dy);
@@ -170,8 +172,9 @@ List<OverworldNode> buildLinearOverworld({required int battlesCleared}) {
   final stops = <_Stop>[];
   for (var region = 1; region <= viewRegion; region++) {
     final area = areaForRegion(region);
-    final regionNodes =
-        allNodes.where((n) => _regionOfNode(n) == region).toList();
+    final regionNodes = allNodes
+        .where((n) => _regionOfNode(n) == region)
+        .toList();
 
     // The region's regular fights (all but the boss), in order, then its boss.
     stops.addAll([

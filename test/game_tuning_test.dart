@@ -55,8 +55,11 @@ void main() {
 
     test('the field conversions round-trip', () {
       for (final d in kDials) {
-        expect(d.fromField(d.toField(d.def)), closeTo(d.def, 1e-9),
-            reason: d.id);
+        expect(
+          d.fromField(d.toField(d.def)),
+          closeTo(d.def, 1e-9),
+          reason: d.id,
+        );
       }
     });
 
@@ -157,14 +160,19 @@ void main() {
       GameTuning.i.set(Dials.energyFloorMultiplier, 0.5);
       GameTuning.i.set(Dials.energyBoostPerThousandSteps, 0.1);
       GameTuning.i.set(Dials.energyMaxBoost, 0.5);
+      GameTuning.i.set(Dials.energyFullHours, 10);
       expect(kEnergyFullSteps, 10000);
       expect(kEnergyFloorMultiplier, closeTo(0.5, 1e-9));
-      // Halfway to the (doubled) daily target sits halfway up the floor→100%
-      // ramp.
-      expect(energyMultiplierForSteps(5000), closeTo(0.75, 1e-9));
-      // 1000 steps past the target buys the full +0.1 boost, capped at +0.5.
-      expect(energyMultiplierForSteps(11000), closeTo(1.1, 1e-9));
-      expect(energyMultiplierForSteps(20000), closeTo(1.5, 1e-9));
+      expect(kEnergyFullHours, 10);
+      // Half of the (doubled) step target is half of the pool.
+      expect(energyAfterSteps(0, 5000), closeTo(50, 1e-9));
+      // 1000 steps past 100 % buy the full +10 %, up to the +50 % ceiling.
+      expect(energyAfterSteps(100, 1000), closeTo(110, 1e-9));
+      expect(energyAfterSteps(0, 30000), closeTo(150, 1e-9));
+      // 100 % lasts the dial's 10 h, so 150 % lasts 15.
+      expect(energyDrain(150, 15).endPercent, closeTo(0, 1e-9));
+      // An empty pool still runs at the floor.
+      expect(energyMultiplierForPercent(0), closeTo(0.5, 1e-9));
     });
 
     test('the party ladder — and out-of-order entries still rise', () {
@@ -180,8 +188,10 @@ void main() {
     test('the boss bonus', () {
       GameTuning.i.set(Dials.bossLevelBonus, 10);
       final boss = kFallbackBattlesPerRegion;
-      expect(enemyLevelForBattle(boss) - enemyLevelForBattle(boss - 1),
-          greaterThanOrEqualTo(10));
+      expect(
+        enemyLevelForBattle(boss) - enemyLevelForBattle(boss - 1),
+        greaterThanOrEqualTo(10),
+      );
     });
 
     test('the AP table', () {

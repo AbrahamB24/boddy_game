@@ -104,14 +104,12 @@ enum AbilityEffectKind {
     dazzled ||
     fear ||
     sleep ||
-    confusion =>
-      AbilityEffectFamily.mainStatus,
+    confusion => AbilityEffectFamily.mainStatus,
     blind ||
     slow ||
     attackDown ||
     defenseDown ||
-    regression =>
-      AbilityEffectFamily.debuff,
+    regression => AbilityEffectFamily.debuff,
     heal => AbilityEffectFamily.heal,
     regen => AbilityEffectFamily.regen,
     lifesteal => AbilityEffectFamily.lifesteal,
@@ -283,8 +281,7 @@ enum AbilityEffectKind {
     slow ||
     attackDown ||
     defenseDown ||
-    regression =>
-      kSecondaryDebuffDuration,
+    regression => kSecondaryDebuffDuration,
     armor || rage || haste => kSelfBuffDuration,
     selfDefDown || selfSpeedDown => 1,
     heal || lifesteal || recoil => 0,
@@ -315,15 +312,12 @@ enum AbilityEffectKind {
   ///          less than the same share of a health bar because it only pays out
   ///          when the hit lands.
   double get powerCoefficient => switch (family) {
-    AbilityEffectFamily.heal ||
-    AbilityEffectFamily.regen =>
-      200,
+    AbilityEffectFamily.heal || AbilityEffectFamily.regen => 200,
     AbilityEffectFamily.lifesteal || AbilityEffectFamily.recoil => 70,
     AbilityEffectFamily.mainStatus => this == burn || this == poison ? 200 : 40,
     AbilityEffectFamily.debuff ||
     AbilityEffectFamily.selfBuff ||
-    AbilityEffectFamily.selfPenalty =>
-      40,
+    AbilityEffectFamily.selfPenalty => 40,
   };
 
   /// Whether this effect makes the move WORSE for its user — then its power is
@@ -463,7 +457,8 @@ class AbilityEffect {
     final turnsFactor = kind.isTimed ? resolvedTurns : 1;
     var magnitude = resolvedValue * turnsFactor;
     if (kind == AbilityEffectKind.poison) {
-      final step = statusDotFraction(MainStatusKind.poison, 1) -
+      final step =
+          statusDotFraction(MainStatusKind.poison, 1) -
           statusDotFraction(MainStatusKind.poison, 0);
       final t = resolvedTurns;
       magnitude = resolvedValue * t + step * (t * (t - 1) / 2);
@@ -507,129 +502,204 @@ List<String> describeAbilityEffect(AbilityEffect e) {
   final out = <String>[];
   switch (e.kind) {
     case AbilityEffectKind.burn:
-      out.add('Deals ${_pct(v)} of the target\'s MAX HP at the end of each of '
-          'its turns, for ${_turns(t)}.');
-      out.add('While burning it also attacks for '
-          '${_pct(1 - statusAttackMult(MainStatusKind.burn))} less (fixed).');
+      out.add(
+        'Deals ${_pct(v)} of the target\'s MAX HP at the end of each of '
+        'its turns, for ${_turns(t)}.',
+      );
+      out.add(
+        'While burning it also attacks for '
+        '${_pct(1 - statusAttackMult(MainStatusKind.burn))} less (fixed).',
+      );
     case AbilityEffectKind.poison:
-      final step = statusDotFraction(MainStatusKind.poison, 1) -
+      final step =
+          statusDotFraction(MainStatusKind.poison, 1) -
           statusDotFraction(MainStatusKind.poison, 0);
-      out.add('Deals ${_pct(v)} of MAX HP at the end of the target\'s turn and '
-          '${_pct(step)} MORE every turn after that, for ${_turns(t)} — '
-          '${_pct(v + step * (t - 1))} on the last one.');
-      out.add('Total over its full run: about '
-          '${_pct(v * t + step * (t * (t - 1) / 2))} of max HP.');
+      out.add(
+        'Deals ${_pct(v)} of MAX HP at the end of the target\'s turn and '
+        '${_pct(step)} MORE every turn after that, for ${_turns(t)} — '
+        '${_pct(v + step * (t - 1))} on the last one.',
+      );
+      out.add(
+        'Total over its full run: about '
+        '${_pct(v * t + step * (t * (t - 1) / 2))} of max HP.',
+      );
     case AbilityEffectKind.frost:
-      out.add('The target loses ${_pct(v)} SPEED for ${_turns(t)} — it acts '
-          'that much less often in the turn order.');
-      out.add('It also has a '
-          '${_pct(statusSkipChance(MainStatusKind.frost))} chance to lose each '
-          'of those turns entirely (fixed).');
+      out.add(
+        'The target loses ${_pct(v)} SPEED for ${_turns(t)} — it acts '
+        'that much less often in the turn order.',
+      );
+      out.add(
+        'It also has a '
+        '${_pct(statusSkipChance(MainStatusKind.frost))} chance to lose each '
+        'of those turns entirely (fixed).',
+      );
     case AbilityEffectKind.freeze:
-      out.add('The target loses each of its next $t turns with a ${_pct(v)} '
-          'chance — rolled again at the start of every one of them.');
-      out.add('The heavier of Ice\'s two ailments — frost chips speed, this '
-          'one nearly stops the target cold.');
+      out.add(
+        'The target loses each of its next $t turns with a ${_pct(v)} '
+        'chance — rolled again at the start of every one of them.',
+      );
+      out.add(
+        'The heavier of Ice\'s two ailments — frost chips speed, this '
+        'one nearly stops the target cold.',
+      );
     case AbilityEffectKind.petrify:
-      out.add('The target loses each of its next $t turns with a ${_pct(v)} '
-          'chance — rolled again at the start of every one of them.');
+      out.add(
+        'The target loses each of its next $t turns with a ${_pct(v)} '
+        'chance — rolled again at the start of every one of them.',
+      );
     case AbilityEffectKind.paralysis:
-      out.add('The target loses each of its next $t turns with a ${_pct(v)} '
-          'chance — rolled again at the start of every one of them.');
+      out.add(
+        'The target loses each of its next $t turns with a ${_pct(v)} '
+        'chance — rolled again at the start of every one of them.',
+      );
     case AbilityEffectKind.soaked:
       out.add('The target deals ${_pct(v)} LESS damage for ${_turns(t)}.');
       out.add('No damage of its own — Water\'s ailment is a pure attack sap.');
     case AbilityEffectKind.dazzled:
-      out.add('The target\'s attacks miss ${_pct(v)} more often for '
-          '${_turns(t)}.');
+      out.add(
+        'The target\'s attacks miss ${_pct(v)} more often for '
+        '${_turns(t)}.',
+      );
       out.add('The heavier, timed cousin of the secondary Blind debuff.');
     case AbilityEffectKind.confusion:
-      out.add('Each of the target\'s next $t turns, there is a ${_pct(v)} '
-          'chance it hits ITSELF instead of acting — a typeless hit using its '
-          'own attack and defense.');
-      out.add('No type owns this one: it never exposes a weakness the way '
-          'the other main statuses do.');
+      out.add(
+        'Each of the target\'s next $t turns, there is a ${_pct(v)} '
+        'chance it hits ITSELF instead of acting — a typeless hit using its '
+        'own attack and defense.',
+      );
+      out.add(
+        'No type owns this one: it never exposes a weakness the way '
+        'the other main statuses do.',
+      );
     case AbilityEffectKind.fear:
-      out.add('The target loses each of its next $t turns with a ${_pct(v)} '
-          'chance — rolled again at the start of every one of them.');
+      out.add(
+        'The target loses each of its next $t turns with a ${_pct(v)} '
+        'chance — rolled again at the start of every one of them.',
+      );
       out.add('No damage and no stat change: fear only steals turns.');
     case AbilityEffectKind.sleep:
-      out.add('The target loses each of its next $t turns with a ${_pct(v)} '
-          'chance — rolled again at the start of every one of them.');
-      out.add('The heaviest turn-eater there is: at this chance it is out of the '
-          'fight for most of $t turns, which is why it is short.');
+      out.add(
+        'The target loses each of its next $t turns with a ${_pct(v)} '
+        'chance — rolled again at the start of every one of them.',
+      );
+      out.add(
+        'The heaviest turn-eater there is: at this chance it is out of the '
+        'fight for most of $t turns, which is why it is short.',
+      );
     case AbilityEffectKind.attackDown:
       out.add('The target deals ${_pct(v)} LESS damage for ${_turns(t)}.');
-      out.add('Stacks with a burn\'s own attack sap — a burned, weakened '
-          'monster hits for very little.');
+      out.add(
+        'Stacks with a burn\'s own attack sap — a burned, weakened '
+        'monster hits for very little.',
+      );
     case AbilityEffectKind.defenseDown:
-      out.add('The target TAKES more damage for ${_turns(t)}: it defends with '
-          '${_pct(v)} less.');
-      out.add('The support move for a party: it multiplies what everyone else '
-          'does to that target, not what you do.');
+      out.add(
+        'The target TAKES more damage for ${_turns(t)}: it defends with '
+        '${_pct(v)} less.',
+      );
+      out.add(
+        'The support move for a party: it multiplies what everyone else '
+        'does to that target, not what you do.',
+      );
     case AbilityEffectKind.regression:
-      out.add('The target loses ${_pct(v)} attack, defense AND speed together '
-          'for ${_turns(t)} — "Deevolution": it fights like a weaker, '
-          'earlier stage of itself for a while.');
-      out.add('Battle-only: nothing about the monster itself changes once '
-          'the fight ends.');
+      out.add(
+        'The target loses ${_pct(v)} attack, defense AND speed together '
+        'for ${_turns(t)} — "Deevolution": it fights like a weaker, '
+        'earlier stage of itself for a while.',
+      );
+      out.add(
+        'Battle-only: nothing about the monster itself changes once '
+        'the fight ends.',
+      );
     case AbilityEffectKind.regen:
-      out.add('The USER heals ${_pct(v)} of its max HP at the end of each of '
-          'its own turns, for ${_turns(t)} — ${_pct(v * t)} in total if it '
-          'survives that long.');
-      out.add('Nothing interrupts it and nothing stacks it: re-using the move '
-          'refreshes the timer.');
+      out.add(
+        'The USER heals ${_pct(v)} of its max HP at the end of each of '
+        'its own turns, for ${_turns(t)} — ${_pct(v * t)} in total if it '
+        'survives that long.',
+      );
+      out.add(
+        'Nothing interrupts it and nothing stacks it: re-using the move '
+        'refreshes the timer.',
+      );
     case AbilityEffectKind.recoil:
-      out.add('COST: the user takes ${_pct(v)} of the damage it just dealt. A '
-          'miss costs nothing, and it can knock the user out.');
+      out.add(
+        'COST: the user takes ${_pct(v)} of the damage it just dealt. A '
+        'miss costs nothing, and it can knock the user out.',
+      );
     case AbilityEffectKind.blind:
-      out.add('The target\'s attacks miss ${_pct(v)} more often for '
-          '${_turns(t)}.');
+      out.add(
+        'The target\'s attacks miss ${_pct(v)} more often for '
+        '${_turns(t)}.',
+      );
     case AbilityEffectKind.slow:
-      out.add('The target loses ${_pct(v)} SPEED for ${_turns(t)} — it acts '
-          'that much less often in the turn order.');
+      out.add(
+        'The target loses ${_pct(v)} SPEED for ${_turns(t)} — it acts '
+        'that much less often in the turn order.',
+      );
     case AbilityEffectKind.heal:
-      out.add('Restores ${_pct(v)} of the TARGET\'s max HP at once. Never '
-          'above full, and it cannot revive a K.O.\'d monster.');
+      out.add(
+        'Restores ${_pct(v)} of the TARGET\'s max HP at once. Never '
+        'above full, and it cannot revive a K.O.\'d monster.',
+      );
     case AbilityEffectKind.lifesteal:
-      out.add('The user heals ${_pct(v)} of the damage this move actually '
-          'dealt — so a blocked or missed hit heals nothing.');
+      out.add(
+        'The user heals ${_pct(v)} of the damage this move actually '
+        'dealt — so a blocked or missed hit heals nothing.',
+      );
     case AbilityEffectKind.armor:
-      out.add('The USER takes less damage for ${_turns(t)}: +${_pct(v)} '
-          'defense.');
+      out.add(
+        'The USER takes less damage for ${_turns(t)}: +${_pct(v)} '
+        'defense.',
+      );
     case AbilityEffectKind.rage:
-      out.add('The USER deals more damage for ${_turns(t)}: +${_pct(v)} '
-          'attack.');
+      out.add(
+        'The USER deals more damage for ${_turns(t)}: +${_pct(v)} '
+        'attack.',
+      );
     case AbilityEffectKind.haste:
       out.add('The USER acts more often for ${_turns(t)}: +${_pct(v)} speed.');
     case AbilityEffectKind.selfDefDown:
-      out.add('COST: the user loses ${_pct(v)} defense for ${_turns(t)} — no '
-          'roll, it always happens.');
+      out.add(
+        'COST: the user loses ${_pct(v)} defense for ${_turns(t)} — no '
+        'roll, it always happens.',
+      );
     case AbilityEffectKind.selfSpeedDown:
-      out.add('COST: the user loses ${_pct(v)} speed for ${_turns(t)} — no '
-          'roll, it always happens.');
+      out.add(
+        'COST: the user loses ${_pct(v)} speed for ${_turns(t)} — no '
+        'roll, it always happens.',
+      );
   }
   // The rule that decides whether it lands at all.
   switch (e.kind.family) {
     case AbilityEffectFamily.mainStatus:
-      out.add('Lands on a ${_pct(e.resolvedChance)} roll, and ONLY if the '
-          'target carries no other main status — they are mutually '
-          'exclusive, so a second attempt on an afflicted target is simply '
-          'wasted.');
+      out.add(
+        'Lands on a ${_pct(e.resolvedChance)} roll, and ONLY if the '
+        'target carries no other main status — they are mutually '
+        'exclusive, so a second attempt on an afflicted target is simply '
+        'wasted.',
+      );
       final exposed = e.kind.exposesElement;
       if (exposed != null) {
-        out.add('${e.kind.emoji} ${e.kind.label} exposes the target to '
-            '${exposed.emoji} ${exposed.label}\'s weaknesses TOO, on top of '
-            'its own — whichever hits harder applies.');
+        out.add(
+          '${e.kind.emoji} ${e.kind.label} exposes the target to '
+          '${exposed.emoji} ${exposed.label}\'s weaknesses TOO, on top of '
+          'its own — whichever hits harder applies.',
+        );
       }
-      out.add('Also loses this status early with a chance that grows every '
-          'round it is active — it is never a fixed lock.');
+      out.add(
+        'Also loses this status early with a chance that grows every '
+        'round it is active — it is never a fixed lock.',
+      );
     case AbilityEffectFamily.debuff:
-      out.add('Lands on a ${_pct(e.resolvedChance)} roll. It stacks alongside a '
-          'main status; re-applying only refreshes the duration.');
+      out.add(
+        'Lands on a ${_pct(e.resolvedChance)} roll. It stacks alongside a '
+        'main status; re-applying only refreshes the duration.',
+      );
     case AbilityEffectFamily.selfBuff:
-      out.add('Always lands. Coexists with the user\'s other buffs; '
-          're-applying refreshes the duration instead of stacking.');
+      out.add(
+        'Always lands. Coexists with the user\'s other buffs; '
+        're-applying refreshes the duration instead of stacking.',
+      );
     case AbilityEffectFamily.heal:
     case AbilityEffectFamily.lifesteal:
       out.add('Always applies — nothing to roll and nothing to expire.');

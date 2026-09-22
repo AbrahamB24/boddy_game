@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart' show CreamPalette;
 import '../../core/theme/foe_theme.dart';
 import 'creature_detail_screen.dart';
 import 'models/creature_enums.dart';
@@ -80,10 +81,8 @@ class _StarterPreviewScreenState extends State<StarterPreviewScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => CreatureDetailScreen(
-    previewCreature: _draft,
-    footer: _confirmButton(),
-  );
+  Widget build(BuildContext context) =>
+      CreatureDetailScreen(previewCreature: _draft, footer: _confirmButton());
 
   Widget _confirmButton() => Material(
     color: Colors.transparent,
@@ -106,7 +105,7 @@ class _StarterPreviewScreenState extends State<StarterPreviewScreen> {
         child: Text(
           _adopting ? 'Choosing…' : 'Choose ${_draft.displayName}',
           textAlign: TextAlign.center,
-          style: FoE.title(size: 13).copyWith(color: FoE.bg),
+          style: FoE.title(size: 13).copyWith(color: CreamPalette.ink),
         ),
       ),
     ),

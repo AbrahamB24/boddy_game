@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../common/widgets/parchment_page.dart';
 import '../../creatures/models/area.dart' show kResourceEmoji;
@@ -10,10 +11,6 @@ import '../../creatures/models/creature_enums.dart'
 import '../data/building_definitions.dart';
 import '../data/goods_definitions.dart';
 import '../data/workshop_role_effects.dart';
-import '../widgets/meander_strip.dart';
-import '../widgets/scroll_paper.dart'
-    show kParchmentDeep, kParchmentInk, parchmentButton, parchmentButtonInk;
-import '../../../core/ui/pressable.dart';
 
 /// Shows a building's EFFECTS at FULL UPGRADE — its highest reachable level
 /// (user 2026-07-24). Opened from the build menu (before you commit to it) and
@@ -66,15 +63,13 @@ class _BuildingUpgradeSheet extends StatelessWidget {
   // and the worker sheet (user 2026-07-26: "gestalte diese Vorschau auch wie
   // die anderen Screens"). This sheet is opened FROM those two and describes
   // the very building they show — a dark panel in between read as another app.
-  static const Color _ink = kParchmentInk;
-  static final Color _inkSoft = kParchmentInk.withValues(alpha: 0.78);
-  static final Color _inkFaint = kParchmentInk.withValues(alpha: 0.55);
-  static const Color _accent = FoE.gold;
-  static final Color _ornament = kParchmentInk.withValues(alpha: 0.22);
+  static const Color _ink = kBoxInk;
+  static final Color _inkSoft = kBoxInkSoft;
+  static final Color _inkFaint = kBoxInkFaint;
+  static const Color _accent = kBoxAccent;
   // The Effects card's own inset (user 2026-09-01: "schreibe es genau so
   // wie im Gebäudedetailscreen mit der Effects box") — the exact same
   // background building_detail_dialog.dart's _sectionCard uses.
-  static final Color _inset = kParchmentDeep.withValues(alpha: 0.55);
 
   @override
   Widget build(BuildContext context) {
@@ -262,7 +257,7 @@ class _BuildingUpgradeSheet extends StatelessWidget {
         e.key == WorkshopRole.kConstruction
             ? '+${e.value.toStringAsFixed(0)} points'
             : '+${e.value.toStringAsFixed(1)}/h',
-        labelColor: Colors.white,
+        labelColor: _ink,
         indent: 12,
       );
     }
@@ -273,7 +268,7 @@ class _BuildingUpgradeSheet extends StatelessWidget {
         '🏠',
         'Housing',
         housing.round().toString(),
-        labelColor: Colors.white,
+        labelColor: _ink,
         indent: 12,
       );
     }
@@ -391,148 +386,55 @@ class _BuildingUpgradeSheet extends StatelessWidget {
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(16)),
-      ),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 24),
-      child: Container(
-        width: 400,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: ParchmentPage.pageGradient,
-          boxShadow: FoE.drop(),
-        ),
-        // Clips content to the rounded corners (a plain Container never
-        // clips to its own decoration's borderRadius) — INSIDE the
-        // Container, not on it, since that Container also casts
-        // [FoE.drop]'s shadow and clipping it directly would cut the
-        // shadow off at the same straight edge (see building_detail_dialog
-        // .dart's own Dialog, and 2026-09-06's "todays goals" fix).
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            children: [
-              // Wallpaper first, so it never lands over a line of text.
-              Positioned(
-                left: 14,
-                top: 0,
-                bottom: 0,
-                width: 16,
-                // fillHeight (user 2026-09-06: "oben und unten bis zur
-                // Kante") — flush top-to-bottom everywhere now.
-                child: MeanderStrip(color: _ornament, fillHeight: true),
-              ),
-              Positioned(
-                right: 14,
-                top: 0,
-                bottom: 0,
-                width: 16,
-                child: MeanderStrip(
-                  color: _ornament,
-                  flip: true,
-                  fillHeight: true,
-                ),
-              ),
-              Padding(
-                // Wide sides: the meander bands live in that margin. +4/+4
-                // (2026-09-06): inset/width grew from 12/14 to 14/16,
-                // matching building_detail_dialog.dart.
-                padding: const EdgeInsets.fromLTRB(38, 16, 38, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      elevation: 0,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: SizedBox(
+        width: 440,
+        // The building dialog's card, its "Effects" card inside it (user
+        // 2026-09-18: the whole UI takes that dialog as its template).
+        child: creamCard(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          corner: const KitCloseButton(),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The level number is the headline fact this card states.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // "— fully upgraded" and its own caption line both gone
-                    // (user 2026-09-01) — the level number now says that on
-                    // its own, big enough to read as the headline fact this
-                    // card states rather than a footnote beside the title.
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            def.name,
-                            style: FoE.title(size: 15).copyWith(color: _ink),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Lv $maxLevel',
-                          style: FoE.title(size: 22).copyWith(
-                            color: _accent,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    // The same "Effects" card the building detail screen
-                    // wraps _productionSection in — title band + inset
-                    // background at radius 14 (user 2026-09-01), not this
-                    // sheet's own bare list of rows.
-                    Flexible(
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(12, 9, 12, 12),
-                        decoration: ShapeDecoration(
-                          color: _inset,
-                          shape: FoE.facet(radius: 14),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              'EFFECTS',
-                              style: FoE.dim(size: 9).copyWith(
-                                color: _inkFaint,
-                                letterSpacing: 1.0,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            if (rows.isEmpty)
-                              Text(
-                                'No scaling effects — a purely decorative '
-                                'building.',
-                                style: FoE.dim(
-                                  size: 12,
-                                ).copyWith(color: _inkSoft),
-                              )
-                            else
-                              Flexible(
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: rows,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
+                    Expanded(
+                      child: Text(
+                        def.name,
+                        style: FoE.title(size: 15).copyWith(color: _ink),
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    Pressable(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        alignment: Alignment.center,
-                        decoration: parchmentButton(),
-                        child: Text(
-                          'Close',
-                          style: FoE.label(
-                            size: 14,
-                          ).copyWith(color: parchmentButtonInk()),
-                        ),
-                      ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Lv $maxLevel',
+                      style: FoE.title(
+                        size: 22,
+                      ).copyWith(color: _accent, fontWeight: FontWeight.w800),
                     ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 10),
+                sectionCard(
+                  title: 'Effects',
+                  icon: Icons.bolt,
+                  child: rows.isEmpty
+                      ? Text(
+                          'No scaling effects — a purely decorative building.',
+                          style: FoE.dim(size: 12).copyWith(color: _inkSoft),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: rows,
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

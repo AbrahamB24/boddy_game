@@ -2,23 +2,28 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
-import '../common/widgets/parchment_page.dart';
+import '../../core/ui/pressable.dart';
+import '../../core/ui/snack.dart';
 import '../settlement/settlement_controller.dart';
-import '../settlement/widgets/scroll_paper.dart' show kParchmentInk, kParchmentLight;
+import '../social/widgets/social_kit.dart';
 import 'models/ability_def.dart';
 import 'models/creature_instance.dart';
 import 'services/creatures_controller.dart';
 import 'services/training_cost.dart';
-import 'widgets/creature_sprite.dart';
-import '../../core/ui/pressable.dart';
+import 'widgets/creature_family.dart';
+import 'widgets/slot_kit.dart';
 
-/// The Combat School (user 2026-09-05) — where a creature actually learns a
-/// move, taking real time that scales with the move's own Power. Structurally
-/// the Healing Hut's own screen (capacity + a line, both level-scaled
-/// building effects), with one difference: starting a lesson needs a choice
-/// of WHICH move, not just a monster, so the "eligible" group opens a picker
-/// instead of acting directly.
+/// The Combat School (user 2026-09-05; laid out like the Healing Hut since
+/// 2026-09-20, "Variante 2, Slot-Karten") — where a creature actually learns a
+/// move, taking real time that scales with the move's own Power.
+///
+/// The practice places on top (the pupil, what they are learning, a bar, the time
+/// left, gold to finish now), the line beside them, and everyone with a move
+/// still to learn as tiles below. It differs from the Healing Hut in one way:
+/// starting a lesson needs a choice of WHICH move, so a tile's button opens the
+/// move picker instead of acting directly.
 class CombatSchoolScreen extends StatefulWidget {
   const CombatSchoolScreen({super.key});
 
@@ -26,16 +31,7 @@ class CombatSchoolScreen extends StatefulWidget {
   State<CombatSchoolScreen> createState() => _CombatSchoolScreenState();
 }
 
-enum _Row { training, queued, eligible }
-
 class _CombatSchoolScreenState extends State<CombatSchoolScreen> {
-  static const Color _ink = kParchmentInk;
-  static final Color _inkSoft = kParchmentInk.withValues(alpha: 0.78);
-  static final Color _inkFaint = kParchmentInk.withValues(alpha: 0.55);
-  static const Color _accent = FoE.gold;
-  static final Color _cardFill = kParchmentInk.withValues(alpha: 0.06);
-  static final Color _hairline = kParchmentInk.withValues(alpha: 0.13);
-
   final _creatures = CreaturesController();
   final _ctrl = SettlementController();
   Timer? _ticker;
@@ -70,12 +66,15 @@ class _CombatSchoolScreenState extends State<CombatSchoolScreen> {
   List<CreatureInstance> get _eligible {
     final list = _creatures.creatures
         .where((c) => !c.isTraining && !c.isQueuedForTraining)
-        .where((c) => c.learnableAbilities.any(
-              (a) => !c.learnedAbilityIds.contains(a.id),
-            ))
+        .where(
+          (c) => c.learnableAbilities.any(
+            (a) => !c.learnedAbilityIds.contains(a.id),
+          ),
+        )
         .toList();
     list.sort(
-      (a, b) => a.equippedAbilityIds.length.compareTo(b.equippedAbilityIds.length),
+      (a, b) =>
+          a.equippedAbilityIds.length.compareTo(b.equippedAbilityIds.length),
     );
     return list;
   }
@@ -94,346 +93,360 @@ class _CombatSchoolScreenState extends State<CombatSchoolScreen> {
     final err = await action();
     if (!mounted) return;
     setState(() => _busy = null);
-    if (err != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(err)));
-    }
+    if (err != null) context.snack(err, error: true);
   }
 
+  // ── The page ──────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([_creatures, _ctrl]),
-    builder: (context, _) => ParchmentPage(
-      title: 'Combat School',
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          ParchmentPage.kParchmentPagePad,
-          12,
-          ParchmentPage.kParchmentPagePad,
-          24,
+    builder: (context, _) {
+      final training = _training;
+      final queued = _queued;
+      final eligible = _eligible;
+      final cap = _ctrl.trainCapacity;
+      final qCap = _ctrl.trainQueueCapacity;
+      return MenuScaffold(
+        title: 'Combat School',
+        trailing: _readout(training.length, cap, queued.length, qCap),
+        child: SlotFamilyLayout(
+          slots: [
+            for (final c in training) _deskCard(c),
+            ..._freeDesks(cap, training.length, eligible.isNotEmpty),
+          ],
+          line: _line(queued, qCap),
+          tilesTitle: 'Ready to learn · ${eligible.length}',
+          tiles: [for (final c in eligible) _tile(c)],
+          whenNoTiles: slotEmptyNote(
+            training.isEmpty && queued.isEmpty
+                ? 'Nobody has anything left to learn.'
+                : 'Everyone else already knows everything they can right now.',
+            'New moves open up as monsters level up.',
+          ),
         ),
-        children: _body(),
-      ),
+      );
+    },
+  );
+
+  Widget _readout(int training, int? cap, int queued, int? qCap) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    decoration: BoxDecoration(
+      color: CreamPalette.tan.withValues(alpha: 0.18),
+      borderRadius: BorderRadius.circular(9),
+    ),
+    child: Text(
+      '${cap == null ? training : '$training/${cap < training ? training : cap}'}'
+      ' training · '
+      '${qCap == null ? queued : '$queued/${qCap < queued ? queued : qCap}'}'
+      ' in line',
+      style: FoE.value(size: 11).copyWith(color: kBoxInk),
     ),
   );
 
-  List<Widget> _body() {
-    final training = _training;
-    final queued = _queued;
-    final eligible = _eligible;
+  // ── The practice places ───────────────────────────────────────────────
 
-    if (training.isEmpty && queued.isEmpty && eligible.isEmpty) {
-      return [const SizedBox(height: 60), _allDone()];
-    }
+  Widget _deskCard(CreatureInstance c) {
+    final ability = kAbilityDefs[c.trainingAbilityId];
+    final total = ability == null ? Duration.zero : trainingDuration(ability);
+    final left = c.trainingRemaining;
+    final progress = total.inMilliseconds <= 0
+        ? 1.0
+        : (1 - left.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+    final skip = _creatures.trainSkipCost(c);
+    final key = 'skip_${c.id}';
+    return SlotCard(
+      avatar: CreatureAvatar.of(c, size: 44),
+      name: c.displayName,
+      sub: 'Learning ${ability?.name ?? c.trainingAbilityId}',
+      progress: progress,
+      time: _fmt(left),
+      action: skip > 0
+          ? SlotPill(
+              '🪙 $skip',
+              gold: true,
+              onTap: _busy == key || _ctrl.gold < skip
+                  ? null
+                  : () => _run(key, () => _creatures.skipTrainWithGold(c)),
+            )
+          : null,
+    );
+  }
 
+  List<Widget> _freeDesks(int? cap, int used, bool anyEligible) {
+    final free = cap == null ? (anyEligible ? 1 : 0) : cap - used;
     return [
-      _stateBand(training.length, queued.length),
-      const SizedBox(height: 16),
-      if (training.isNotEmpty) ...[
-        _group(
-          title: 'Training',
-          stripe: FoE.positive,
-          rows: [for (final c in training) _row(c, _Row.training)],
-        ),
-        const SizedBox(height: 14),
-      ],
-      if (queued.isNotEmpty) ...[
-        _group(
-          title: 'In line',
-          stripe: _accent,
-          note: 'They start as slots free, in this order.',
-          rows: [
-            for (var i = 0; i < queued.length; i++)
-              _row(queued[i], _Row.queued, place: i + 1),
-          ],
-        ),
-        const SizedBox(height: 14),
-      ],
-      if (eligible.isNotEmpty)
-        _group(
-          title: 'Ready to learn',
-          stripe: FoE.gold,
-          rows: [for (final c in eligible) _row(c, _Row.eligible)],
-        )
-      else if (queued.isNotEmpty || training.isNotEmpty)
-        Text(
-          'Everyone else already knows everything they can right now.',
-          style: FoE.dim(size: 12).copyWith(color: _inkFaint),
-        ),
+      for (var i = 0; i < free; i++)
+        const FreeSlotCard(label: 'Free practice spot'),
     ];
   }
 
-  Widget _allDone() => Column(
-    children: [
-      Text('🥋', style: TextStyle(fontSize: 30, color: FoE.gold)),
-      const SizedBox(height: 10),
-      Text(
-        'Nobody has anything left to learn.',
-        textAlign: TextAlign.center,
-        style: FoE.label(size: 13).copyWith(color: _inkSoft),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        'New moves open up as your monsters evolve.',
-        textAlign: TextAlign.center,
-        style: FoE.dim(size: 11).copyWith(color: _inkFaint),
-      ),
-    ],
-  );
-
-  Widget _stateBand(int training, int queued) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-    decoration: ShapeDecoration(
-      color: _cardFill,
-      shape: FoE.facet(radius: 12, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.15))),
-    ),
-    child: Row(
-      children: [
-        _bandFact('🥋', training, _ctrl.trainCapacity, 'training', FoE.positive),
-        _bandDivider(),
-        _bandFact('⏳', queued, _ctrl.trainQueueCapacity, 'in line', _accent),
-      ],
-    ),
-  );
-
-  Widget _bandFact(String glyph, int n, int? cap, String label, Color tint) =>
-      Expanded(
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(glyph, style: const TextStyle(fontSize: 12)),
-                const SizedBox(width: 5),
-                Text(
-                  cap == null ? '$n' : '$n/${cap < n ? n : cap}',
-                  style: FoE.value(size: 15).copyWith(color: tint),
-                ),
-              ],
-            ),
-            const SizedBox(height: 1),
-            Text(label, style: FoE.dim(size: 9).copyWith(color: _inkFaint)),
-          ],
-        ),
-      );
-
-  Widget _bandDivider() => Container(width: 1, height: 26, color: _hairline);
-
-  Widget _group({
-    required String title,
-    required Color stripe,
-    required List<Widget> rows,
-    String? note,
-  }) => Column(
+  Widget _line(List<CreatureInstance> queued, int? qCap) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Row(
-        children: [
-          Container(width: 3, height: 13, color: stripe),
-          const SizedBox(width: 7),
-          Text(
-            title.toUpperCase(),
-            style: FoE.dim(size: 10).copyWith(
-              color: _inkSoft,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1,
+      slotLineHeading(
+        'In line',
+        qCap == null ? '${queued.length}' : '${queued.length}/$qCap',
+      ),
+      if (queued.isEmpty)
+        Text(
+          'Nobody is waiting.',
+          style: FoE.dim(size: 11).copyWith(color: kBoxInkFaint),
+        )
+      else
+        Expanded(
+          child: SingleChildScrollView(
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final c in queued)
+                  SlotChip(
+                    avatar: CreatureAvatar.of(c, size: 22),
+                    name: c.displayName,
+                    onRemove: _busy == 'unqueue_${c.id}'
+                        ? null
+                        : () async {
+                            setState(() => _busy = 'unqueue_${c.id}');
+                            await _creatures.unqueueTraining(c);
+                            if (mounted) setState(() => _busy = null);
+                          },
+                  ),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          Text('${rows.length}', style: FoE.value(size: 11).copyWith(color: _inkFaint)),
-        ],
-      ),
-      if (note != null) ...[
-        const SizedBox(height: 4),
-        Text(note, style: FoE.dim(size: 10).copyWith(color: _inkFaint)),
-      ],
-      const SizedBox(height: 7),
-      Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: ShapeDecoration(
-          color: _cardFill,
-          shape: FoE.facet(radius: 12, side: BorderSide(color: kParchmentInk.withValues(alpha: 0.15))),
         ),
-        child: Column(
-          children: [
-            for (var i = 0; i < rows.length; i++) ...[
-              if (i > 0) Container(height: 1, color: _hairline),
-              rows[i],
-            ],
-          ],
-        ),
-      ),
     ],
   );
 
-  Widget _row(CreatureInstance c, _Row kind, {int? place}) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      child: Row(
-        children: [
-          if (place != null)
-            SizedBox(
-              width: 16,
-              child: Text('$place', style: FoE.value(size: 11).copyWith(color: _inkFaint)),
-            ),
-          _portrait(c),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  c.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: FoE.label(size: 12).copyWith(color: _ink),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _rowSubtitle(c, kind),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: FoE.dim(size: 10).copyWith(color: _inkFaint),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          _rowTrailing(c, kind),
-        ],
-      ),
-    );
-  }
+  // ── Everyone who can learn something ──────────────────────────────────
 
-  String _rowSubtitle(CreatureInstance c, _Row kind) {
-    if (kind == _Row.training) {
-      final ability = kAbilityDefs[c.trainingAbilityId];
-      return 'Learning ${ability?.name ?? c.trainingAbilityId}';
-    }
-    if (kind == _Row.queued) {
-      final ability = kAbilityDefs[c.trainingAbilityId];
-      return 'Waiting to learn ${ability?.name ?? c.trainingAbilityId}';
-    }
-    return '${c.equippedAbilityIds.length}/$kMaxEquippedAbilities equipped';
-  }
-
-  Widget _rowTrailing(CreatureInstance c, _Row kind) {
-    switch (kind) {
-      case _Row.training:
-        final skip = _creatures.trainSkipCost(c);
-        final key = 'skip_${c.id}';
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _fmt(c.trainingRemaining),
-              style: FoE.value(size: 12).copyWith(color: FoE.positive),
-            ),
-            if (skip > 0) ...[
-              const SizedBox(width: 8),
-              _pill(
-                '🪙 $skip',
-                _accent,
-                _busy == key || _ctrl.gold < skip
-                    ? null
-                    : () => _run(key, () => _creatures.skipTrainWithGold(c)),
-              ),
-            ],
-          ],
-        );
-      case _Row.queued:
-        final key = 'unqueue_${c.id}';
-        return _pill(
-          'Leave',
-          _inkFaint,
-          _busy == key
-              ? null
-              : () async {
-                  setState(() => _busy = key);
-                  await _creatures.unqueueTraining(c);
-                  if (mounted) setState(() => _busy = null);
-                },
-        );
-      case _Row.eligible:
-        return _pill('Learn…', FoE.positive, () => _openPicker(c), filled: true);
-    }
-  }
-
-  Future<void> _openPicker(CreatureInstance c) async {
-    final options = c.learnableAbilities
-        .where((a) => !c.learnedAbilityIds.contains(a.id))
-        .toList()
-      ..sort((a, b) => a.totalPower.compareTo(b.totalPower));
-    if (options.isEmpty) return;
-    final chosen = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: FoE.panelDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Teach ${c.displayName}',
-                style: FoE.title(size: 15),
-              ),
-              const SizedBox(height: 10),
-              ...[
-                for (final a in options)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Text(a.element.emoji, style: const TextStyle(fontSize: 18)),
-                    title: Text(a.name, style: FoE.label(size: 13)),
-                    subtitle: Text(
-                      '${a.kind.label} · Power ${a.power} · '
-                      '⏱ ${_fmt(trainingDuration(a))}',
-                      style: FoE.dim(size: 11),
-                    ),
-                    onTap: () => Navigator.pop(ctx, a.id),
-                  ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-    if (chosen == null) return;
-    await _run('queue_${c.id}', () => _creatures.queueForTraining(c, chosen));
-  }
-
-  Widget _portrait(CreatureInstance c) => SizedBox(
-    width: 34,
-    height: 34,
-    child: c.imageUrl == null
-        ? Icon(Icons.pets, size: 20, color: _accent)
-        : CreatureSprite(url: c.imageUrl!, fallback: Icon(Icons.pets, size: 20, color: _accent)),
+  Widget _tile(CreatureInstance c) => SlotTile(
+    avatar: CreatureAvatar.of(c, size: 40),
+    name: c.displayName,
+    sub: '${c.equippedAbilityIds.length + 1}/$kMaxAbilitiesTotal moves',
+    actionLabel: 'Learn…',
+    onAction: _busy == null ? () => _openPicker(c) : null,
+    onTap: _busy == null ? () => _openPicker(c) : null,
   );
 
-  Widget _pill(String label, Color color, VoidCallback? onTap, {bool filled = false}) =>
-      Pressable(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Opacity(
-          opacity: onTap == null ? 0.5 : 1,
-          child: Container(
-            height: 28,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            alignment: Alignment.center,
-            decoration: ShapeDecoration(
-              color: color.withValues(alpha: filled ? 0.9 : 0.07),
-              shape: FoE.facet(radius: 9, side: BorderSide(color: color.withValues(alpha: filled ? 0.9 : 0.5))),
+  Future<void> _openPicker(CreatureInstance c) async {
+    final options =
+        c.learnableAbilities
+            .where((a) => !c.learnedAbilityIds.contains(a.id))
+            .toList()
+          ..sort((a, b) => a.totalPower.compareTo(b.totalPower));
+    if (options.isEmpty) return;
+    final chosen = await pushMenu<String>(
+      context,
+      _MovePickerScreen(creature: c, options: options),
+    );
+    if (chosen == null || !mounted) return;
+    await _run('queue_${c.id}', () => _creatures.queueForTraining(c, chosen));
+  }
+}
+
+/// Which move should this monster learn? The monster on the left with what it
+/// already knows; on the right the moves it could learn, each with its Power and
+/// how long the lesson takes. Pops with the chosen ability's id.
+class _MovePickerScreen extends StatelessWidget {
+  final CreatureInstance creature;
+  final List<AbilityDef> options;
+
+  const _MovePickerScreen({required this.creature, required this.options});
+
+  @override
+  Widget build(BuildContext context) {
+    final known = [
+      for (final id in creature.learnedAbilityIds) kAbilityDefs[id]?.name ?? id,
+    ];
+    return MenuScaffold(
+      title: 'Combat School',
+      trailing: Text(
+        'Teach ${creature.displayName}',
+        style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: 270,
+              child: creamCard(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  children: [
+                    CreatureAvatar.of(creature, size: 76),
+                    const SizedBox(height: 8),
+                    Text(
+                      creature.displayName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: kBoxInk,
+                      ),
+                    ),
+                    Text(
+                      'Lv ${creature.level} · '
+                      '${creature.equippedAbilityIds.length + 1}/'
+                      '$kMaxAbilitiesTotal moves (Attack included)',
+                      style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: const Text(
+                        'KNOWS',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.9,
+                          color: kBoxAccent,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final k in known)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: raisedTile(radius: 9),
+                                  child: Text(
+                                    k,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: kBoxInk,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            child: Text(
-              label,
-              style: FoE.label(size: 11).copyWith(color: filled ? kParchmentLight : color),
+            const SizedBox(width: 10),
+            Expanded(
+              child: creamCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+                      child: Row(
+                        children: [
+                          const Text(
+                            'MOVES IT CAN LEARN',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.9,
+                              color: kBoxAccent,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            "time grows with the move's Power",
+                            style: FoE.dim(
+                              size: 10.5,
+                            ).copyWith(color: kBoxInkSoft),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(14, 2, 14, 14),
+                        itemCount: options.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 6),
+                        itemBuilder: (context, i) =>
+                            _moveRow(context, options[i]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _moveRow(BuildContext context, AbilityDef a) => Pressable(
+    behavior: HitTestBehavior.opaque,
+    onTap: () => Navigator.pop(context, a.id),
+    child: Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: raisedTile(),
+      child: Row(
+        children: [
+          Text(a.element.emoji, style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  a.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: kBoxInk,
+                  ),
+                ),
+                Text(
+                  '${a.kind.label} · Power ${a.power}',
+                  style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
+                ),
+              ],
             ),
           ),
-        ),
-      );
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'takes',
+                style: FoE.dim(size: 10).copyWith(color: kBoxInkSoft),
+              ),
+              Text(
+                _CombatSchoolScreenState._fmt(trainingDuration(a)),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: kBoxInk,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          SocialGoldButton(
+            'Learn',
+            height: 28,
+            fontSize: 11.5,
+            onTap: () => Navigator.pop(context, a.id),
+          ),
+        ],
+      ),
+    ),
+  );
 }

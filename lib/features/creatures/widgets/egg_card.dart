@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
-import '../../settlement/widgets/scroll_paper.dart' show kParchmentInk;
+import '../../../core/theme/cream_kit.dart' show CreamPalette, kBoxInk;
 import '../models/breeding_job.dart';
 import '../models/creature_enums.dart';
 import '../models/species_def.dart';
@@ -11,7 +11,7 @@ import 'creature_sprite.dart';
 
 /// The parchment screens' accent gold — the same value the Hatchery, the
 /// breeding page and the building dialog each declare for their own readouts.
-const Color _kParchmentAccent = FoE.gold;
+const Color _kParchmentAccent = CreamPalette.accent;
 
 /// Luminance-preserving greyscale (Rec. 709 weights), applied to the egg glyph
 /// before it is tinted — see the comment at its use. Alpha is passed through
@@ -100,7 +100,7 @@ class EggCard extends StatelessWidget {
                     child: Icon(
                       Icons.check_circle,
                       size: 18,
-                      color: FoE.positive,
+                      color: CreamPalette.better,
                     ),
                   ),
               ],
@@ -137,13 +137,12 @@ class EggCard extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: FoE.label(size: 12).copyWith(color: kParchmentInk),
+            style: FoE.label(size: 12).copyWith(color: kBoxInk),
           ),
         ],
       ),
     );
   }
-
 }
 
 /// JUST THE EGG — the tinted shell with the monster's silhouette inside it and

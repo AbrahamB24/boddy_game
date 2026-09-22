@@ -2,20 +2,30 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/pressable.dart';
 import '../creatures/models/expedition.dart';
 import '../creatures/services/expedition_controller.dart';
 import '../settlement/settlement_controller.dart';
+import '../social/social_actions.dart' show confirmDialog;
 import 'intro_flow.dart';
 
 /// The new-player guidance card, shown over the settlement map for as long as
 /// the intro chain runs. Deliberately a card the player can ignore rather than
-/// a modal tour: it names the next move and gets out of the way, and "✕ Skip"
-/// ends it (and the jumpstart) for good.
+/// a modal tour: it names the next move and gets out of the way, and the skip
+/// cross ends it (and the jumpstart) for good.
 ///
-/// Sizing is the caller's job — the settlement screen stacks this above the
-/// quick menu, and PhoneFrame caps the viewport at [FoE.phoneMaxWidth].
+/// IN THE CREAM KIT since 2026-09-21 — it was the last surface still wearing
+/// the old dark/blue `FoE.panel` look after the app-wide redesign, which made
+/// the very first thing a new player ever sees the one thing that did not
+/// match the game around it. Same paper, tan shadow and gold button as every
+/// dialog and menu: [creamCard] for the body, [goldButton] for the
+/// call-to-action, [KitCloseButton] for the skip, and the shared cream
+/// [confirmDialog] for the confirmation behind it.
+///
+/// Sizing is the caller's job — the settlement screen centres this over the
+/// map and caps it at 520 px (see SettlementScreen._introCard).
 class IntroCardPanel extends StatelessWidget {
   final SettlementController ctrl;
 
@@ -66,30 +76,31 @@ class IntroCardPanel extends StatelessWidget {
         ? IntroDestination.trips
         : card.destination;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-      decoration: FoE.panel(overrideBorder: FoE.borderGold, glow: true),
+    return creamCard(
+      padding: const EdgeInsets.fromLTRB(16, 13, 16, 16),
+      // The skip cross rides the card's own corner, like every other cream
+      // surface's leaving button — it no longer has to share the header row
+      // with the step counter.
+      corner: _skipButton(context),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'GETTING STARTED · ${step.index + 1}/${IntroStep.done.index}',
-                  style: FoE.dim(size: 9).copyWith(color: FoE.gold),
-                ),
-              ),
-              _skipButton(context),
-            ],
+          _stepTrail(step),
+          const SizedBox(height: 9),
+          // FLAT heading, never a gold pill — in this kit a pill means
+          // "pressable", and the title is not (see cream_kit.dart).
+          Text(
+            card.title,
+            style: FoE.title(size: 16).copyWith(color: kBoxInk),
           ),
-          const SizedBox(height: 6),
-          Text(card.title, style: FoE.title(size: 13)),
-          const SizedBox(height: 6),
-          Text(card.body, style: FoE.label(size: 11)),
+          const SizedBox(height: 7),
+          Text(
+            card.body,
+            style: FoE.label(size: 12).copyWith(color: kBoxInkSoft, height: 1.3),
+          ),
           if (ctaLabel != null && destination != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             _ctaButton(ctaLabel, destination, step),
           ],
         ],
@@ -97,93 +108,125 @@ class IntroCardPanel extends StatelessWidget {
     );
   }
 
+  /// Where the player is in the chain, as a row of pips rather than "3/9".
+  /// A new player has no idea how long nine steps is; a short row they can
+  /// see filling up answers "how much more of this?" at a glance, which is
+  /// the only question the counter was ever really being asked.
+  Widget _stepTrail(IntroStep step) {
+    final total = IntroStep.done.index;
+    return Row(
+      children: [
+        Text(
+          'GETTING STARTED',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.1,
+            color: kBoxAccent,
+          ),
+        ),
+        const SizedBox(width: 10),
+        // Room for the corner button, so a long trail never runs under it.
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: KitCloseButton.size - 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                for (var i = 0; i < total; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: _Pip(done: i < step.index, current: i == step.index),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _ctaButton(
     String label,
     IntroDestination destination,
     IntroStep step,
-  ) => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: () {
-        // welcome has no milestone of its own to advance from elsewhere, so
-        // its CTA just advances the chain — the player stays on the
-        // settlement map and sees the pickStarter card next, whose own CTA
-        // is what opens the starter picker (user 2026-09-02: "Wenn ich auf
-        // lets go klicke, soll ich noch auf der Karte bleiben").
-        if (step == IntroStep.welcome) {
-          unawaited(ctrl.advanceIntro(step));
-          return;
-        }
-        // pickStarter doesn't navigate either (user 2026-09-02, same day):
-        // the player is still on the settlement map, and the ONE lit control
-        // is now the real Monsters tile in the quick menu rather than a
-        // second copy of it on this card.
-        if (step == IntroStep.pickStarter) {
-          onPromptQuickMenu();
-          return;
-        }
-        onNavigate(destination);
-      },
-      borderRadius: BorderRadius.circular(FoE.radiusSmall),
-      child: Container(
-        width: double.infinity,
-        constraints: const BoxConstraints(minHeight: FoE.tapTarget),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          gradient: FoE.goldGradient,
-          borderRadius: BorderRadius.circular(FoE.radiusSmall),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          // Dark ink on the accent fill — this is the one primary action on
-          // the screen and should look like it.
-          style: FoE.title(size: 12).copyWith(color: FoE.bg),
-        ),
+  ) => Pressable(
+    onTap: () {
+      // welcome has no milestone of its own to advance from elsewhere, so
+      // its CTA just advances the chain — the player stays on the
+      // settlement map and sees the pickStarter card next, whose own CTA
+      // is what opens the starter picker (user 2026-09-02: "Wenn ich auf
+      // lets go klicke, soll ich noch auf der Karte bleiben").
+      if (step == IntroStep.welcome) {
+        unawaited(ctrl.advanceIntro(step));
+        return;
+      }
+      // pickStarter doesn't navigate either (user 2026-09-02, same day):
+      // the player is still on the settlement map, and the ONE lit control
+      // is now the real Monsters tile in the quick menu rather than a
+      // second copy of it on this card.
+      if (step == IntroStep.pickStarter) {
+        onPromptQuickMenu();
+        return;
+      }
+      onNavigate(destination);
+    },
+    child: Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: FoE.tapTarget),
+      alignment: Alignment.center,
+      decoration: goldButton(),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: FoE.title(size: 13).copyWith(color: goldButtonInk()),
       ),
     ),
   );
 
-  Widget _skipButton(BuildContext context) => Pressable(
+  Widget _skipButton(BuildContext context) => KitCloseButton(
     onTap: () async {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          backgroundColor: FoE.panelMid,
-          shape: FoE.facet(
-            radius: FoE.radius,
-            side: const BorderSide(color: FoE.border, width: 2),
-          ),
-          title: Text('Skip the intro?', style: FoE.title(size: 13)),
-          content: Text(
+      final ok = await confirmDialog(
+        context,
+        title: 'Skip the intro?',
+        body:
             'You will lose the head start that comes with it: faster '
             'expeditions, research and building, and weakened enemies. This '
             'cannot be undone.',
-            style: FoE.label(size: 11),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text('Keep it', style: FoE.label(size: 11)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(
-                'Skip',
-                style: FoE.label(size: 11).copyWith(color: FoE.danger),
-              ),
-            ),
-          ],
-        ),
+        confirmLabel: 'Skip',
+        cancelLabel: 'Keep it',
       );
-      if (confirmed == true) await ctrl.skipIntro();
+      if (ok) await ctrl.skipIntro();
     },
-    // A bare glyph is a ~12px target. Padded out to a thumb-sized one; the
-    // icon stays small, the hit area does not.
-    child: const SizedBox(
-      width: 36,
-      height: 32,
-      child: Icon(Icons.close_rounded, size: 16, color: FoE.textDim),
-    ),
   );
+}
+
+/// One step of the trail: filled for a step already behind the player, gold
+/// and a touch larger for the one they are on, hollow for what is still to
+/// come.
+class _Pip extends StatelessWidget {
+  final bool done;
+  final bool current;
+
+  const _Pip({required this.done, required this.current});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = current ? 8.0 : 6.0;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: current
+            ? CreamPalette.gold
+            : done
+            ? CreamPalette.tan
+            : Colors.transparent,
+        border: done || current
+            ? null
+            : Border.all(color: CreamPalette.tan.withValues(alpha: 0.5)),
+      ),
+    );
+  }
 }

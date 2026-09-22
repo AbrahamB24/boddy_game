@@ -136,10 +136,10 @@ class ExpeditionController extends ChangeNotifier {
   /// Why an expedition can't go out right now, or null when a seat is free.
   String? get slotBlockReason => noSlots
       ? 'No expedition slots. A Scout Post is what grants them — build one, '
-          'or level it up.'
+            'or level it up.'
       : slotsFull
-          ? 'All expedition slots are busy ($activeCount/$maxSlots).'
-          : null;
+      ? 'All expedition slots are busy ($activeCount/$maxSlots).'
+      : null;
 
   bool get caravansFull => caravanCount >= maxCaravanSlots;
 
@@ -289,23 +289,27 @@ class ExpeditionController extends ChangeNotifier {
         'Your party has returned with its load.',
       ),
     };
-    unawaited(GameNotifications.schedule(
-      kind: kind,
-      key: e.id,
-      at: e.endsAt,
-      title: title,
-      body: body,
-    ));
+    unawaited(
+      GameNotifications.schedule(
+        kind: kind,
+        key: e.id,
+        at: e.endsAt,
+        title: title,
+        body: body,
+      ),
+    );
   }
 
   /// Takes the promise back — collected, resolved offline, or hurried with gold.
   void _cancelArrival(Expedition e) {
-    unawaited(GameNotifications.cancel(
-      e.type == ExpeditionType.trade
-          ? NotifyKind.caravan
-          : NotifyKind.expedition,
-      e.id,
-    ));
+    unawaited(
+      GameNotifications.cancel(
+        e.type == ExpeditionType.trade
+            ? NotifyKind.caravan
+            : NotifyKind.expedition,
+        e.id,
+      ),
+    );
   }
 
   Future<String?> startGather({
@@ -349,10 +353,7 @@ class ExpeditionController extends ChangeNotifier {
       memberIds: members.map((c) => c.id).toList(),
       startedAt: DateTime.now(),
       duration: plan.duration,
-      payload: {
-        'resource': spot.resource,
-        'amount': plan.amount,
-      },
+      payload: {'resource': spot.resource, 'amount': plan.amount},
     );
 
     try {
@@ -429,7 +430,8 @@ class ExpeditionController extends ChangeNotifier {
     // travelMult that cuts gather travel scales the capture duration.
     var duration = captureDuration(
       option,
-      timeScale: _timeScale * SettlementController().expeditionBonuses.travelMult,
+      timeScale:
+          _timeScale * SettlementController().expeditionBonuses.travelMult,
     );
     // Tutorial: even jumpstart-scaled, a hunt is ~40s of dead waiting — the
     // guided catch should be playable the moment the player checks Trips.
@@ -714,8 +716,10 @@ class ExpeditionController extends ChangeNotifier {
       // Daily-task hooks: a trip came home, possibly hauling wood.
       SettlementController().reportDailyProgress(DailyTaskKind.gatherTrips);
       if (resource == 'wood') {
-        SettlementController()
-            .reportDailyProgress(DailyTaskKind.haulWood, granted.round());
+        SettlementController().reportDailyProgress(
+          DailyTaskKind.haulWood,
+          granted.round(),
+        );
       }
       // A gather trip used to land in complete silence: the resources simply
       // appeared, and a trip that resolved offline was never mentioned at all.

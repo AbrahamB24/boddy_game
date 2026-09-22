@@ -56,21 +56,24 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
           roadCellKey(b.gridX, b.gridY),
     };
 
-    final tiles = [...widget.buildings]..sort((a, b) {
-      final da = kBuildingDefs[a.buildingTypeId];
-      final db = kBuildingDefs[b.buildingTypeId];
-      if (da == null || db == null) return 0;
-      return isoDrawOrder(
-        a.gridX,
-        a.gridY,
-        da.gridW,
-        da.gridH,
-        b.gridX,
-        b.gridY,
-        db.gridW,
-        db.gridH,
-      );
-    });
+    // A STORED building (its owner's Umbaumodus tray, mid-rearrange) isn't
+    // standing anywhere — a visitor must never see it at its stale spot.
+    final tiles = [for (final b in widget.buildings) if (!b.isStored) b]
+      ..sort((a, b) {
+        final da = kBuildingDefs[a.buildingTypeId];
+        final db = kBuildingDefs[b.buildingTypeId];
+        if (da == null || db == null) return 0;
+        return isoDrawOrder(
+          a.gridX,
+          a.gridY,
+          da.gridW,
+          da.gridH,
+          b.gridX,
+          b.gridY,
+          db.gridW,
+          db.gridH,
+        );
+      });
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -121,7 +124,7 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
     final (gx, gy) = screenToGrid(local);
     for (final b in widget.buildings.reversed) {
       final def = kBuildingDefs[b.buildingTypeId];
-      if (def == null || def.isRoad || def.isBuildPlot) continue;
+      if (def == null || def.isRoad || def.isBuildPlot || b.isStored) continue;
       if (gx >= b.gridX &&
           gx < b.gridX + def.gridW &&
           gy >= b.gridY &&
@@ -143,9 +146,7 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
       height: iso.height,
       child: Opacity(
         opacity: b.isPaused && b.isComplete ? 0.6 : 1.0,
-        child: RepaintBoundary(
-          child: _buildingArt(def, b, roadCells),
-        ),
+        child: RepaintBoundary(child: _buildingArt(def, b, roadCells)),
       ),
     );
   }
@@ -176,6 +177,18 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
     return Stack(
       clipBehavior: Clip.none,
       children: [
+        // The same ground shadow the player's own map gives every building.
+        Positioned(
+          left: art.left,
+          width: art.width,
+          bottom: bounds.height - art.bottom,
+          child: BuildingGroundShadow(
+            imageUrl: def.imageUrl,
+            defId: def.id,
+            width: art.width,
+            dimmed: !b.isComplete,
+          ),
+        ),
         Positioned(
           left: art.left,
           width: art.width,

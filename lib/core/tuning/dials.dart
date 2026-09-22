@@ -23,6 +23,7 @@ abstract final class Dials {
   static const energyFloorMultiplier = 'energyFloorMultiplier';
   static const energyBoostPerThousandSteps = 'energyBoostPerThousandSteps';
   static const energyMaxBoost = 'energyMaxBoost';
+  static const energyFullHours = 'energyFullHours';
   static const healMaxCut = 'healMaxCut';
   static const tradeMaxDiscount = 'tradeMaxDiscount';
   static const goodsBuyMarkup = 'goodsBuyMarkup';
@@ -205,8 +206,10 @@ final List<Dial> kDials = [
     group: TuningGroup.settlement,
     section: 'Energie',
     label: 'Schritte für 100%',
-    help: 'Wie viele Schritte seit Mitternacht für die volle Rate (100%) '
-        'nötig sind.',
+    help:
+        'Wie viele Schritte die Energie von 0 auf 100% füllen. Die '
+        'Schritte darüber zählen weniger (siehe Bonus pro 1000 '
+        'Extraschritte).',
     def: 5000,
     kind: DialKind.count,
     min: 1,
@@ -215,19 +218,21 @@ final List<Dial> kDials = [
     id: Dials.energyFloorMultiplier,
     group: TuningGroup.settlement,
     section: 'Energie',
-    label: 'Rate bei 0 Schritten',
-    help: 'Wie viel die Siedlung noch leistet, wenn heute noch kein Schritt '
-        'gezählt wurde.',
+    label: 'Rate bei leerer Energie',
+    help:
+        'Wie viel die Siedlung noch leistet, wenn die Energie auf 0 '
+        'gesunken ist.',
     def: 0.25,
     kind: DialKind.percent,
-    felt: (v) => 'Bei 0 Schritten läuft alles mit ${_n(v * 100)} %.',
+    felt: (v) => 'Bei leerer Energie läuft alles mit ${_n(v * 100)} %.',
   ),
   Dial(
     id: Dials.energyBoostPerThousandSteps,
     group: TuningGroup.settlement,
     section: 'Energie',
     label: 'Bonus pro 1000 Extraschritte',
-    help: 'Über die 100%-Schwelle hinaus: wie viel zusätzliche Rate je '
+    help:
+        'Über die 100%-Schwelle hinaus: wie viel zusätzliche Energie je '
         '1000 weitere Schritte.',
     def: 0.05,
     kind: DialKind.percent,
@@ -237,8 +242,9 @@ final List<Dial> kDials = [
     group: TuningGroup.settlement,
     section: 'Energie',
     label: 'Bonus-Obergrenze',
-    help: 'Die maximale Extra-Rate über 100% hinaus, egal wie viele '
-        'Schritte darüber liegen.',
+    help:
+        'Die maximale Extra-Energie über 100% hinaus. Weitere Schritte '
+        'verfallen, bis die Energie wieder unter dem Maximum liegt.',
     def: 0.25,
     kind: DialKind.percent,
     felt: (v) {
@@ -248,9 +254,26 @@ final List<Dial> kDials = [
           ? null
           : full + 1000 * (v / perThousand);
       return stepsForMax == null
-          ? 'Maximal ${_n(100 + v * 100)} % Rate.'
-          : 'Maximal ${_n(100 + v * 100)} % Rate, ab ${_n(stepsForMax)} '
-                'Schritten/Tag.';
+          ? 'Maximal ${_n(100 + v * 100)} % Energie.'
+          : 'Maximal ${_n(100 + v * 100)} % Energie, erreicht mit '
+                '${_n(stepsForMax)} Schritten aus leerem Zustand.';
+    },
+  ),
+  Dial(
+    id: Dials.energyFullHours,
+    group: TuningGroup.settlement,
+    section: 'Energie',
+    label: 'Stunden von 100% bis 0',
+    help:
+        'Wie lange 100% Energie reichen, wenn nicht gelaufen wird. Die '
+        'Energie sinkt gleichmässig — die Maximalenergie hält '
+        'entsprechend länger.',
+    def: 24,
+    min: 0.1,
+    felt: (v) {
+      final maxPct = 100 + GameTuning.i.raw(Dials.energyMaxBoost) * 100;
+      return '100 % reichen ${_n(v)} h, die Maximalenergie '
+          '(${_n(maxPct)} %) ${_n(v * maxPct / 100)} h.';
     },
   ),
   Dial(
@@ -439,7 +462,8 @@ final List<Dial> kDials = [
     group: TuningGroup.campaign,
     section: 'Reise',
     label: 'Anreise',
-    help: 'Hinweg + Rückweg zu einem Gebiet. Wird durch Scout-Post-Arbeiter '
+    help:
+        'Hinweg + Rückweg zu einem Gebiet. Wird durch Scout-Post-Arbeiter '
         'gekürzt.',
     def: 300,
     kind: DialKind.minutes,

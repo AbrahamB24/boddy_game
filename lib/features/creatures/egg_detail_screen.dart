@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
-import '../common/widgets/parchment_page.dart';
+import '../../core/theme/cream_kit.dart';
 import '../settlement/settlement_controller.dart';
-import '../settlement/widgets/scroll_paper.dart'
-    show
-        kParchmentInk,
-        kParchmentLight,
-        parchmentButton,
-        parchmentButtonInk;
+import '../../core/ui/pressable.dart';
 import 'hatchery_screen.dart';
 import 'models/breeding_job.dart';
 import 'models/creature_enums.dart';
@@ -18,7 +13,6 @@ import 'services/breeding_controller.dart';
 import 'widgets/egg_card.dart';
 import 'widgets/egg_details.dart';
 import '../common/widgets/monster_tile_grid.dart';
-import '../../core/ui/pressable.dart';
 
 /// ONE EGG, OPENED FROM THE BAG (user 2026-07-27: "sobald ich auf ein Ei
 /// drücke. Komme ich in ein neues Menü, welches das Ei zusammen mit den Stats
@@ -42,7 +36,15 @@ import '../../core/ui/pressable.dart';
 class EggDetailScreen extends StatefulWidget {
   final String eggId;
 
-  const EggDetailScreen({super.key, required this.eggId});
+  /// Opened FROM the Hatchery (a tap on an egg tile): the Incubate button hands
+  /// the egg back to it (pops with the id) instead of opening another Hatchery.
+  final bool returnChoice;
+
+  const EggDetailScreen({
+    super.key,
+    required this.eggId,
+    this.returnChoice = false,
+  });
 
   @override
   State<EggDetailScreen> createState() => _EggDetailScreenState();
@@ -50,9 +52,9 @@ class EggDetailScreen extends StatefulWidget {
 
 class _EggDetailScreenState extends State<EggDetailScreen> {
   // The parchment palette every page reached from a building wears.
-  static const Color _ink = kParchmentInk;
-  static final Color _inkSoft = kParchmentInk.withValues(alpha: 0.78);
-  static final Color _inkFaint = kParchmentInk.withValues(alpha: 0.55);
+  static const Color _ink = CreamPalette.ink;
+  static final Color _inkSoft = CreamPalette.ink.withValues(alpha: 0.78);
+  static final Color _inkFaint = CreamPalette.ink.withValues(alpha: 0.55);
 
   final _breeding = BreedingController();
 
@@ -75,7 +77,7 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: kParchmentLight,
+        backgroundColor: CreamPalette.paperTop,
         title: Text(
           'Discard this egg?',
           style: FoE.title(size: 15).copyWith(color: _ink),
@@ -96,7 +98,7 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
               'Discard',
-              style: FoE.label(size: 12).copyWith(color: FoE.danger),
+              style: FoE.label(size: 12).copyWith(color: CreamPalette.warn),
             ),
           ),
         ],
@@ -112,7 +114,7 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
     listenable: _breeding,
     builder: (context, _) {
       final job = _job;
-      return ParchmentPage(
+      return MenuScaffold(
         // The SPECIES names the page — "Egg" alone would be the same title on
         // every one of them, and the shell below is the picture that says what
         // kind of object this is.
@@ -121,20 +123,50 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
             : kSpeciesDefs[job.speciesId]?.name ?? job.speciesId,
         child: job == null
             ? Center(
-                child: Text(
-                  'This egg has left your bag.',
-                  style: FoE.dim(size: 12).copyWith(color: _inkSoft),
+                child: creamCard(
+                  padding: const EdgeInsets.all(22),
+                  child: Text(
+                    'This egg has left your bag.',
+                    style: FoE.dim(size: 12).copyWith(color: _inkSoft),
+                  ),
                 ),
               )
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(ParchmentPage.kParchmentPagePad, 12, ParchmentPage.kParchmentPagePad, 20),
-                children: _body(job),
+            // LANDSCAPE (2026-09-18): the egg + its one action on the left,
+            // the fourteen-gene table on the right — both visible at once
+            // instead of one long portrait scroll. Two cream cards.
+            : Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: 264,
+                      child: creamCard(
+                        padding: const EdgeInsets.all(14),
+                        child: ListView(
+                          padding: EdgeInsets.zero,
+                          children: _leftPanel(job),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: creamCard(
+                        padding: const EdgeInsets.all(14),
+                        child: ListView(
+                          padding: EdgeInsets.zero,
+                          children: [EggGeneTable(job: job)],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
       );
     },
   );
 
-  List<Widget> _body(BreedingJob job) {
+  List<Widget> _leftPanel(BreedingJob job) {
     final species = kSpeciesDefs[job.speciesId];
     final free = _breeding.freeHatcherySlots > 0;
     final noHatchery = _breeding.hatcherySlots <= 0;
@@ -155,41 +187,39 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
       ),
       const SizedBox(height: 12),
       EggFacts(job: job),
-      const SizedBox(height: 12),
-      EggGeneTable(job: job),
-      const SizedBox(height: 16),
+      const SizedBox(height: 14),
       // The one action, in the Hatchery's own button shape: what it does on
       // top, the wait it commits you to underneath — and the reason in place of
       // the label when the Hatchery cannot take it.
       Pressable(
-        onTap: () => Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => HatcheryScreen(selectedEggId: job.id),
-          ),
-        ),
+        onTap: () => widget.returnChoice
+            ? Navigator.pop(context, job.id)
+            : Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => HatcheryScreen(selectedEggId: job.id),
+                ),
+              ),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 8),
-          alignment: Alignment.center,
-          decoration: parchmentButton(),
+          decoration: goldButton(),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                noHatchery ? 'Open the Hatchery' : 'Hatch',
-                style: FoE.label(
-                  size: 13,
-                ).copyWith(color: parchmentButtonInk()),
+                noHatchery ? 'Open the Hatchery' : 'Incubate',
+                style: FoE.label(size: 13).copyWith(color: goldButtonInk()),
               ),
               const SizedBox(height: 3),
               Text(
                 noHatchery
                     ? 'No incubation slots yet'
                     : free && species != null
-                        ? '${_hatchHours(species).round()}h'
-                        : 'Hatchery full — free a slot there',
-                style: FoE.dim(size: 10).copyWith(color: parchmentButtonInk()),
+                    ? '${_hatchHours(species).round()}h'
+                    : 'Hatchery full — free a slot there',
+                textAlign: TextAlign.center,
+                style: FoE.dim(size: 10).copyWith(color: goldButtonInk()),
               ),
             ],
           ),
@@ -204,7 +234,7 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
           onPressed: () => _discard(job),
           child: Text(
             'Discard egg',
-            style: FoE.dim(size: 11).copyWith(color: FoE.danger),
+            style: FoE.dim(size: 11).copyWith(color: CreamPalette.warn),
           ),
         ),
       ),

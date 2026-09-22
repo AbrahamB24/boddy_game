@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../common/widgets/filter_pills.dart';
 import '../common/widgets/monster_tile_grid.dart';
-import '../common/widgets/parchment_page.dart';
-import '../settlement/widgets/scroll_paper.dart'
-    show kParchmentInk;
 import 'models/breeding_job.dart';
 import 'models/creature_enums.dart';
 import 'models/species_def.dart';
@@ -36,11 +34,11 @@ class EggPickerScreen extends StatefulWidget {
 }
 
 class _EggPickerScreenState extends State<EggPickerScreen> {
-  static final Color _inkSoft = kParchmentInk.withValues(alpha: 0.78);
-  static const Color _accent = FoE.gold;
+  static final Color _inkSoft = kBoxInkSoft;
+  static const Color _accent = CreamPalette.goldDeep;
 
   /// This page is parchment, so its pills are.
-  static final PillPalette _pills = PillPalette.parchment;
+  static final PillPalette _pills = PillPalette.cream;
 
   final _breeding = BreedingController();
   final _search = TextEditingController();
@@ -61,54 +59,62 @@ class _EggPickerScreenState extends State<EggPickerScreen> {
     listenable: _breeding,
     builder: (context, _) {
       final options = _pickerEggs();
-      return ParchmentPage(
+      return MenuScaffold(
         // No emoji in a title (user 2026-07-27) — here and on every page's bar.
-        title: 'Eggs',
+        title: 'Choose an egg',
         trailing: Text(
-          '${_breeding.eggs.length}',
-          style: FoE.value(size: 12).copyWith(color: _accent),
+          '${_breeding.eggs.length} in the bag',
+          style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(ParchmentPage.kParchmentPagePad, 10, ParchmentPage.kParchmentPagePad, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _searchPill(),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(child: _filterPill()),
-                  const SizedBox(width: 8),
-                  Expanded(child: _sortPill()),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: options.isEmpty
-                    ? Text(
-                        _breeding.eggs.isEmpty
-                            ? 'No eggs in the bag.'
-                            : 'No egg matches.',
-                        style: FoE.dim(size: 12).copyWith(color: _inkSoft),
-                      )
-                    : GridView.builder(
-                        padding: const EdgeInsets.only(top: 4, bottom: 16),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: kMonsterTileCols,
-                          mainAxisSpacing: kMonsterTileSpacing,
-                          crossAxisSpacing: kMonsterTileSpacing,
-                          childAspectRatio: kMonsterTileAspect,
+          padding: const EdgeInsets.only(bottom: 10),
+          child: creamCard(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(flex: 3, child: _searchPill()),
+                    const SizedBox(width: 8),
+                    Expanded(flex: 2, child: _sortPill()),
+                    const SizedBox(width: 8),
+                    Expanded(flex: 2, child: _filterPill()),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: options.isEmpty
+                      ? Text(
+                          _breeding.eggs.isEmpty
+                              ? 'No eggs in the bag.'
+                              : 'No egg matches.',
+                          style: FoE.dim(size: 12).copyWith(color: _inkSoft),
+                        )
+                      // Fixed-width cells (the shared tile size), not a max-extent
+                      // grid that hands a tile any width up to its cap.
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.only(top: 14, bottom: 16),
+                          child: Wrap(
+                            spacing: kMonsterTileSpacing,
+                            runSpacing: kMonsterTileSpacing,
+                            children: [
+                              for (final egg in options)
+                                SizedBox(
+                                  width: monsterTileWidth(context),
+                                  height: monsterTileHeight(context),
+                                  child: EggCard(
+                                    job: egg,
+                                    selected: egg.id == widget.selectedEggId,
+                                    onTap: () => Navigator.pop(context, egg.id),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                        itemCount: options.length,
-                        itemBuilder: (_, i) => EggCard(
-                          job: options[i],
-                          selected: options[i].id == widget.selectedEggId,
-                          onTap: () => Navigator.pop(context, options[i].id),
-                        ),
-                      ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       );

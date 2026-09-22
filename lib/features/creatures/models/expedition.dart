@@ -177,7 +177,9 @@ class Expedition {
         .map((e) => e as String)
         .toList(),
     startedAt: DateTime.parse(row['started_at'] as String),
-    duration: Duration(seconds: (row['duration_seconds'] as num?)?.toInt() ?? 0),
+    duration: Duration(
+      seconds: (row['duration_seconds'] as num?)?.toInt() ?? 0,
+    ),
     state: ExpeditionState.fromName(row['state'] as String?),
     payload: ((row['payload'] as Map?) ?? const {}).cast<String, dynamic>(),
   );

@@ -22,7 +22,9 @@ class ChatMessage {
     recipientId: m['recipient_id'] as String,
     body: m['body'] as String,
     createdAt: DateTime.parse(m['created_at'] as String),
-    readAt: m['read_at'] == null ? null : DateTime.parse(m['read_at'] as String),
+    readAt: m['read_at'] == null
+        ? null
+        : DateTime.parse(m['read_at'] as String),
   );
 
   bool sentByMe(String myUserId) => senderId == myUserId;

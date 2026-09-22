@@ -83,8 +83,7 @@ class ResourceGatherDef {
   }) => ResourceGatherDef(
     resource: resource,
     unitsPerCarry: unitsPerCarry ?? this.unitsPerCarry,
-    secondsPerUnitPerStat:
-        secondsPerUnitPerStat ?? this.secondsPerUnitPerStat,
+    secondsPerUnitPerStat: secondsPerUnitPerStat ?? this.secondsPerUnitPerStat,
     spotCapacity: spotCapacity ?? this.spotCapacity,
     regenPerHour: regenPerHour ?? this.regenPerHour,
   );

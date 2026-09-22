@@ -15,7 +15,11 @@ import '../data/item_definitions.dart';
 /// luxury goods get a purpose. Otherwise it falls back to the legacy abstract
 /// [supplyCost], billed against era [eraOrder]'s goods richest-first from what
 /// the settlement actually has ([stock]).
-Map<String, double> craftCost(ItemDef def, int eraOrder, Map<String, double> stock) {
+Map<String, double> craftCost(
+  ItemDef def,
+  int eraOrder,
+  Map<String, double> stock,
+) {
   if (def.ingredients.isNotEmpty) return Map.of(def.ingredients);
   return goodsCost(def.supplyCost, eraOrder, stock);
 }
@@ -26,7 +30,11 @@ Map<String, double> craftCost(ItemDef def, int eraOrder, Map<String, double> sto
 /// in the Workshop" rather than show a bar that never moves. That exact
 /// failure (a silent, motionless progress bar reading as a bug) is why the old
 /// research screen had to spell out "nobody is researching".
-double? craftSecondsAt(ItemDef def, double craftPowerPerHour, {double timeScale = 1.0}) {
+double? craftSecondsAt(
+  ItemDef def,
+  double craftPowerPerHour, {
+  double timeScale = 1.0,
+}) {
   if (craftPowerPerHour <= 0) return null;
   return (def.craftSeconds * timeScale) / craftPowerPerHour * 3600;
 }
@@ -47,8 +55,11 @@ int itemCount(Map<String, int> inventory) =>
     inventory.values.fold(0, (s, n) => s + n);
 
 /// Adds [n] of [itemId] to [inventory], returning a new map.
-Map<String, int> addItem(Map<String, int> inventory, String itemId, [int n = 1]) =>
-    {...inventory, itemId: (inventory[itemId] ?? 0) + n};
+Map<String, int> addItem(
+  Map<String, int> inventory,
+  String itemId, [
+  int n = 1,
+]) => {...inventory, itemId: (inventory[itemId] ?? 0) + n};
 
 /// Removes one [itemId], returning a new map — or null when there is none to
 /// remove, so a caller can't spend an item it doesn't have by ignoring a bool.
@@ -57,7 +68,9 @@ Map<String, int>? removeItem(Map<String, int> inventory, String itemId) {
   if (have <= 0) return null;
   final next = {...inventory};
   if (have == 1) {
-    next.remove(itemId); // don't leave a 0 behind — it would show as a bag entry
+    next.remove(
+      itemId,
+    ); // don't leave a 0 behind — it would show as a bag entry
   } else {
     next[itemId] = have - 1;
   }
@@ -73,11 +86,89 @@ double healFromItem(ItemDef def, double missingHp) =>
     math.max(0, math.min(def.healHp, missingHp));
 
 /// Whether using [def] on a creature missing [missingHp] does anything at all.
-bool canUseOn(ItemDef def, double missingHp) =>
-    def.isHeal && missingHp > 0;
+bool canUseOn(ItemDef def, double missingHp) => def.isHeal && missingHp > 0;
 
 Map<String, int> inventoryFromJson(Map<dynamic, dynamic>? json) => {
   for (final e in (json ?? const {}).entries)
     if ((e.value as num?)?.toInt() case final int n when n > 0)
       e.key as String: n,
 };
+
+// ── What can be made from what is in store (Crafting page, 2026-09-20) ──────
+
+/// Stands in for "as many as you like" — a recipe that costs nothing.
+const int kCraftableCap = 999;
+
+/// The Crafting page's groups of recipes (user 2026-09-20, "Variante 4,
+/// Kategorien + Detail"): the rail on the left.
+enum CraftGroup {
+  heal('Heal'),
+  revive('Revive'),
+  cures('Cures'),
+  boosts('Boosts'),
+  packs('Packs');
+
+  final String label;
+  const CraftGroup(this.label);
+}
+
+/// Which rail button an item of [kind] sits under.
+CraftGroup craftGroupOf(ItemKind kind) => switch (kind) {
+  ItemKind.heal => CraftGroup.heal,
+  ItemKind.revive => CraftGroup.revive,
+  ItemKind.cureStatus || ItemKind.cureDebuffs => CraftGroup.cures,
+  ItemKind.buff ||
+  ItemKind.catchBoost ||
+  ItemKind.expeditionYield ||
+  ItemKind.breedSpeed => CraftGroup.boosts,
+  ItemKind.resourcePack => CraftGroup.packs,
+};
+
+/// What [n] crafts of [def] cost against [stock] — the named ingredients times
+/// [n], or the abstract supply bill for [n] crafts billed richest-first.
+Map<String, double> craftCostFor(
+  ItemDef def,
+  int eraOrder,
+  Map<String, double> stock,
+  int n,
+) {
+  if (def.ingredients.isNotEmpty) {
+    return {for (final e in def.ingredients.entries) e.key: e.value * n};
+  }
+  return goodsCost(def.supplyCost * n, eraOrder, stock);
+}
+
+/// How many of [def] the goods in [stock] pay for right now (each craft is
+/// billed on completion, so this is "how many could finish today").
+int craftableCount(ItemDef def, int eraOrder, Map<String, double> stock) {
+  if (def.ingredients.isNotEmpty) {
+    var n = kCraftableCap;
+    for (final e in def.ingredients.entries) {
+      if (e.value <= 0) continue;
+      n = math.min(n, ((stock[e.key] ?? 0) / e.value).floor());
+    }
+    return n;
+  }
+  if (def.supplyCost <= 0) return kCraftableCap;
+  final unit = math.max(1, def.supplyCost.ceil());
+  var total = 0;
+  for (final g in goodsForRegion(eraOrder)) {
+    total += (stock[g.id] ?? 0).floor();
+  }
+  return total ~/ unit;
+}
+
+/// What is missing to make [n] of [def]: good id → how much more you need.
+/// Empty when the store covers it.
+Map<String, double> craftShortfall(
+  ItemDef def,
+  int eraOrder,
+  Map<String, double> stock, {
+  int n = 1,
+}) {
+  final cost = craftCostFor(def, eraOrder, stock, n);
+  return {
+    for (final e in cost.entries)
+      if ((stock[e.key] ?? 0) < e.value) e.key: e.value - (stock[e.key] ?? 0),
+  };
+}

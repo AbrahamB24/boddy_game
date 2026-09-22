@@ -132,9 +132,7 @@ class ResourceModel {
       wood: clamp('wood', wood),
       stone: clamp('stone', stone),
       gold: clamp('gold', gold),
-      goods: {
-        for (final e in goods.entries) e.key: clamp(e.key, e.value),
-      },
+      goods: {for (final e in goods.entries) e.key: clamp(e.key, e.value)},
     );
   }
 

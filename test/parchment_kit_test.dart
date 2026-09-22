@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:boddygame/core/theme/cream_kit.dart' show KitCloseButton;
 
 import 'package:boddygame/core/ui/pressable.dart';
 import 'package:boddygame/features/common/widgets/parchment_kit.dart';
@@ -14,7 +15,9 @@ import 'package:boddygame/features/common/widgets/parchment_kit.dart';
 // muted card still shows its content, and the confirm box answers honestly.
 void main() {
   Future<void> pump(WidgetTester tester, Widget child) => tester.pumpWidget(
-    MaterialApp(home: Scaffold(body: Center(child: child))),
+    MaterialApp(
+      home: Scaffold(body: Center(child: child)),
+    ),
   );
 
   group('ParchmentButton', () {
@@ -104,15 +107,16 @@ void main() {
       expect(find.text('Rare 20 %'), findsNothing);
       await tester.tap(find.text('i'));
       await tester.pumpAndSettle();
-      expect(find.text('Find odds'), findsOneWidget);
+      expect(find.text('FIND ODDS'), findsOneWidget);
       expect(find.text('Rare 20 %'), findsOneWidget);
-      await tester.tap(find.text('Close'));
+      await tester.tap(find.byType(KitCloseButton));
       await tester.pumpAndSettle();
       expect(find.text('Rare 20 %'), findsNothing);
     });
 
-    testWidgets('the content is rebuilt on every open, never captured',
-        (tester) async {
+    testWidgets('the content is rebuilt on every open, never captured', (
+      tester,
+    ) async {
       var opens = 0;
       await pump(
         tester,
@@ -125,7 +129,7 @@ void main() {
         await tester.tap(find.text('i'));
         await tester.pumpAndSettle();
         expect(find.text(expected), findsOneWidget);
-        await tester.tap(find.text('Close'));
+        await tester.tap(find.byType(KitCloseButton));
         await tester.pumpAndSettle();
       }
     });
@@ -172,14 +176,15 @@ void main() {
     testWidgets('confirming answers true', (tester) async {
       bool? result;
       await open(tester, (r) => result = r);
-      expect(find.text('Recall expedition?'), findsOneWidget);
+      expect(find.text('RECALL EXPEDITION?'), findsOneWidget);
       await tester.tap(find.text('Recall'));
       await tester.pumpAndSettle();
       expect(result, isTrue);
     });
 
-    testWidgets('the default action is to KEEP — recall is destructive',
-        (tester) async {
+    testWidgets('the default action is to KEEP — recall is destructive', (
+      tester,
+    ) async {
       bool? result;
       await open(tester, (r) => result = r);
       await tester.tap(find.text('Keep'));

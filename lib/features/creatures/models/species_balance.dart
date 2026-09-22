@@ -165,8 +165,10 @@ class RarityConfig {
       healSecondsPerHp: d('healSecondsPerHp', fallback.healSecondsPerHp),
       healGoodsPerHp: d('healGoodsPerHp', fallback.healGoodsPerHp),
       breedGoods: d('breedGoods', fallback.breedGoods),
-      encounterWeightBase:
-          d('encounterWeightBase', fallback.encounterWeightBase),
+      encounterWeightBase: d(
+        'encounterWeightBase',
+        fallback.encounterWeightBase,
+      ),
       catchHits: (j['catchHits'] as num?)?.toInt() ?? fallback.catchHits,
     );
   }

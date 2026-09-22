@@ -84,8 +84,10 @@ GatherPlan planGather({
   // what makes bulk worth a trip while a luxury run stays a handful.
   final dials = gatherDefFor(spot.resource);
   final gatherPower = members.fold<int>(0, (sum, c) => sum + gatherPowerOf(c));
-  final carryPoints =
-      members.fold<int>(0, (sum, c) => sum + c.statValue(CreatureStat.carry));
+  final carryPoints = members.fold<int>(
+    0,
+    (sum, c) => sum + c.statValue(CreatureStat.carry),
+  );
   final loadCap = dials.loadCap(carryPoints) * carryMult;
 
   final ratePerHour = dials.ratePerHour(gatherPower);

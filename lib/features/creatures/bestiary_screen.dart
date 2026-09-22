@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
-import '../common/widgets/parchment_page.dart';
+import '../../core/theme/cream_kit.dart';
 import 'creature_detail_screen.dart';
 import 'models/creature_instance.dart';
 import 'models/species_def.dart';
@@ -10,7 +10,6 @@ import 'services/creatures_controller.dart';
 import 'widgets/creature_sprite.dart';
 import '../../core/ui/pressable.dart';
 import '../common/widgets/recess_bar.dart';
-import '../settlement/widgets/scroll_paper.dart' show kParchmentInk;
 
 // The bestiary (Dex) — the collection endgame.
 //
@@ -42,6 +41,23 @@ class BestiaryScreen extends StatefulWidget {
 /// counted SPECIES while the grid showed stages — "1/15" under forty-five
 /// pictures (user 2026-08-04).
 const int kBestiaryStages = 3;
+
+/// How much of the bestiary [owned] fills in: stages SEEN out of every stage of
+/// every species. A stage counts as seen once your best of that species has
+/// reached it — the rule the tiles use to un-silhouette, and the one the
+/// completion figure at the top of the Bestiary uses. The Monsters screen's
+/// Bestiary hub shows the same figure.
+({int seen, int total}) bestiaryProgress(Iterable<CreatureInstance> owned) {
+  final best = <String, int>{};
+  for (final c in owned) {
+    if (c.stage > (best[c.speciesId] ?? -1)) best[c.speciesId] = c.stage;
+  }
+  var seen = 0;
+  for (final id in kSpeciesDefs.keys) {
+    seen += ((best[id] ?? -1) + 1).clamp(0, kBestiaryStages);
+  }
+  return (seen: seen, total: kSpeciesDefs.length * kBestiaryStages);
+}
 
 class _BestiaryScreenState extends State<BestiaryScreen> {
   final _ctrl = CreaturesController();
@@ -91,63 +107,68 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
       final totalStages = species.length * kBestiaryStages;
       final discovered = species.fold<int>(
         0,
-        (n, s) => n + (_progressFor(s.id).bestStage + 1)
-            .clamp(0, kBestiaryStages),
+        (n, s) =>
+            n + (_progressFor(s.id).bestStage + 1).clamp(0, kBestiaryStages),
       );
       final mastered = species
           .where((s) => _progressFor(s.id).bestStage >= kBestiaryStages - 1)
           .length;
-      return ParchmentPage(
+      return MenuScaffold(
         title: 'Bestiary',
-        trailing: Text(
-          species.isEmpty
-              ? ''
-              : '${(discovered / totalStages * 100).round()}%',
-          style: FoE.value(size: 13).copyWith(color: FoE.gold),
-        ),
-        child: Column(
-          children: [
-            if (species.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(ParchmentPage.kParchmentPagePad, 10, ParchmentPage.kParchmentPagePad, 0),
-                child: Column(
-                  children: [
-                    RecessBar(
-                      value: discovered / totalStages,
-                      color: FoE.gold,
-                      height: 12,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$discovered/$totalStages stages seen · '
-                      '$mastered/${species.length} species fully evolved',
-                      style: FoE.dim(size: 10),
-                    ),
-                  ],
-                ),
+        trailing: species.isEmpty
+            ? null
+            : Text(
+                '${(discovered / totalStages * 100).round()} %',
+                style: FoE.value(size: 13).copyWith(color: kBoxAccent),
               ),
-            Expanded(
-              child: species.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No species defined yet.',
-                        style: FoE.dim(size: 12),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(
-                        ParchmentPage.kParchmentPagePad,
-                        6,
-                        ParchmentPage.kParchmentPagePad,
-                        20,
-                      ),
+        child: species.isEmpty
+            ? Center(
+                child: Text(
+                  'No species defined yet.',
+                  style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // How far the whole book is filled in.
+                  creamCard(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                    child: Column(
+                      children: [
+                        RecessBar(
+                          value: discovered / totalStages,
+                          color: CreamPalette.gold,
+                          height: 12,
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          '$discovered/$totalStages stages seen · '
+                          '$mastered/${species.length} species fully evolved',
+                          style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Two lines of species side by side — a landscape screen has
+                  // the width, and a line is only ~440 px of it.
+                  Expanded(
+                    child: GridView.builder(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 452,
+                            mainAxisExtent: 156,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                          ),
                       itemCount: species.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (_, i) => _speciesRow(species[i]),
                     ),
-            ),
-          ],
-        ),
+                  ),
+                ],
+              ),
       );
     },
   );
@@ -166,83 +187,90 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
       // line has nothing to open, and must not pretend otherwise.
       onTap: rep == null
           ? null
-          : () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CreatureDetailScreen(creatureId: rep.id),
-                ),
-              ),
+          : () => pushMenu(context, CreatureDetailScreen(creatureId: rep.id)),
+      // A cream card, its rim the species' rarity once you have started the
+      // line; an unreached line is the kit's grey locked tile.
       child: Container(
-        // all(12), not fromLTRB(10, 8, 10, 10) — and radius 12, not 14
-        // (2026-08-31 audit) — the standard list-card shape/padding used
-        // everywhere else (teams_screen.dart, breeding_screen.dart,
-        // battle_screen.dart, healing_hut_screen.dart, hatchery_screen.dart).
-        padding: const EdgeInsets.all(12),
-        decoration: ShapeDecoration(
-          color: kParchmentInk.withValues(alpha: discovered ? 0.10 : 0.05),
-          shape: FoE.facet(
-            radius: 12,
-            side: BorderSide(
-              color: discovered
-                  ? species.rarity.color.withValues(alpha: 0.6)
-                  : kParchmentInk.withValues(alpha: 0.14),
-            ),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Text(species.element.emoji, style: const TextStyle(fontSize: 13)),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    // An undiscovered species keeps its NAME hidden — the line
-                    // is the reward, and the silhouettes are the tease.
-                    discovered ? species.name : '???',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: FoE.label(size: 13).copyWith(
-                      color: discovered ? FoE.parchment : FoE.textMuted,
-                      fontWeight: FontWeight.w700,
+        decoration: discovered
+            ? BoxDecoration(
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: species.rarity.color.withValues(alpha: 0.75),
+                  width: 2,
+                ),
+              )
+            : null,
+        child: _lineCard(
+          discovered: discovered,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    species.element.emoji,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      // An undiscovered species keeps its NAME hidden — the line
+                      // is the reward, and the silhouettes are the tease.
+                      discovered ? species.name : '???',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: FoE.label(size: 13).copyWith(
+                        color: discovered ? kBoxInk : kBoxInkFaint,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                ),
-                Text(
-                  // How far this line has come: 0/3 through 3/3.
-                  '${(progress.bestStage + 1).clamp(0, 3)}/3',
-                  style: FoE.value(size: 11).copyWith(
-                    color: progress.bestStage >= 2
-                        ? FoE.positive
-                        : discovered
-                            ? FoE.gold
-                            : FoE.textMuted,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var stage = 0; stage < kBestiaryStages; stage++) ...[
-                  if (stage > 0) const SizedBox(width: 8),
-                  Expanded(
-                    child: _stageTile(
-                      species,
-                      stage,
-                      seen: progress.bestStage >= stage,
+                  Text(
+                    // How far this line has come: 0/3 through 3/3.
+                    '${(progress.bestStage + 1).clamp(0, 3)}/3',
+                    style: FoE.value(size: 11).copyWith(
+                      color: progress.bestStage >= 2
+                          ? CreamPalette.better
+                          : discovered
+                          ? CreamPalette.accent
+                          : kBoxInkFaint,
                     ),
                   ),
                 ],
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var stage = 0; stage < kBestiaryStages; stage++) ...[
+                    if (stage > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: _stageTile(
+                        species,
+                        stage,
+                        seen: progress.bestStage >= stage,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  /// The surface of one species line: the kit's cream card once you have started
+  /// it, the grey locked tile before.
+  Widget _lineCard({required bool discovered, required Widget child}) =>
+      discovered
+      ? creamCard(padding: const EdgeInsets.all(12), child: child)
+      : Container(
+          padding: const EdgeInsets.all(12),
+          decoration: raisedTile(locked: true, radius: 14),
+          child: child,
+        );
 
   /// One stage of a line: its art if you have got this far, else its own
   /// silhouette.
@@ -260,22 +288,22 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: ShapeDecoration(
-              color: kParchmentInk.withValues(alpha: seen ? 0.06 : 0.10),
+              color: CreamPalette.tan.withValues(alpha: seen ? 0.12 : 0.2),
               shape: FoE.facet(radius: 10),
             ),
             child: url == null
-                ? Icon(Icons.help_outline, size: 20, color: FoE.textMuted)
+                ? Icon(Icons.help_outline, size: 20, color: kBoxInkFaint)
                 : seen
-                    ? CreatureSprite(url: url)
-                    : ColorFiltered(
-                        // Flat black, no blur: the same hard-edged treatment
-                        // the rest of the app gives a silhouette.
-                        colorFilter: ColorFilter.mode(
-                          kParchmentInk.withValues(alpha: 0.55),
-                          BlendMode.srcIn,
-                        ),
-                        child: CreatureSprite(url: url),
-                      ),
+                ? CreatureSprite(url: url)
+                : ColorFiltered(
+                    // Flat black, no blur: the same hard-edged treatment
+                    // the rest of the app gives a silhouette.
+                    colorFilter: ColorFilter.mode(
+                      CreamPalette.ink.withValues(alpha: 0.55),
+                      BlendMode.srcIn,
+                    ),
+                    child: CreatureSprite(url: url),
+                  ),
           ),
         ),
         const SizedBox(height: 3),
@@ -284,9 +312,9 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: FoE.dim(size: 9).copyWith(
-            color: seen ? FoE.textDim : FoE.textMuted,
-          ),
+          style: FoE.dim(
+            size: 9,
+          ).copyWith(color: seen ? kBoxInkSoft : kBoxInkFaint),
         ),
       ],
     );

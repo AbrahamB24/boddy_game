@@ -1,18 +1,23 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+// Warms the picture's BYTES without decoding it — see
+// [_warmNetworkArtInBackground] for why a decode-based precache was worse
+// than no precache at all.
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'data/resource_icons.dart';
-import '../../core/ui/feel_button.dart';
-import '../../core/orientation_lock.dart';
 import '../../core/theme/foe_theme.dart';
+import '../../core/theme/cream_kit.dart';
+import '../../core/ui/duration_format.dart';
 import '../../core/ui/number_format.dart';
-import '../creatures/models/area.dart';
 import '../creatures/models/species_def.dart' show kSpeciesDefs;
-import '../creatures/services/overworld_layout.dart' show areaForRegion;
-import 'data/building_art.dart' show kBundledBuildingArt, buildingAsset;
+import 'data/building_art.dart'
+    show kBundledBuildingArt, artBoxOf, buildingAsset;
+import 'data/iso_grid.dart' show artPlacement, isoLocalBounds;
+import 'widgets/building_icon.dart' show BuildingIcon;
 import 'data/building_definitions.dart';
 import 'data/goods_definitions.dart';
+import 'data/item_definitions.dart' show kItemDefs;
 // Deferred (user 2026-09-06: "performance deutlich verbessern") — Dev Mode
 // is ~12.6k lines (every def form, the balance tools, the combat lab), all
 // of which used to compile straight into the initial main.dart.js bundle
@@ -23,21 +28,22 @@ import 'services/daily_tasks.dart';
 import 'services/new_items.dart';
 import 'services/step_tracker_service.dart';
 import 'settlement_controller.dart';
-import 'build_menu_screen.dart';
-import 'sheets/energy_sheet.dart';
+import 'widgets/building_carousel.dart';
+import 'energy_screen.dart';
 import 'bag_screen.dart';
 import 'profile_screen.dart';
 import 'resource_detail_screen.dart';
-import 'widgets/meander_strip.dart';
-import 'widgets/parchment_sheet.dart';
 import 'widgets/quick_pad.dart';
-import 'widgets/scroll_paper.dart';
+import 'resources_screen.dart';
 import 'widgets/settlement_map.dart';
+import 'widgets/terrain_layer.dart';
 import '../common/events/game_events.dart';
 import '../common/widgets/parchment_page.dart';
-import '../common/events/notification_button.dart';
+import '../common/events/notification_button.dart' show NotificationBadge;
+import 'widgets/trips_status_builder.dart';
 import '../creatures/collection_screen.dart';
-import 'housing_screen.dart';
+import 'build_menu_request.dart';
+import 'work_screen.dart';
 import 'management_screen.dart';
 import '../creatures/expeditions_screen.dart';
 import '../creatures/models/creature_enums.dart' show kHealingHutBuildingId;
@@ -45,9 +51,10 @@ import '../creatures/overworld_screen.dart';
 import '../onboarding/intro_card_panel.dart';
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
-import '../common/widgets/recess_bar.dart';
 import '../../core/ui/pressable.dart';
 import '../social/social_screen.dart';
+import '../social/services/message_notifier.dart';
+import '../social/services/pvp_notifier.dart';
 
 class SettlementScreen extends StatefulWidget {
   const SettlementScreen({super.key});
@@ -57,10 +64,7 @@ class SettlementScreen extends StatefulWidget {
 }
 
 class _SettlementScreenState extends State<SettlementScreen>
-    with
-        OrientationLock<SettlementScreen>,
-        WidgetsBindingObserver,
-        SingleTickerProviderStateMixin {
+    with WidgetsBindingObserver {
   final _ctrl = SettlementController();
   // Lets the tutorial's CTAs open a building's dialog directly (heal step,
   // assign step) instead of asking a brand-new player to find it on the map.
@@ -68,40 +72,65 @@ class _SettlementScreenState extends State<SettlementScreen>
   String? _pendingTypeId;
   bool _editMode = false;
 
+  /// Which of edit mode's two doors is open (user 2026-09-22) — see
+  /// [SettlementMap.persistentEditMode]'s own doc comment for what this
+  /// changes. False whenever [_editMode] was set true by a long-press
+  /// (single-shot: one move, then leaves on its own); true only for
+  /// [_enterLayoutMode] (the Build menu's own right-edge button — Umbaumodus proper,
+  /// including "Alle Gebäude zurücknehmen").
+  bool _editModePersistent = false;
+
+  /// True the instant the map starts aiming something and false the instant
+  /// that ghost is gone, confirmed or cancelled (user 2026-09-22, via
+  /// [SettlementMap.onAimingChanged]) — the tray carousel (see
+  /// [_showTrayCarousel]) has to get out of the way while the player is
+  /// actually positioning a ghost, the same way it already hides itself
+  /// while a brand-new purchase is being aimed.
+  bool _trayAiming = false;
+
+  /// The tray card the player just tapped, handed to [SettlementMap] as
+  /// [SettlementMap.selectBuildingId] — its own existing "aim THIS specific
+  /// building" door (see that prop's doc comment), reused rather than
+  /// reinvented for Umbaumodus's tray (user 2026-09-22). Reset the moment
+  /// aiming ends, so tapping the same or another tray card again is always
+  /// a fresh value change.
+  String? _selectTrayBuildingId;
+
   bool _roadMode = false;
+
+  // Whether the player has opened the build carousel (user 2026-09-18: "das
+  // Baumenü soll nicht immer offen sein, sondern nur wenn ich es öffne").
+  // Toggled by the quick pad's Build tile, closed again once a building or the
+  // road tool is picked. Ignored while the tutorial runs — see
+  // [_showBuildCarousel].
+  bool _buildOpen = false;
+
+  // The category a page other than the map asked the strip to open on (Work's
+  // "Build a house"); null = wherever the strip was. See [BuildMenuRequest].
+  BuildingCategory? _requestedCategory;
+
+  void _onBuildRequest() {
+    if (!mounted) return;
+    setState(() {
+      _requestedCategory = BuildMenuRequest.category;
+      _buildOpen = true;
+      _editMode = false;
+      _editModePersistent = false;
+      _roadMode = false;
+      _pendingTypeId = null;
+    });
+  }
+
+  // Where/when the current touch on the map began — lets the map's tap-to-close
+  // Listener tell a tap from the start of a pan (see [_layout]).
+  Offset? _mapTapDownPos;
+  Duration? _mapTapDownAt;
 
   // Set by the pickStarter card's CTA (see IntroCardPanel.onPromptQuickMenu):
   // instead of navigating, it hands the spotlight to the real Monsters tile
   // in the quick menu. Reset once the step moves on, so a later replay of
   // the intro (skip/restart) starts the card fresh again.
   bool _pickStarterPrompted = false;
-
-  // ── Eras panel expand/collapse (user 2026-09-06) ────────────
-  // AnimatedSize looked instant no matter how long its duration ran —
-  // [_erasPanel] sits as the size-determining child of a Stack that ALSO
-  // has two full-height Positioned MeanderStrips in it, and something in
-  // that combination was skipping the intermediate frames instead of
-  // interpolating through them. A driven [SizeTransition] doesn't depend on
-  // the parent re-measuring an implicitly-animated child at all — it clips
-  // and scales a fixed-size child by its OWN controller's value every
-  // frame, which is the actual "extends downward, retracts back up" reveal
-  // that was asked for.
-  late final AnimationController _erasCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 500),
-  );
-
-  // PORTRAIT. This screen used to force landscape, which is flatly at odds
-  // with everything else: the phone frame, the header, the sheets and the
-  // quick menu are all built for a 430-wide portrait viewport, and a player
-  // would have had the device flip under them on the home screen alone.
-  // The map itself doesn't need the width — it lives in an InteractiveViewer,
-  // so it pans and zooms.
-  @override
-  List<DeviceOrientation> get lockedOrientations => const [
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ];
 
   @override
   void initState() {
@@ -110,6 +139,9 @@ class _SettlementScreenState extends State<SettlementScreen>
     WidgetsBinding.instance.addObserver(this);
     _ctrl.addListener(_rebuild);
     NewItems().addListener(_rebuild);
+    PvpNotifier.instance.addListener(_rebuild);
+    MessageNotifier.instance.addListener(_rebuild);
+    BuildMenuRequest.requests.addListener(_onBuildRequest);
     // Real step counter: watches the hardware sensor and credits steps as
     // energy automatically (user 2026-07-18).
     StepTrackerService().start();
@@ -148,15 +180,40 @@ class _SettlementScreenState extends State<SettlementScreen>
       return;
     }
     final local = <Future<void>>[];
+    // AT THE WIDTH THE MAP WILL ASK FOR, not at the asset's own (2026-09-21).
+    // `precacheImage(AssetImage(asset))` decoded every bundled render at its
+    // full ~960 px and filed it under the bare AssetImage key — but the map
+    // draws through [BuildingIcon], which caps the decode with `cacheWidth`
+    // and therefore resolves a `ResizeImage(AssetImage(...), width: …)`. Two
+    // different ImageCache keys: the loading screen blocked on a decode of
+    // every bundled building that nothing would ever read, and then the map
+    // decoded all of them AGAIN on its first paint. Worse, the full-size
+    // copies sat in the cache evicting the capped ones the map actually
+    // draws — the exact eviction-and-redecode-on-every-pan that
+    // BuildingIcon's own cap exists to prevent.
     for (final id in kBundledBuildingArt) {
-      final asset = buildingAsset(id);
-      if (asset != null) local.add(precacheImage(AssetImage(asset), context));
+      final def = kBuildingDefs[id];
+      if (def == null) continue;
+      // The same number settlement_map's _BuildingTile passes as `width`.
+      final box = artBoxOf(def);
+      final artWidth = artPlacement(
+        isoLocalBounds(def.gridW, def.gridH),
+        baseWidth: box.baseWidth,
+        anchorX: box.anchorX,
+        lift: box.lift,
+      ).width;
+      final provider = BuildingIcon.providerFor(context, id, artWidth);
+      if (provider != null) local.add(precacheImage(provider, context));
     }
+    // The map's ground too: its art and its terrain (shore, forest, props)
+    // are worked out here, behind the loading screen and off the UI thread,
+    // rather than on the map's first paint. Never throws — see preload.
+    local.add(TerrainLayer.preload(_ctrl.buildableRegion));
     // One broken asset must not hang the loading screen forever.
     await Future.wait(local.map((f) => f.catchError((_) {})));
     if (!mounted) return;
     setState(() => _assetsReady = true);
-    _precacheNetworkArtInBackground();
+    _warmNetworkArtInBackground();
   }
 
   /// Everything that needs the network, fired AFTER the game is already
@@ -164,19 +221,29 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// just warms the cache so the Bestiary/battle/build-menu don't hit a cold
   /// fetch the first time they draw a picture this save hasn't needed yet.
   ///
-  /// THE PROVIDER MUST MATCH THE WIDGET (found auditing this 2026-09-12) —
-  /// [BuildingIcon] draws every uploaded (non-bundled) picture through
-  /// [CachedNetworkImage], never plain [Image.network]. Flutter's ImageCache
-  /// keys on the ImageProvider's own type, so precaching a `NetworkImage`
-  /// here populated a cache entry [CachedNetworkImageProvider] never looks
-  /// up — every uploaded building has been fetched over the network TWICE
-  /// since this precache first shipped (2026-09-06): once here, wastefully,
-  /// and once for real the first time [BuildingIcon] actually drew it.
-  /// [CachedNetworkImageProvider] is what actually lands in its cache (and,
-  /// via flutter_cache_manager, on disk). Species art keeps the platform
-  /// split [CreatureSprite] itself uses — `Image.network` on web, otherwise
-  /// the same cached provider — for the same reason.
-  void _precacheNetworkArtInBackground() {
+  /// IT DOWNLOADS, IT DOES NOT DECODE (2026-09-21). This used to call
+  /// `precacheImage`, which decodes — roughly 300 pictures at their FULL
+  /// native resolution, all at once, in the seconds right after the map
+  /// appears. Not one of those decodes was ever read: both widgets that draw
+  /// this art cap the decode ([BuildingIcon] with `memCacheWidth`,
+  /// [CreatureSprite] with `memCacheWidth`/`cacheWidth`), so both resolve a
+  /// `ResizeImage(provider, width: …)` whose ImageCache key is a different
+  /// key from the bare provider's. The full-size copies only ever did harm:
+  /// they filled the 200 MB budget and evicted the capped entries the map
+  /// was actively drawing, which is what turns a pan into a re-decode.
+  ///
+  /// What the cold-fetch gap is actually made of is the NETWORK, and bytes
+  /// on disk are what closes it. [DefaultCacheManager] is the same store
+  /// [CachedNetworkImageProvider] reads from, so a file pulled here is a
+  /// local read when the widget asks — at zero cost in texture memory.
+  ///
+  /// Web has no such store (flutter_cache_manager has nowhere durable to
+  /// write, which is why [CreatureSprite] skips it there), and the browser
+  /// caches the response on the real request anyway. So web warms nothing —
+  /// strictly better than spending the CanvasKit heap on decodes that miss.
+  void _warmNetworkArtInBackground() {
+    if (kIsWeb) return;
+    final urls = <String>{};
     // The other ~69 of 89 buildings — no bundled render yet, so their picture
     // is whatever got uploaded in Dev Mode (BuildingDef.imageUrl). Bundled
     // wins over imageUrl (see data/building_art.dart), so skip a building
@@ -185,24 +252,22 @@ class _SettlementScreenState extends State<SettlementScreen>
     for (final def in kBuildingDefs.values) {
       final url = def.imageUrl;
       if (url != null && url.isNotEmpty && buildingAsset(def.id) == null) {
-        precacheImage(CachedNetworkImageProvider(url), context)
-            .catchError((_) {});
+        urls.add(url);
       }
     }
-    final speciesUrls = <String>{};
     for (final species in kSpeciesDefs.values) {
       for (final stage in species.stages) {
         final front = stage.imageUrl;
         final back = stage.backImageUrl;
-        if (front != null && front.isNotEmpty) speciesUrls.add(front);
-        if (back != null && back.isNotEmpty) speciesUrls.add(back);
+        if (front != null && front.isNotEmpty) urls.add(front);
+        if (back != null && back.isNotEmpty) urls.add(back);
       }
     }
-    for (final url in speciesUrls) {
-      final ImageProvider provider = kIsWeb
-          ? NetworkImage(url)
-          : CachedNetworkImageProvider(url);
-      precacheImage(provider, context).catchError((_) {});
+    final cache = DefaultCacheManager();
+    for (final url in urls) {
+      // A picture that will not download is not an error here — the widget
+      // that needs it has its own placeholder and its own retry.
+      cache.downloadFile(url).then((_) {}, onError: (Object _) {});
     }
   }
 
@@ -212,8 +277,10 @@ class _SettlementScreenState extends State<SettlementScreen>
     WidgetsBinding.instance.removeObserver(this);
     _ctrl.removeListener(_rebuild);
     NewItems().removeListener(_rebuild);
+    PvpNotifier.instance.removeListener(_rebuild);
+    MessageNotifier.instance.removeListener(_rebuild);
+    BuildMenuRequest.requests.removeListener(_onBuildRequest);
     _ctrl.stopTicker();
-    _erasCtrl.dispose();
     super.dispose();
   }
 
@@ -230,25 +297,18 @@ class _SettlementScreenState extends State<SettlementScreen>
   void _rebuild() => setState(() {});
 
   // ── Navigation ────────────────────────────────────────────
-  void _showExpeditions() => Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => const ExpeditionsScreen()),
-  );
+  // The menus below are laid OVER the map (see [pushMenu]) rather than
+  // replacing it.
+  void _showExpeditions() => pushMenu(context, const ExpeditionsScreen());
 
   void _showCreatures() => Navigator.push(
     context,
     MaterialPageRoute(builder: (_) => const CollectionScreen()),
   );
 
-  void _showManagement({int initialTab = 0}) => Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => ManagementScreen(initialTab: initialTab)),
-  );
+  void _showManagement() => pushMenu(context, const ManagementScreen());
 
-  void _showSocial() => Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => const SocialScreen()),
-  );
+  void _showSocial() => pushMenu(context, const SocialScreen());
 
   // Overworld — the front door to expeditions (gather/capture/battle). Battle
   // routes into the existing dungeon run per area; the quick-menu button is
@@ -267,58 +327,17 @@ class _SettlementScreenState extends State<SettlementScreen>
     );
   }
 
-  void _showProfile() => Navigator.push(
+  void _showProfile() => pushMenu(
     context,
-    MaterialPageRoute(
-      builder: (_) => ProfileScreen(
-        onOpenDevMode: _ctrl.isDev ? _showDevMode : null,
-      ),
-    ),
-  );
-
-  /// Same tap-target/icon-button shape as [FeelButton]/[NotificationButton]
-  /// right beside it — the account settings a player was otherwise never
-  /// shown at all (user 2026-09-15).
-  Widget _profileButton() => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: _showProfile,
-      borderRadius: BorderRadius.circular(FoE.radiusSmall),
-      child: SizedBox(
-        width: FoE.tapTarget,
-        height: FoE.tapTarget,
-        child: Icon(Icons.person_outline, size: 20, color: FoE.textDim),
-      ),
-    ),
+    ProfileScreen(onOpenDevMode: _ctrl.isDev ? _showDevMode : null),
   );
 
   /// Opens Build and applies whatever the player picked.
-  ///
-  /// A POPUP over the map (user 2026-07-20), not a page: building is something
-  /// you do TO the map, so the map has to stay visible behind the menu. It
-  /// returns a choice rather than firing callbacks: each one puts the MAP into
-  /// a mode, so the menu's job ends the moment it closes — and the modes are
-  /// mutually exclusive, which a set of independent callbacks left it possible
-  /// to get wrong.
-  Future<void> _showBuildMenu() async {
-    // No nav destinations to hand it any more (user 2026-07-29): the menu used
-    // to carry a copy of the nav bar so you could jump straight from it to
-    // Map/Monsters/Manage. With the bar gone everywhere, the menu closes and
-    // the corner pad is right there.
-    final choice = await showBuildMenu(context, _ctrl);
-    if (!mounted) return;
-    if (choice == null) return; // backed out
-    switch (choice) {
-      case BuildPlace(:final typeId):
-        await _buildAndPlace(typeId);
-      case BuildRoads():
-        _enterRoadMode();
-    }
-  }
-
   /// Hands the building to the MAP to be aimed (user 2026-08-09: "Wenn ich ein
   /// Gebäude ausgewählt habe, dann erscheint es mittig im Screen … Über dem
-  /// Gebäude gibt es ein gutzeichen und ein X").
+  /// Gebäude gibt es ein gutzeichen und ein X"). Called directly by the
+  /// bottom [BuildingCarousel]'s card taps now (2026-09-18) — there is no
+  /// longer a pushed Build menu route to await a result from.
   ///
   /// It is not bought here and it is not placed here. The map opens it in the
   /// middle of the view as a ghost, and its ✓ is the single point where the
@@ -329,36 +348,57 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// and auto-placing bought the building the moment you tapped its card. The
   /// ghost is the outline AND the decision, which is why one flow can now cover
   /// ordinary buildings, plots and roads alike.
-  Future<void> _buildAndPlace(String typeId) async {
+  void _buildAndPlace(String typeId) {
     if (kBuildingDefs[typeId] == null) return;
     setState(() {
       _pendingTypeId = typeId;
       _editMode = false;
+      _editModePersistent = false;
       _roadMode = false;
+      _buildOpen = false;
     });
   }
 
-  /// Long-pressing a building on the map drops straight into move mode (user
-  /// 2026-07-20) — and STAYS there after the drop, so several buildings can be
-  /// rearranged in one go. It replaced the menu's Move button entirely.
+  /// Long-pressing a building on the map is a SINGLE-SHOT errand (user
+  /// 2026-09-22: "wenn ich lange auf ein Gebäude drücke, [soll] ich nur
+  /// dieses [verschieben] … nach dem Platzieren [wird] der Modus verlassen"):
+  /// it picks that one building up, and [SettlementMap] itself leaves edit
+  /// mode again the moment the move confirms — see
+  /// [SettlementMap.persistentEditMode]. Rearranging several buildings (or
+  /// the FoE-style "take the whole city back") now lives in
+  /// [_enterLayoutMode], its own door into the same mode.
   void _enterEditMode() => setState(() {
     _editMode = true;
+    _editModePersistent = false;
     _roadMode = false;
     _pendingTypeId = null;
+  });
+
+  /// Umbaumodus proper (user 2026-09-22): opened from the Build menu's own
+  /// right-edge button ("ich will über das Baumenü in den Umbaumodus
+  /// kommen") rather than by grabbing a specific building, so it has
+  /// something to do even before the player has touched anything — namely
+  /// "Alle Gebäude zurücknehmen". Ordinary tap-and-move still works exactly
+  /// as it always has inside it; this only changes what happens to the
+  /// SESSION once a move confirms (see [SettlementMap.persistentEditMode]):
+  /// it stays open.
+  void _enterLayoutMode() => setState(() {
+    _editMode = true;
+    _editModePersistent = true;
+    _roadMode = false;
+    _pendingTypeId = null;
+    _buildOpen = false;
   });
 
   void _enterRoadMode() => setState(() {
     _roadMode = true;
     _editMode = false;
+    _editModePersistent = false;
     _pendingTypeId = null;
+    _buildOpen = false;
   });
 
-  void _showEnergyOverview() => showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => EnergySheet(ctrl: _ctrl),
-  );
+  void _showEnergyOverview() => pushMenu(context, const EnergyScreen());
 
   // Its OWN screen now (user 2026-08-31: "die Ressourcendetail screens einen
   // eigenen Screen werden") — [ResourceDetailScreen] reads everything it
@@ -380,20 +420,29 @@ class _SettlementScreenState extends State<SettlementScreen>
     ),
   );
 
-  /// Whether the bar is unfolded to show every era's resources.
-  bool _erasOpen = false;
+  /// The header band, measured — the map's top edge is wherever it ends.
+  final _headerKey = GlobalKey();
 
-  void _openEras() {
-    setState(() => _erasOpen = true);
-    _erasCtrl.forward();
+  /// The band's FOLDED height (safe area included); 0 until first measured.
+  double _headerH = 0;
+
+  /// Where the map starts. Until the band has been measured, a guess close
+  /// enough (safe area + one row of cells) that the first frame is not far off.
+  double get _mapTop =>
+      _headerH > 0 ? _headerH : MediaQuery.paddingOf(context).top + 56;
+
+  /// Reads the band's height after layout — the map starts where it ends.
+  void _measureHeader() {
+    if (!mounted) return;
+    final box = _headerKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    final h = box.size.height;
+    if ((h - _headerH).abs() > 0.5) setState(() => _headerH = h);
   }
 
-  void _closeEras() {
-    setState(() => _erasOpen = false);
-    _erasCtrl.reverse();
-  }
-
-  void _toggleEras() => _erasOpen ? _closeEras() : _openEras();
+  /// The header's rounded tab opens the Resources page — every era's shelf (user
+  /// 2026-09-22, replacing the eras drop-down).
+  void _openResources() => pushMenu(context, const ResourcesScreen());
 
   // ── Build ─────────────────────────────────────────────────
   @override
@@ -408,6 +457,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     // shown exactly once, after this frame so the sheet has a laid-out screen
     // under it.
     final ready = !_ctrl.isLoading && _assetsReady;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureHeader());
     final digest = _ctrl.pendingDigest;
     if (digest != null && ready) {
       _ctrl.pendingDigest = null;
@@ -417,8 +467,9 @@ class _SettlementScreenState extends State<SettlementScreen>
     }
     return Scaffold(
       // The map fills this itself; the colour only shows while it loads and
-      // behind the edges, so it is the page tone like everywhere else.
-      backgroundColor: kParchmentMid,
+      // behind the edges, so it is the wood ground like every menu (was the
+      // navy page tone, which showed blue at the map's edges).
+      backgroundColor: CreamPalette.groundBottom,
       body: !ready
           ? _loading()
           : _ctrl.error != null
@@ -430,16 +481,21 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// "While you were away" — the passive economy, experienced instead of
   /// silently accrued (user 2026-07-21).
   ///
-  /// A CENTRED PARCHMENT BOX in the build menu's style (user 2026-07-27), no
-  /// longer a dark sheet crawling up from the bottom edge: this is the first
-  /// thing you see on opening the game, and it belongs on the same paper as the
-  /// rest of the settlement's UI.
+  /// "Zwei Spalten" (user 2026-09-22): ONE wide cream card in the kit's dialog
+  /// shell, the same as every other popup — LEFT what was gathered, RIGHT what
+  /// happened. It used to be a narrow portrait box; a landscape screen has the
+  /// width for both at once.
   ///
   /// It also reports WHAT HAPPENED, not just what was gathered (user
-  /// 2026-07-27). The resources were only half the story — expeditions
-  /// resolving, eggs hatching, monsters levelling up and casualties all landed
-  /// silently in the bell, and the digest just said "N new events" and left you
-  /// to go looking.
+  /// 2026-07-27): expeditions resolving, eggs hatching, monsters levelling up
+  /// and casualties all landed silently in the bell, and the digest just said
+  /// "N new events" and left you to go looking.
+  ///
+  /// It has to carry MANY resources (user 2026-09-22: "wie machen wir es, wenn
+  /// ich später etwa 20 Ressourcen bekomme?"): the current era's resources and
+  /// gold stand as big tiles; everything else — older eras, whatever else came
+  /// in — is a compact run of chips underneath, newest era first. The column
+  /// scrolls, so twenty of them are a scroll and not a redirect.
   void _showDigest(WelcomeDigest d) {
     final hours = d.awayHours;
     final awayLabel = hours >= 48
@@ -449,17 +505,9 @@ class _SettlementScreenState extends State<SettlementScreen>
         : '${(hours * 60).round()} minutes';
     // EVERYTHING THE BELL WOULD SHOW YOU (user 2026-07-27: "alles was bei den
     // notifications angezeigt wird, soll auch beim while you were away screen
-    // sein") — the unread feed, whole and uncut.
-    //
-    // Two things were wrong before. It cut the list at eight and pointed at the
-    // bell for the rest, so the screen whose entire job is "here is what
-    // happened" sent you somewhere else to finish reading it. And it selected
-    // by TIME WINDOW — events newer than the away period — which quietly
-    // dropped anything still unread from an earlier session: the bell counted
-    // it, this never mentioned it.
-    //
-    // Reading the same [GameEventLog.unreadEvents] the badge counts makes the
-    // two incapable of disagreeing.
+    // sein") — the unread feed, whole and uncut. Reading the same
+    // [GameEventLog.unreadEvents] the badge counts makes the two incapable of
+    // disagreeing.
     final log = GameEventLog();
     final events = log.unreadEvents;
 
@@ -468,206 +516,246 @@ class _SettlementScreenState extends State<SettlementScreen>
     // screen nicht auftauchen") — an empty gathered list AND an empty event
     // feed means the away period produced nothing worth a whole dialog over.
     // kDigestMinAwayHours already filters trivially SHORT absences; this
-    // filters LONG-but-idle ones (an empty settlement, or one with nothing
-    // left to produce) the same way.
-    if (d.gained.isEmpty && events.isEmpty) return;
+    // filters LONG-but-idle ones the same way.
+    if (d.gained.isEmpty && events.isEmpty && d.lost.isEmpty) return;
 
-    const ink = kParchmentInk;
-    final inkSoft = kParchmentInk.withValues(alpha: 0.78);
-    final inkFaint = kParchmentInk.withValues(alpha: 0.55);
-    final ornament = kParchmentInk.withValues(alpha: 0.22);
+    // Big tiles: this era's own resources and gold. The rest: chips.
+    final eraIds = {
+      for (final r in _eraResources(
+        _ctrl.dungeonMaxStage,
+        cleared: _ctrl.battlesCleared,
+      ))
+        r.id,
+      'gold',
+    };
+    final main = [
+      for (final e in d.gained.entries)
+        if (eraIds.contains(e.key)) e,
+    ];
+    final others =
+        [
+          for (final e in d.gained.entries)
+            if (!eraIds.contains(e.key)) e,
+        ]..sort(
+          (a, b) => (kGoodsDefs[b.key]?.regionOrder ?? 1).compareTo(
+            kGoodsDefs[a.key]?.regionOrder ?? 1,
+          ),
+        );
+
+    Widget tile(MapEntry<String, double> e) => Container(
+      width: 138,
+      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
+      decoration: raisedTile(radius: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(resourceEmoji(e.key), style: const TextStyle(fontSize: 22)),
+          Text(
+            '+${e.value.toStringAsFixed(0)}',
+            style: FoE.value(size: 18).copyWith(color: kBoxInk),
+          ),
+          Text(
+            resourceName(e.key),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
+          ),
+        ],
+      ),
+    );
+
+    Widget chip(MapEntry<String, double> e) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: raisedTile(radius: 10),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(resourceEmoji(e.key), style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 4),
+          Text(
+            '+${e.value.toStringAsFixed(0)}',
+            style: FoE.value(size: 12).copyWith(color: kBoxInk),
+          ),
+        ],
+      ),
+    );
+
+    // What went WRONG while away: stores that stood full (production stops at the
+    // ceiling, so that time earned nothing) and an energy pool that ran down.
+    final lostEntries = d.lost.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final energyDrop = (d.energyBefore != null && d.energyAfter != null)
+        ? d.energyBefore! - d.energyAfter!
+        : 0.0;
+    Widget notice(String text) => Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: CreamPalette.warn.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        text,
+        style: FoE.label(
+          size: 11.5,
+        ).copyWith(color: CreamPalette.warn, fontWeight: FontWeight.w700),
+      ),
+    );
+    final notices = <Widget>[
+      for (final e in lostEntries.take(4))
+        notice(
+          '${resourceEmoji(e.key)} ${resourceName(e.key)} was full for '
+          '${(d.fullHours[e.key] ?? 0).round()} h · about '
+          '${e.value.round()} lost',
+        ),
+      if (energyDrop >= 10)
+        notice(
+          (d.energyAfter ?? 0) < 1
+              ? '⚡ Energy ran out — production slowed to a crawl'
+              : '⚡ Energy fell from ${d.energyBefore!.round()} % to '
+                    '${d.energyAfter!.round()} % — production slowed',
+        ),
+    ];
+
+    final gathered = SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _digestHeading('Gathered', kBoxInk),
+          const SizedBox(height: 8),
+          if (d.gained.isEmpty)
+            Text(
+              'Nothing came in — station monsters in your buildings so the '
+              'settlement works while you are gone.',
+              style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+            )
+          else ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [for (final e in main) tile(e)],
+            ),
+            if (others.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _digestHeading('Other resources', kBoxInk),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [for (final e in others) chip(e)],
+              ),
+            ],
+          ],
+          if (notices.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _digestHeading('Lost', kBoxInk),
+            const SizedBox(height: 8),
+            ...notices,
+          ],
+        ],
+      ),
+    );
+
+    final happened = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _digestHeading('What happened', kBoxInk),
+        const SizedBox(height: 8),
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.28),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: events.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      'Nothing else to report.',
+                      style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+                    ),
+                  )
+                // ALL of them. The list scrolls, so a long night away is a
+                // scroll, not a truncation and a redirect.
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: events.length,
+                    separatorBuilder: (_, _) => Divider(
+                      height: 1,
+                      color: kBoxInk.withValues(alpha: 0.13),
+                    ),
+                    itemBuilder: (_, i) {
+                      final e = events[i];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              e.kind.emoji,
+                              style: const TextStyle(fontSize: 15),
+                            ),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: Text(
+                                e.message,
+                                style: FoE.label(
+                                  size: 12,
+                                ).copyWith(color: kBoxInk),
+                              ),
+                            ),
+                            // WHEN, as the bell prints it — the only way to
+                            // tell an expedition that landed an hour ago from
+                            // one that landed as you opened the game.
+                            const SizedBox(width: 8),
+                            Text(
+                              _digestAgo(e.at),
+                              style: FoE.dim(
+                                size: 10,
+                              ).copyWith(color: kBoxInkFaint),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ),
+      ],
+    );
 
     showDialog<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.55),
-      builder: (ctx) => Center(
+      barrierColor: CreamPalette.dim,
+      builder: (ctx) => ParchmentDialog(
+        title: 'While you were away',
+        maxWidth: 800,
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          decoration: raisedTile(radius: 10),
+          child: Text(
+            '🕒 $awayLabel',
+            style: FoE.label(size: 11).copyWith(color: kBoxInk),
+          ),
+        ),
+        closeLabel: 'Continue',
+        // Dismissing with Continue MARKS THEM READ. This screen has just shown
+        // the same set the bell would, so leaving the badge nagging about it
+        // would send the player to read a second time what they have already
+        // read once (user 2026-07-27).
+        onClose: log.markAllRead,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 380, maxHeight: 520),
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  // Same top-to-bottom sheet-into-shade gradient as every
-                  // other page/dialog ground (ParchmentPage.pageGradient,
-                  // user 2026-09-05) — this dialog still had the flat
-                  // single-tone fill that rule replaced everywhere else.
-                  gradient: ParchmentPage.pageGradient,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 0,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    // The build menu's own bands, as wallpaper. Flush to
-                    // the box's own top/bottom edge (user 2026-09-01), the
-                    // same fillHeight fix the era panel got — a hard-edged
-                    // card, not a free page margin, so the usual centred-
-                    // with-margin run left a visible gap at both ends.
-                    Positioned(
-                      left: 14,
-                      top: 0,
-                      bottom: 0,
-                      width: 16,
-                      child: MeanderStrip(color: ornament, fillHeight: true),
-                    ),
-                    Positioned(
-                      right: 14,
-                      top: 0,
-                      bottom: 0,
-                      width: 16,
-                      child: MeanderStrip(
-                        color: ornament,
-                        flip: true,
-                        fillHeight: true,
-                      ),
-                    ),
-                    Padding(
-                      // +12/+12 (2026-09-06): same band-width delta as
-                      // every other page's kParchmentPagePad.
-                      padding: const EdgeInsets.fromLTRB(42, 18, 42, 16),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // No moon (user 2026-07-27).
-                          Text(
-                            'While you were away',
-                            style: FoE.title(size: 16).copyWith(color: ink),
-                          ),
-                          Text(
-                            awayLabel,
-                            style: FoE.dim(size: 11).copyWith(color: inkFaint),
-                          ),
-                          const SizedBox(height: 14),
-                          Flexible(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _digestHeading('Gathered', ink),
-                                  const SizedBox(height: 6),
-                                  if (d.gained.isEmpty)
-                                    Text(
-                                      'Nothing came in — station monsters in '
-                                      'your buildings so the settlement works '
-                                      'while you are gone.',
-                                      style: FoE.dim(
-                                        size: 12,
-                                      ).copyWith(color: inkSoft),
-                                    )
-                                  else
-                                    Wrap(
-                                      spacing: 14,
-                                      runSpacing: 8,
-                                      children: [
-                                        for (final e in d.gained.entries)
-                                          Text(
-                                            '${resourceEmoji(e.key)} '
-                                            '+${e.value.toStringAsFixed(0)}',
-                                            style: FoE.value(
-                                              size: 15,
-                                            ).copyWith(color: ink),
-                                          ),
-                                      ],
-                                    ),
-                                  const SizedBox(height: 16),
-                                  _digestHeading('What happened', ink),
-                                  const SizedBox(height: 6),
-                                  if (events.isEmpty)
-                                    Text(
-                                      'Nothing else to report.',
-                                      style: FoE.dim(
-                                        size: 12,
-                                      ).copyWith(color: inkSoft),
-                                    )
-                                  else
-                                    // ALL of them. The box already scrolls
-                                    // (Flexible + SingleChildScrollView), so a
-                                    // long night away is a scroll, not a
-                                    // truncation and a redirect.
-                                    for (final e in events)
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 6,
-                                        ),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              e.kind.emoji,
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                e.message,
-                                                style: FoE.label(
-                                                  size: 12,
-                                                ).copyWith(color: inkSoft),
-                                              ),
-                                            ),
-                                            // WHEN, as the bell prints it —
-                                            // part of what the notifications
-                                            // show, and the only way to tell an
-                                            // expedition that landed an hour
-                                            // ago from one that landed as you
-                                            // opened the game.
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              _digestAgo(e.at),
-                                              style: FoE.dim(
-                                                size: 10,
-                                              ).copyWith(color: inkFaint),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Pressable(
-                            // Dismissing MARKS THEM READ. This screen has just
-                            // shown the same set the bell would, so leaving the
-                            // badge nagging about it would send the player to
-                            // read a second time what they have already read
-                            // once (user 2026-07-27).
-                            onTap: () {
-                              log.markAllRead();
-                              Navigator.pop(ctx);
-                            },
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 11),
-                              alignment: Alignment.center,
-                              decoration: parchmentButton(),
-                              child: Text(
-                                'Continue',
-                                style: FoE.label(
-                                  size: 13,
-                                ).copyWith(color: parchmentButtonInk()),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 300, child: gathered),
+              const SizedBox(width: 20),
+              Expanded(child: happened),
+            ],
           ),
         ),
       ),
@@ -697,13 +785,7 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// and title as the sign-in screen, so app launch reads as one continuous
   /// piece rather than a flash of brand, then a blank wait, then the game.
   Widget _loading() => DecoratedBox(
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [kParchmentLight, kParchmentMid],
-      ),
-    ),
+    decoration: const BoxDecoration(gradient: kMenuGround),
     child: Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -727,34 +809,72 @@ class _SettlementScreenState extends State<SettlementScreen>
 
   Widget _layout() => Stack(
     children: [
-      Positioned.fill(
+      // The map begins UNDER the header, not behind it (user 2026-09-18: "der
+      // Header verdeckt einiges von der Baufläche. Ich sollte auch wenn ich
+      // ganz herausgezoomt bin, die ganze Baufläche sehen können"). The
+      // starting plot sits near the top of the map, and the map may never be
+      // scrolled past its own edge — so with the header laid over it, the
+      // top of the plot was hidden AND out of reach. Sized this way the map's
+      // viewport is exactly the visible part, so its zoom-out limit, its pan
+      // limits and the "middle of the view" the placement ghost drops into all
+      // mean what the player sees.
+      //
+      // The bottom stays full-bleed: the build carousel has no backdrop, and
+      // closes the moment a building is picked, so the placement ghost is
+      // never aimed from underneath it.
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: 0,
+        top: _mapTop,
         child: SettlementMap(
           key: _mapKey,
           ctrl: _ctrl,
           pendingTypeId: _pendingTypeId,
           editMode: _editMode,
           roadMode: _roadMode,
+          persistentEditMode: _editModePersistent,
+          selectBuildingId: _selectTrayBuildingId,
+          onAimingChanged: (aiming) => setState(() {
+            _trayAiming = aiming;
+            if (!aiming) _selectTrayBuildingId = null;
+          }),
           onPlacementDone: () => setState(() => _pendingTypeId = null),
           onEnterEditMode: _enterEditMode,
-          onExitEditMode: () => setState(() => _editMode = false),
+          onExitEditMode: () => setState(() {
+            _editMode = false;
+            _editModePersistent = false;
+          }),
           onExitRoadMode: () => setState(() => _roadMode = false),
-          onOpenBuildMenu: _showBuildMenu,
         ),
       ),
-      // Tapping the map closes the open eras panel (user 2026-09-01: "wenn
-      // das era panel geöffnet ist, soll es sich schliessen, wenn ich
-      // irgendwo auf die map klicke"). Sits ABOVE the map but BELOW the top
-      // bar in this Stack, so it swallows a dismiss tap anywhere on the map
-      // without also passing it through to the map underneath, while the
-      // header/panel's own taps (chips, the fold tab) still land on the
-      // header above this layer untouched. Absent entirely while closed —
-      // no invisible barrier stealing taps the map needs the rest of the
-      // time.
-      if (_erasOpen)
+      // Tapping the map closes the build menu (user 2026-09-18). A Listener,
+      // not a GestureDetector: it sees the tap WITHOUT absorbing it, so the
+      // map underneath keeps panning, zooming and opening buildings while the
+      // menu is up. Only when the player opened the menu — the tutorial's
+      // forced-open carousel has no other way to be reached again.
+      if (_buildOpen && _showBuildCarousel)
         Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _closeEras,
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (e) {
+              _mapTapDownPos = e.position;
+              _mapTapDownAt = e.timeStamp;
+            },
+            onPointerUp: (e) {
+              final downPos = _mapTapDownPos;
+              final downAt = _mapTapDownAt;
+              _mapTapDownPos = null;
+              if (downPos == null || downAt == null) return;
+              final isTap =
+                  (e.position - downPos).distance < 18 &&
+                  e.timeStamp - downAt < const Duration(milliseconds: 400);
+              if (isTap) {
+                setState(() => _buildOpen = false);
+              }
+            },
+            onPointerCancel: (_) => _mapTapDownPos = null,
+            child: const SizedBox.expand(),
           ),
         ),
       // Stacked rather than each Positioned at a guessed offset: the top bar's
@@ -778,13 +898,11 @@ class _SettlementScreenState extends State<SettlementScreen>
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: _debugRow()),
+                  const Spacer(),
                   if (_ctrl.saveFailed) _syncWarning(),
-                  // Mute in ONE tap from wherever you are (user 2026-07-30, with
-                  // the sound); long-press for the vibration switch too.
-                  const FeelButton(),
-                  const NotificationButton(),
-                  _profileButton(),
+                  // Sound/music left the header for the Profile (user
+                  // 2026-09-20: "Musik/Sound aus gehört ins Profil").
+                  _newsButton(),
                   const SizedBox(width: 4),
                 ],
               ),
@@ -797,7 +915,45 @@ class _SettlementScreenState extends State<SettlementScreen>
       // overlap. Stacking them also keeps everything inside thumb reach.
       // Full-bleed: the quick menu is a bar fixed to the bottom edge now, so
       // the stack owns the whole width and the cards indent themselves.
-      Positioned(left: 0, right: 0, bottom: 0, child: _bottomStack()),
+      //
+      // Beside the build strip while the PLAYER has it open (2026-09-19: the Build
+      // tile stands in the strip's left margin, on one line with its cards); lifted
+      // above it by [buildingCarouselHeight] only when the tutorial forces the
+      // strip open and the rail carries other tiles.
+      AnimatedPositioned(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        left: 0,
+        right: 0,
+        bottom: _showBuildCarousel && !_buildOpen
+            ? buildingCarouselHeight(context)
+            : 0,
+        child: _bottomStack(),
+      ),
+      // THE BUILD MENU, FOLDED INTO THE MAP (2026-09-18 — user: "das
+      // Baumenü kein eigener Screen ist, sondern unten die Gebäude
+      // gescrollt werden können wie dies bei rok der Fall ist"). Replaces
+      // the old pushed BuildMenuScreen entirely — see BuildingCarousel's
+      // own doc comment.
+      if (_showBuildCarousel)
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SafeArea(
+            top: false,
+            child: BuildingCarousel(
+              ctrl: _ctrl,
+              onPlace: _buildAndPlace,
+              onRoads: _enterRoadMode,
+              onLayout: _enterLayoutMode,
+              initialCategory: _requestedCategory,
+              trayBuildings: _showTrayCarousel ? _ctrl.storedBuildings : null,
+              onPlaceStored: (id) => setState(() => _selectTrayBuildingId = id),
+              onCancelTray: _cancelUmbaumodus,
+            ),
+          ),
+        ),
       // The intro card ITSELF is the lit control (every step still holding
       // its own unpressed CTA) — centred on the screen rather than pinned
       // above the quick menu (user 2026-09-02: "diese Textboxen in die
@@ -844,10 +1000,15 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// same widget.
   Widget _introCard() => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 10),
-    child: IntroCardPanel(
-      ctrl: _ctrl,
-      onNavigate: _goToIntroTarget,
-      onPromptQuickMenu: () => setState(() => _pickStarterPrompted = true),
+    // Width-capped (2026-09-18, landscape): a full-width card on a 900px
+    // screen is a banner nobody reads end to end.
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520),
+      child: IntroCardPanel(
+        ctrl: _ctrl,
+        onNavigate: _goToIntroTarget,
+        onPromptQuickMenu: () => setState(() => _pickStarterPrompted = true),
+      ),
     ),
   );
 
@@ -878,7 +1039,11 @@ class _SettlementScreenState extends State<SettlementScreen>
       return switch (card.destination) {
         IntroDestination.map => 'quick-map',
         IntroDestination.collection => 'quick-monsters',
-        IntroDestination.build => 'quick-build',
+        // Build has no solo hand-off any more (2026-09-18): the carousel
+        // isn't a tile you tap to OPEN something — it appears the moment
+        // [_buildUnlocked] flips true, already showing its own row/category
+        // spotlight (see BuildingCarousel) for exactly what to tap next.
+        IntroDestination.build => null,
         // Not a quick-pad tile — the Healing Hut itself, on the map (user
         // 2026-09-06: "lass mich das Gebäude anklicken") — see
         // SettlementMapState's own anchorKey wiring in _buildingTile.
@@ -901,7 +1066,6 @@ class _SettlementScreenState extends State<SettlementScreen>
   String? get _introSpotlightHint => switch (_soloQuickPadAnchor) {
     'quick-monsters' => 'Tap Monsters to choose your starter',
     'quick-map' => 'Tap Map to open the overworld',
-    'quick-build' => 'Tap Build to open the build menu',
     'map-healing-hut' => 'Tap the Healing Hut to open it',
     _ => null,
   };
@@ -920,9 +1084,14 @@ class _SettlementScreenState extends State<SettlementScreen>
       _soloQuickPadAnchor == 'quick-map' ||
       _ctrl.introStep.index > IntroStep.firstNode.index;
 
+  /// Whether the build carousel is allowed to exist at all — the same
+  /// progressive-reveal rule the quick pad's own tiles follow, just no
+  /// longer keyed to a solo hand-off (there's no separate "open" tile any
+  /// more — see [_soloQuickPadAnchor]'s own doc comment on Build). True
+  /// from the moment the tutorial hands off to buildHealingHut onward
+  /// (buildRoad is the very next step, so `>=` already covers it).
   bool get _buildUnlocked =>
-      _soloQuickPadAnchor == 'quick-build' ||
-      _ctrl.introStep.index > IntroStep.buildHealingHut.index;
+      _ctrl.introStep.index >= IntroStep.buildHealingHut.index;
 
   /// True while the map owns the bottom of the screen: aiming, road building
   /// and move/edit mode each show their own banner down there (with the button
@@ -934,21 +1103,77 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// saying roughly the same thing is one too many.
   bool get _mapModeActive => _roadMode || _editMode || _pendingTypeId != null;
 
+  /// Whether the bottom [BuildingCarousel] is showing right now — unlocked,
+  /// not fighting the map's own mode banner for the same strip of screen
+  /// (2026-09-18), and OPENED by the player via the quick pad's Build tile.
+  /// The tutorial is the exception: the quick pad is hidden while it runs, so
+  /// its build steps get the carousel without asking for it.
+  ///
+  /// OR — [_showTrayCarousel] (user 2026-09-22): Umbaumodus's own tray. This
+  /// is the one case the carousel appears WHILE `_mapModeActive` is true
+  /// (edit mode never turns that off) — [BuildingCarousel] itself switches
+  /// into tray mode; see [_bottomStack]'s own build call.
+  bool get _showBuildCarousel =>
+      (_buildUnlocked &&
+          !_mapModeActive &&
+          (_buildOpen || _ctrl.introStep.isActive)) ||
+      _showTrayCarousel;
+
+  /// Umbaumodus's tray, standing in for the map's own small banner (user
+  /// 2026-09-22: "wenn ich recall all mache, sollen das Baumenü geöffnet
+  /// werden … genau gleiche Oberfläche, aber nur mit den gespeicherten
+  /// Gebäuden") — the instant "Alle Gebäude/Straßen zurücknehmen" leaves
+  /// anything in [SettlementController.storedBuildings], the Build menu
+  /// itself takes over the bottom of the screen, filtered to just those.
+  /// [_trayAiming] hides it again for as long as one of its cards is
+  /// actually being positioned, so it never covers the spot the player is
+  /// dragging a ghost toward.
+  bool get _showTrayCarousel =>
+      _editMode &&
+      _editModePersistent &&
+      _ctrl.hasStoredBuildings &&
+      !_trayAiming;
+
+  /// The tray carousel's own Cancel button (user 2026-09-22): undoes the
+  /// whole rearrange — see [SettlementController.cancelRecall] — and only
+  /// then leaves Umbaumodus. A no-op revert (nothing was ever recalled this
+  /// visit) still safely falls through to just leaving.
+  Future<void> _cancelUmbaumodus() async {
+    await _ctrl.cancelRecall();
+    if (!mounted) return;
+    setState(() {
+      _editMode = false;
+      _editModePersistent = false;
+    });
+  }
+
   Widget _bottomStack() {
     // The Build menu no longer needs a mention here (2026-07-31): it is a page
     // now, so it covers this screen rather than sharing the bottom edge with it.
     if (_mapModeActive) return const SizedBox.shrink();
     // SafeArea now: the bar that used to paint its own background into the
     // gesture inset is gone, so the loose buttons have to keep off the glass
-    // themselves.
-    return SafeArea(top: false, child: _quickPad());
+    // themselves. The two rails stand at the screen's own edges and leave the
+    // middle to the map.
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+        child: _quickRails(),
+      ),
+    );
   }
 
   void _goToIntroTarget(IntroDestination target) => switch (target) {
     IntroDestination.collection => _showCreatures(),
     IntroDestination.map => _showOverworld(),
     IntroDestination.trips => _showExpeditions(),
-    IntroDestination.build => _showBuildMenu(),
+    // No screen to open any more (2026-09-18) — the carousel is already on
+    // screen the moment [_buildUnlocked] flips true, and no build step's
+    // own card carries a CTA that reaches this case in practice (both are
+    // narration-only; see [_soloQuickPadAnchor]'s doc comment). Kept for
+    // the switch's own exhaustiveness rather than removed.
+    IntroDestination.build => null,
     IntroDestination.healingHut => _mapKey.currentState?.openBuildingByType(
       kHealingHutBuildingId,
     ),
@@ -994,75 +1219,68 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// band) never counts toward it, so ancestor hit-testing (which stops at
   /// the Stack's own bounds before ever asking its children) rejected any
   /// tap landing in that overflow — exactly where the tab's tappable icon
-  /// sits. Doubly so once the band's own height started changing under
-  /// [_erasPanel]'s AnimatedSize, which no fixed-size workaround could have
-  /// tracked. A real Column sibling has no such blind spot, at the cost of
+  /// sits. A real Column sibling has no such blind spot, at the cost of
   /// the few pixels the tab used to tuck up under the band's own edge.
-  Widget _topBar() => SafeArea(
-    bottom: false,
-    child: Column(
-      children: [
-        ParchmentHeader.band(
-          // The exact background the building detail dialog uses (user
-          // 2026-09-06: "nimm ... den genau gleichen Hintergrund wie für den
-          // Gebäudedetailscreen") rather than [ParchmentHeader.bandFill]'s
-          // flat approximation of it — this screen has no ambient
-          // [ParchmentPage] gradient behind it to show through, so the band
-          // draws the real one itself.
-          gradient: ParchmentPage.pageGradient,
-          // Lifts it off the map behind it (user 2026-09-06: "damit sich
-          // dieser besser von der Map abhebt") — every other [band] caller
-          // sits on the flat parchment page and stays shadowless, but this
-          // one floats directly over the isometric settlement with nothing
-          // but colour to tell the two apart. [_mapShadow], not [FoE.drop],
-          // so the shadow reaches the LEFT edge too (user 2026-09-06).
+  Widget _topBar() => Column(
+    children: [
+      // STRATEGY-HUD RESOURCE BAR (2026-09-18): one flat navy plate
+      // (the same [FoE.bg] the pull tab below fills itself with, so the
+      // two still read as one shape) lifted off the map by the shadow,
+      // with the resource cells sitting on it as gem badges. The meander
+      // bordure it used to carry is gone with the rest of it.
+      // Measured (see [_measureHeader]): the map starts where this ends.
+      KeyedSubtree(
+        key: _headerKey,
+        child: ParchmentHeader.band(
+          // A flat gradient (both stops [FoE.bg]) rather than ill: — a band
+          // given a plain fill also draws its lit/shaded facet edges, a seam the
+          // pull tab hanging off the bottom of it has no counterpart for.
+          //
+          // It LIGHTENS towards the top now (user 2026-09-18: "der Header ...
+          // wirkt sehr schlicht") but still ends on exactly [FoE.bg], the flat
+          // colour the wave fills itself with, so the two read as one shape.
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [CreamPalette.groundTop, CreamPalette.groundBottom],
+          ),
           shadow: _mapShadow,
-          // The same Greek-key bordure every ParchmentPage carries down its
-          // sides (user 2026-08-31: "bei der Ressourcenübersicht bitte auch
-          // das Mäanderband an den Seiten einfügen") — [ParchmentPage
-          // .ornament] is the ink for both, since the app went
-          // dark-mode-first and that ink already reads on graphite.
-          child: Stack(
-            children: [
-              // Bands BEHIND the content, same paint order ParchmentPage
-              // uses — drawn first so the resource cells sit on top of them
-              // rather than the other way round.
-              Positioned(
-                left: 14,
-                top: 0,
-                bottom: 0,
-                width: 16,
-                // Flush to the box's own top/bottom edge (user 2026-08-31:
-                // "das Band soll oben und unten bis wirklich zur Kante der
-                // Box gehen") — this panel IS a hard-edged box, not a free
-                // page margin, so the usual centred-with-margin run left a
-                // visible gap at both ends. Left/right inset 14/width 16
-                // (2026-09-06), matching building_detail_dialog.dart.
-                child: MeanderStrip(
-                  color: ParchmentPage.ornament,
-                  fillHeight: true,
-                ),
-              ),
-              Positioned(
-                right: 14,
-                top: 0,
-                bottom: 0,
-                width: 16,
-                child: MeanderStrip(
-                  color: ParchmentPage.ornament,
-                  flip: true,
-                  fillHeight: true,
-                ),
-              ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [_resourceRow(), _erasPanel()],
-              ),
-            ],
+          // The safe area is the band's own top padding rather than a
+          // SafeArea around it: the plate paints up through a notch instead of
+          // leaving a strip of map showing above it, and the measured height
+          // then includes it — which is what the map's top edge needs.
+          child: Padding(
+            padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [_resourceRow(), _headerTrim()],
+            ),
           ),
         ),
-        _erasWave(),
-      ],
+      ),
+      // Up by the trim's own height, so the tab's fill covers the trim where
+      // the two meet and the gold line carries on around the tab's edge
+      // instead of cutting across its top.
+      Transform.translate(offset: const Offset(0, -_kTrimH), child: _erasTab()),
+    ],
+  );
+
+  static const double _kTrimH = 2;
+
+  /// A thin gold rule along the header's foot, brightest in the middle where the
+  /// wave hangs from it and fading out towards the phone's edges — the piece of
+  /// jewellery that stops a flat navy plate reading as a bare bar.
+  Widget _headerTrim() => Container(
+    height: _kTrimH,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          CreamPalette.gold.withValues(alpha: 0),
+          CreamPalette.gold.withValues(alpha: 0.85),
+          CreamPalette.gold.withValues(alpha: 0),
+        ],
+        stops: const [0, 0.5, 1],
+      ),
     ),
   );
 
@@ -1080,197 +1298,50 @@ class _SettlementScreenState extends State<SettlementScreen>
     ),
   ];
 
-  /// How deep the wave hangs at its LOWEST point, and how shallow at its
-  /// highest — a full-width wave spanning the header's own width, reading as
-  /// the header's edge itself flowing down into a pull, rather than a
-  /// separate control bolted under it.
-  static const double _kWaveMin = 8;
-  static const double _kWaveMax = 26;
+  /// The one-line strip's height. The band is nothing but this row (and the eras
+  /// panel when it is unfolded) — the map starts right under it.
+  static const double _kResourceRowHeight = 34;
 
-  /// How far in from EACH edge the curve takes to reach full depth, as a
-  /// fraction of the width — centred and symmetric (user 2026-09-07: "der
-  /// Headerbutton soll mittig sein und auf beide Seiten auslaufen", then
-  /// "wieder deutlich schmaler und weniger hoch"). The middle stretch (the
-  /// remaining `1 - 2*_kWaveTaper`) stays flat at full depth; both sides
-  /// mirror the same ogee back up to the shallow lip.
-  static const double _kWaveTaper = 0.38;
+  /// How tall the rounded tab under the header is.
+  static const double _kPullH = 22;
 
-  /// The pull that unfolds the bar — belongs TO the header, not beside it
-  /// (user 2026-09-06: "dieser gehört zum Header. Daher gibt es keinen
-  /// Übergang"), so it must never restart its own gradient. A LinearGradient
-  /// always fits itself to its OWN box, which is why this paints a flat
-  /// [FoE.bg] fill (the gradient's own end stop) instead of a fresh
-  /// gradient — see the CROSS-FADE note this comment used to carry on the
-  /// old fixed-height tab; a wave of varying height has the identical
-  /// problem for the same reason.
-  Widget _erasWave() => FractionallySizedBox(
-    // Centred and narrow (user 2026-09-08: "so dass er links und rechts
-    // nicht bis an die Handykante kommt, sondern nur etwa 20% der Breite in
-    // der Mitte einnimmt") — no longer spans the header's full width.
-    widthFactor: 0.2,
-    child: Pressable(
-      onTap: _toggleEras,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: double.infinity,
-        height: _kWaveMax,
-        child: CustomPaint(
-          painter: _EraWavePainter(
-            waveMin: _kWaveMin,
-            waveMax: _kWaveMax,
-            taper: _kWaveTaper,
-            shadow: _mapShadow.first,
-          ),
-          child: Align(
-            // The arrow sits where the wave actually IS deep enough to hold
-            // it — dead centre, now that the plateau itself is centred.
-            alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: AnimatedRotation(
-                // The arrow turns to point back at the bar it just pulled open
-                // — the one thing that says "this closes again" without a
-                // second glyph. Same duration as [_erasPanel]'s own
-                // AnimatedSize (user 2026-09-06, then "noch langsamere
-                // Animation, so dass man es gut sieht") so the arrow finishes
-                // turning exactly as the panel finishes moving, instead of
-                // visibly settling first.
-                turns: _erasOpen ? 0.5 : 0,
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.easeInOutCubic,
-                child: Icon(
-                  Icons.expand_more_rounded,
-                  size: 26,
-                  color: ParchmentHeader.engravedInk,
-                  shadows: ParchmentHeader.engraved(depth: 1),
-                ),
-              ),
+  /// The tab under the header — belongs TO the header, not beside it (user
+  /// 2026-09-06: "dieser gehört zum Header. Daher gibt es keinen Übergang"), so it
+  /// is the header's own colour, hung from its foot with the same gold rim. ROUND
+  /// like the rest of the UI (user 2026-09-22). It opens the Resources page, every
+  /// era's shelf. (It wore a coral dot while any store was full; removed on
+  /// request, 2026-09-22 — the Resources page marks full stores itself.)
+  Widget _erasTab() => Center(
+    child: Semantics(
+      label: 'All resources',
+      button: true,
+      child: Pressable(
+        onTap: _openResources,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: 78,
+          height: _kPullH,
+          decoration: BoxDecoration(
+            color: CreamPalette.groundBottom,
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(16),
             ),
+            border: Border.all(
+              color: CreamPalette.gold.withValues(alpha: 0.85),
+              width: 2,
+            ),
+            boxShadow: [_mapShadow.first],
+          ),
+          alignment: Alignment.center,
+          child: const Icon(
+            Icons.apps_rounded,
+            size: 16,
+            color: CreamPalette.gold,
           ),
         ),
       ),
     ),
   );
-
-  /// Everything the settlement holds, region by region — the bar's second
-  /// half, shown only when it is unfolded.
-  ///
-  /// Every region the GOODS ladder reaches ([kMaxRegionOrder]), not just the
-  /// ones with a map ([kAreaDefs]) yet (user 2026-09-05: "alle Ressourcen
-  /// angezeigt bekommen, welche im Spiel vorhanden sind oder sein werden" —
-  /// e.g. Crystal Vault, region VIII's element, used to be invisible here
-  /// because no area past III has been built yet). A region without a map
-  /// still has a resource ladder authored for it, so it still gets a row —
-  /// just with a placeholder name until [areaForRegion] finds one.
-  ///
-  /// [SizeTransition] driven by [_erasCtrl], not [AnimatedSize] — the list
-  /// is as long as [kMaxRegionOrder] says, so a hardcoded height would clip
-  /// a late region or leave a gap with only a few, but AnimatedSize here
-  /// looked instant regardless of its own duration (user 2026-09-06: "es
-  /// sieht noch immer aus, als würde es direkt aufgeklappt sein"). Sitting
-  /// as the size-determining child of a Stack that also carries two
-  /// full-height Positioned MeanderStrips, something about that combination
-  /// skipped straight to the end size instead of interpolating through it.
-  /// A driven transition sidesteps the question entirely: [_erasCtrl]'s own
-  /// value scales and clips a CHILD THAT'S ALWAYS FULLY BUILT, frame by
-  /// frame, rather than asking a parent to notice and animate an implicitly
-  /// changing child size.
-  Widget _erasPanel() {
-    final currentRegion = _ctrl.dungeonMaxStage;
-    return SizeTransition(
-      sizeFactor: CurvedAnimation(
-        parent: _erasCtrl,
-        curve: Curves.easeInOutCubic,
-      ),
-      // Reveals downward from the header (user 2026-09-06: "ich möchte
-      // aber, dass es nach unten ausfährt und wieder zurückfährt") rather
-      // than growing from the centre.
-      axisAlignment: -1,
-      child: Padding(
-        // Clear of the tab, which hangs over the band's bottom edge.
-        padding: const EdgeInsets.only(bottom: 10),
-        // Own bands, not just a taller reach of _topBar's (user 2026-09-05:
-        // "bei todays goals links und rechts noch das Mäanderband
-        // hinzufügen") — self-contained so the panel always carries them
-        // regardless of how the transition interacts with the outer
-        // Stack's sizing. Same 14/16 geometry _topBar's own pair uses (user
-        // 2026-09-06: widened from 4/14 to match building_detail_dialog.dart),
-        // so the two line up as one continuous band down the whole card.
-        child: Stack(
-          children: [
-            Positioned(
-              left: 14,
-              top: 0,
-              bottom: 0,
-              width: 16,
-              child: MeanderStrip(
-                color: ParchmentPage.ornament,
-                fillHeight: true,
-              ),
-            ),
-            Positioned(
-              right: 14,
-              top: 0,
-              bottom: 0,
-              width: 16,
-              child: MeanderStrip(
-                color: ParchmentPage.ornament,
-                flip: true,
-                fillHeight: true,
-              ),
-            ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var region = 1; region <= kMaxRegionOrder; region++) ...[
-                  if (region > 1) _eraDivider(),
-                  _eraMenuRow(
-                    region,
-                    areaForRegion(region)?.name ?? 'Unentdeckt',
-                    region == currentRegion,
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// The rule between two era rows — inset and thicker, not edge to edge
-  /// (user 2026-09-01: "die Trennstriche im era panel so machen wie bei
-  /// Management"), same shape as [ParchmentDivider] but at THIS panel's own
-  /// inset (18/16, clearing the band) rather than [ParchmentPage
-  /// .kParchmentPagePad] — a page's own margin, which this narrower dropdown
-  /// does not share — and in the ink every other line on this dark band
-  /// already uses, rather than [ParchmentDivider]'s parchment-page [FoE
-  /// .border].
-  Widget _eraDivider() => Padding(
-    // 38/36, not 26/24 (user 2026-09-06: the band widened from a 4px
-    // inset/14px width to building_detail_dialog.dart's 14px inset/16px
-    // width) — same +8/+8 breathing room past the band's new edge that
-    // 26/24 gave it past the old one (user 2026-09-01: "die Trennstriche
-    // sollen nicht ganz bis zum Mäanderband gehen").
-    padding: const EdgeInsets.fromLTRB(38, 0, 36, 0),
-    child: Container(height: 2, color: kParchmentInk.withValues(alpha: 0.13)),
-  );
-
-  static const _kRomans = [
-    'I',
-    'II',
-    'III',
-    'IV',
-    'V',
-    'VI',
-    'VII',
-    'VIII',
-    'IX',
-    'X',
-  ];
-
-  static String _roman(int n) =>
-      n >= 1 && n <= _kRomans.length ? _kRomans[n - 1] : '$n';
 
   /// Shown only when the last save FAILED for a real reason (network/RLS). Local
   /// progress is kept and retried every tick, so this is a heads-up, not an
@@ -1293,41 +1364,231 @@ class _SettlementScreenState extends State<SettlementScreen>
     ),
   );
 
-  /// THE SAME SHEET as Notifications, the Bag, the Build menu — a centred
-  /// [ParchmentDialog] (user 2026-09-05: "dieses Menü soll genau gleich
-  /// aufgemaut sein wie der Gebäude detailscreen. Notifications ebenfalls",
-  /// then 2026-09-06: "todays goals soll auch so aufgebaut sein" and "what
-  /// happend [the bell] soll genau so gestaltet sein ... wie todays goals").
-  void _showDailyTasks() => showDialog<void>(
-    context: context,
-    builder: (dialogCtx) => StatefulBuilder(
-      builder: (ctx, setLocal) {
-        final tasks = _ctrl.dailyTasks.tasks;
-        return ParchmentDialog(
-          title: 'Today\'s goals',
-          child: SingleChildScrollView(
-            // +12/+12 (2026-09-06): ParchmentDialog's own bands widened by
-            // that on each side.
-            padding: const EdgeInsets.fromLTRB(38, 12, 38, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Three fresh goals every day — small rewards for playing '
-                  'a round of everything.',
-                  style: FoE.dim(
-                    size: 11,
-                  ).copyWith(color: ParchmentSheet.inkSoft),
-                ),
-                const SizedBox(height: 12),
-                for (var i = 0; i < tasks.length; i++)
-                  _dailyTaskRow(i, tasks[i], setLocal),
-              ],
+  /// TODAY'S GOALS (v2, user 2026-09-22: "Serie, mehr Aufgabenarten, Tages-Truhe"):
+  /// a wide cream dialog — LEFT the three goals of the day, RIGHT the streak (a
+  /// week of days in a row, with a chest to look forward to on days 3, 5 and 7) and
+  /// today's chest, which opens once all three are claimed.
+  void _showDailyTasks() {
+    DailyChest? got;
+    showDialog<void>(
+      context: context,
+      barrierColor: CreamPalette.dim,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final state = _ctrl.dailyTasks;
+          final tasks = state.tasks;
+          return ParchmentDialog(
+            title: "Today's goals",
+            maxWidth: 780,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Three fresh goals every day. Finish all three for '
+                            "today's chest.",
+                            style: FoE.dim(
+                              size: 11,
+                            ).copyWith(color: kBoxInkSoft),
+                          ),
+                          const SizedBox(height: 10),
+                          for (var i = 0; i < tasks.length; i++)
+                            _dailyTaskRow(i, tasks[i], setLocal),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: 270,
+                    child: SingleChildScrollView(
+                      child: _streakAndChest(state, got, (chest) {
+                        got = chest;
+                        setLocal(() {});
+                      }, setLocal),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// The right-hand side: the streak strip and the chest.
+  Widget _streakAndChest(
+    DailyTasksState state,
+    DailyChest? got,
+    ValueChanged<DailyChest> onOpened,
+    StateSetter setLocal,
+  ) {
+    final now = DateTime.now().toUtc();
+    final streak = state.streakOn(now);
+    // The day of the week-long cycle the chest just opened (or the next one) sits
+    // on: pips up to it are lit.
+    final lit = streak == 0 ? 0 : ((streak - 1) % kStreakCycle) + 1;
+    final nextDay = state.nextChestDay(now);
+    final next = chestForStreakDay(nextDay);
+    final doneCount = state.tasks.where((t) => t.claimed).length;
+
+    Widget pip(int day) {
+      final on = day <= lit;
+      final special = day == 3 || day == 5 || day == kStreakCycle;
+      return Expanded(
+        child: Column(
+          children: [
+            Container(
+              height: 26,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: on ? CreamPalette.gold : kBoxInk.withValues(alpha: 0.12),
+              ),
+              child: special
+                  ? Text(day == kStreakCycle ? '🏆' : '🎁')
+                  : Text(
+                      '$day',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: on ? CreamPalette.ink : kBoxInkSoft,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final chestBody = got != null
+        ? _chestLine('You got', got)
+        : _chestLine(state.chestOpened ? "Tomorrow's chest" : next.name, next);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: raisedTile(radius: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('🔥', style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 6),
+                  Text(
+                    streak == 0
+                        ? 'No streak yet'
+                        : streak == 1
+                        ? 'Streak: 1 day'
+                        : 'Streak: $streak days',
+                    style: FoE.label(
+                      size: 13,
+                    ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(children: [for (var d = 1; d <= kStreakCycle; d++) pip(d)]),
+              const SizedBox(height: 6),
+              Text(
+                'Open the chest every day. Miss a day and it starts over. '
+                'Days 3, 5 and 7 give more.',
+                style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
+              ),
+            ],
           ),
-        );
-      },
-    ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: raisedTile(radius: 12, lit: state.chestReady),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              chestBody,
+              const SizedBox(height: 10),
+              if (state.chestReady)
+                Pressable(
+                  onTap: () async {
+                    final chest = await _ctrl.claimDailyChest();
+                    if (chest != null) onOpened(chest);
+                  },
+                  child: Container(
+                    height: 38,
+                    alignment: Alignment.center,
+                    decoration: goldButton(),
+                    child: Text(
+                      'Open chest',
+                      style: FoE.label(
+                        size: 14,
+                      ).copyWith(color: goldButtonInk()),
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  state.chestOpened
+                      ? 'Opened — come back tomorrow.'
+                      : '$doneCount of ${state.tasks.length} goals claimed',
+                  textAlign: TextAlign.center,
+                  style: FoE.dim(size: 11.5).copyWith(
+                    color: state.chestOpened
+                        ? CreamPalette.better
+                        : kBoxInkSoft,
+                    fontWeight: state.chestOpened ? FontWeight.w800 : null,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A chest's name and what is in it: gold, and the items.
+  Widget _chestLine(String label, DailyChest chest) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          const Text('🎁', style: TextStyle(fontSize: 20)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: FoE.label(
+              size: 13,
+            ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 10,
+        runSpacing: 4,
+        children: [
+          Text(
+            '🪙 ${chest.gold}',
+            style: FoE.value(size: 13).copyWith(color: kBoxInk),
+          ),
+          for (final e in chest.items.entries)
+            Text(
+              '${kItemDefs[e.key]?.emoji ?? '🎁'} ×${e.value}',
+              style: FoE.value(size: 13).copyWith(color: kBoxInk),
+            ),
+        ],
+      ),
+    ],
   );
 
   Widget _dailyTaskRow(int index, DailyTask t, StateSetter setLocal) {
@@ -1338,54 +1599,88 @@ class _SettlementScreenState extends State<SettlementScreen>
               '${e.value.toStringAsFixed(0)}',
         )
         .join('  ');
+    final frac = t.target == 0 ? 1.0 : (t.progress / t.target).clamp(0.0, 1.0);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      // Same recess Notifications' own rows sit in (ParchmentSheet.card),
-      // not a second, differently-tinted panel (user 2026-09-05: "genau
-      // gleich aufgemaut wie der Gebäude detailscreen. Notifications
-      // ebenfalls").
-      decoration: ParchmentSheet.card,
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      decoration: raisedTile(radius: 12, lit: t.claimable),
       child: Row(
         children: [
-          Text(t.kind.emoji, style: const TextStyle(fontSize: 18)),
+          Text(t.kind.emoji, style: const TextStyle(fontSize: 20)),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t.kind.label, style: FoE.label(size: 13)),
-                const SizedBox(height: 3),
-                RecessBar(
-                  value: t.target == 0 ? 1 : t.progress / t.target,
-                  color: t.done ? FoE.positive : FoE.gold,
-                  height: 9,
-                  onDark: true,
+                Text(
+                  t.kind.label,
+                  style: FoE.label(
+                    size: 13,
+                  ).copyWith(color: kBoxInk, fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: SizedBox(
+                    height: 8,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ColoredBox(color: kBoxInk.withValues(alpha: 0.16)),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: FractionallySizedBox(
+                            widthFactor: frac,
+                            child: ColoredBox(
+                              color: t.done
+                                  ? CreamPalette.better
+                                  : CreamPalette.gold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
                 Text(
                   '${t.progress}/${t.target} · reward: $rewardText',
-                  style: FoE.dim(size: 10),
+                  style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 10),
           if (t.claimed)
-            Text('✓', style: FoE.label(size: 15).copyWith(color: FoE.positive))
+            Text(
+              '✓',
+              style: FoE.label(size: 18).copyWith(color: CreamPalette.better),
+            )
           else
-            TextButton(
-              onPressed: t.claimable
+            Pressable(
+              onTap: t.claimable
                   ? () async {
                       await _ctrl.claimDailyTask(index);
                       setLocal(() {});
                     }
                   : null,
-              child: Text(
-                'Claim',
-                style: FoE.label(
-                  size: 12,
-                ).copyWith(color: t.claimable ? FoE.gold : FoE.textMuted),
+              child: Opacity(
+                opacity: t.claimable ? 1 : 0.4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: t.claimable
+                      ? goldButton()
+                      : raisedTile(radius: 10),
+                  child: Text(
+                    'Claim',
+                    style: FoE.label(size: 12).copyWith(
+                      color: t.claimable ? goldButtonInk() : kBoxInkSoft,
+                    ),
+                  ),
+                ),
               ),
             ),
         ],
@@ -1393,49 +1688,67 @@ class _SettlementScreenState extends State<SettlementScreen>
     );
   }
 
-  /// SEVEN CELLS, ONE ROW, EVERY ERA. Not scrollable and no longer wrapping:
-  /// each cell takes an equal share of the width, so the bar is the same height
-  /// in era VIII as in era I and nothing is ever hidden behind a scroll.
-  ///
-  /// Order is the order you spend in: what you build with, what you pay sinks
-  /// with, then the three standing totals (gold, energy, housing).
+  /// ONE LINE, EVERY ERA. Not scrollable and no longer wrapping: the era's
+  /// resources share the left half equally, gold, housing and trips the right, so
+  /// the strip is the same height in era VIII as in era I and nothing is ever
+  /// hidden behind a scroll. The energy bar stands between them.
   Widget _resourceRow() {
     final rates = _ctrl.hourlyRates;
     final era = _ctrl.dungeonMaxStage;
-    // Eight cells while a refinery is unlocked but its era has not arrived —
-    // see [_eraResources]. Every cell is an Expanded, so the row still fits.
-
-    return Padding(
-      // 30/28, not 18/16 (user 2026-09-06: the band widened from a 4px
-      // inset/14px width to building_detail_dialog.dart's 14px inset/16px
-      // width) — clears the strip's own 14 + 16 px reach so the first and
-      // last cell's icons don't sit half under it.
-      padding: const EdgeInsets.fromLTRB(30, 0, 28, 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          for (final r in _eraResources(era, cleared: _ctrl.battlesCleared))
+    // ONE LINE, 34 px (user 2026-09-22, "Variante 4"). LEFT: the era's own
+    // resources (its build pair and its luxury — three in era I). CENTRE: ENERGY,
+    // the one bar, because it scales every rate on the strip. RIGHT: gold,
+    // housing and trips. The two groups get the same width either side of the
+    // bar, so the bar stays on the screen's own centre line. The bell is not in
+    // the strip: it hangs under the header at the right.
+    return SizedBox(
+      height: _kResourceRowHeight,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
             Expanded(
-              child: _resCell(
-                r.emoji,
-                r.name,
-                r.id,
-                _amountOf(r.id),
-                rates[r.id] ?? 0,
+              child: Row(
+                children: [
+                  for (final r in _eraResources(
+                    era,
+                    cleared: _ctrl.battlesCleared,
+                  ))
+                    Expanded(
+                      child: _resCell(
+                        r.emoji,
+                        r.name,
+                        r.id,
+                        _amountOf(r.id),
+                        rates[r.id] ?? 0,
+                      ),
+                    ),
+                ],
               ),
             ),
-          Expanded(
-            child: _resCell(
-              '🪙',
-              'Gold',
-              'gold',
-              _amountOf('gold'),
-              rates['gold'] ?? 0,
+            const SizedBox(width: 6),
+            _energyBar(),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _resCell(
+                      '🪙',
+                      'Gold',
+                      'gold',
+                      _amountOf('gold'),
+                      rates['gold'] ?? 0,
+                    ),
+                  ),
+                  Expanded(child: _housingCell()),
+                  Expanded(child: _tripsCell()),
+                ],
+              ),
             ),
-          ),
-          Expanded(child: _energyCell()),
-          Expanded(child: _housingCell()),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1512,9 +1825,9 @@ class _SettlementScreenState extends State<SettlementScreen>
     };
   }
 
-  // Shared sizing for every header cell so icons and text lines all match up.
-  static const _kHeaderIconSize = 14.0;
-  static const _kHeaderSubSize = 9.0;
+  // Shared sizing for every header cell so glyphs and text lines all match up.
+  static const _kHeaderIconSize = 15.0;
+  static const _kHeaderSubSize = 10.0;
 
   /// Header numbers are SHORT (`1.2k`, `12k`, `1.4M`). At a seventh of a phone
   /// each, a cell has room for about four glyphs — and a five-digit pile of wood
@@ -1524,19 +1837,19 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// this used to be the only place in the app that shortened anything.
   static String _short(double v) => shortNumber(v);
 
-  /// Every header cell is tappable (it opens the resource breakdown), so each
-  /// one gets a real hit area instead of being a bare Padding you have to aim
-  /// at.
+  /// Every header cell is tappable (it opens the resource breakdown), so each one
+  /// gets a real hit area instead of being a bare Padding you have to aim at. No
+  /// slot around it any more (user 2026-09-22, "Variante 4"): the figures stand
+  /// straight on the bar, and the cell is scaled down as a whole when a long
+  /// figure would not fit its share of the width.
   Widget _headerCell({required VoidCallback onTap, required Widget child}) =>
       InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(FoE.radiusSmall),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [child],
+        borderRadius: BorderRadius.circular(10),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: FittedBox(fit: BoxFit.scaleDown, child: child),
           ),
         ),
       );
@@ -1580,7 +1893,6 @@ class _SettlementScreenState extends State<SettlementScreen>
           // rather than variety once every header cell's badge fights for
           // attention in its own hue). Matches the target cards' own cream/tan
           // treatment (see expeditions_screen.dart's _targetCard).
-          iconColor: FoE.gold,
           value: _short(amount),
           sub: over
               ? 'over ${_short(cap)}'
@@ -1601,80 +1913,156 @@ class _SettlementScreenState extends State<SettlementScreen>
     ),
   );
 
-  /// The shape every cell in the strip shares: THE GLYPH ON TOP, the figure
-  /// under it, the rate under that (user 2026-07-29: "Die Icons der
-  /// Ressourcen/Housing etc. soll über der Zahl sein").
-  ///
-  /// Stacked, not side by side. Glyph-then-number ate the cell's width — a
-  /// seventh of a phone had to hold both, so `12.4k` was already clipping.
-  /// Stacked, the full width belongs to the number, and the glyphs line up as a
-  /// row of icons you scan across rather than seven separate little pairs.
+  /// The shape every cell in the strip shares: ONE LINE — the glyph, the figure,
+  /// the rate (user 2026-09-22, "Variante 4"). The strip is 34 px high, so a cell
+  /// can no longer stack them; side by side, the figure reads first and the rate
+  /// is a quiet tail behind it.
   Widget _cellBody({
     required String emoji,
     required String value,
     required String sub,
-    Color? iconColor,
     Color? valueColor,
     Color? subColor,
-  }) => Column(
+  }) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
       // Fixed box, not a bare Text: color emoji render through a fallback
       // system font whose glyph bitmap sits taller than the line height
       // Flutter computes from Outfit's own metrics at this size, so an
-      // unconstrained emoji bled down and overwrote the value below it
-      // (user 2026-08-31: "Die Icons werden überschrieben").
-      //
-      // The badge behind it is the resource's own colour at low strength
-      // (user 2026-08-31: "die Icons passend einfärben") — the glyph itself
-      // is a baked-colour emoji font, immune to TextStyle.color, so the tint
-      // has to live on something behind it instead.
+      // unconstrained emoji bled down and overwrote the value beside it (user
+      // 2026-08-31: "Die Icons werden überschrieben").
       SizedBox(
-        height: _kHeaderIconSize + 4,
+        width: _kHeaderIconSize + 5,
+        height: _kHeaderIconSize + 5,
         child: Center(
-          child: Container(
-            width: _kHeaderIconSize + 8,
-            height: _kHeaderIconSize + 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: (iconColor ?? const Color(0xFF8B95A5)).withValues(
-                alpha: 0.16,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                emoji,
-                style: const TextStyle(fontSize: _kHeaderIconSize),
-              ),
-            ),
+          child: Text(
+            emoji,
+            style: const TextStyle(fontSize: _kHeaderIconSize),
           ),
         ),
       ),
-      // STAMPED, in the band's own hand (user 2026-07-29: "jetzt den Header im
-      // gleichen stil"). The corner keys' full letterpress — the glyph in the
-      // material's own colour, carried entirely by two hairlines — is not
-      // available here: that works at 34px, and these are figures at 12 and 9
-      // that have to be READ, not recognised. So the ink stays and only the
-      // cut comes over, which is what the two treatments share anyway.
+      const SizedBox(width: 3),
       Text(
         value,
         maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: FoE.value(size: 12).copyWith(
+        style: FoE.value(size: 13).copyWith(
           color: valueColor,
           shadows: ParchmentHeader.engraved(depth: 0.8),
         ),
       ),
+      const SizedBox(width: 4),
       Text(
         sub,
         maxLines: 1,
-        overflow: TextOverflow.ellipsis,
         style: FoE.dim(size: _kHeaderSubSize).copyWith(
           color: subColor,
           shadows: ParchmentHeader.engraved(depth: 0.6),
         ),
       ),
     ],
+  );
+
+  /// TRIPS: how many expeditions and caravans are away, and when the first is
+  /// back. Gold once one is home and waiting to be played. Opens the
+  /// expeditions hub.
+  Widget _tripsCell() => TripsStatusBuilder(
+    builder: (context, s) {
+      final ready = s.ready > 0;
+      return _headerCell(
+        onTap: _showExpeditions,
+        child: _cellBody(
+          emoji: '🧭',
+          value: s.noSlots ? '–' : '${ready ? s.ready : s.out}',
+          sub: ready
+              ? 'ready'
+              : s.soonest != null
+              ? fmtDuration(s.soonest!.inSeconds.toDouble())
+              : s.noSlots
+              ? 'no post'
+              : 'idle',
+          valueColor: ready ? CreamPalette.gold : null,
+          subColor: ready ? CreamPalette.gold : null,
+        ),
+      );
+    },
+  );
+
+  /// NEWS: the bell, out of the strip again (user 2026-09-19) — a small round kit
+  /// button under the header at the right, with the unread count on its corner.
+  /// The same sheet on tap, and the same "mark read on open" rule
+  /// ([NotificationBadge]).
+  Widget _newsButton() => NotificationBadge(
+    builder: (context, unread, open) => Semantics(
+      label: 'News',
+      button: true,
+      child: Pressable(
+        onTap: open,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [CreamPalette.tileTop, CreamPalette.tileBottom],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: CreamPalette.tanShadow,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  unread > 0
+                      ? Icons.notifications_active_rounded
+                      : Icons.notifications_none_rounded,
+                  size: 20,
+                  color: unread > 0 ? CreamPalette.ink : kBoxInkFaint,
+                ),
+              ),
+              if (unread > 0)
+                Positioned(
+                  top: 0,
+                  right: -2,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 18),
+                    height: 18,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: FoE.coral,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: CreamPalette.paperTop,
+                        width: 2,
+                      ),
+                    ),
+                    child: Text(
+                      // Caps the badge: "99+" keeps it stable no matter how
+                      // long you were away.
+                      unread > 99 ? '99+' : '$unread',
+                      style: const TextStyle(
+                        color: CreamPalette.ink,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
   );
 
   /// HOUSING, PROMOTED INTO THE STRIP (user 2026-07-29). It used to live only
@@ -1687,15 +2075,12 @@ class _SettlementScreenState extends State<SettlementScreen>
     final cap = _ctrl.housingCapacity;
     final full = used >= cap;
     return _headerCell(
-      // Its own screen now (2026-09-11) — Housing left Management for the
-      // same door every sheltering building opens it through.
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const HousingScreen()),
-      ),
+      // Opens Work, not Housing (user 2026-09-20: "wenn ich beim Header auf
+      // Housing drücke, soll Work aufgehen, da dies der wichtigere Screen
+      // ist") — Housing is the page's second tab, one tap over.
+      onTap: () => pushMenu(context, const WorkScreen()),
       child: _cellBody(
         emoji: '🛏',
-        iconColor: FoE.gold,
         value: '$used/$cap',
         sub: full ? 'full' : '${cap - used} free',
         valueColor: full ? FoE.danger : null,
@@ -1704,330 +2089,92 @@ class _SettlementScreenState extends State<SettlementScreen>
     );
   }
 
-  /// THE ERAS MENU (user 2026-07-29: "die Ressourcen aller Zeitalter zu sehen
-  /// durch ein Dropdown menü"). The price of a strip that only shows this era:
-  /// everything it left out has to be one tap away, and it is — every era, its
-  /// build pair and its luxuries, with what you hold of each.
+  /// ENERGY, AS THE STRIP'S CENTRE (user 2026-09-19, "Variante 4" 2026-09-22). A
+  /// wide bar on a 0–125 % scale, the figure and how many hours it will still last
+  /// written across it. Energy is a POOL that steps fill and time empties (user
+  /// 2026-09-20), and it scales every rate beside it. Amber up to 100 %; the
+  /// stretch from 100 to 125 % is cyan, with a tick at the 100 % mark. Coral only
+  /// when it is empty: everything above that is a real, working rate.
   ///
-  /// A real dropdown rather than a sheet, because it belongs to the strip it
-  /// abbreviates: it opens against it and closes when you look away.
-  Widget _eraMenuRow(int region, String name, bool current) {
-    final items = <({String id, String emoji, String name})>[
-      ..._eraResources(region),
-    ];
-    return Container(
-      width: double.infinity,
-      // 30 on the right too, matching the left column's own SizedBox(30)
-      // clearance below — the panel's own meander strips now reach the same
-      // 14-30 span on both sides (widened from 4-18, user 2026-09-06), so a
-      // bare 16 let a wide chip row's right edge sit half under the band
-      // (user 2026-09-05: "schauen, dass es keine Kollisionen gibt ... in
-      // die Mitte schieben").
-      padding: const EdgeInsets.fromLTRB(0, 8, 30, 8),
-      // NO fill, and no border of its own any more (user 2026-08-31: "lass
-      // den grünen halbtransparenten Schatten/Box [weg]"; 2026-09-01: "die
-      // Trennstriche im era panel so machen wie bei Management") — the
-      // left accent bar alone says which era this is, and the rule
-      // between rows is [_eraDivider], drawn once by [_erasPanel] between
-      // rows rather than as each row's own full-bleed top border.
-      // The accent bar moved OFF the container's own edge (user 2026-08-31:
-      // "damit der vertikale grüne Strich rechts von dem Band Platz hat")
-      // — it used to sit at x 0-3, AHEAD of where the band itself starts
-      // (x 4-18); now it sits just past the band, with the text pushed
-      // further right again to clear it in turn. IntrinsicHeight so the
-      // accent bar (a fixed-width, unconstrained-height Container) can
-      // stretch to match the text/chip column's own height.
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(width: 30), // clears the band
-            Container(
-              width: 3,
-              color: current ? FoE.positive : Colors.transparent,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      // No icon, no dot (user 2026-08-31: "überall die
-                      // Icons streichen und den Punkt zwischen Zahl und
-                      // Text") — the roman numeral and the region's name,
-                      // plainly.
-                      Expanded(
-                        child: Text(
-                          '${_roman(region)}  $name',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: FoE.label(size: 11).copyWith(
-                            color: current ? FoE.positive : FoE.parchment,
-                            fontWeight: current
-                                ? FontWeight.w700
-                                : FontWeight.w400,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 5,
-                    children: [
-                      for (final r in items) _eraChip(r.id, r.emoji, r.name),
-                    ],
-                  ),
-                ],
+  /// Energy is loaded separately from the settlement, so it can genuinely be
+  /// absent for the first frames: the bar keeps its SLOT either way, so the row
+  /// must not reflow the moment it arrives.
+  Widget _energyBar() {
+    final energy = _ctrl.energy;
+    final percent = (energy?.percent ?? 0).toDouble();
+    final atFloor = energy != null && energy.isEmpty;
+    // How long it lasts — the countdown is the point of a pool that drains.
+    final left = energy == null || energy.isEmpty
+        ? ''
+        : energy.hoursLeft >= 1
+        ? ' · ${energy.hoursLeft.floor()}h'
+        : ' · ${(energy.hoursLeft * 60).ceil()}m';
+    return Semantics(
+      label: 'Energy',
+      button: true,
+      child: Pressable(
+        onTap: _showEnergyOverview,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: _kEnergyBarWidth,
+          height: 24,
+          child: CustomPaint(
+            painter: _EnergyBarPainter(percent: percent, empty: atFloor),
+            child: Center(
+              child: Text(
+                energy == null ? '⚡ —' : '⚡ ${percent.round()}%$left',
+                maxLines: 1,
+                style: FoE.value(size: 11.5).copyWith(
+                  color: atFloor ? FoE.danger : Colors.white,
+                  fontWeight: FontWeight.w800,
+                  shadows: const [
+                    Shadow(color: Color(0xCC000000), blurRadius: 2),
+                    Shadow(color: Color(0x99000000), offset: Offset(0, 1)),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _eraChip(String id, String emoji, String name) {
-    final amount = _amountOf(id);
-    final has = amount > 0;
-    return InkWell(
-      onTap: () {
-        // Close the DROPDOWN, not the route (2026-09-01 fix: "wenn ich eine
-        // Ressource beim era panel anklicke und ... auf den zurückbutton
-        // drücke, kommt ein blackscreen"). The eras panel is inline now
-        // (_erasCtrl + _erasOpen), not the popup its own history once was —
-        // this Navigator.pop() was a leftover from back when it WAS one, and
-        // since SettlementScreen is the app's root route, popping it here
-        // quietly emptied the Navigator's history. Pushing
-        // ResourceDetailScreen straight after papered over it (there was
-        // still a route to push onto), until backing OUT of that screen had
-        // nothing valid left underneath it.
-        _closeEras();
-        _showResourceBreakdown(resourceId: id, emoji: emoji, title: name);
-      },
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: ShapeDecoration(
-          // An era you have not reached holds nothing, and its chips say so by
-          // fading rather than by disappearing — the ladder stays readable.
-          color: kParchmentInk.withValues(alpha: has ? 0.07 : 0.03),
-          shape: FoE.facet(
-            radius: 8,
-            side: BorderSide(
-              color: kParchmentInk.withValues(alpha: has ? 0.20 : 0.10),
             ),
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 11)),
-            const SizedBox(width: 4),
-            Text(
-              _short(amount),
-              style: FoE.value(
-                size: 10,
-              ).copyWith(color: has ? FoE.parchment : FoE.textMuted),
-            ),
-          ],
-        ),
       ),
     );
   }
 
-  Widget _energyCell() {
-    // Energy is loaded separately from the settlement, so it can genuinely be
-    // absent for the first frames. The strip keeps the cell's SLOT either way —
-    // the row's seven columns must not reflow the moment it arrives.
-    final energy = _ctrl.energy;
-    if (energy == null) {
-      return _headerCell(
-        onTap: _showEnergyOverview,
-        child: _cellBody(
-          emoji: '⚡',
-          iconColor: FoE.gold,
-          value: '—',
-          sub: '',
-        ),
-      );
-    }
-    // Energy is a daily-steps RATE now (user 2026-09-14), not a draining
-    // pool with an hours-until-empty countdown — [energy.percent] is already
-    // exactly current, no live extrapolation needed. Red only at the floor
-    // (0 steps today yet): everything above that is a real, working rate,
-    // just not a boosted one.
-    final atFloor = energy.stepsToday <= 0;
-    return _headerCell(
-      onTap: _showEnergyOverview,
-      // Ink, not white: the strip is a LIT PARCHMENT band now, and white on
-      // cream is a number you cannot read.
-      child: _cellBody(
-        emoji: '⚡',
-        iconColor: FoE.gold,
-        value: '${energy.percent.round()}%',
-        sub: '${energy.stepsToday} steps',
-        valueColor: atFloor ? FoE.danger : null,
-        subColor: atFloor ? FoE.danger : null,
-      ),
-    );
-  }
+  /// The energy bar's width — wide enough for "⚡ 125% · 30h" at a glance.
+  static const double _kEnergyBarWidth = 172;
 
-  // ── Debug row (under header, under settlement name) ────────
-  /// DEV ONLY — the whole row. Gated on the account flag (profiles.is_dev)
-  /// rather than kDebugMode: it works in real builds, but only for the flagged
-  /// dev account. It hands out only the STOCKPILE plus Reset and the Dev Mode
-  /// editor — nothing that lets a player tap past the docs' balance numbers.
+  // ── Quick buttons (bottom-left dock, bottom-right row) ──
+  /// THE SETTLEMENT'S CONTROLS THE FORGE-OF-EMPIRES WAY (user 2026-09-19): at
+  /// the bottom RIGHT one horizontal row — Build, Monsters, Map, the three
+  /// places you go to all the time; at the bottom LEFT Social, with a fold
+  /// button that opens a row to its right holding every other button (Manage,
+  /// Profile, Bag, Daily tasks). Build toggles the bottom carousel, which is
+  /// only on screen while the player has it open. Manage is the hub for what is
+  /// out on the road, who works where and the housing budget; Research is not a
+  /// button (the overworld IS research now).
   ///
-  /// The ⚡ energy and 🗺 expansion buttons are gone (user 2026-07-26). One
-  /// resource button that fills the yard is what testing a build actually
-  /// needs; the other two handed out things you can also reach by playing.
-  ///
-  /// ICON-ONLY, and deliberately unshowy (user 2026-08-31: "nur als icon
-  /// jeweils, dafür deutlich kleiner, dass alle nebeneinander Platz haben.
-  /// Diese sollen nicht auffallen, da sie später so oder so gelöscht
-  /// werden") — three small glyphs side by side rather than a labelled,
-  /// gold-on-dark row that reads as a real feature of the screen.
-  Widget _debugRow() {
-    if (!_ctrl.isDev) return const SizedBox.shrink();
+  /// Dev Mode deliberately NOT here: it lives in the debug row with the other
+  /// dev tools. These buttons are the player's.
+  Widget _quickRails() {
+    final r = _railItems();
+    if (r.main == null && r.right.isEmpty) return const SizedBox.shrink();
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Gold gates nothing (it only ever removes waiting) and wood/stone
-        // are what every build costs, so a thousand of each costs no
-        // balance — it just means a building under test doesn't wait on a
-        // gather trip.
-        _debugBtn(
-          '🪙',
-          () => _ctrl.grantResources({
-            'gold': kDevResetFloat,
-            'wood': kDevResetFloat,
-            'stone': kDevResetFloat,
-          }),
-        ),
-        const SizedBox(width: 4),
-        _debugBtn('🔄', _confirmReset),
-        const SizedBox(width: 4),
-        _debugBtn('🛠', _showDevMode),
+        if (r.main != null) QuickDock(main: r.main!, more: r.more),
+        const Spacer(),
+        if (r.right.isNotEmpty) QuickRail(items: r.right),
       ],
     );
   }
 
-  Future<void> _confirmReset() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          width: 260,
-          decoration: FoE.panel(radius: 12),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Reset EVERYTHING?', style: FoE.title(size: 14)),
-              const SizedBox(height: 10),
-              Text(
-                'Wipes this account back to a first launch: every monster you '
-                'own, all buildings, resources, tech gates, breeding, '
-                'expeditions, and your level and region progress. The intro '
-                'starts over.\n\n'
-                'Dev Mode content (monsters, buildings, techs, areas you have '
-                'authored) is kept.\n\nThis cannot be undone.',
-                textAlign: TextAlign.center,
-                style: FoE.label().copyWith(color: FoE.textDim),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Pressable(
-                    onTap: () => Navigator.pop(context, false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
-                      ),
-                      decoration: FoE.btn(),
-                      child: Text(
-                        'Cancel',
-                        style: FoE.label().copyWith(color: FoE.textDim),
-                      ),
-                    ),
-                  ),
-                  Pressable(
-                    onTap: () => Navigator.pop(context, true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
-                      ),
-                      decoration: ShapeDecoration(
-                        color: Colors.red.shade900.withValues(alpha: 0.4),
-                        shape: FoE.facet(
-                          radius: 6,
-                          side: BorderSide(color: Colors.red.shade700),
-                        ),
-                      ),
-                      child: Text(
-                        'Reset',
-                        style: FoE.label().copyWith(color: Colors.red.shade300),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (ok == true) await _ctrl.resetSettlement();
-  }
-
-  Widget _debugBtn(String emoji, VoidCallback onTap) => Pressable(
-    onTap: onTap,
-    child: Container(
-      width: 20,
-      height: 20,
-      alignment: Alignment.center,
-      decoration: ShapeDecoration(
-        color: const Color(0xFF1A1206).withValues(alpha: 0.6),
-        shape: FoE.facet(
-          radius: 4,
-          side: BorderSide(color: FoE.border.withValues(alpha: 0.5)),
-        ),
-      ),
-      child: Text(emoji, style: const TextStyle(fontSize: 10)),
-    ),
-  );
-
-  // ── Quick pad (loose buttons, bottom-right) ─────────────────
-  /// EIGHT BUTTONS, ONE PLACE (user 2026-07-29: "bag, notification und
-  /// tägliche ziele sind zusammen mit den Buttons build, map, trips, monster
-  /// und manage einzelne Buttons ohne Footer unten rechts").
-  ///
-  /// Ordered by reach: [QuickPad] lays its first item into the bottom-right
-  /// corner and fills outwards, so Build — the thing you press most on a
-  /// settlement screen — sits under the thumb and the bell ends up furthest.
-  ///
-  /// Dev Mode deliberately NOT here: it lives in the debug row with the other
-  /// dev tools. This pad is the player's.
-  ///
-  /// SIX KEYS. Trips is gone (user 2026-07-29): the Management hub leads with
-  /// its Trips tab now, and that tab IS the expeditions hub — so the button was
-  /// a second door into a room that already had one. News is gone too; it is an
-  /// icon under the header, not a destination.
-  ///
-  /// Every glyph is a SOLID one (user 2026-07-29: "Fülle die Icons jeweils
-  /// aus"). With the labels gone the glyph is the whole button, so the two
-  /// outline ones had to be swapped: the bag for its filled twin, and the
-  /// daily tasks from a ticked circle — which reads as "already done" — to a
-  /// flag, which is what a goal is.
-  Widget _quickPad() {
+  // "main" used to always be Social, with Manage folded — swapped (user
+  // 2026-09-22: "manage und social sollen noch den Platz wechseln"): Manage
+  // is the tile that's always visible now, Social moved into the fold. Its
+  // badge (challenges/unread messages) travels with it — summed onto the
+  // fold button while closed, the same as Bag's and Daily tasks' already are.
+  ({QuickPadItem? main, List<QuickPadItem> more, List<QuickPadItem> right})
+  _railItems() {
     final solo = _soloQuickPadAnchor;
     // Only the CURRENT step's own tile carries the anchor (user 2026-09-02:
     // "Nur der jeweilige Button soll aktiv und markiert sein") — an earlier
@@ -2050,47 +2197,75 @@ class _SettlementScreenState extends State<SettlementScreen>
           ? IntroSpotlightAnchors.of('quick-map')
           : null,
     );
-    final build = QuickPadItem(
-      Icons.construction,
-      'Build',
-      _showBuildMenu,
-      anchorKey: solo == 'quick-build'
-          ? IntroSpotlightAnchors.of('quick-build')
-          : null,
-    );
-    // Reduced to whichever tiles are unlocked so far — the CURRENT step's
-    // own target plus any earlier solo hand-off's tile, which stays around
-    // rather than disappearing again (user 2026-09-02: "der Monsterbutton
-    // soll auch bereits angezeigt werden, da dieser bereits benutzt
-    // wurde").
+    // The solo hand-off has no Build tile — the tutorial's carousel is forced
+    // open instead; see [_buildUnlocked]/[_showBuildCarousel].
+    //
+    // Reduced to whichever tiles are unlocked so far — the CURRENT step's own
+    // target plus any earlier solo hand-off's tile, which stays around rather
+    // than disappearing again (user 2026-09-02: "der Monsterbutton soll auch
+    // bereits angezeigt werden, da dieser bereits benutzt wurde").
     if (solo != null) {
-      return QuickPad(
-        items: [
-          if (_monstersUnlocked) monsters,
-          if (_mapUnlocked) map,
-          if (_buildUnlocked) build,
-        ],
-      );
+      final soloItems = [
+        if (_monstersUnlocked) monsters,
+        if (_mapUnlocked) map,
+      ];
+      // Monsters and Map live in the right-hand row now, tutorial or not.
+      return (main: null, more: const <QuickPadItem>[], right: soloItems);
     }
     // No button at all until it is the one actually being used (user
-    // 2026-09-02: "Zum Start soll noch gar kein Button ersichtlich sein ...
-    // Die Buttons erscheinen erst dann, wenn sie benutzt werden"). While the
-    // intro card itself is the spotlighted control (every step except the
-    // solo hand-offs above), its own CTA is the only way forward — the
-    // quick menu isn't the mechanism yet, so it stays off rather than
-    // sitting there dimmed and dead behind the scrim.
-    if (_ctrl.introStep.isActive) return const SizedBox.shrink();
-    return QuickPad(
-      items: [
-        QuickPadItem(Icons.construction, 'Build', _showBuildMenu),
-        map,
-        monsters,
-        // The Management hub: what is out on the road, who works where, and
-        // the housing budget. Research used to be a key here — the overworld
-        // IS research now (techs are places on it), so it would have been
-        // two doors into one room.
-        QuickPadItem(Icons.assignment, 'Manage', _showManagement),
-        QuickPadItem(Icons.group, 'Social', _showSocial),
+    // 2026-09-02): while the intro card itself is the spotlighted control, its
+    // own CTA is the only way forward.
+    if (_ctrl.introStep.isActive) {
+      return (
+        main: null,
+        more: const <QuickPadItem>[],
+        right: const <QuickPadItem>[],
+      );
+    }
+    // Opens/closes the build carousel (amber while it is open).
+    final build = QuickPadItem(Icons.construction, 'Build', () {
+      setState(() {
+        _buildOpen = !_buildOpen;
+        _requestedCategory = null;
+      });
+    }, active: _buildOpen);
+    // While the menu is open the rails are EMPTY (user 2026-09-19: "der
+    // Buildbutton soll verschwinden, wenn das Menü offen ist") — the category
+    // column takes the left edge, and a tap on the map closes the menu again.
+    if (_buildOpen) {
+      return (
+        main: null,
+        more: const <QuickPadItem>[],
+        right: const <QuickPadItem>[],
+      );
+    }
+    return (
+      // Build, Monsters, Map: the three you go to all the time (user
+      // 2026-09-19, Forge-of-Empires layout).
+      right: [build, monsters, map],
+      // Verwalten (Manage), always visible — swapped with Social (user
+      // 2026-09-22).
+      main: QuickPadItem(Icons.assignment, 'Manage', _showManagement),
+      // Everything else, behind the fold button next to Manage.
+      more: [
+        // Waiting on you: a challenge to answer, an opponent already in
+        // their lobby, your move in a fight, unread messages — the badge
+        // rides along into the fold and sums onto its button while closed,
+        // same as Bag's and Daily tasks' already do.
+        QuickPadItem(
+          Icons.group,
+          'Social',
+          _showSocial,
+          badge:
+              PvpNotifier.instance.attention + MessageNotifier.instance.unread,
+        ),
+        // Umbaumodus's entry point lives in the Build menu itself now (user
+        // 2026-09-22: "ich will über das Baumenü in den Umbaumodus kommen") —
+        // see BuildingCarousel's own right-edge button, which calls
+        // _enterLayoutMode directly. A long-press on a building is still the
+        // quick way to move just that one.
+        // The account settings — a tile like Manage (user 2026-09-18).
+        QuickPadItem(Icons.person, 'Profile', _showProfile),
         QuickPadItem(
           Icons.backpack,
           'Bag',
@@ -2112,62 +2287,78 @@ class _SettlementScreenState extends State<SettlementScreen>
   }
 }
 
-/// The wave's silhouette (user 2026-09-07: "der Headerbutton soll mittig
-/// sein und auf beide Seiten auslaufen", then "einmal konvex und einmal
-/// konkav vom Rand bis zur Mitte... Aktuell hat es noch eine Ecke, diese
-/// muss auch geschwungen werden"): flush with the header along the top and
-/// the two vertical ends, THIN at both edges ([waveMin] deep), flowing up
-/// through one true ogee on each side — a convex arc straight off the
-/// vertical edge, then a concave arc into a centred plateau at [waveMax]
-/// deep — the two sides are exact mirrors of each other.
-Path _eraWavePath(Size size, double waveMin, double waveMax, double taper) {
-  final w = size.width;
-  final tw = w * taper;
-  final leftDeepX = tw;
-  final rightDeepX = w - tw;
-  // How deep the curve's single inflection point sits — not used as a
-  // literal path vertex, only to place the control points that give it a
-  // vertical tangent at the edge and a horizontal one at the plateau.
-  final midDepth = waveMin + (waveMax - waveMin) * 0.7;
-  return Path()
-    ..moveTo(0, 0)
-    ..lineTo(0, waveMin)
-    // Control point 1 shares the START's x (0) — the curve leaves the
-    // straight edge travelling STRAIGHT DOWN, so the two meet with no kink,
-    // the corner the earlier "ease" version still had. Control point 2
-    // shares the END's y (waveMax) — the curve arrives at the plateau
-    // travelling level, same as before. One cubic, one inflection: convex
-    // first, concave second.
-    ..cubicTo(0, midDepth, tw * 0.5, waveMax, leftDeepX, waveMax)
-    ..lineTo(rightDeepX, waveMax)
-    ..cubicTo(w - tw * 0.5, waveMax, w, midDepth, w, waveMin)
-    ..lineTo(w, 0)
-    ..close();
-}
+/// The energy bar's body (Variante 4, user 2026-09-22): a capsule on a 0–125 %
+/// scale. Amber up to 100 %, a tick at 100 %, and the 100–125 % stretch in cyan —
+/// a different colour for the surplus that steps earn above the pool's normal
+/// ceiling ("der Energiebalken hat von 100–125 % eine andere Farbe").
+class _EnergyBarPainter extends CustomPainter {
+  final double percent;
+  final bool empty;
+  const _EnergyBarPainter({required this.percent, required this.empty});
 
-class _EraWavePainter extends CustomPainter {
-  final double waveMin;
-  final double waveMax;
-  final double taper;
-  final BoxShadow shadow;
-  const _EraWavePainter({
-    required this.waveMin,
-    required this.waveMax,
-    required this.taper,
-    required this.shadow,
-  });
+  /// The top of the scale: the pool's ceiling, 125 %.
+  static const double _max = 125;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = _eraWavePath(size, waveMin, waveMax, taper);
-    canvas.drawPath(path.shift(shadow.offset), Paint()..color = shadow.color);
-    canvas.drawPath(path, Paint()..color = FoE.bg);
+    final w = size.width;
+    final h = size.height;
+    final shape = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(h / 2),
+    );
+    canvas.drawRRect(
+      shape,
+      Paint()..color = Colors.black.withValues(alpha: 0.4),
+    );
+    canvas.save();
+    canvas.clipRRect(shape);
+    final base = percent.clamp(0.0, 100.0) / _max * w;
+    if (base > 0) {
+      final fill = Rect.fromLTWH(0, 0, base, h);
+      canvas.drawRect(
+        fill,
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFD46B), Color(0xFFD9921A)],
+          ).createShader(fill),
+      );
+    }
+    if (percent > 100) {
+      final start = 100 / _max * w;
+      final end = percent.clamp(100.0, _max) / _max * w;
+      final over = Rect.fromLTRB(start, 0, end, h);
+      canvas.drawRect(
+        over,
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFA6ECFF), Color(0xFF2FA9D0)],
+          ).createShader(over),
+      );
+    }
+    // The 100 % mark: where the pool's normal ceiling ends.
+    final mark = 100 / _max * w;
+    canvas.drawRect(
+      Rect.fromLTWH(mark - 0.75, 0, 1.5, h),
+      Paint()..color = Colors.white.withValues(alpha: 0.55),
+    );
+    canvas.restore();
+    canvas.drawRRect(
+      shape.deflate(0.5),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = (empty ? FoE.danger : CreamPalette.gold).withValues(
+          alpha: 0.6,
+        ),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _EraWavePainter old) =>
-      old.waveMin != waveMin ||
-      old.waveMax != waveMax ||
-      old.taper != taper ||
-      old.shadow != shadow;
+  bool shouldRepaint(covariant _EnergyBarPainter old) =>
+      old.percent != percent || old.empty != empty;
 }

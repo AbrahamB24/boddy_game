@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/theme/strategy_theme.dart';
 import '../../settlement/widgets/parchment_sheet.dart';
-import '../../settlement/widgets/scroll_paper.dart'
-    show
-        kActionGreen,
-        kParchmentInk,
-        kParchmentLight,
-        parchmentButton,
-        parchmentButtonInk;
+import '../../../core/theme/cream_kit.dart';
+import '../../settlement/widgets/scroll_paper.dart' show kActionGreen;
 import 'parchment_page.dart';
 import '../../../core/ui/pressable.dart';
 
@@ -56,7 +52,7 @@ class ParchmentDivider extends StatelessWidget {
     padding: const EdgeInsets.symmetric(
       horizontal: ParchmentPage.kParchmentPagePad,
     ),
-    child: Container(height: 2, color: FoE.border),
+    child: Container(height: 2, color: Strategy.tan.withValues(alpha: 0.5)),
   );
 }
 
@@ -89,23 +85,22 @@ class ParchmentSectionHeader extends StatelessWidget {
       children: [
         Text(
           title.toUpperCase(),
-          style: FoE.label(size: 11).copyWith(
-            color: kAccent,
-            letterSpacing: 1.2,
-          ),
+          style: FoE.label(
+            size: 11,
+          ).copyWith(color: kAccent, letterSpacing: 1.2),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Container(height: 1, color: kParchmentInk.withValues(alpha: 0.18)),
+          child: Container(
+            height: 1,
+            color: Strategy.tan.withValues(alpha: 0.55),
+          ),
         ),
         if (hint != null) ...[
           const SizedBox(width: 10),
           Text(hint!, style: FoE.dim(size: 10).copyWith(color: kInkFaint)),
         ],
-        if (trailing != null) ...[
-          const SizedBox(width: 6),
-          trailing!,
-        ],
+        if (trailing != null) ...[const SizedBox(width: 6), trailing!],
       ],
     ),
   );
@@ -163,16 +158,13 @@ class ParchmentInfoButton extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: kAccent.withValues(alpha: 0.6)),
       ),
-      child: Text(
-        'i',
-        style: FoE.label(size: 11).copyWith(color: kAccent),
-      ),
+      child: Text('i', style: FoE.label(size: 11).copyWith(color: kAccent)),
     ),
   );
 }
 
-/// A card on the paper: the shallow recess the building dialog and the breeding
-/// screen use, with an optional accent border for the one that wants attention.
+/// A card on the paper: the light raised tile of the building-dialog template,
+/// with a gold rim for the one that wants attention.
 class ParchmentCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
@@ -202,12 +194,7 @@ class ParchmentCard extends StatelessWidget {
       child: Container(
         width: double.infinity,
         padding: padding,
-        decoration: ShapeDecoration(color: highlight
-              ? kAccent.withValues(alpha: 0.12)
-              : kParchmentInk.withValues(alpha: 0.06), shape: FoE.facet(radius: 10, side: BorderSide(color: highlight
-                ? kAccent.withValues(alpha: 0.55)
-                : kParchmentInk.withValues(alpha: 0.18),
-            width: highlight ? 1.4 : 1))),
+        decoration: raisedTile(lit: highlight),
         child: child,
       ),
     );
@@ -251,41 +238,45 @@ class ParchmentButton extends StatelessWidget {
 
   bool get _enabled => onTap != null;
 
+  // Strategy-HUD button (2026-09-18): every ParchmentButton in the app is a
+  // chunky bevelled button now — gold for the primary action, coral for the
+  // destructive one, panel-blue otherwise; a null [onTap] greys it out.
   @override
   Widget build(BuildContext context) {
-    final ink = danger
-        ? (_enabled ? const Color(0xFF9B3B22) : kInkFaint)
-        : parchmentButtonInk(active: primary && _enabled);
-    return Pressable(
+    final fill = danger
+        ? Strategy.coral
+        : primary
+        ? Strategy.gold
+        : Strategy.tan;
+    final ink = strategyTextOn(fill);
+    return ChunkyButton(
       onTap: onTap,
-      child: Opacity(
-        opacity: _enabled ? 1 : 0.5,
-        child: Container(
-          width: expand ? double.infinity : null,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-          alignment: Alignment.center,
-          decoration: parchmentButton(active: primary && _enabled),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: FoE.label(size: 13).copyWith(color: ink),
-              ),
-              if (sub != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  sub!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: FoE.dim(size: 10).copyWith(color: ink),
-                ),
-              ],
-            ],
+      fill: fill,
+      expand: expand,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: FoE.label(
+              size: 13,
+            ).copyWith(color: _enabled ? ink : kBoxInkFaint),
           ),
-        ),
+          if (sub != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              sub!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: FoE.dim(
+                size: 10,
+              ).copyWith(color: _enabled ? ink : kBoxInkFaint),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -302,19 +293,20 @@ class ParchmentHeaderChip extends StatelessWidget {
   /// Marks the count as spent — nothing left, everything busy.
   final bool alert;
 
-  const ParchmentHeaderChip({super.key, required this.text, this.alert = false});
+  const ParchmentHeaderChip({
+    super.key,
+    required this.text,
+    this.alert = false,
+  });
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 6),
     child: Text(
       text,
-      style: FoE.value(size: 12).copyWith(
-        color: alert
-            ? const Color(0xFF9B3B22)
-            : ParchmentHeader.engravedInk,
-        shadows: ParchmentHeader.engraved(depth: 1),
-      ),
+      style: FoE.value(
+        size: 12,
+      ).copyWith(color: alert ? const Color(0xFF9B3B22) : kBoxInk),
     ),
   );
 }
@@ -338,10 +330,7 @@ class ParchmentFact extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.end,
     mainAxisSize: MainAxisSize.min,
     children: [
-      Text(
-        value,
-        style: FoE.value(size: 14).copyWith(color: color ?? kInk),
-      ),
+      Text(value, style: FoE.value(size: 14).copyWith(color: color ?? kInk)),
       Text(label, style: FoE.dim(size: 9).copyWith(color: kInkFaint)),
     ],
   );
@@ -364,50 +353,46 @@ Future<bool> parchmentConfirm(
     context: context,
     builder: (dctx) => Dialog(
       backgroundColor: Colors.transparent,
-      child: Container(
-        width: 300,
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-        decoration: ShapeDecoration(
-          color: kParchmentLight,
-          shadows: FoE.drop(), // stands off the page it interrupts
-          shape: FoE.facet(
-            radius: 16,
-            side: BorderSide(color: kParchmentInk.withValues(alpha: 0.25)),
+      elevation: 0,
+      child: SizedBox(
+        width: 320,
+        // The template's card, with a flat heading (user 2026-09-18).
+        child: creamCard(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CreamHeading(title: title),
+              const SizedBox(height: 10),
+              Text(
+                message,
+                style: FoE.label(size: 12).copyWith(color: kInkSoft),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ParchmentButton(
+                      label: cancelLabel,
+                      expand: true,
+                      onTap: () => Navigator.pop(dctx, false),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ParchmentButton(
+                      label: confirmLabel,
+                      expand: true,
+                      danger: danger,
+                      primary: !danger,
+                      onTap: () => Navigator.pop(dctx, true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: FoE.title(size: 16).copyWith(color: kInk)),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              style: FoE.label(size: 12).copyWith(color: kInkSoft),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: ParchmentButton(
-                    label: cancelLabel,
-                    expand: true,
-                    onTap: () => Navigator.pop(dctx, false),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ParchmentButton(
-                    label: confirmLabel,
-                    expand: true,
-                    danger: danger,
-                    primary: !danger,
-                    onTap: () => Navigator.pop(dctx, true),
-                  ),
-                ),
-              ],
-            ),
-          ],
         ),
       ),
     ),

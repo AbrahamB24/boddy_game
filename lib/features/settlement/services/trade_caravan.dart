@@ -78,8 +78,7 @@ double tradeCapacity(
   String resource,
   List<CreatureInstance> members, {
   double carryMult = 1.0,
-}) =>
-    gatherDefFor(resource).loadCap(caravanCarry(members)) * carryMult;
+}) => gatherDefFor(resource).loadCap(caravanCarry(members)) * carryMult;
 
 /// The most of [resource] this caravan may take on, given the [available]
 /// stock. Floors to whole units — a caravan can't carry 3.7 fish.

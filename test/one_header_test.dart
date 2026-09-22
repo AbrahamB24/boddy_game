@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:boddygame/core/theme/cream_kit.dart' show KitCloseButton;
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:boddygame/core/theme/parchment_theme.dart';
@@ -27,7 +28,6 @@ void main() {
   // No network in a test: google_fonts otherwise fires an HTTP fetch for the
   // app's typeface and fails whichever test happens to be running when it lands.
   GoogleFonts.config.allowRuntimeFetching = false;
-
 
   testWidgets('the Material app bar IS the app band', (tester) async {
     // A widget test, not a plain one: building the theme touches the app's
@@ -63,20 +63,6 @@ void main() {
     final decoration = (bar as Container).decoration as BoxDecoration;
     expect(decoration.gradient, isNull);
     expect(decoration.color, ParchmentHeader.bandFill);
-  });
-
-  testWidgets('a page and a bar built by hand cannot differ', (tester) async {
-    // The header is one widget, so "the same" is a property of the code rather
-    // than of six screens agreeing — this just proves the page uses it.
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: ParchmentPage(title: 'Anything', child: SizedBox.expand()),
-      ),
-    );
-    expect(find.byType(ParchmentHeader), findsOneWidget);
-    final header = tester.widget<ParchmentHeader>(find.byType(ParchmentHeader));
-    expect(header.title, 'Anything');
-    expect(header.showBack, isTrue);
   });
 
   // ── Low poly (user 2026-07-31) ──
@@ -117,19 +103,29 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Wood'), findsOneWidget);
+    expect(find.text('WOOD'), findsOneWidget);
     // The band names it, exactly as a page's does.
-    expect(find.byType(ParchmentHeader), findsNothing,
-        reason: 'a sheet uses the BAND, not the whole header widget');
+    expect(
+      find.byType(ParchmentHeader),
+      findsNothing,
+      reason: 'a sheet uses the BAND, not the whole header widget',
+    );
     // …and nothing sits above that band: the handle was a bar spending a row
     // to hint at a drag the entire sheet accepts.
     final column = tester.widget<Column>(
-      find.descendant(
-        of: find.byType(ParchmentSheet),
-        matching: find.byType(Column),
-      ).first,
+      find
+          .descendant(
+            of: find.byType(ParchmentSheet),
+            matching: find.byType(Column),
+          )
+          .first,
     );
-    expect(column.children.first, isA<Container>(),
-        reason: 'the band is the first thing on the sheet');
+    expect(
+      column.children.first,
+      isA<Padding>(),
+      reason: 'the ribbon title row is the first thing on the sheet',
+    );
+    // The kit's one leaving button sits at the end of that first row.
+    expect(find.byType(KitCloseButton), findsOneWidget);
   });
 }

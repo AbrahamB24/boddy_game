@@ -1,323 +1,225 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/cream_kit.dart' show CreamPalette;
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../models/creature_enums.dart';
 import '../models/creature_instance.dart';
-import '../models/species_def.dart';
 import '../services/creature_power.dart';
 import 'creature_backdrop.dart';
+import 'creature_family.dart' show CreatureFigure, creatureHpColor;
 import 'creature_sprite.dart';
-import 'xp_arc.dart';
-import '../../common/widgets/recess_bar.dart';
 
-/// A monster tile styled like a trading card (user 2026-07-17): a big image
-/// that POPS OUT the top (~20% of the art overflows above the tile), a
-/// borderless, strongly-rounded tile with the ELEMENT backdrop, and the key
-/// data (name, HP, level, power) in a RARITY-coloured strip along the bottom.
+/// One extra figure a screen wants on the tile — the stat this seat or trip is
+/// judged on, the level-1 power a breeding parent passes on. It hangs from the
+/// tile as a small flag in the free part above the foot; up to three fit.
+class TileValue {
+  final String label;
+  final Object value;
+
+  const TileValue(this.label, this.value);
+}
+
+/// The monster tile (user 2026-09-19, "Variante 9, Werte-Fahnen" of the second
+/// round): an element-coloured FOOT carrying everything a monster is —
+/// name and gender, level and power, rarity — with the HP bar as an edge along
+/// its bottom, and the monster standing half in the foot and half FREE above
+/// it, big, its feet resting just over the name.
 ///
-/// Shared by the Monsters screen and the Bestiary (user 2026-07-18) so both use
-/// the exact same tile. The Bestiary uses [CreatureCard.shrouded] for
-/// undiscovered species: the same shape, but a dark tile with a black
-/// silhouette and every detail hidden.
+/// The foot never changes between screens. What a particular screen adds
+/// (the stat a work post reads, the mining figure of an expedition, the
+/// level-1 power in Breeding) goes in [extras], as flags in the free upper
+/// right — so the tile keeps one shape and one place for everything, and a
+/// screen without extras shows a calm tile.
+///
+/// Shared by the Monsters screen, the Bestiary, teams, breeding, the pickers
+/// and the market. The Bestiary uses [CreatureCard.shrouded] for undiscovered
+/// species: the same shape, a dark foot, a black silhouette and "???" — every
+/// detail hidden.
 class CreatureCard extends StatelessWidget {
   final CreatureInstance? creature;
   final String? shroudImageUrl;
   final bool shrouded;
   final VoidCallback? onTap;
 
-  /// The VITALS: the XP arc under the monster's feet and the HP bar in the
-  /// strip. XP defaults OFF everywhere now (user 2026-08-28: "Der EP Balken
-  /// kann entfernt werden" — the small arc at the feet, not the HP bar) —
-  /// no caller had ever asked for it on. Kept as a flag rather than deleted
-  /// outright in case a screen wants it back.
-  final bool showXp;
+  /// The HP bar along the foot's bottom edge. Off where health is beside the
+  /// point (Breeding picks a parent on its genes, not its wounds).
   final bool showHp;
 
-  /// Adds the power at LEVEL 1 under the top-right power readout, small — the
-  /// breeding screen's reading (user 2026-07-27). A parent passes on its genes,
-  /// not its levels, so there the level-1 figure is worth seeing next to the
-  /// current one.
-  final bool showLevelOnePower;
-
-  /// Replaces the VITALS row (the HP bar + gender glyph) with a different
-  /// reading — for the work-post picker, where the number that decides who
-  /// belongs in a seat is the STAT this post reads, not health (user
-  /// 2026-08-31: "anstelle des Lebensbalkens und dem Geschlecht den
-  /// entsprechenden Wert anzeigen. Dafür oben rechts weiterhin die Power
-  /// Anzeige und die Rarität"). Power and rarity stay in the top-right
-  /// corner either way — that corner answers "how strong", which does not
-  /// change just because the bottom row is asking a different question.
-  final String? vitalsLabel;
-  final int? vitalsValue;
+  /// Up to three extra figures, as flags at the top right.
+  final List<TileValue> extras;
 
   const CreatureCard({
     super.key,
     required CreatureInstance this.creature,
     this.onTap,
-    this.showXp = false,
     this.showHp = true,
-    this.showLevelOnePower = false,
-    this.vitalsLabel,
-    this.vitalsValue,
+    this.extras = const [],
   }) : shrouded = false,
        shroudImageUrl = null;
 
   const CreatureCard.shrouded({super.key, this.shroudImageUrl, this.onTap})
     : shrouded = true,
       creature = null,
-      // An undiscovered species shows no data at all — the flags are moot.
-      showXp = false,
       showHp = false,
-      showLevelOnePower = false,
-      vitalsLabel = null,
-      vitalsValue = null;
+      extras = const [];
+
+  // The tile's geometry, from the design: everything below the foot's top edge
+  // is anchored to the BOTTOM, so the text keeps its place whatever height the
+  // grid gives the tile; the foot's top and the monster follow from it.
+  static const double _barH = 9;
+  // The text zone, tight (user 2026-09-20: "level, energie, name und Geschlecht
+  // weiter nach unten, dafür das Asset grösser") — the three lines (16 + 14 + 12)
+  // now sit almost touching, and every pixel this gives up goes to the monster,
+  // whose box ends where the text begins.
+  static const double _zoneH = 44;
+  static const double _footTopFraction = 0.347;
+  static const double _monsterOverhang = 0.10; // of the width, each side
+  static const double _monsterTop = -12;
+  static const double _flagH = 16;
+  static const double _flagStep = 19;
+  static const int _maxExtras = 3;
 
   @override
   Widget build(BuildContext context) {
     final inst = creature;
-    final ko = shrouded ? false : inst!.isKo;
-    final imageUrl = shrouded ? shroudImageUrl : inst!.imageUrl;
-    // ONE TILE, ONE COLOUR — THE TYPE'S (user 2026-07-27: "mache den
-    // Hintergrund einmal komplett in der Farbe des Typs und entferne die
-    // Seltenheitsstufe").
-    //
-    // The tile used to be two colours meeting at a seam: the element behind the
-    // art, the RARITY behind the name. Two hues on an object this small fought
-    // each other, and the rarity half was the louder of the two — a fire
-    // monster on a purple plinth read as purple. Rarity has its own homes (the
-    // Bestiary, the detail screen, the breeding tables); it does not need to
-    // repaint half of every tile.
-    //
-    // The strip is now the SAME element colour carried on past where the
-    // backdrop's diagonal gradient ends (element + 20 % black at its bottom-
-    // right corner), just deeper — so the seam reads as the same surface
-    // turning into shade rather than as a join between two materials.
-    //
-    // A shrouded tile has no type to show, so it stays neutral grey.
+    final ko = inst?.isKo ?? false;
+    final species = inst?.species;
     final element = shrouded
         ? FoE.textMuted
-        : (inst!.species?.element.color ?? FoE.borderGold);
-    final stripLight = Color.lerp(element, Colors.black, 0.30)!;
-    final stripDark = Color.lerp(element, Colors.black, 0.46)!;
-    // The sprite's drop shadow uses the element's own shadow tone — the same
-    // colour its type icon is embossed with (user request). Only read for
-    // discovered tiles; a shrouded one draws a flat silhouette instead.
-    final elementShadow =
-        (inst?.species?.element ?? CreatureElement.fire).shadowColor;
+        : (species?.element.color ?? FoE.borderGold);
 
     return Pressable(
-      // THE WHOLE CELL TAKES THE TAP (user 2026-07-27: the Market's ✕ did not
-      // remove a hauler).
-      //
-      // Without this the default is `deferToChild`, and a GestureDetector then
-      // hit-tests only what its child actually PAINTS. This tile deliberately
-      // leaves its top ~17 % empty for the art to pop into, so every tap in
-      // that band fell through — including one on the Market's ✕ badge, which
-      // sits exactly there and is the one part of the card that looks like a
-      // button. [EggCard] documents the same trap; the tiles simply never had
-      // an affordance up there before.
+      // THE WHOLE CELL TAKES THE TAP (user 2026-07-27): the top of the tile is
+      // empty on purpose, and a GestureDetector only hit-tests what its child
+      // paints, so without this every tap up there fell through — including one
+      // on the Market's ✕ badge, which sits exactly there. [EggCard] documents
+      // the same trap.
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: LayoutBuilder(
         builder: (context, c) {
-          // 54, not 52 (2026-07-27): the rebuilt strip is a name line (14 px
-          // at height 1.4 = 20) over a state line (15), and at 52 the column
-          // overflowed by exactly 1 px. Two more give it real slack, so a font
-          // fallback with different metrics cannot bring the overflow back —
-          // pixel-tuning the padding to fit exactly would have been a trap.
-          const stripH = 54.0;
-          // Reserve room at the top of the cell for the art to pop into, so it
-          // overflows the TILE (not the neighbouring cell). Kept small (user
-          // 2026-07-18) so the square-sprite pop-out stays ~20px while rows
-          // sit close.
-          final topReserve = c.maxHeight * 0.17;
-          final imgH = c.maxHeight - stripH; // art spans cell-top → strip-top
-          final artAreaH = (imgH - topReserve).clamp(0.0, double.infinity);
+          final w = c.maxWidth;
+          final h = c.maxHeight;
+          final footTop = h * _footTopFraction;
+          final zoneTop = h - _barH - _zoneH;
           return Stack(
+            // The monster's head, the flags and the foot's shadow all reach past
+            // the cell; the grid's gaps and padding are the room they use.
+            clipBehavior: Clip.none,
             children: [
-              // Borderless, strongly-rounded tile: element backdrop + strip,
-              // starting BELOW the reserved pop-out space.
+              // The foot: the element's backdrop (with its symbol at the top),
+              // shade toward the bottom for the text, the text, the HP edge.
               Positioned(
-                top: topReserve,
+                top: footTop,
                 left: 0,
                 right: 0,
                 bottom: 0,
                 child: Container(
                   clipBehavior: Clip.antiAlias,
-                  decoration: ShapeDecoration(color: stripDark, shape: FoE.facet(radius: 22)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  decoration: ShapeDecoration(
+                    color: Color.lerp(element, Colors.black, 0.36),
+                    shape: FoE.facet(radius: 20),
+                    shadows: const [
+                      BoxShadow(color: Color(0x4D000000), offset: Offset(0, 3)),
+                    ],
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Expanded(
-                        child: shrouded
-                            // A shrouded tile hides its type: a plain dark area,
-                            // no element backdrop.
-                            ? const ColoredBox(color: FoE.bg)
-                            : _backdrop(
-                                inst!.species,
-                                const SizedBox.expand(),
-                                radius: 0,
-                              ),
-                      ),
-                      SizedBox(
-                        height: stripH,
-                        // The type's colour, deepening from the seam DOWNWARD
-                        // (user 2026-07-27) — the backdrop's own gradient runs
-                        // top-left light to bottom-right dark, and this picks
-                        // up where it stops so the two read as one surface.
+                      if (shrouded)
+                        const ColoredBox(color: FoE.bg)
+                      else if (species != null)
+                        CreatureBackdrop(
+                          element: species.element,
+                          radius: 0,
+                          watermarkTop: true,
+                          child: const SizedBox.expand(),
+                        )
+                      else
+                        ColoredBox(color: element),
+                      const Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: _zoneH + _barH + 10,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
-                              colors: [stripLight, stripDark],
+                              colors: [Color(0x00000000), Color(0x59000000)],
                             ),
                           ),
-                          child:
-                              shrouded ? _shroudStrip() : _cardStrip(inst!),
                         ),
                       ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: _barH,
+                        height: _zoneH,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 7),
+                          child: shrouded ? _shroudText() : _text(inst!),
+                        ),
+                      ),
+                      if (!shrouded && showHp)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          height: _barH,
+                          child: _hpEdge(inst!),
+                        ),
                     ],
                   ),
                 ),
               ),
-              // Power (top-right) over the element area — drawn BEFORE the art
-              // so the monster overlaps it (user 2026-07-18). Always power +
-              // rarity, whatever the vitals row below is showing (user
-              // 2026-08-31) — this corner answers "how strong", a question
-              // that does not change with the bottom row's.
-              if (!shrouded)
-                Positioned(
-                  top: topReserve + 6,
-                  right: 8,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '⚡${totalPower(inst!)}',
-                        style: FoE.value(size: showLevelOnePower ? 14 : 11)
-                            .copyWith(
-                          color: Colors.white,
-                          shadows: _stripShadow,
-                        ),
-                      ),
-                      // The genes, small, under the current power (user
-                      // 2026-07-27): the big number stays the one every other
-                      // screen shows. Only meaningful next to POWER.
-                      if (showLevelOnePower)
-                        Text(
-                          // "lv", not "lvl" (user 2026-07-29).
-                          'lv 1  ${levelOnePower(inst)}',
-                          style: FoE.dim(size: 10).copyWith(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            shadows: _stripShadow,
-                          ),
-                        ),
-                      // THE RARITY, UNDER THE ENERGY (user 2026-07-27:
-                      // "schreibe die Seltenheit unter die Energie").
-                      //
-                      // It left the tile when the strip became one type colour,
-                      // and a monster's rarity is worth knowing at a glance —
-                      // so it comes back as a WORD rather than as paint. In its
-                      // own colour, lightened so it holds against any element
-                      // backdrop, and small: it is a label on the power block,
-                      // not a second headline.
-                      if (inst.species case final sp?)
-                        Text(
-                          sp.rarity.label,
-                          style: FoE.dim(size: 9).copyWith(
-                            color: Color.lerp(
-                              sp.rarity.color,
-                              Colors.white,
-                              0.35,
-                            ),
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.3,
-                            shadows: _stripShadow,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              // The monster art — bottom-aligned so its feet sit at the strip
-              // and its top overflows above the tile.
+              // The monster: bigger than the tile is wide, feet just over the
+              // name, its top half free of any backdrop.
               Positioned(
-                top: 0,
-                left: 4,
-                right: 4,
-                height: imgH,
+                top: _monsterTop,
+                left: -w * _monsterOverhang,
+                right: -w * _monsterOverhang,
+                bottom: h - zoneTop - 2,
                 child: IgnorePointer(
                   child: Opacity(
                     opacity: ko ? 0.35 : 1,
-                    // A taller box (user 2026-08-28) doesn't by itself grow
-                    // a sprite that BoxFit.contain was already fitting by
-                    // WIDTH rather than height — same lesson as the battle
-                    // arena's own sprites. A flat zoom grows the art
-                    // regardless of which side the fit was bound by.
-                    //
-                    // 20%, not 15% (user 2026-08-28, same day: "die Monster
-                    // allgemein um 20% grösser machen"), and anchored at
-                    // CENTRE rather than the bottom now — bottomCenter grew
-                    // the art keeping the feet fixed and put the WHOLE 20%
-                    // into the head, which is what "das Monster ist zu hoch"
-                    // was about: it pushed further into the tile's pop-out
-                    // allowance than the tile has room for. Centring splits
-                    // the growth, so the head rises by half as much for the
-                    // same size increase.
-                    child: Transform.scale(
-                      scale: shrouded ? 1.0 : 1.20,
-                      alignment: Alignment.center,
-                      child: shrouded
-                          ? _silhouette(imageUrl)
-                          : Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                // Drop shadow behind the sprite — its
-                                // silhouette in the element's shadow tone
-                                // (matching its type icon), blurred + nudged
-                                // down.
-                                Positioned.fill(
-                                  child: _creatureShadow(
-                                    imageUrl,
-                                    elementShadow,
-                                  ),
-                                ),
-                                Positioned.fill(
-                                  child: _creatureImage(
-                                    imageUrl,
-                                    alignment: Alignment.bottomCenter,
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
+                    child: shrouded
+                        ? _silhouette(shroudImageUrl)
+                        // Half the monster stands on bare paper, so its drop
+                        // shadow — the silhouette in the element's shadow tone —
+                        // is what keeps a pale one from vanishing there. The
+                        // figure is shared with every avatar (creature_family).
+                        : CreatureFigure(
+                            imageUrl: inst!.imageUrl,
+                            element: species?.element ?? CreatureElement.fire,
+                          ),
                   ),
                 ),
               ),
-              // Treatment / K.O. badge centred on the visible art area.
+              // Extra figures, as flags in the free upper right.
+              if (!shrouded)
+                for (var i = 0; i < extras.length && i < _maxExtras; i++)
+                  Positioned(
+                    top: 6 + i * _flagStep,
+                    right: -5,
+                    child: _flag(extras[i]),
+                  ),
+              // Treatment / K.O. badge, over the middle of the monster.
               if (!shrouded && (inst!.isHealing || ko))
                 Positioned(
-                  top: topReserve + artAreaH * 0.42,
+                  top: h * 0.4,
                   left: 0,
                   right: 0,
                   child: Center(
                     child: inst.isHealing
-                        ? _badge('🩹 ${_fmtShort(inst.healingRemaining)}',
-                            FoE.accentBlue)
+                        ? _badge(
+                            '🩹 ${_fmtShort(inst.healingRemaining)}',
+                            FoE.accentBlue,
+                          )
                         : _badge('K.O.', FoE.danger),
                   ),
-                ),
-              // The XP indicator: an open-topped arc "bowl" under the monster's
-              // feet at the seam — the SAME as the detail screen (user
-              // 2026-07-24), replacing the old thin seam line.
-              if (!shrouded && showXp)
-                Positioned(
-                  left: c.maxWidth * 0.12,
-                  right: c.maxWidth * 0.12,
-                  top: (c.maxHeight - stripH) - 18,
-                  height: 24,
-                  child: IgnorePointer(child: _xpArc(inst!)),
                 ),
             ],
           );
@@ -326,23 +228,241 @@ class CreatureCard extends StatelessWidget {
     );
   }
 
-  /// The undiscovered strip: just a muted "???" — no name, level or HP.
-  ///
-  /// Light ink like the discovered strip's (2026-07-27): a shrouded tile's
-  /// strip is a dark neutral grey, and FoE.textDim is a faded brown INK made
-  /// for paper.
-  Widget _shroudStrip() => Center(
-    child: Text(
-      '???',
-      style: FoE.label(size: 14).copyWith(
-        color: Colors.white.withValues(alpha: 0.55),
-        fontWeight: FontWeight.w800,
-        letterSpacing: 2,
+  // ── The foot's text ───────────────────────────────────────────────────
+
+  /// Name and gender centred (the evolve arrow behind them), then level and
+  /// power on one line, then the rarity between two hairlines.
+  Widget _text(CreatureInstance inst) {
+    final rarity = inst.species?.rarity;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _nameRow(inst),
+        SizedBox(
+          height: 14,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Each side scales down rather than overflowing if a font runs wide.
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'Lv ${inst.level}',
+                    style: FoE.value(size: 11).copyWith(
+                      color: _ink.withValues(alpha: 0.9),
+                      shadows: _shadowLine,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '⚡${totalPower(inst)}',
+                    style: FoE.value(
+                      size: 11,
+                    ).copyWith(color: _ink, shadows: _shadowLine),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 12,
+          child: rarity == null
+              ? null
+              // The word sits at its own width, capped, and the two hairlines
+              // share what is left EQUALLY (user 2026-09-22: "die Seltenheit ist
+              // nicht mittig"). The word used to be a loose Flexible next to two
+              // Expanded hairlines: it took less than its share and the unused
+              // room piled up on the right, so a short word ("EPIC") sat left of
+              // centre.
+              : LayoutBuilder(
+                  builder: (context, box) => Row(
+                    children: [
+                      Expanded(child: _hairline),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: box.maxWidth * 0.72,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              rarity.label.toUpperCase(),
+                              maxLines: 1,
+                              style: FoE.dim(size: 8.5).copyWith(
+                                color: Color.lerp(
+                                  rarity.color,
+                                  Colors.white,
+                                  0.45,
+                                ),
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.0,
+                                shadows: _shadowLine,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(child: _hairline),
+                    ],
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _nameRow(CreatureInstance inst) => SizedBox(
+    height: 16,
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Flexible(
+          child: Text(
+            inst.displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: FoE.label(size: 13).copyWith(
+              color: _ink,
+              fontWeight: FontWeight.w700,
+              shadows: _shadowLine,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          inst.gender.symbol,
+          style: TextStyle(
+            color: Color.lerp(inst.gender.color, Colors.white, 0.45),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            height: 1.0,
+            shadows: _shadowLine,
+          ),
+        ),
+        if (inst.canEvolve) ...[
+          const SizedBox(width: 4),
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: CreamPalette.better,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 1),
+            ),
+            child: const Icon(Icons.arrow_upward, size: 8, color: Colors.white),
+          ),
+        ],
+      ],
+    ),
+  );
+
+  /// The undiscovered foot: just "???" where the name would be.
+  Widget _shroudText() => Align(
+    alignment: Alignment.topCenter,
+    child: SizedBox(
+      height: 16,
+      child: Text(
+        '???',
+        style: FoE.label(size: 13).copyWith(
+          color: Colors.white.withValues(alpha: 0.55),
+          fontWeight: FontWeight.w800,
+          letterSpacing: 2,
+        ),
       ),
     ),
   );
 
-  /// The sprite as a near-black silhouette for undiscovered species.
+  static const Color _ink = Colors.white;
+  static const List<Shadow> _shadowLine = [
+    Shadow(color: Color(0x66000000), blurRadius: 0, offset: Offset(0, 1)),
+  ];
+  static final Widget _hairline = Container(
+    height: 1,
+    color: Colors.white.withValues(alpha: 0.3),
+  );
+
+  // ── HP edge, flags, badge ─────────────────────────────────────────────
+
+  /// HP as the foot's bottom edge (from the first round's variant 5): a dark
+  /// track and a bar, full width. Colour is the signal — coral is "this one
+  /// will go down in the next fight", not only K.O.
+  Widget _hpEdge(CreatureInstance c) {
+    final fraction = c.maxHp <= 0 ? 0.0 : (c.hp / c.maxHp).clamp(0.0, 1.0);
+    final color = creatureHpColor(fraction);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ColoredBox(color: Color(0x59000000)),
+        FractionallySizedBox(
+          alignment: Alignment.centerLeft,
+          widthFactor: fraction,
+          child: ColoredBox(color: color),
+        ),
+      ],
+    );
+  }
+
+  Widget _flag(TileValue v) => Container(
+    height: _flagH,
+    padding: const EdgeInsets.fromLTRB(8, 0, 7, 0),
+    decoration: BoxDecoration(
+      color: const Color(0xD62A1A0C),
+      borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+      border: Border(left: _flagEdge, top: _flagEdge, bottom: _flagEdge),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          v.label.toUpperCase(),
+          maxLines: 1,
+          style: FoE.dim(size: 7).copyWith(
+            color: Colors.white.withValues(alpha: 0.7),
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '${v.value}',
+          maxLines: 1,
+          style: FoE.value(size: 9).copyWith(color: Colors.white),
+        ),
+      ],
+    ),
+  );
+
+  static final BorderSide _flagEdge = BorderSide(
+    color: const Color(0xFFF5B83A).withValues(alpha: 0.45),
+  );
+
+  Widget _badge(String label, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: ShapeDecoration(color: color, shape: FoE.facet(radius: 6)),
+    child: Text(
+      label,
+      style: FoE.title(size: 11).copyWith(color: Colors.white),
+    ),
+  );
+
+  static String _fmtShort(Duration d) =>
+      d.inHours > 0 ? '${d.inHours}h ${d.inMinutes % 60}m' : '${d.inMinutes}m';
+
+  // ── The sprite ────────────────────────────────────────────────────────
+
+  /// The undiscovered species as a near-black silhouette.
   Widget _silhouette(String? url) => url == null
       ? const Center(child: Icon(Icons.pets, color: Colors.black87, size: 40))
       : ColorFiltered(
@@ -354,235 +474,8 @@ class CreatureCard extends StatelessWidget {
             url: url,
             alignment: Alignment.bottomCenter,
             fallback: const Center(
-                child: Icon(Icons.pets, color: Colors.black87, size: 40)),
-          ),
-        );
-
-  /// The XP indicator: the open-topped arc "bowl" under the monster's feet — the
-  /// same [XpArcPainter] the detail screen uses, so the two read identically.
-  Widget _xpArc(CreatureInstance creature) {
-    final atMax = creature.level >= kCreatureMaxLevel;
-    final need = atMax ? 1 : xpToNextLevel(creature.level);
-    final frac = atMax ? 1.0 : (creature.xp / need).clamp(0.0, 1.0);
-    return CustomPaint(painter: XpArcPainter(frac, stroke: 3, dotRadius: 3.5));
-  }
-
-  /// THE BOTTOM STRIP, REBUILT (user 2026-07-27: "gestalte den unteren Teil
-  /// der Monsterkachel neu").
-  ///
-  /// It was a name with "Lv 4" as plain text beside it and a hairline HP bar
-  /// running edge to edge underneath — which read as the tile's bottom border
-  /// rather than as a gauge. The gender, meanwhile, floated over the artwork
-  /// just above the seam, where it collided with the sprite's feet and the XP
-  /// bowl.
-  ///
-  /// Now it is two lines with one job each:
-  ///
-  ///   NAME   the thing you are looking for, on its own line, with the evolve
-  ///          arrow beside it and the level as a BADGE rather than as text —
-  ///          a number that means something different from the name should not
-  ///          look like more of the name.
-  ///   STATE  the HP gauge, inset from the edges so it reads as a bar, with
-  ///          the gender at its end. Both are facts about the monster's
-  ///          condition, so they share a line.
-  Widget _cardStrip(CreatureInstance creature) => Padding(
-    padding: const EdgeInsets.fromLTRB(9, 5, 9, 6),
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Expanded(
-              child: Text(
-                creature.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: FoE.label(size: 13).copyWith(
-                  color: _stripInk,
-                  fontWeight: FontWeight.w700,
-                  shadows: _stripShadow,
-                ),
-              ),
-            ),
-            if (creature.canEvolve)
-              Padding(
-                padding: const EdgeInsets.only(left: 3),
-                child: Icon(Icons.upgrade, color: _stripInk, size: 14),
-              ),
-            const SizedBox(width: 5),
-            // NO BOX (user 2026-07-27: "bei lvl will ich keine Box"). The badge
-            // was a dark plate punched into the strip — it did its job of
-            // separating the number from the name, but on a strip that is now
-            // one saturated colour it read as a hole in the surface. Weight and
-            // opacity do the same separating without cutting anything out.
-            Text(
-              'Lv ${creature.level}',
-              style: FoE.value(size: 10).copyWith(
-                color: _stripInkSoft,
-                shadows: _stripShadow,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          // [vitalsValue] replaces BOTH the HP bar and the gender glyph
-          // (user 2026-08-31) — a work post cares about the stat it reads,
-          // not the monster's health or sex, so the row states that instead
-          // of squeezing a third thing in beside them.
-          children: vitalsValue != null
-              ? [Expanded(child: _vitalsOverride())]
-              : [
-                  if (showHp)
-                    Expanded(child: _hpBar(creature))
-                  else
-                    const Spacer(),
-                  const SizedBox(width: 6),
-                  _genderTag(creature.gender),
-                ],
-        ),
-      ],
-    ),
-  );
-
-  // ── Ink on the type-coloured strip (user 2026-07-27) ──────────────────
-  // The strip carries the monster's own type colour now, so it can be anything
-  // from a pale plant green to a deep shadow purple. FoE.parchment is the app's
-  // dark brown INK — right on paper, unreadable on a saturated colour, which is
-  // what it had become here.
-  //
-  // White with a soft dark shadow is the one pair that holds on all of them:
-  // the shadow is what keeps it legible on the LIGHT elements, where white
-  // alone would wash out.
-  static const Color _stripInk = Colors.white;
-  static final Color _stripInkSoft = Colors.white.withValues(alpha: 0.82);
-  static const List<Shadow> _stripShadow = [
-    Shadow(color: Color(0x66000000), blurRadius: 0, offset: Offset(0, 1)),
-  ];
-
-  /// Gender as a small disc in the strip, beside the HP gauge. It used to be a
-  /// bare glyph floating over the artwork, where it fought the sprite behind
-  /// it.
-  ///
-  /// JUST THE GLYPH, BIGGER (user 2026-07-27: "bei dem Geschlechtssymbol bitte
-  /// keinen Kreis als Hintergrund, dafür das Symbol etwas grösser machen").
-  ///
-  /// It sat on a near-white disc, which was one way to make pink-on-red and
-  /// blue-on-blue survive a strip in the monster's own type colour. At 16 px
-  /// with the strip's own drop shadow the glyph carries itself, and the colour
-  /// is lifted a fifth of the way to white so it stays a ♂/♀ rather than a
-  /// smudge on the darker elements.
-  Widget _genderTag(CreatureGender gender) => Text(
-    gender.symbol,
-    style: TextStyle(
-      color: Color.lerp(gender.color, Colors.white, 0.2),
-      fontSize: 16,
-      fontWeight: FontWeight.bold,
-      height: 1.0,
-      shadows: _stripShadow,
-    ),
-  );
-
-  Widget _badge(String label, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: ShapeDecoration(color: color, shape: FoE.facet(radius: 6)),
-    child: Text(label, style: FoE.title(size: 11).copyWith(color: Colors.white)),
-  );
-
-  static String _fmtShort(Duration d) =>
-      d.inHours > 0 ? '${d.inHours}h ${d.inMinutes % 60}m' : '${d.inMinutes}m';
-
-  /// HP at a glance. Colour is the signal — red isn't only K.O., it's "this one
-  /// will die in the next fight".
-  Widget _hpBar(CreatureInstance c) {
-    final fraction = c.maxHp <= 0 ? 0.0 : c.hp / c.maxHp;
-    final color = fraction <= 0
-        ? FoE.danger
-        : fraction < 0.3
-        ? FoE.danger
-        : fraction < 0.6
-        ? FoE.gold
-        : FoE.positive;
-    // Rounded and 6 px tall on a translucent track (user 2026-07-27): a 4 px
-    // bar on an opaque panel colour, running the full width of the tile, read
-    // as the tile's own edge rather than as a reading of anything.
-    // The app's one bar (user 2026-07-29: "jetzt alle Balken im gleichen
-    // Effekt gestalten"). Still 6 px — the strip's height is spoken for — so
-    // the groove is shallow here, but it is the same groove.
-    return RecessBar(value: fraction, color: color, height: 6, onDark: true);
-  }
-
-  /// [vitalsValue]/[vitalsLabel], filling the row the HP bar + gender used
-  /// to share. LABEL LEFT, VALUE RIGHT (user 2026-08-31) — the same order
-  /// every other stat readout in the app uses (the building card, the work-
-  /// post picker's own header line), so a value here doesn't read backwards
-  /// next to them.
-  Widget _vitalsOverride() => Row(
-    crossAxisAlignment: CrossAxisAlignment.baseline,
-    textBaseline: TextBaseline.alphabetic,
-    children: [
-      Expanded(
-        child: Text(
-          vitalsLabel ?? '',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: FoE.dim(size: 10).copyWith(color: _stripInkSoft, shadows: _stripShadow),
-        ),
-      ),
-      const SizedBox(width: 5),
-      Text(
-        '$vitalsValue',
-        style: FoE.value(size: 13).copyWith(color: _stripInk, shadows: _stripShadow),
-      ),
-    ],
-  );
-
-  /// Wraps a card's image area in the rarity backdrop; a creature with no
-  /// species def (should not happen) just skips it.
-  Widget _backdrop(SpeciesDef? species, Widget child, {double radius = 8}) =>
-      species == null
-      ? child
-      : CreatureBackdrop(
-          element: species.element,
-          radius: radius,
-          child: child,
-        );
-
-  Widget _creatureImage(String? url, {Alignment alignment = Alignment.center}) =>
-      url == null
-      ? const Center(child: Icon(Icons.pets, color: FoE.gold, size: 40))
-      : CreatureSprite(
-          url: url,
-          alignment: alignment,
-          fallback:
-              const Center(child: Icon(Icons.pets, color: FoE.gold, size: 40)),
-        );
-
-  /// The sprite's drop shadow: its SHARP silhouette painted [color] (the
-  /// element's shadow tone), just nudged down/right and bottom-aligned to match
-  /// the sprite — the same crisp, un-blurred offset as the type icon's 3D
-  /// emboss (user request).
-  Widget _creatureShadow(String? url, Color color) => url == null
-      ? const SizedBox.shrink()
-      : Transform.translate(
-          offset: const Offset(2, 4),
-          // Slightly SMALLER than the sprite, anchored at the feet (user
-          // request) so it stays a subtle base shadow on the tile.
-          child: Transform.scale(
-            scale: 0.9,
-            alignment: Alignment.bottomCenter,
-            child: ColorFiltered(
-              colorFilter: ColorFilter.mode(color, BlendMode.srcATop),
-              child: CreatureSprite(
-                url: url,
-                alignment: Alignment.bottomCenter,
-              ),
+              child: Icon(Icons.pets, color: Colors.black87, size: 40),
             ),
           ),
         );
 }
-

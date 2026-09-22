@@ -32,10 +32,12 @@ List<RewardLine> battleRewardsFor(int battleNumber) {
   // A wider battle party (still a rule of position on the line).
   if (battleNumber > 1 &&
       partySizeForBattle(battleNumber) > partySizeForBattle(battleNumber - 1)) {
-    lines.add(RewardLine(
-      '👥',
-      'Bring ${partySizeForBattle(battleNumber)} monsters into battle',
-    ));
+    lines.add(
+      RewardLine(
+        '👥',
+        'Bring ${partySizeForBattle(battleNumber)} monsters into battle',
+      ),
+    );
   }
 
   if (node != null) {
@@ -49,32 +51,33 @@ List<RewardLine> battleRewardsFor(int battleNumber) {
       final holds = def != null && def.kind == ItemKind.resourcePack
           ? ' (${def.magnitude.toStringAsFixed(0)} ${def.resourceId})'
           : '';
-      lines.add(RewardLine(
-        def?.emoji ?? '🎁',
-        '${def?.name ?? e.key}$count$holds',
-      ));
+      lines.add(
+        RewardLine(def?.emoji ?? '🎁', '${def?.name ?? e.key}$count$holds'),
+      );
     }
     for (final id in node.rewards.buildings) {
       final def = kBuildingDefs[id];
-      lines.add(RewardLine(
-        '🏛️',
-        'New building: ${def?.name ?? id}',
-        buildingId: id,
-      ));
+      lines.add(
+        RewardLine('🏛️', 'New building: ${def?.name ?? id}', buildingId: id),
+      );
     }
     if (node.rewards.expansions > 0) {
-      lines.add(RewardLine(
-        '🗺️',
-        '+${node.rewards.expansions} territory expansion'
-            '${node.rewards.expansions > 1 ? 's' : ''}',
-      ));
+      lines.add(
+        RewardLine(
+          '🗺️',
+          '+${node.rewards.expansions} territory expansion'
+              '${node.rewards.expansions > 1 ? 's' : ''}',
+        ),
+      );
     }
     if (node.rewards.huntOptions > 0) {
-      lines.add(RewardLine(
-        '🪤',
-        '+${node.rewards.huntOptions} longer hunt'
-            '${node.rewards.huntOptions > 1 ? 's' : ''} unlocked',
-      ));
+      lines.add(
+        RewardLine(
+          '🪤',
+          '+${node.rewards.huntOptions} longer hunt'
+              '${node.rewards.huntOptions > 1 ? 's' : ''} unlocked',
+        ),
+      );
     }
   } else {
     // No authored node (path emptied) — fall back to the legacy unlock tables.
@@ -82,18 +85,18 @@ List<RewardLine> battleRewardsFor(int battleNumber) {
       if (e.value != battleNumber) continue;
       final def = kBuildingDefs[e.key];
       if (def != null) {
-        lines.add(RewardLine(
-          '🏛️',
-          'New building: ${def.name}',
-          buildingId: e.key,
-        ));
+        lines.add(
+          RewardLine('🏛️', 'New building: ${def.name}', buildingId: e.key),
+        );
       }
     }
   }
 
   // The era gate.
   if (node?.isBoss ?? isBossBattle(battleNumber)) {
-    lines.add(const RewardLine('👑', 'Region legendary + the next region opens'));
+    lines.add(
+      const RewardLine('👑', 'Region legendary + the next region opens'),
+    );
   }
 
   return lines;

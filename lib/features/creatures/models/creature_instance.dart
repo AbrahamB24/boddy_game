@@ -4,11 +4,17 @@ import 'ability_def.dart';
 import 'creature_enums.dart';
 import 'species_def.dart';
 
-/// At most this many learned abilities may be equipped (battle-usable) at
-/// once (user 2026-09-05: "ich kann mehr als 6 Fähigkeiten erlernen, aber
-/// nur einige davon ausrüsten"). `attack` sits outside this cap entirely —
-/// it is free and always on.
-const int kMaxEquippedAbilities = 6;
+/// A monster goes into a fight with at most this many moves IN TOTAL — Attack
+/// counts as one of them (user 2026-09-21: "das Maximum von 6 Fähigkeiten
+/// (Attacke ist auch eine davon, aktuell wird diese nicht gezählt)"). It used to
+/// sit outside the cap, which made it seven.
+const int kMaxAbilitiesTotal = 6;
+
+/// At most this many learned abilities may be equipped (battle-usable) at once
+/// besides `attack`, which is free and always on and takes the first of the
+/// [kMaxAbilitiesTotal] places (user 2026-09-05: "ich kann mehr als 6 Fähigkeiten
+/// erlernen, aber nur einige davon ausrüsten").
+const int kMaxEquippedAbilities = kMaxAbilitiesTotal - 1;
 
 // One creature OWNED by a player — a row in the `creatures` table. Species
 // data (per-stat mean curves, stages, abilities) lives in kSpeciesDefs; this
@@ -232,8 +238,9 @@ class CreatureInstance {
   /// legacy rows saved before the 8 civilian stats existed. Such creatures
   /// are lazily backfilled from their species curve on load (see
   /// CreaturesController.load).
-  bool get needsGeneBackfill =>
-      CreatureStat.values.any((s) => !statBase.containsKey(s) || !statSlope.containsKey(s));
+  bool get needsGeneBackfill => CreatureStat.values.any(
+    (s) => !statBase.containsKey(s) || !statSlope.containsKey(s),
+  );
 
   SpeciesDef? get species => kSpeciesDefs[speciesId];
 
@@ -346,12 +353,19 @@ class CreatureInstance {
     var changed = false;
     for (final stat in CreatureStat.values) {
       if (!statBase.containsKey(stat)) {
-        statBase[stat] = _sample(s.statCurve(stat).baseAt(0), kBaseSigmaPct, rng);
+        statBase[stat] = _sample(
+          s.statCurve(stat).baseAt(0),
+          kBaseSigmaPct,
+          rng,
+        );
         changed = true;
       }
       if (!statSlope.containsKey(stat)) {
-        statSlope[stat] =
-            _sample(s.statCurve(stat).growth, kSlopeSigmaPct, rng);
+        statSlope[stat] = _sample(
+          s.statCurve(stat).growth,
+          kSlopeSigmaPct,
+          rng,
+        );
         changed = true;
       }
     }

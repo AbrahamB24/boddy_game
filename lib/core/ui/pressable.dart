@@ -81,11 +81,7 @@ class _PressableState extends State<Pressable> {
       child: AnimatedContainer(
         duration: Pressable.duration,
         curve: Curves.easeOut,
-        transform: Matrix4.translationValues(
-          0,
-          _down ? Pressable.depth : 0,
-          0,
-        ),
+        transform: Matrix4.translationValues(0, _down ? Pressable.depth : 0, 0),
         child: Stack(
           // PASSTHROUGH, not Stack's own default `loose` (user 2026-09-08,
           // reported as "die 'add monster' Boxen sind überall geschrumpft"):

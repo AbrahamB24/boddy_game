@@ -40,7 +40,12 @@ class GeneBarToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 22,
-    decoration: ShapeDecoration(shape: FoE.facet(radius: 11, side: BorderSide(color: inkFaint.withValues(alpha: 0.45)))),
+    decoration: ShapeDecoration(
+      shape: FoE.facet(
+        radius: 11,
+        side: BorderSide(color: inkFaint.withValues(alpha: 0.45)),
+      ),
+    ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -82,7 +87,10 @@ class GeneBarToggle extends StatelessWidget {
       height: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.center,
-      decoration: ShapeDecoration(color: active ? accent.withValues(alpha: 0.16) : Colors.transparent, shape: FoE.facet(radius: 11)),
+      decoration: ShapeDecoration(
+        color: active ? accent.withValues(alpha: 0.16) : Colors.transparent,
+        shape: FoE.facet(radius: 11),
+      ),
       child: child,
     ),
   );

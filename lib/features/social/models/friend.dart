@@ -1,10 +1,7 @@
 enum FriendshipStatus { pending, accepted, declined, blocked }
 
-FriendshipStatus friendshipStatusFromString(String s) =>
-    FriendshipStatus.values.firstWhere(
-      (v) => v.name == s,
-      orElse: () => FriendshipStatus.pending,
-    );
+FriendshipStatus friendshipStatusFromString(String s) => FriendshipStatus.values
+    .firstWhere((v) => v.name == s, orElse: () => FriendshipStatus.pending);
 
 /// One row of `friendships` — see supabase/migrations/0047_social_friends.sql.
 /// Directional (who requested), but a pair only ever has one row either way.

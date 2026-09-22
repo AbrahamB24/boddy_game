@@ -54,14 +54,21 @@ void main() {
       // These three don't place like a building — a road card enters PAINT
       // mode. An authored category that moved one into Production put a
       // road-painting card in among the camps (user 2026-07-26: "wenn ich
-      // primitive stone camp bauen will, baut es eine strasse").
+      // primitive stone camp bauen will, baut es eine strasse"). Road and plot
+      // live in Civic (user 2026-09-19), the castle in Special — whatever the
+      // author says.
       for (final d in [
         _def(category: BuildingCategory.production, isRoad: true),
-        _def(category: BuildingCategory.goods, isBuildPlot: true),
-        _def(category: BuildingCategory.civic, isMainBuilding: true),
+        _def(category: BuildingCategory.housing, isBuildPlot: true),
       ]) {
-        expect(categoryOfBuilding(d), BuildingCategory.special);
+        expect(categoryOfBuilding(d), BuildingCategory.civic);
       }
+      expect(
+        categoryOfBuilding(
+          _def(category: BuildingCategory.civic, isMainBuilding: true),
+        ),
+        BuildingCategory.special,
+      );
     });
 
     test('every category is reachable, including the new Military drawer', () {
@@ -69,8 +76,15 @@ void main() {
         expect(categoryOfBuilding(_def(category: c)), c, reason: c.id);
       }
       expect(BuildingCategory.values.map((c) => c.id), containsAll(
-        ['production', 'goods', 'housing', 'civic', 'military', 'special'],
+        ['production', 'housing', 'civic', 'military', 'special'],
       ));
+    });
+  });
+
+  group('the retired Goods drawer', () {
+    test('a stored "goods" key reads as Production', () {
+      expect(BuildingCategory.fromId('goods'), BuildingCategory.production);
+      expect(BuildingCategory.values.map((c) => c.id), isNot(contains('goods')));
     });
   });
 
@@ -84,13 +98,13 @@ void main() {
       }
     });
 
-    test('gold and era goods → Goods', () {
+    test('gold and era goods → Production (the Goods drawer is gone)', () {
       final good = kGoodsDefs.keys.first;
       for (final res in ['gold', good]) {
         final d = _def(workshops: [
           WorkshopRole(stat: CreatureStat.production, resource: res),
         ]);
-        expect(categoryOfBuilding(d), BuildingCategory.goods, reason: res);
+        expect(categoryOfBuilding(d), BuildingCategory.production, reason: res);
       }
     });
 
@@ -98,11 +112,11 @@ void main() {
       expect(categoryOfBuilding(_def(population: 4)), BuildingCategory.housing);
     });
 
-    test('roads, plots and the hall → Special', () {
-      expect(categoryOfBuilding(_def(isRoad: true)), BuildingCategory.special);
+    test('roads and plots → Civic, the hall → Special', () {
+      expect(categoryOfBuilding(_def(isRoad: true)), BuildingCategory.civic);
       expect(
         categoryOfBuilding(_def(isBuildPlot: true)),
-        BuildingCategory.special,
+        BuildingCategory.civic,
       );
       expect(
         categoryOfBuilding(_def(isMainBuilding: true)),

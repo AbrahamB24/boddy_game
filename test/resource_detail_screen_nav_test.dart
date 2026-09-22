@@ -12,8 +12,9 @@ import 'package:boddygame/features/settlement/settlement_controller.dart';
 // press back, and the app is supposed to hang on black instead of
 // returning to the map.
 void main() {
-  testWidgets('pushing and popping ResourceDetailScreen does not throw',
-      (tester) async {
+  testWidgets('pushing and popping ResourceDetailScreen does not throw', (
+    tester,
+  ) async {
     final ctrl = SettlementController();
     ctrl.resources = ResourceModel(
       settlementId: 's',
@@ -54,9 +55,8 @@ void main() {
     expect(find.text('🪵  Wood'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // The app's own back icon now (2026-08-31 audit), not the bespoke
-    // chevron_left the header used to draw by hand.
-    await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+    // The menu's gold close button (the page is a MenuScaffold now).
+    await tester.tap(find.byIcon(Icons.close));
     // Step through the pop transition frame by frame instead of
     // pumpAndSettle's single jump to the end — if a rebuild mid-transition
     // is what throws, jumping past it would hide the very frame that fails.

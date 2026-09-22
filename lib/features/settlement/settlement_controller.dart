@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../../../core/supabase/supabase_client.dart';
 import '../../core/tuning/game_tuning.dart';
@@ -52,7 +53,40 @@ class WelcomeDigest {
   /// Resource key → amount gained (only entries ≥ 1).
   final Map<String, double> gained;
 
-  const WelcomeDigest({required this.awayHours, required this.gained});
+  /// Resources whose store was FULL for part of the time away, with how many hours
+  /// it stood full and about how much production that cost (estimated from the
+  /// rate the settlement had when it left — production stops at the ceiling).
+  final Map<String, double> fullHours;
+  final Map<String, double> lost;
+
+  /// The energy pool when the player left and on return (percent), so the digest
+  /// can say it ran down. Null when energy was not loaded.
+  final double? energyBefore;
+  final double? energyAfter;
+
+  const WelcomeDigest({
+    required this.awayHours,
+    required this.gained,
+    this.fullHours = const {},
+    this.lost = const {},
+    this.energyBefore,
+    this.energyAfter,
+  });
+}
+
+/// Why the aimed spot cannot take a building (see
+/// [SettlementController.placementProblem]). [label] is what the ghost's name tag
+/// says about it — null for [overlap]: a footprint on top of a building is red
+/// already, and words there only made the tag bigger (user 2026-09-19).
+enum PlacementProblem {
+  unknown('Unknown building'),
+  offMap('Outside the map'),
+  overlap(null),
+  outsideLand('Outside your land'),
+  plotMustExtend('A plot has to extend your land');
+
+  final String? label;
+  const PlacementProblem(this.label);
 }
 
 class SettlementController extends ChangeNotifier {
@@ -74,12 +108,10 @@ class SettlementController extends ChangeNotifier {
   EnergyModel? energy;
   List<PlacedBuilding> buildings = [];
 
-  /// Energy RIGHT NOW, drained forward from the last tick's anchor.
-  /// THE rate multiplier every action/production figure reads (user
-  /// 2026-09-14, replacing the old hard energy gate) — a pure function of
-  /// today's step count, so unlike the old draining pool this needs no
-  /// live time-extrapolation: [EnergyModel.multiplier] is already exactly
-  /// as current as [energy] itself is.
+  /// THE rate multiplier every action/production figure reads — the energy
+  /// pool's own fraction, never below the floor. The pool is drained forward
+  /// by every tick (5 s live, one integrated catch-up after the app was closed),
+  /// so [EnergyModel.multiplier] is as current as [energy] itself is.
   double get energyMultiplier => energy?.multiplier ?? kEnergyFloorMultiplier;
   bool isDev = false;
 
@@ -166,7 +198,8 @@ class SettlementController extends ChangeNotifier {
   /// on load and from the ticker, so a session crossing midnight rolls over.
   void _rolloverDailyTasks(DateTime now) {
     if (dailyTasks.dateKey != dateKeyFor(now)) {
-      dailyTasks = rollDailyTasks(now);
+      // The streak and the date of the last chest carry over; the tasks do not.
+      dailyTasks = rollDailyTasks(now, carry: dailyTasks);
       _saveDailyTasks();
     }
   }
@@ -193,6 +226,29 @@ class SettlementController extends ChangeNotifier {
       _saveDailyTasks();
       notifyListeners();
     }
+  }
+
+  /// Opens today's DAILY CHEST once all three tasks are claimed: gold and items
+  /// for the streak day this opens (see [chestForStreakDay]), and the streak goes
+  /// up by one — or starts again at 1 if yesterday's chest was missed. Returns
+  /// the chest, or null when there is nothing to open.
+  Future<DailyChest?> claimDailyChest() async {
+    final now = DateTime.now().toUtc();
+    _rolloverDailyTasks(now);
+    final state = dailyTasks;
+    if (!state.chestReady) return null;
+    final day = state.nextChestDay(now);
+    final chest = chestForStreakDay(day);
+    state.streak = day;
+    state.lastChestKey = state.dateKey;
+    await grantResources({'gold': chest.gold.toDouble()});
+    if (chest.items.isNotEmpty) {
+      _grantItems(chest.items);
+      await _persist();
+    }
+    _saveDailyTasks();
+    notifyListeners();
+    return chest;
   }
 
   /// Claims a finished task's reward. Returns a user-facing error or null.
@@ -306,11 +362,14 @@ class SettlementController extends ChangeNotifier {
           unawaited(_svc.saveIntroStep(userId, introStep.index));
         }
       }
+      // introStep decides which answer connectedBuildingIds caches, and it
+      // has just been read from the DB and possibly corrected twice above.
+      _connectedCache = null;
 
       debugPrint(
         '[LOAD] From DB — '
         'lastUpdatedAt=${energy!.lastUpdatedAt.toIso8601String()} '
-        'steps=${energy!.stepsToday} (${(energy!.multiplier * 100).toStringAsFixed(0)}%) '
+        'energy=${energy!.energyPct.toStringAsFixed(1)}% steps=${energy!.stepsToday} '
         'wood=${resources!.wood.toStringAsFixed(0)} '
         'stone=${resources!.stone.toStringAsFixed(0)} '
         'buildings=${buildings.length}',
@@ -337,6 +396,11 @@ class SettlementController extends ChangeNotifier {
       // Snapshot for the welcome-back digest: everything the offline tick AND
       // the offline expedition resolve (below) add lands in this diff.
       final beforeAll = resources!.asMap;
+      // What the offline tick could NOT add because a store was full: worked out
+      // from the rates and ceilings the settlement had on leaving.
+      final ratesBefore = hourlyRates;
+      final capsBefore = storageCaps;
+      final energyBefore = energy!.energyPct;
       final now = DateTime.now().toUtc();
       final hoursDelta =
           now.difference(energy!.lastUpdatedAt).inMicroseconds / 3.6e9;
@@ -345,7 +409,7 @@ class SettlementController extends ChangeNotifier {
         '[LOAD] After tick — '
         'hoursDelta=${hoursDelta.toStringAsFixed(4)}h '
         'stone: ${beforeStone.toStringAsFixed(0)} → ${resources!.stone.toStringAsFixed(0)} '
-        'steps=${energy!.stepsToday} (${(energy!.multiplier * 100).toStringAsFixed(0)}%)',
+        'energy=${energy!.energyPct.toStringAsFixed(1)}% steps=${energy!.stepsToday}',
       );
 
       await _persist();
@@ -381,7 +445,29 @@ class SettlementController extends ChangeNotifier {
           final delta = v - (beforeAll[key] ?? 0);
           if (delta >= 1) gained[key] = delta;
         });
-        pendingDigest = WelcomeDigest(awayHours: hoursDelta, gained: gained);
+        // A store that reached its ceiling while away stopped producing: how long
+        // it stood full, and what that cost.
+        final fullHours = <String, double>{};
+        final lost = <String, double>{};
+        ratesBefore.forEach((key, rate) {
+          final cap = capsBefore[key] ?? 0;
+          if (rate <= 0 || cap <= 0) return;
+          final toFull = math.max(0.0, (cap - (beforeAll[key] ?? 0)) / rate);
+          if (toFull >= hoursDelta) return;
+          final hours = hoursDelta - toFull;
+          if (hours >= 1 && rate * hours >= 1) {
+            fullHours[key] = hours;
+            lost[key] = rate * hours;
+          }
+        });
+        pendingDigest = WelcomeDigest(
+          awayHours: hoursDelta,
+          gained: gained,
+          fullHours: fullHours,
+          lost: lost,
+          energyBefore: energyBefore,
+          energyAfter: energy?.energyPct,
+        );
       }
 
       // Self-heal: unassign creatures whose POST no longer exists — the
@@ -416,7 +502,11 @@ class SettlementController extends ChangeNotifier {
       final storedTasks = await _svc.loadDailyTasks(settlement!.id);
       if (storedTasks != null) {
         final restored = DailyTasksState.fromJson(storedTasks);
-        if (restored.dateKey == dateKeyFor(now)) dailyTasks = restored;
+        // Today's saved progress if it is from today, else a fresh roll — but
+        // the streak lives on either way.
+        dailyTasks = restored.dateKey == dateKeyFor(now)
+            ? restored
+            : rollDailyTasks(now, carry: restored);
       }
 
       // 10s, not 5 (2026-09-12, chasing Chrome-debug responsiveness) — every
@@ -425,7 +515,7 @@ class SettlementController extends ChangeNotifier {
       // whole settlement screen (the map included), and _persist writes
       // resources/energy/settlement to Supabase. Halving how often that
       // fires halves all three costs at once. Still comfortably granular —
-      // EnergySheet's own countdown only shows minute resolution at this
+      // The Energy page's countdown only shows minute resolution at this
       // drain rate, and every number here reads as "a few seconds behind",
       // never as stalled.
       _tickTimer = Timer.periodic(const Duration(seconds: 10), (_) {
@@ -453,7 +543,7 @@ class SettlementController extends ChangeNotifier {
   /// (BP/level/region progress/intro) — back to a first-launch state, intro
   /// chain and jumpstart included. Authored `*_defs` content is never touched.
   Future<void> resetSettlement() async {
-    final userId = supabase.auth.currentUser?.id;
+    final userId = _userId;
     if (settlement == null || userId == null) return;
     // A dev account keeps its grant float across the reset — see kDevResetFloat.
     await _svc.resetSettlement(settlement!.id, userId, devFloat: isDev);
@@ -476,10 +566,7 @@ class SettlementController extends ChangeNotifier {
   // CreaturesController via [housingFull]).
   int get housingCapacity => resources == null
       ? 0
-      : GameEngine.housingCapacity(
-          buildings,
-          eraOrder: dungeonMaxStage,
-        );
+      : GameEngine.housingCapacity(buildings, eraOrder: dungeonMaxStage);
 
   int get housingUsed => CreaturesController().creatures.length;
 
@@ -1121,8 +1208,7 @@ class SettlementController extends ChangeNotifier {
     // A store's post amplifies what that store HOLDS. Without this the fallback
     // dial would happily make room for a good the building has no shelf for —
     // and every caller would have to remember to ask first.
-    if (def.effectEntry('storage', resource, dungeonMaxStage) ==
-        null) {
+    if (def.effectEntry('storage', resource, dungeonMaxStage) == null) {
       return 0;
     }
     final creatures = CreaturesController();
@@ -1237,7 +1323,6 @@ class SettlementController extends ChangeNotifier {
     return power;
   }
 
-
   // Buildings currently reachable from the Main Hall via an unbroken road
   // network (edge-adjacent only) — only these actually produce/count.
   // ── Derived-from-buildings caches ─────────────────────────
@@ -1256,12 +1341,54 @@ class SettlementController extends ChangeNotifier {
   Set<int>? _regionCache;
   Set<int>? _roadCache;
 
+  /// The signed-in user, or null — including when Supabase has not been
+  /// initialised at all (2026-09-21). `supabase.auth` ASSERTS on an
+  /// uninitialised instance rather than returning null, so a bare
+  /// `currentUser?.id` throws instead of degrading, and the `?.` reads as if
+  /// it were handling that. Every read here is on a path whose answer to "no
+  /// user" is already "skip the write", so a throw only ever turns a skipped
+  /// save into a crash. Matches CreaturesController's own `_userId`.
+  String? get _userId {
+    try {
+      return supabase.auth.currentUser?.id;
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _refreshDerived() {
     if (identical(_derivedFor, buildings)) return;
+    final previous = _derivedFor;
     _derivedFor = buildings;
+    // A new list is not necessarily a new LAYOUT: construction progress, a
+    // level-up or a pause all replace the list without moving, adding or
+    // finishing anything. The caches below read only these five fields, so
+    // when they all match the old answers still stand — and, because the sets
+    // keep their identity, the map's terrain (which repaints when the region
+    // changes) is not thrown away and rebuilt for nothing.
+    if (previous != null && _sameLayout(previous, buildings)) return;
     _connectedCache = null;
     _regionCache = null;
     _roadCache = null;
+  }
+
+  static bool _sameLayout(List<PlacedBuilding> a, List<PlacedBuilding> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final x = a[i], y = b[i];
+      if (x.id != y.id ||
+          x.buildingTypeId != y.buildingTypeId ||
+          x.gridX != y.gridX ||
+          x.gridY != y.gridY ||
+          x.isComplete != y.isComplete ||
+          // A recall/place doesn't necessarily move gridX/gridY (a building
+          // placed back at the same spot it started from wouldn't), but it
+          // always changes which buildings occupy/connect the map.
+          x.isStored != y.isStored) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Every cell a road stands on, keyed by [roadCellKey].
@@ -1286,9 +1413,15 @@ class SettlementController extends ChangeNotifier {
     // step (user script 2026-08-24) still has the player lay a real road,
     // so the mechanic is taught, but enforcement only starts once the
     // tutorial ends (the completion message says so).
-    if (introStep.isActive) return {for (final b in buildings) b.id};
     _refreshDerived();
-    return _connectedCache ??= GameEngine.connectedBuildingIds(buildings);
+    // Through the same cache as the real answer (2026-09-21), not a fresh
+    // set on every read: the map asks this ONCE PER BUILDING while it lays
+    // out its tiles, so building a new set of every id per call made the
+    // tutorial's map quadratic in the number of buildings — for an answer
+    // that cannot change until the layout does.
+    return _connectedCache ??= introStep.isActive
+        ? {for (final b in buildings) b.id}
+        : GameEngine.connectedBuildingIds(buildings);
   }
 
   // Cells the player can currently build on — the starting zone plus every
@@ -1350,6 +1483,41 @@ class SettlementController extends ChangeNotifier {
       buildings,
       region: region,
     );
+  }
+
+  /// WHY a footprint cannot go here — null when [isPlacementValid] says it can.
+  /// The rules themselves stay in [isPlacementValid]; this only names the first
+  /// one that fails, for the ghost's name tag.
+  PlacementProblem? placementProblem(
+    String typeId,
+    int x,
+    int y, {
+    String? excludeId,
+  }) {
+    final def = kBuildingDefs[typeId];
+    if (def == null) return PlacementProblem.unknown;
+    (x, y) = snapPlacement(typeId, x, y);
+    if (isPlacementValid(typeId, x, y, excludeId: excludeId)) return null;
+    if (x < 0 ||
+        y < 0 ||
+        x + def.gridW > kGridCols ||
+        y + def.gridH > kGridRows) {
+      return PlacementProblem.offMap;
+    }
+    for (final b in buildings) {
+      if (b.id == excludeId) continue;
+      final other = kBuildingDefs[b.buildingTypeId];
+      // Building Plots mark territory, not structures — see [_isAreaFreeImpl].
+      if (other == null || other.isBuildPlot) continue;
+      if (x < b.gridX + other.gridW &&
+          x + def.gridW > b.gridX &&
+          y < b.gridY + other.gridH &&
+          y + def.gridH > b.gridY) {
+        return PlacementProblem.overlap;
+      }
+    }
+    if (def.isBuildPlot) return PlacementProblem.plotMustExtend;
+    return PlacementProblem.outsideLand;
   }
 
   // ── Build slot helpers ────────────────────────────────────
@@ -1532,6 +1700,7 @@ class SettlementController extends ChangeNotifier {
     for (final b in buildings) {
       if (b.isComplete && !wasComplete.contains(b.id)) {
         _buildingsDirty = true;
+        reportDailyProgress(DailyTaskKind.finishBuildings);
         GameEventLog().add(
           GameEventKind.building,
           '${kBuildingDefs[b.buildingTypeId]?.name ?? b.buildingTypeId} '
@@ -1645,6 +1814,7 @@ class SettlementController extends ChangeNotifier {
     var items = s.items;
     for (final def in finished) {
       items = addItem(items, def.id);
+      reportDailyProgress(DailyTaskKind.craftItems);
       NewItems().add(def.id, 1);
       GameEventLog().add(
         GameEventKind.craft,
@@ -1808,7 +1978,7 @@ class SettlementController extends ChangeNotifier {
     if (resources == null || energy == null || settlement == null) return;
     if (_persisting) return;
     _persisting = true;
-    final userId = supabase.auth.currentUser?.id;
+    final userId = _userId;
     try {
       await Future.wait([
         _svc.saveResources(resources!),
@@ -1851,6 +2021,8 @@ class SettlementController extends ChangeNotifier {
     if (energy == null) return;
     _applyTick(DateTime.now().toUtc());
     energy = GameEngine.addSteps(energy!, steps, DateTime.now());
+    // Daily goal: the steps walked count, whether or not the pool had room.
+    if (steps > 0) reportDailyProgress(DailyTaskKind.walkSteps, steps);
     // NB: step logging removed — the `step_logs` table was append-only and
     // never read anywhere, so it only ever grew and ate Supabase storage.
     notifyListeners();
@@ -2125,7 +2297,9 @@ class SettlementController extends ChangeNotifier {
     notifyListeners();
     unawaited(
       _svc.saveResources(resources!).catchError((e) {
-        debugPrint('[SettlementController] placeBuilding resources save failed: $e');
+        debugPrint(
+          '[SettlementController] placeBuilding resources save failed: $e',
+        );
         _flagSaveFailed();
       }),
     );
@@ -2253,10 +2427,7 @@ class SettlementController extends ChangeNotifier {
     if (!isRoad) {
       final remainingCapacity = resources == null
           ? 0
-          : GameEngine.housingCapacity(
-              remaining,
-              eraOrder: dungeonMaxStage,
-            );
+          : GameEngine.housingCapacity(remaining, eraOrder: dungeonMaxStage);
       if (remainingCapacity < housingUsed) {
         return 'Not enough housing left for your creatures — release or '
             'rehouse some first';
@@ -2333,14 +2504,164 @@ class SettlementController extends ChangeNotifier {
     buildings = [
       for (final existing in buildings)
         if (existing.id == buildingId)
-          existing.copyWith(gridX: newX, gridY: newY)
+          // isStored: false unconditionally — this is also how a building
+          // LEAVES the Umbaumodus tray (user 2026-09-22): placing it from
+          // storage is the same call as moving one already on the map, it
+          // just also clears the flag that made it invisible and non-
+          // blocking. A no-op for a building that was never stored.
+          existing.copyWith(gridX: newX, gridY: newY, isStored: false)
         else
           existing,
     ];
+    // The rearrange is DONE, not just this one placement, the moment the
+    // tray runs out — nothing is left for cancelRecall to put back, so its
+    // memory of where everything came from can go too (user 2026-09-22:
+    // closing early undoes the whole visit, but finishing it for real must
+    // not leave a stale revert sitting around for next time).
+    if (_recallOrigin.isNotEmpty && !hasStoredBuildings) {
+      _recallOrigin.clear();
+    }
 
     notifyListeners();
     await _svc.moveBuilding(buildingId, newX, newY);
     return null;
+  }
+
+  // ── Umbaumodus: recall the whole city (user 2026-09-22) ────
+  // "der Umbaumodus soll so sein wie bei FoE. D.h ich kann alle Gebäude
+  // 'zurücknehmen' und dann einzeln frei platzieren. Ich kann aber auch
+  // Gebäude verschieben wie bis anhin." — TWO tools now share Umbaumodus:
+  // tapping a building on the map still moves just that one exactly as
+  // before (moveBuilding above, unchanged); this is the OTHER one, for a
+  // full redesign, where whatever is already standing in the way is never
+  // the obstacle it used to be.
+
+  /// Every recalled building's spot from BEFORE this Umbaumodus visit
+  /// touched it, so [cancelRecall] has something to put back. Grows across
+  /// however many "Alle Gebäude zurücknehmen" presses happen in one session
+  /// (a building already in here keeps its FIRST-recorded spot, never a
+  /// later, already-replaced one) and is cleared the moment there is
+  /// nothing left to revert — either every recalled building has a new home
+  /// ([moveBuilding] clears its entry the instant that makes the tray
+  /// empty) or [cancelRecall] just put everything back.
+  final Map<String, (int, int)> _recallOrigin = {};
+
+  /// True once there is something [cancelRecall] would actually undo —
+  /// closing Umbaumodus while this is true is what triggers it (user
+  /// 2026-09-22: "wenn ich es schliesse, bevor ich fertig bin, dann soll
+  /// einfach alles rückgängig gemacht werden").
+  bool get hasRecallInProgress => _recallOrigin.isNotEmpty;
+
+  /// Everything currently in the tray, recalled but not yet given a new
+  /// spot — see [recallAllBuildings]. The map draws none of these (they are
+  /// not standing anywhere) and offers them back up as a row of tiles to tap
+  /// and place.
+  List<PlacedBuilding> get storedBuildings => [
+    for (final b in buildings)
+      if (b.isStored) b,
+  ];
+
+  /// True while the tray holds anything.
+  bool get hasStoredBuildings => buildings.any((b) => b.isStored);
+
+  /// What [recallAllBuildings] is allowed to touch: everything actually
+  /// placed right now except the Castle (the settlement itself — see
+  /// deleteBuilding's own reasoning), Building Plots (permanent territory,
+  /// never move) and roads — roads have their OWN bulk tool now
+  /// ([recallableRoads]/[recallAllRoads], user 2026-09-22: "es braucht auch
+  /// noch einen Button, um alle Strassen aufzuheben"), kept separate so a
+  /// tray of thirty individual road tiles never drowns out the real
+  /// buildings sitting in it.
+  List<PlacedBuilding> get recallableBuildings {
+    final out = <PlacedBuilding>[];
+    for (final b in buildings) {
+      if (b.isStored) continue;
+      final def = kBuildingDefs[b.buildingTypeId];
+      if (def == null || def.isMainBuilding || def.isBuildPlot || def.isRoad) {
+        continue;
+      }
+      out.add(b);
+    }
+    return out;
+  }
+
+  /// Every placed road, none recalled yet — the source [recallAllRoads]
+  /// works through.
+  List<PlacedBuilding> get recallableRoads {
+    final out = <PlacedBuilding>[];
+    for (final b in buildings) {
+      if (b.isStored) continue;
+      if (kBuildingDefs[b.buildingTypeId]?.isRoad ?? false) out.add(b);
+    }
+    return out;
+  }
+
+  /// "Alle Gebäude zurücknehmen": every [recallableBuildings] entry leaves
+  /// the map at once and waits in [storedBuildings] — a full replan never has
+  /// to shuffle around whatever is still standing in the way first.
+  ///
+  /// Nothing is deleted and nothing here costs anything: a stored building
+  /// keeps its level, its workers and its construction progress exactly as
+  /// a PAUSED one does (see [PlacedBuilding.isPaused]'s own doc comment) —
+  /// it simply isn't standing anywhere until [moveBuilding] places it again,
+  /// which is also what clears the flag. Its housing/production pause the
+  /// same way an unconnected building's already do
+  /// ([GameEngine.connectedBuildingIds] skips a stored building the same way
+  /// it skips an incomplete one), so no separate effect bookkeeping is
+  /// needed here.
+  Future<void> recallAllBuildings() => _recallAll(recallableBuildings);
+
+  /// "Alle Straßen zurücknehmen" (user 2026-09-22) — same tool, same tray,
+  /// same [_recallOrigin] snapshot (so [cancelRecall] undoes buildings and
+  /// roads together regardless of which button recalled which), just
+  /// sourced from [recallableRoads] instead.
+  Future<void> recallAllRoads() => _recallAll(recallableRoads);
+
+  Future<void> _recallAll(List<PlacedBuilding> targets) async {
+    if (targets.isEmpty) return;
+    final ids = [for (final b in targets) b.id];
+    final idSet = ids.toSet();
+    // Only a building's FIRST recall this session records where it came
+    // from — a second "Alle zurücknehmen" press must not overwrite that
+    // with a spot it only reached because this same rearrange put it there.
+    for (final b in targets) {
+      _recallOrigin.putIfAbsent(b.id, () => (b.gridX, b.gridY));
+    }
+    _buildingsDirty = true;
+    buildings = [
+      for (final b in buildings)
+        if (idSet.contains(b.id)) b.copyWith(isStored: true) else b,
+    ];
+    notifyListeners();
+    await _svc.setBuildingsStored(ids, true);
+  }
+
+  /// Umbaumodus closed with the tray still non-empty (user 2026-09-22): the
+  /// WHOLE rearrange undoes at once, not just what is still sitting in the
+  /// tray — a building already placed somewhere else during this same
+  /// unfinished visit goes back too, because "fertig" never happened.
+  /// [_recallOrigin] is what makes that possible: it remembers where every
+  /// touched building stood before this visit picked it up at all.
+  Future<void> cancelRecall() async {
+    if (_recallOrigin.isEmpty) return;
+    final origin = Map<String, (int, int)>.from(_recallOrigin);
+    _recallOrigin.clear();
+    final reverted = <PlacedBuilding>[];
+    final next = <PlacedBuilding>[];
+    for (final b in buildings) {
+      final spot = origin[b.id];
+      if (spot == null) {
+        next.add(b);
+        continue;
+      }
+      final back = b.copyWith(gridX: spot.$1, gridY: spot.$2, isStored: false);
+      reverted.add(back);
+      next.add(back);
+    }
+    _buildingsDirty = true;
+    buildings = next;
+    notifyListeners();
+    await _svc.saveBuildings(reverted);
   }
 
   // ── Helpers ───────────────────────────────────────────────
@@ -2351,8 +2672,10 @@ class SettlementController extends ChangeNotifier {
       if (b.id == excludeId) continue;
       final def = kBuildingDefs[b.buildingTypeId];
       // Building Plots mark territory, not structures — they never block
-      // other buildings from later occupying the same ground.
-      if (def == null || def.isBuildPlot) continue;
+      // other buildings from later occupying the same ground. A STORED
+      // building (Umbaumodus tray, user 2026-09-22) isn't standing anywhere
+      // either — its gridX/gridY are stale, so it must never block a spot.
+      if (def == null || def.isBuildPlot || b.isStored) continue;
       final bRight = b.gridX + def.gridW;
       final bBottom = b.gridY + def.gridH;
       final nRight = x + w;
@@ -2382,6 +2705,48 @@ class SettlementController extends ChangeNotifier {
     );
   }
 
+  /// What building [b] makes of [resourceId] per hour at 100 % energy and before
+  /// the tech bonus — read EXACTLY the way [workshopPower] reads it (the same
+  /// presence rule, and each post's own level factor via
+  /// [WorkshopRole.contribution]), so the breakdown's rows add up to the rate
+  /// the header shows. (They used to apply the global level curve to every post
+  /// and drifted from the header wherever a role authors its own factor.)
+  double _buildingOutput(
+    PlacedBuilding b,
+    BuildingDef def,
+    String resourceId,
+    CreaturesController creatures,
+    int era,
+  ) {
+    var amount = 0.0;
+    for (final c in creatures.creatures) {
+      if (c.assignedBuildingId != b.id) continue;
+      final role = _postedRole(c, def, creatures);
+      if (role == null || role.resource == WorkshopRole.kStorageRoom) continue;
+      amount +=
+          role.contribution(
+            (s) => c.statValue(s).toDouble(),
+            b.level,
+          )[resourceId] ??
+          0;
+    }
+    final effVal = def.effectAt('production', resourceId, era, level: b.level);
+    if (effVal != 0) {
+      amount += effVal * _legendaryBoostFactor(b, def, creatures);
+    }
+    return amount;
+  }
+
+  /// Whether [def] has a post or a `production` effect that makes [resourceId] —
+  /// what a paused building of it would be making.
+  bool _canMake(BuildingDef def, String resourceId) =>
+      def.workshops.any(
+        (r) =>
+            r.resource == resourceId ||
+            (r.isCombined && r.parts.values.contains(resourceId)),
+      ) ||
+      def.effectKeys('production').contains(resourceId);
+
   // ── Resource-tap breakdown, PER BUILDING (user 2026-08-31) ──
   // [productionSources] groups by building TYPE; the Resource screen's own
   // "Produced by" list wants one row per INSTANCE instead, the same reason
@@ -2409,34 +2774,19 @@ class SettlementController extends ChangeNotifier {
     final era = dungeonMaxStage;
     final out = <(PlacedBuilding, BuildingDef, double)>[];
     for (final b in buildings) {
-      if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
+      if (!b.isComplete) continue;
       final def = kBuildingDefs[b.buildingTypeId];
       if (def == null) continue;
-      double amount = 0;
-      for (final role in def.workshops) {
-        if (role.resource != resourceId) continue;
-        for (final c in creatures.creatures) {
-          if (c.assignedBuildingId != b.id || c.assignedStat != role.stat) {
-            continue;
-          }
-          if (c.isKo ||
-              creatures.isBreeding(c.id) ||
-              creatures.isOnExpedition(c.id)) {
-            continue;
-          }
-          amount += c.statValue(role.stat) * role.mult;
-        }
+      // A PAUSED building stays on the list, making nothing (user 2026-09-22:
+      // "auch die Gebäude anzeigen, welche pausiert sind und mit 0/h"): it is the
+      // first thing to look at when a rate is lower than expected. Only ones that
+      // could make this resource are listed.
+      if (b.isPaused) {
+        if (_canMake(def, resourceId)) out.add((b, def, 0.0));
+        continue;
       }
-      amount *= buildingYieldFactor(b.level);
-      final effVal = def.effectAt(
-        'production',
-        resourceId,
-        era,
-        level: b.level,
-      );
-      if (effVal != 0) {
-        amount += effVal * _legendaryBoostFactor(b, def, creatures);
-      }
+      if (!connected.contains(b.id)) continue;
+      final amount = _buildingOutput(b, def, resourceId, creatures, era);
       if (amount == 0) continue;
       out.add((b, def, amount * bonusMult));
     }
@@ -2472,40 +2822,13 @@ class SettlementController extends ChangeNotifier {
       if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
       final def = kBuildingDefs[b.buildingTypeId];
       if (def == null) continue;
-      double out = 0;
-      for (final role in def.workshops) {
-        if (role.resource != resourceId) continue;
-        for (final c in creatures.creatures) {
-          if (c.assignedBuildingId != b.id || c.assignedStat != role.stat) {
-            continue;
-          }
-          // Away on an expedition: the post is still theirs, but they aren't
-          // in it, so it yields nothing until they walk back in.
-          if (c.isKo ||
-              creatures.isBreeding(c.id) ||
-              creatures.isOnExpedition(c.id)) {
-            continue;
-          }
-          out += c.statValue(role.stat) * role.mult;
-        }
-      }
-      // Level scales the WORKERS' output — the same factor workshopPower and
-      // the tick apply, so this breakdown's rows sum to exactly the rate the
-      // header shows. (There is no code-side base to scale any more.)
-      out *= buildingYieldFactor(b.level);
-      final era = dungeonMaxStage;
-      // Dev-authored `production` effects (e.g. a house's own gold effect, the
-      // special buildings) — they carry their own level scaling, added AFTER
-      // the global factor, matching workshopPower so the rows sum to the header.
-      final effVal = def.effectAt(
-        'production',
+      final out = _buildingOutput(
+        b,
+        def,
         resourceId,
-        era,
-        level: b.level,
+        creatures,
+        dungeonMaxStage,
       );
-      if (effVal != 0) {
-        out += effVal * _legendaryBoostFactor(b, def, creatures);
-      }
       if (out == 0) continue;
       totals[def.id] = (totals[def.id] ?? 0) + out * bonusMult;
       counts[def.id] = (counts[def.id] ?? 0) + 1;
@@ -2875,8 +3198,13 @@ class SettlementController extends ChangeNotifier {
     if (introStep == IntroStep.done) {
       GameEventLog().add(
         GameEventKind.building,
+        // "Castle", the building's own name in kBuildingDefs and on every
+        // other screen — the intro cards were corrected to it on 2026-09-06
+        // (see intro_flow.dart's buildRoad card) and this one, the very last
+        // thing the tutorial says, was left behind calling it something the
+        // player has never seen (fixed 2026-09-21).
         '🎓 Tutorial complete! Road connectivity is enforced for real now '
-        '— keep every new building linked back to the Main Hall via '
+        '— keep every new building linked back to the Castle via '
         'Build ▸ Roads.',
       );
     }
@@ -2892,9 +3220,14 @@ class SettlementController extends ChangeNotifier {
 
   Future<void> _setIntroStep(IntroStep step) async {
     if (introStep == step) return;
+    final wasActive = introStep.isActive;
     introStep = step;
+    // The tutorial answers "is it connected?" with "everything is", and that
+    // answer is cached alongside the real one — so crossing into or out of
+    // the tutorial invalidates it even though the LAYOUT has not moved.
+    if (wasActive != step.isActive) _connectedCache = null;
     notifyListeners();
-    final userId = supabase.auth.currentUser?.id;
+    final userId = _userId;
     if (userId != null) await _svc.saveIntroStep(userId, step.index);
   }
 }

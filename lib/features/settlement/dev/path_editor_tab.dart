@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/foe_theme.dart';
+import 'dev_foe.dart';
 import '../../creatures/models/path_node.dart';
 import '../../creatures/models/species_def.dart' show kSpeciesDefs;
 import '../../creatures/services/overworld_path.dart'
@@ -49,18 +49,21 @@ class _PathEditorTabState extends State<PathEditorTab> {
       count: n.enemies.length,
       rng: _rng,
     );
-    final updated = n.copyWith(enemies: [
-      for (var i = 0; i < n.enemies.length; i++)
-        PathEnemy(speciesId: n.enemies[i].speciesId, level: levels[i]),
-    ]);
+    final updated = n.copyWith(
+      enemies: [
+        for (var i = 0; i < n.enemies.length; i++)
+          PathEnemy(speciesId: n.enemies[i].speciesId, level: levels[i]),
+      ],
+    );
     setState(() => _busy = true);
     try {
       await _svc.upsertPathNode(updated);
       await GameDefsController().load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -69,7 +72,8 @@ class _PathEditorTabState extends State<PathEditorTab> {
 
   Future<void> _onReorder(int oldIndex, int newIndex) async {
     final list = pathNodesInOrder();
-    if (newIndex > oldIndex) newIndex -= 1;
+    // onReorderItem (unlike the deprecated onReorder) hands back a newIndex
+    // already adjusted for the removed item at oldIndex — no manual -1 here.
     if (newIndex == oldIndex) return;
     final moved = list.removeAt(oldIndex);
     list.insert(newIndex, moved);
@@ -88,8 +92,9 @@ class _PathEditorTabState extends State<PathEditorTab> {
       await GameDefsController().load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Reorder failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Reorder failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -99,8 +104,10 @@ class _PathEditorTabState extends State<PathEditorTab> {
   Future<void> _open(PathNode? node) async {
     final nextOrder = kPathNodes.isEmpty
         ? 1
-        : kPathNodes.values.map((n) => n.order).reduce((a, b) => a > b ? a : b) +
-            1;
+        : kPathNodes.values
+                  .map((n) => n.order)
+                  .reduce((a, b) => a > b ? a : b) +
+              1;
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -110,28 +117,28 @@ class _PathEditorTabState extends State<PathEditorTab> {
     if (mounted) setState(() {});
   }
 
-
   /// The per-era species breakdown, with the dice that fills a region.
   ///
   /// A separate widget (path_species_sheet.dart) rather than a closure here: it
   /// has tabs, it writes to the path and it has to rebuild after a roll, none of
   /// which a builder inside a list row should be doing.
-  void _showSpecies() => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: FoE.panelDark,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
-    ),
-    builder: (_) => DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.8,
-      maxChildSize: 0.95,
-      builder: (_, _) => const PathSpeciesSheet(),
-    ),
-  ).then((_) {
-    if (mounted) setState(() {});
-  });
+  void _showSpecies() =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: FoE.panelDark,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
+        ),
+        builder: (_) => DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.8,
+          maxChildSize: 0.95,
+          builder: (_, _) => const PathSpeciesSheet(),
+        ),
+      ).then((_) {
+        if (mounted) setState(() {});
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -149,9 +156,10 @@ class _PathEditorTabState extends State<PathEditorTab> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: FoE.btn(active: true),
                     alignment: Alignment.center,
-                    child: Text('+ Neuer Knoten',
-                        style:
-                            FoE.label(size: 15).copyWith(color: Colors.white)),
+                    child: Text(
+                      '+ Neuer Knoten',
+                      style: FoE.label(size: 15).copyWith(color: FoE.onGold),
+                    ),
                   ),
                 ),
               ),
@@ -166,8 +174,10 @@ class _PathEditorTabState extends State<PathEditorTab> {
                     vertical: 12,
                   ),
                   decoration: FoE.btn(),
-                  child: Text('📊 Monster',
-                      style: FoE.label(size: 13).copyWith(color: FoE.gold)),
+                  child: Text(
+                    '📊 Monster',
+                    style: FoE.label(size: 13).copyWith(color: FoE.gold),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -176,11 +186,15 @@ class _PathEditorTabState extends State<PathEditorTab> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: FoE.goldBright),
+                    strokeWidth: 2,
+                    color: FoE.goldBright,
+                  ),
                 )
               else
-                Text('${nodes.length}',
-                    style: FoE.label(size: 13).copyWith(color: FoE.gold)),
+                Text(
+                  '${nodes.length}',
+                  style: FoE.label(size: 13).copyWith(color: FoE.gold),
+                ),
             ],
           ),
         ),
@@ -190,7 +204,7 @@ class _PathEditorTabState extends State<PathEditorTab> {
               : ReorderableListView.builder(
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
                   itemCount: nodes.length,
-                  onReorder: _onReorder,
+                  onReorderItem: _onReorder,
                   itemBuilder: (_, i) => _row(nodes[i], i),
                 ),
         ),
@@ -211,8 +225,9 @@ class _PathEditorTabState extends State<PathEditorTab> {
         for (final e in n.enemies)
           Text(
             '${kSpeciesDefs[e.speciesId]?.name ?? e.speciesId} ${e.level}',
-            style: FoE.label(size: 11)
-                .copyWith(color: speciesNameColor(e.speciesId)),
+            style: FoE.label(
+              size: 11,
+            ).copyWith(color: speciesNameColor(e.speciesId)),
           ),
       ],
     );
@@ -242,8 +257,10 @@ class _PathEditorTabState extends State<PathEditorTab> {
               Container(
                 width: 34,
                 alignment: Alignment.center,
-                child: Text('${n.order}',
-                    style: FoE.value(size: 14).copyWith(color: FoE.goldBright)),
+                child: Text(
+                  '${n.order}',
+                  style: FoE.value(size: 14).copyWith(color: FoE.goldBright),
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -254,10 +271,13 @@ class _PathEditorTabState extends State<PathEditorTab> {
                       children: [
                         if (n.isBoss) const Text('👑 '),
                         Flexible(
-                          child: Text(label,
-                              overflow: TextOverflow.ellipsis,
-                              style: FoE.label(size: 14)
-                                  .copyWith(color: FoE.parchment)),
+                          child: Text(
+                            label,
+                            overflow: TextOverflow.ellipsis,
+                            style: FoE.label(
+                              size: 14,
+                            ).copyWith(color: FoE.parchment),
+                          ),
                         ),
                       ],
                     ),
@@ -318,7 +338,11 @@ class _PathEditorTabState extends State<PathEditorTab> {
 class _TotalLevelField extends StatefulWidget {
   final int total;
   final ValueChanged<int> onCommit;
-  const _TotalLevelField({super.key, required this.total, required this.onCommit});
+  const _TotalLevelField({
+    super.key,
+    required this.total,
+    required this.onCommit,
+  });
 
   @override
   State<_TotalLevelField> createState() => _TotalLevelFieldState();

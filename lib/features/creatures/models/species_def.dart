@@ -251,14 +251,16 @@ class SpeciesDef {
         // The same row's GATHERING curve is left to the default on purpose:
         // gathering is a new capability, not a renamed old one.
         if (!parsed.containsKey(CreatureStat.production)) {
-          final legacy = statsJson['luxuryProduction'] ??
+          final legacy =
+              statsJson['luxuryProduction'] ??
               statsJson['woodcutting'] ??
               statsJson['mining'] ??
               statsJson['fishing'] ??
               statsJson['hunting'];
           if (legacy is Map) {
-            parsed[CreatureStat.production] =
-                StatCurve.fromJson(legacy.cast<String, dynamic>());
+            parsed[CreatureStat.production] = StatCurve.fromJson(
+              legacy.cast<String, dynamic>(),
+            );
           }
         }
         return parsed;

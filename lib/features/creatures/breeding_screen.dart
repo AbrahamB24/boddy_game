@@ -5,19 +5,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/snack.dart';
-import '../common/widgets/parchment_page.dart';
+import '../../core/theme/cream_kit.dart';
 import '../common/widgets/empty_monster_slot.dart';
 import '../common/widgets/filter_pills.dart';
 import '../common/widgets/monster_tile_grid.dart';
 import '../settlement/data/item_definitions.dart';
-import '../settlement/widgets/meander_strip.dart';
-import '../settlement/widgets/scroll_paper.dart'
-    show
-        kParchmentInk,
-        kParchmentLight,
-        kParchmentMid,
-        parchmentButton,
-        parchmentButtonInk;
 import '../settlement/settlement_controller.dart';
 import 'models/breeding_job.dart';
 import 'models/creature_enums.dart';
@@ -28,6 +20,7 @@ import 'models/species_def.dart';
 import 'services/breeding_controller.dart';
 import 'services/breeding_cost.dart';
 import 'services/creatures_controller.dart';
+import 'services/creature_power.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/gene_bar_toggle.dart';
 import '../common/widgets/recess_bar.dart';
@@ -42,28 +35,32 @@ import '../../core/ui/pressable.dart';
 // the partner's list for you) and the panel lays the two sets of genes side by
 // side, because that — plus the odds the better gene wins — is the whole
 // decision. Eggs, incubation and hatching live on the Hatchery screen.
-class BreedingScreen extends StatefulWidget {
-  const BreedingScreen({super.key});
+class BreedingPane extends StatefulWidget {
+  const BreedingPane({super.key});
 
   @override
-  State<BreedingScreen> createState() => _BreedingScreenState();
+  State<BreedingPane> createState() => _BreedingPaneState();
 }
 
-class _BreedingScreenState extends State<BreedingScreen> {
+class _BreedingPaneState extends State<BreedingPane> {
   // ── Ink on parchment (user 2026-07-26: "gestalte das Breeding menü neu
   // und den anderen Menüs entsprechend") ──
   // The build menu, the building dialog, the worker sheet and the upgrade
   // preview all share one surface; this page was the last dark screen among
   // them, and it is reached from the same building.
-  static const Color _ink = kParchmentInk;
-  static final Color _inkSoft = kParchmentInk.withValues(alpha: 0.78);
-  static final Color _inkFaint = kParchmentInk.withValues(alpha: 0.55);
-  static const Color _accent = FoE.gold;
-  static final Color _ornament = kParchmentInk.withValues(alpha: 0.22);
-  static final Color _cardFill = kParchmentInk.withValues(alpha: 0.06);
+  static const Color _ink = CreamPalette.ink;
+  static final Color _inkSoft = CreamPalette.ink.withValues(alpha: 0.78);
+  static const Color _accent = CreamPalette.accent;
 
-  /// This page is parchment, so its pills are.
-  static final PillPalette _pills = PillPalette.parchment;
+  /// The page and the picker sheet are both the kit's cream now, so one ink
+  /// serves both; these are the names the page's own text used while it sat on a
+  /// dark ground.
+  static const Color _pageInk = CreamPalette.ink;
+  static final Color _pageInkSoft = CreamPalette.ink.withValues(alpha: 0.78);
+  static final Color _pageInkFaint = CreamPalette.ink.withValues(alpha: 0.5);
+
+  /// This page is cream, so its pills are.
+  static final PillPalette _pills = PillPalette.cream;
 
   final _breeding = BreedingController();
   final _creatures = CreaturesController();
@@ -192,132 +189,56 @@ class _BreedingScreenState extends State<BreedingScreen> {
     return h > 0 ? '${h}h ${m}m' : '${m}m ${s}s';
   }
 
+  // The BREEDING half of the merged Breeding & Hatchery page (user 2026-09-20:
+  // "hatchery und breeding sollten zusammen sein wie worker und population").
+  // The page's own frame — title, tabs, close — lives in HatcheryScreen.
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kParchmentMid,
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [kParchmentLight, kParchmentMid],
-          ),
-        ),
-        child: SafeArea(
-          // The bands run the FULL page height now, behind [_topBar] too
-          // (user 2026-08-31: "das Mäanderband soll oben weitergehen und
-          // 'unter' den Header auf allen Screens") — they used to sit only
-          // in the body's own Stack, starting exactly where the bar ends,
-          // so the border was a strip down the CONTENT, not down the page.
-          // The bar (opaque, full width) still covers its own row of it
-          // exactly as before.
-          child: Stack(
-            children: [
-              // Wallpaper first, so they never land over a card.
-              Positioned(
-                left: 14,
-                top: 0,
-                bottom: 0,
-                width: 16,
-                // fillHeight (user 2026-09-06: "oben und unten bis zur
-                // Kante") — every band runs flush top-to-bottom now, not
-                // just the hard-edged boxes it used to be reserved for.
-                child: MeanderStrip(color: _ornament, fillHeight: true),
-              ),
-              Positioned(
-                right: 14,
-                top: 0,
-                bottom: 0,
-                width: 16,
-                child: MeanderStrip(
-                  color: _ornament,
-                  flip: true,
-                  fillHeight: true,
-                ),
-              ),
-              ListenableBuilder(
-                listenable: Listenable.merge([_breeding, _creatures]),
-                builder: (context, _) => Column(
-                  children: [
-                    _topBar(),
-                    Expanded(
-                      child: ListView(
-                        // Wide sides: the bands live in that margin. +12/+12
-                        // (2026-09-06), matching the bands' own widened inset.
-                        padding: const EdgeInsets.fromLTRB(40, 14, 40, 14),
-                        children: [
-                          // ONLY the matings (user 2026-07-26). A laid egg goes
-                          // to the Bag and incubating happens in the Hatchery —
-                          // its own building — so neither has a section here.
-                          ..._phaseSection(
-                            'Mating',
-                            _breeding.matingJobs,
-                            'No pair mating.',
-                            slotLabel:
-                                '${_breeding.matingJobs.length}/${_breeding.breedingSlots}',
-                          ),
-                          const SizedBox(height: 18),
-                          Text(
-                            'New pair',
-                            style: FoE.title(size: 13).copyWith(color: _ink),
-                          ),
-                          const SizedBox(height: 8),
-                          _newPairPanel(),
-                          const SizedBox(height: 20),
-                        ],
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([_breeding, _creatures]),
+    // Two columns (landscape): what is mating on the left, the new pair — two
+    // parents, the gene comparison, the button — on the right. ONLY the matings
+    // (user 2026-07-26): a laid egg goes to the Bag and incubating happens in
+    // the Hatchery tab, so neither is here.
+    builder: (context, _) => Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 5,
+            child: sectionCard(
+              title: 'Mating',
+              icon: Icons.favorite,
+              expand: true,
+              child: _breeding.matingJobs.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No pair mating.',
+                        style: FoE.dim(size: 12).copyWith(color: _pageInkFaint),
                       ),
+                    )
+                  : ListView(
+                      padding: EdgeInsets.zero,
+                      children: [
+                        for (final job in _breeding.matingJobs) _jobCard(job),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 7,
+            child: sectionCard(
+              title: 'New pair',
+              icon: Icons.add_circle_outline,
+              expand: true,
+              child: SingleChildScrollView(child: _newPairPanel()),
+            ),
+          ),
+        ],
       ),
-    );
-  }
-
-  /// THE bar (user 2026-07-31: "überall wo es einen header hat, soll dieser
-  /// immer genau gleich aussehen"). It used to be a hand-built 48-px box in the
-  /// scroll's deepest parchment — the same INTENT as the shared band, four
-  /// values apart from it.
-  ///
-  /// No "n active" (user 2026-07-27): the Mating section right below counts its
-  /// own jobs against the hut's slots.
-  Widget _topBar() => const ParchmentHeader(title: 'Breeding');
-
-  /// A titled group (breeding / eggs / hatchery) with its cards, or a dim
-  /// placeholder line when empty. Returns the slivers to splice into the list.
-  List<Widget> _phaseSection(
-    String title,
-    List<BreedingJob> jobs,
-    String emptyLabel, {
-    String? slotLabel,
-  }) => [
-    Row(
-      children: [
-        Text(title, style: FoE.title(size: 13).copyWith(color: _ink)),
-        const Spacer(),
-        // Bare, like every other readout on this paper: a boxed or gilded
-        // number reads as a button.
-        if (slotLabel != null)
-          Text(slotLabel, style: FoE.value(size: 12).copyWith(color: _accent)),
-      ],
     ),
-    const SizedBox(height: 8),
-    if (jobs.isEmpty)
-      Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(
-          emptyLabel,
-          style: FoE.dim(size: 12).copyWith(color: _inkFaint),
-        ),
-      )
-    else
-      for (final job in jobs) _jobCard(job),
-    const SizedBox(height: 14),
-  ];
+  );
 
   /// One running MATING. The egg it will lay, and everything after, belongs to
   /// the Hatchery screen — this page ends when the timer does.
@@ -328,17 +249,8 @@ class _BreedingScreenState extends State<BreedingScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
-      decoration: ShapeDecoration(
-        color: _cardFill,
-        // radius 12, not 10 (2026-08-31 audit) — the standard "running job
-        // card" radius the very next step of this pipeline uses
-        // (hatchery_screen.dart's own job card), and the one every other
-        // list card in the app converges on.
-        shape: FoE.facet(
-          radius: 12,
-          side: BorderSide(color: kParchmentInk.withValues(alpha: 0.18)),
-        ),
-      ),
+      // A raised tile on the card.
+      decoration: raisedTile(radius: 12),
       child: Row(
         children: [
           SizedBox(
@@ -399,20 +311,11 @@ class _BreedingScreenState extends State<BreedingScreen> {
           onPressed: _busy ? null : () => _useAccelerator(job),
         ),
       ),
-    if (SettlementController().isDev)
-      Semantics(
-        label: 'Finish now (Dev)',
-        button: true,
-        child: IconButton(
-          icon: Icon(Icons.fast_forward, color: _accent, size: 18),
-          onPressed: () => _breeding.devFinishNow(job),
-        ),
-      ),
     Semantics(
       label: 'Cancel',
       button: true,
       child: IconButton(
-        icon: const Icon(Icons.close, color: FoE.danger, size: 18),
+        icon: const Icon(Icons.close, color: CreamPalette.warn, size: 18),
         onPressed: () => _breeding.cancel(job),
       ),
     ),
@@ -460,7 +363,7 @@ class _BreedingScreenState extends State<BreedingScreen> {
       return Text(
         'You need an available male AND female of the same species '
         '(not K.O., not already breeding).',
-        style: FoE.dim(size: 12).copyWith(color: _inkSoft),
+        style: FoE.dim(size: 12).copyWith(color: _pageInkSoft),
       );
     }
 
@@ -512,43 +415,43 @@ class _BreedingScreenState extends State<BreedingScreen> {
           // it. The price is part of the offer, not a caption above it.
           Pressable(
             onTap: canStart ? _start : null,
-            child: Opacity(
-              opacity: canStart ? 1 : 0.5,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                alignment: Alignment.center,
-                decoration: parchmentButton(active: canStart),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // A greyed button that repeats its own label says it is off
-                    // but not WHY. Name the missing half instead.
-                    Text(
-                      a == null || b == null
-                          ? 'Pick the partner'
-                          // "Breed" (user 2026-07-27) — one word, like Hatch on
-                          // the Hatchery's button.
-                          : 'Breed',
-                      style: FoE.label(
-                        size: 13,
-                      ).copyWith(color: parchmentButtonInk(active: canStart)),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: goldButton(active: canStart),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A greyed button that repeats its own label says it is off
+                  // but not WHY. Name the missing half instead.
+                  Text(
+                    a == null || b == null
+                        ? 'Pick the partner'
+                        // "Breed" (user 2026-07-27) — one word, like Hatch on
+                        // the Hatchery's button.
+                        : 'Breed',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: goldButtonInk(active: canStart),
                     ),
-                    if (cost.isNotEmpty && species != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        '${breedCostLabel(cost)}   '
-                        '⏱ ${_matingHours(species).round()}h',
-                        textAlign: TextAlign.center,
-                        style: FoE.dim(size: 10).copyWith(
-                          color: affordable
-                              ? parchmentButtonInk(active: canStart)
-                              : FoE.danger,
-                        ),
+                  ),
+                  if (cost.isNotEmpty && species != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      '${breedCostLabel(cost)}   '
+                      '⏱ ${_matingHours(species).round()}h',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: affordable
+                            ? goldButtonInk(active: canStart)
+                            : CreamPalette.warn,
                       ),
-                    ],
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
           ),
@@ -570,31 +473,34 @@ class _BreedingScreenState extends State<BreedingScreen> {
   /// der Kachel bereits beschrieben"). The tile carries the gender symbol, and
   /// the slots are not genders any more — whichever you fill first decides what
   /// the other one may be.
-  Widget _parentSlot({required bool first, required CreatureInstance? c}) =>
-      Builder(
-        builder: (context) => SizedBox(
-          // The Monsters grid's own tile, in its own PIXELS (user
-          // 2026-08-31: "genau gleich gross sein wie die Kacheln beim
-          // Monstersscreen") — an AspectRatio here only fixed the shape;
-          // the actual size still came from however wide this Row's own
-          // Expanded happened to split, which is not the grid's width.
-          width: monsterTileWidth(context),
-          height: monsterTileHeight(context),
-          child: c == null
-              ? _emptySlot(first)
-              : CreatureCard(
-                  creature: c,
-                  onTap: () => _pickParent(first),
-                  // No XP arc and no HP bar here (user 2026-07-27): a parent is
-                  // picked on its genes, not on its level progress or wounds.
-                  showXp: false,
-                  showHp: false,
-                  // The current power big, the level-1 one (its genes) small
-                  // under it.
-                  showLevelOnePower: true,
-                ),
-        ),
-      );
+  Widget _parentSlot({
+    required bool first,
+    required CreatureInstance? c,
+  }) => Builder(
+    builder: (context) => SizedBox(
+      // The Monsters grid's own tile, in its own PIXELS (user
+      // 2026-08-31: "genau gleich gross sein wie die Kacheln beim
+      // Monstersscreen") — an AspectRatio here only fixed the shape;
+      // the actual size still came from however wide this Row's own
+      // Expanded happened to split, which is not the grid's width.
+      // Fixed landscape size (2026-09-18): monsterTileWidth reads the
+      // device's raw WIDTH, now the long axis, and would size this tile
+      // taller than the whole screen. Same 0.6 aspect the tile expects.
+      width: 104,
+      height: 104 / kMonsterTileAspect,
+      child: c == null
+          ? _emptySlot(first)
+          : CreatureCard(
+              creature: c,
+              onTap: () => _pickParent(first),
+              // No HP bar here (user 2026-07-27): a parent is picked on its
+              // genes, not on its wounds. The current power stays in the foot;
+              // the level-1 one (its genes) hangs from the tile as a flag.
+              showHp: false,
+              extras: [TileValue('At Lv 1', levelOnePower(c))],
+            ),
+    ),
+  );
 
   /// An unfilled parent slot, in the BUILD MENU'S dead-card style (user
   /// 2026-07-27: "Nimm für die Kacheln die Kacheln der Gebäude, welche nicht
@@ -623,9 +529,9 @@ class _BreedingScreenState extends State<BreedingScreen> {
         GeneBarToggle(
           showGrowth: _barsShowGrowth,
           onChanged: (v) => setState(() => _barsShowGrowth = v),
-          ink: _ink,
-          inkFaint: _inkFaint,
-          accent: _accent,
+          ink: _pageInk,
+          inkFaint: _pageInkFaint,
+          accent: CreamPalette.accent,
         ),
         const Spacer(),
       ],
@@ -658,7 +564,7 @@ class _BreedingScreenState extends State<BreedingScreen> {
       maxLines: 1,
       style: (size >= 12 ? FoE.value(size: size) : FoE.dim(size: size))
           .copyWith(
-            color: better ? FoE.positive : _inkFaint,
+            color: better ? CreamPalette.better : _pageInkFaint,
             fontWeight: better ? FontWeight.w800 : FontWeight.w400,
           ),
     ),
@@ -711,8 +617,11 @@ class _BreedingScreenState extends State<BreedingScreen> {
           value: (value / maxVal).clamp(0.0, 1.0),
           // The winner's bar is the SAME green as its number, so colour and
           // length agree instead of being two separate readings.
-          color: wins ? FoE.positive : kParchmentInk.withValues(alpha: 0.40),
+          color: wins
+              ? CreamPalette.better
+              : CreamPalette.ink.withValues(alpha: 0.3),
           height: 9,
+          onDark: false,
         ),
       ),
     );
@@ -764,7 +673,7 @@ class _BreedingScreenState extends State<BreedingScreen> {
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: FoE.dim(size: 10).copyWith(color: _inkSoft),
+                style: FoE.dim(size: 10).copyWith(color: _pageInkSoft),
               ),
             ),
             Expanded(
@@ -794,14 +703,14 @@ class _BreedingScreenState extends State<BreedingScreen> {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: ShapeDecoration(
-            color: _accent.withValues(alpha: 0.12),
-            shape: FoE.facet(radius: 8),
+          decoration: BoxDecoration(
+            color: CreamPalette.tan.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Text(
             'Every single stat has a ${(favored * 100).round()} % chance to '
             'inherit the better stat of its parents.',
-            style: FoE.dim(size: 11).copyWith(color: _ink),
+            style: FoE.dim(size: 11).copyWith(color: _inkSoft),
           ),
         ),
       ],
@@ -837,34 +746,21 @@ class _BreedingScreenState extends State<BreedingScreen> {
           return Container(
             margin: const EdgeInsets.all(12),
             constraints: const BoxConstraints(maxHeight: 560),
-            decoration: ShapeDecoration(
-              color: kParchmentLight,
-              shape: FoE.facet(radius: 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [CreamPalette.paperTop, CreamPalette.paperBottom],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: CreamPalette.tan.withValues(alpha: 0.6),
+              ),
             ),
             child: Stack(
               children: [
-                Positioned(
-                  left: 14,
-                  top: 0,
-                  bottom: 0,
-                  width: 16,
-                  child: MeanderStrip(color: _ornament, fillHeight: true),
-                ),
-                Positioned(
-                  right: 14,
-                  top: 0,
-                  bottom: 0,
-                  width: 16,
-                  child: MeanderStrip(
-                    color: _ornament,
-                    flip: true,
-                    fillHeight: true,
-                  ),
-                ),
                 Padding(
-                  // +4/+4 (2026-09-06): the band's inset/width grew from
-                  // 12/14 to 14/16, matching building_detail_dialog.dart.
-                  padding: const EdgeInsets.fromLTRB(38, 16, 38, 16),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1099,9 +995,8 @@ class _BreedingScreenState extends State<BreedingScreen> {
                   Positioned.fill(
                     child: CreatureCard(
                       creature: c,
-                      showXp: false,
                       showHp: false,
-                      showLevelOnePower: true,
+                      extras: [TileValue('At Lv 1', levelOnePower(c))],
                     ),
                   ),
                   // No separate gene badge any more: the tile's own ⚡ now
@@ -1115,7 +1010,7 @@ class _BreedingScreenState extends State<BreedingScreen> {
                       child: const Icon(
                         Icons.check_circle,
                         size: 18,
-                        color: FoE.positive,
+                        color: CreamPalette.better,
                       ),
                     ),
                 ],

@@ -66,6 +66,28 @@ int partySizeForBattle(int battleNumber) {
   return size.clamp(1, kMaxPartySize);
 }
 
+/// The next party-size step ahead of a player who has cleared [battlesCleared]
+/// battles: how big the party gets, from which battle number, and how many more
+/// wins it takes to allow it. Null once the largest party is already allowed.
+///
+/// Seats come from the map alone (user 2026-09-22: "nur die Anzahl der Monster pro
+/// Team wird freigeschalten durch die Map") — the number of SAVED teams is not
+/// limited. The Teams screen reads this for its "seat 3 from battle 15 — 5 wins
+/// to go" line and the locked seat on every team.
+({int size, int battle, int winsToGo})? nextPartySeat(int battlesCleared) {
+  final cap = partySizeForBattle(battlesCleared + 1);
+  if (cap >= kMaxPartySize) return null;
+  for (final t in partySizeThresholds()) {
+    final size = partySizeForBattle(t);
+    if (t > battlesCleared + 1 && size > cap) {
+      // The allowance for the NEXT battle is what counts (see partyCap): clearing
+      // battle t-1 is what lets battle t take the bigger party.
+      return (size: size, battle: t, winsToGo: t - 1 - battlesCleared);
+    }
+  }
+  return null;
+}
+
 /// The max party the player has UNLOCKED so far, given the furthest battle they
 /// have reached. This is the cap for things not tied to a single battle node —
 /// standing teams and expedition groups — where "the highest I've earned"

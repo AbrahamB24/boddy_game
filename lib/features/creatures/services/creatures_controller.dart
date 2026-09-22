@@ -185,12 +185,16 @@ class CreaturesController extends ChangeNotifier {
   /// The FIGHTING rosters — what the Teams screen lists and battleTeam() reads.
   /// [savedTeams] also holds the Market's caravans since migration 0028, and a
   /// caravan has no business in the battle-team picker.
-  List<SavedTeam> get battleTeams =>
-      [for (final t in savedTeams) if (t.kind == TeamKind.battle) t];
+  List<SavedTeam> get battleTeams => [
+    for (final t in savedTeams)
+      if (t.kind == TeamKind.battle) t,
+  ];
 
   /// The Market's saved hauling parties, oldest first (the insert order).
-  List<SavedTeam> get caravans =>
-      [for (final t in savedTeams) if (t.kind == TeamKind.caravan) t];
+  List<SavedTeam> get caravans => [
+    for (final t in savedTeams)
+      if (t.kind == TeamKind.caravan) t,
+  ];
 
   SavedTeam? get activeTeam {
     for (final t in savedTeams) {
@@ -306,10 +310,7 @@ class CreaturesController extends ChangeNotifier {
   /// healing taking time (healing_cost.dart). Without this you could heal and
   /// fight with the same monster in the same breath.
   bool _isBattleReady(CreatureInstance c) =>
-      !c.isKo &&
-      !c.isHealing &&
-      !isBreeding(c.id) &&
-      !isOnExpedition(c.id);
+      !c.isKo && !c.isHealing && !isBreeding(c.id) && !isOnExpedition(c.id);
 
   /// The battle roster, capped at [size] (default: the researched team-size
   /// cap). THE single team-selection rule — collection training, dungeon entry
@@ -352,7 +353,15 @@ class CreaturesController extends ChangeNotifier {
   bool get housingFull =>
       creatures.isNotEmpty && SettlementController().housingFull;
 
-  String? get _userId => supabase.auth.currentUser?.id;
+  /// The signed-in user, or null — also null before Supabase is initialised
+  /// (a widget test), where reading `supabase` would throw.
+  String? get _userId {
+    try {
+      return supabase.auth.currentUser?.id;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> load({bool force = false}) async {
     if (isLoading || (_loadedOnce && !force)) return;
@@ -452,8 +461,9 @@ class CreaturesController extends ChangeNotifier {
   /// visible the instant [notifyListeners] fires below; persisting it is a
   /// durability concern, not something the caller needs to wait on.
   Future<void> unassignAllFrom(String buildingId) async {
-    final affected =
-        creatures.where((c) => c.assignedBuildingId == buildingId).toList();
+    final affected = creatures
+        .where((c) => c.assignedBuildingId == buildingId)
+        .toList();
     if (affected.isEmpty) return;
     for (final c in affected) {
       c.assignedBuildingId = null;
@@ -645,7 +655,10 @@ class CreaturesController extends ChangeNotifier {
   /// exact sampled genes. Joins with full pools (fresh start in your team).
   /// [force] bypasses the housing cap — used for the region-boss legendary,
   /// which is awarded ceremonially and must never be lost to a full house.
-  Future<CreatureInstance?> captureWild(Combatant wild, {bool force = false}) async {
+  Future<CreatureInstance?> captureWild(
+    Combatant wild, {
+    bool force = false,
+  }) async {
     final userId = _userId;
     final speciesId = wild.speciesId;
     if (userId == null ||
@@ -675,8 +688,7 @@ class CreaturesController extends ChangeNotifier {
       final created = await _svc.insert(caught);
       creatures.add(created);
       // Daily-task hook: a monster joined the roster.
-      SettlementController()
-          .reportDailyProgress(DailyTaskKind.catchMonsters);
+      SettlementController().reportDailyProgress(DailyTaskKind.catchMonsters);
       notifyListeners();
       return created;
     } catch (e) {
@@ -1021,13 +1033,15 @@ class CreaturesController extends ChangeNotifier {
         // A REAL deadline (unlike crafting/construction, which accrue seconds and
         // whose finish time moves with staffing), so it can be promised (user
         // 2026-07-30).
-        unawaited(GameNotifications.schedule(
-          kind: NotifyKind.healing,
-          key: c.id,
-          at: c.healingUntil!,
-          title: '🩺 Patched up',
-          body: '${c.displayName} is out of the Healing Hut.',
-        ));
+        unawaited(
+          GameNotifications.schedule(
+            kind: NotifyKind.healing,
+            key: c.id,
+            at: c.healingUntil!,
+            title: '🩺 Patched up',
+            body: '${c.displayName} is out of the Healing Hut.',
+          ),
+        );
       }
       // It is in the hut now, not in the line — the two states are exclusive,
       // and a stale queue entry would put it back in the queue list beside its
@@ -1048,6 +1062,8 @@ class CreaturesController extends ChangeNotifier {
     unawaited(GameNotifications.cancel(NotifyKind.healing, c.id));
     c.currentHp = -1;
     c.healingUntil = null;
+    // Daily goal: a finished treatment counts.
+    SettlementController().reportDailyProgress(DailyTaskKind.healMonsters);
   }
 
   /// Treatment order when a heal cap forces a choice: the K.O.'d go first, then
@@ -1347,13 +1363,15 @@ class CreaturesController extends ChangeNotifier {
     c.trainingUntil = DateTime.now().add(
       trainingDuration(ability) * (1.0 / settlement.energyMultiplier),
     );
-    unawaited(GameNotifications.schedule(
-      kind: NotifyKind.training,
-      key: c.id,
-      at: c.trainingUntil!,
-      title: '🥋 Lesson complete',
-      body: '${c.displayName} finished learning ${ability.name}.',
-    ));
+    unawaited(
+      GameNotifications.schedule(
+        kind: NotifyKind.training,
+        key: c.id,
+        at: c.trainingUntil!,
+        title: '🥋 Lesson complete',
+        body: '${c.displayName} finished learning ${ability.name}.',
+      ),
+    );
     try {
       await _svc.update(c);
     } catch (e) {
@@ -1387,13 +1405,15 @@ class CreaturesController extends ChangeNotifier {
       if (ability == null) continue;
       c.trainingUntil = DateTime.now().add(trainingDuration(ability));
       c.trainQueuedAt = null;
-      unawaited(GameNotifications.schedule(
-        kind: NotifyKind.training,
-        key: c.id,
-        at: c.trainingUntil!,
-        title: '🥋 Lesson complete',
-        body: '${c.displayName} finished learning ${ability.name}.',
-      ));
+      unawaited(
+        GameNotifications.schedule(
+          kind: NotifyKind.training,
+          key: c.id,
+          at: c.trainingUntil!,
+          title: '🥋 Lesson complete',
+          body: '${c.displayName} finished learning ${ability.name}.',
+        ),
+      );
       try {
         await _svc.update(c);
       } catch (e) {
@@ -1544,9 +1564,7 @@ class CreaturesController extends ChangeNotifier {
         // Snapshot before, so a level-up can report exactly which stats grew
         // (user 2026-07-24: show the improvement at the end of the fight).
         final fromLevel = creature.level;
-        final before = {
-          for (final s in kCombatStats) s: creature.statValue(s),
-        };
+        final before = {for (final s in kCombatStats) s: creature.statValue(s)};
         final gained = creature.gainXp(xpEach, levelCap: eraLevelCap);
         if (gained > 0) {
           final statGains = <CreatureStat, int>{};
@@ -1554,14 +1572,16 @@ class CreaturesController extends ChangeNotifier {
             final delta = creature.statValue(s) - before[s]!;
             if (delta > 0) statGains[s] = delta;
           }
-          levelUps.add(LevelUpResult(
-            creatureId: creature.id,
-            name: creature.displayName,
-            imageUrl: creature.imageUrl,
-            fromLevel: fromLevel,
-            toLevel: creature.level,
-            statGains: statGains,
-          ));
+          levelUps.add(
+            LevelUpResult(
+              creatureId: creature.id,
+              name: creature.displayName,
+              imageUrl: creature.imageUrl,
+              fromLevel: fromLevel,
+              toLevel: creature.level,
+              statGains: statGains,
+            ),
+          );
         }
       }
       try {
@@ -1571,6 +1591,13 @@ class CreaturesController extends ChangeNotifier {
       }
     }
     notifyListeners();
+    // Daily goal: every level gained in the fight counts.
+    if (levelUps.isNotEmpty) {
+      SettlementController().reportDailyProgress(
+        DailyTaskKind.levelUpMonsters,
+        levelUps.length,
+      );
+    }
     return levelUps;
   }
 }

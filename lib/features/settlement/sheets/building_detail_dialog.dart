@@ -4,12 +4,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/theme/cream_kit.dart';
 import '../../../core/ui/duration_format.dart';
 import '../../../core/ui/number_format.dart';
-import '../../common/widgets/parchment_page.dart';
+import '../../../core/ui/scroll_cue.dart';
 import '../../common/widgets/recess_bar.dart';
 import '../../creatures/battle_screen.dart';
-import '../../creatures/breeding_screen.dart';
 import '../../creatures/combat_school_screen.dart';
 import '../../creatures/expeditions_screen.dart';
 import '../../creatures/hatchery_screen.dart';
@@ -34,7 +34,8 @@ import '../../creatures/models/creature_instance.dart';
 import '../../creatures/models/species_def.dart';
 import '../../creatures/overworld_screen.dart';
 import '../../creatures/services/creatures_controller.dart';
-import '../../creatures/widgets/creature_sprite.dart';
+import '../../creatures/widgets/creature_family.dart'
+    show CreatureFace, CreatureSeatTile;
 import '../../onboarding/intro_flow.dart';
 import '../../onboarding/intro_spotlight.dart';
 import '../crafting_screen.dart';
@@ -42,30 +43,15 @@ import '../data/building_definitions.dart';
 import '../data/goods_definitions.dart';
 import '../data/resource_icons.dart';
 import '../data/workshop_role_effects.dart';
-import '../housing_screen.dart';
 import '../work_screen.dart';
 import '../market_screen.dart';
 import '../models/placed_building.dart';
 import '../settlement_controller.dart';
-import '../widgets/assign_workers_sheet.dart';
+import '../assign_workers_screen.dart';
 import '../widgets/building_icon.dart';
-import '../widgets/meander_strip.dart';
-import '../widgets/parchment_sheet.dart';
-import '../widgets/scroll_paper.dart'
-    show
-        kActionGreen,
-        kParchmentDeep,
-        kParchmentInk,
-        parchmentButton,
-        parchmentButtonInk;
+import '../widgets/building_life.dart' show kPausedFilter;
 import 'building_upgrade_sheet.dart';
 import '../../../core/ui/pressable.dart';
-
-/// The warm accent for labels on the building dialog's parchment (user
-/// 2026-07-23): a burnt amber that reads on the cream where the app's light
-/// golds would vanish. File-level so the dialog and the standalone
-/// _BuildCountdown widget share the one value.
-const Color _kDlgAccent = FoE.gold;
 
 // Training battle vs. 1-3 random wild creatures near the team's level.
 // Lives at the Training Grounds (user decision 2026-07-17, moved off the
@@ -99,22 +85,40 @@ Future<void> _startTrainingBattle(BuildContext context) async {
   );
 }
 
-// ── Detail dialog (normal mode) ───────────────────────────
-/// The building detail dialog: art, name, level, effects, upgrade, era-ascend
-/// and the primary "what this building is for" actions. Opened by tapping a
-/// building on the settlement map, and (since 2026-08-31) from a building's
-/// row in the Management screen's Housing tab — the same dialog either way,
-/// just given an explicit [SettlementController] instead of reading it off
-/// `widget.ctrl` the way the map's own State used to.
+// ── Detail dialog ─────────────────────────────────────────
+/// The building detail dialog, "Variante 3 · Holz" (user 2026-09-19, picked
+/// from ten layouts). Three tiers, top to bottom:
+///
+///  * a HERO card — art rising out of it, name, level/footprint/state pills,
+///    the building's primary actions and the pause switch;
+///  * a fixed-height row of two cards, EFFECTS and CREW. They keep the same
+///    size whatever the building: the Effects rows flow into two columns (and
+///    only then shrink) when there are many, the Crew tiles scale
+///    ([_CrewGrid]) so 24 seats and every effect always fit without scrolling;
+///  * an UPGRADE bar that never moves — "Lv 4 → Lv 5", what the level brings,
+///    the cost inside the button.
+///
+/// Opened by tapping a building on the settlement map, and (since 2026-08-31)
+/// from a building's row in the Management screen's Housing tab — the same
+/// dialog either way, just given an explicit [SettlementController] instead of
+/// reading it off `widget.ctrl` the way the map's own State used to.
 Future<void> showBuildingDetailDialog(
   BuildContext context,
   SettlementController ctrl,
   PlacedBuilding b, {
-  VoidCallback? onOpenBuildMenu,
+  // Only the map's own call site passes true — the Builder Camp's "Build"
+  // action just closes this dialog to reveal the bottom carousel sitting
+  // right underneath it (see that action's own doc comment below), which
+  // only exists on the settlement screen. Opened from Housing/Work/a
+  // resource tab instead, popping would land back on THAT screen with no
+  // carousel to reveal, so the button has to stay hidden there.
+  bool onMap = false,
 }) {
   final def = kBuildingDefs[b.buildingTypeId]!;
   return showDialog<void>(
     context: context,
+    // The map behind goes brown with the kit.
+    barrierColor: CreamPalette.dim,
     builder: (_) => AnimatedBuilder(
       animation: ctrl,
       builder: (context, _) {
@@ -126,9 +130,9 @@ Future<void> showBuildingDetailDialog(
         );
         final connected = ctrl.connectedBuildingIds.contains(liveB.id);
         final functional = liveB.isComplete && connected;
-        // Guided tutorial (user 2026-09-06): "Manage Work" is the only lit
-        // control in this dialog for as long as this is true — Effects,
-        // Upgrade and the primary actions below are dimmed and dead. Self-
+        // Guided tutorial (user 2026-09-06): the Healing Hut's empty "+" worker
+        // tile is the only lit control in this dialog for as long as this is
+        // true — Upgrade and the primary actions are dimmed and dead. Self-
         // clearing: posting a worker here is what advances past assignHealer
         // (see SettlementController.setAssignment), so the NEXT rebuild after
         // a successful assignment already sees a different step and stops
@@ -140,388 +144,175 @@ Future<void> showBuildingDetailDialog(
           ignoring: oneLitControl,
           child: Opacity(opacity: oneLitControl ? 0.35 : 1, child: child),
         );
-        // Tapping outside a dialog is a barrier pop (Navigator.maybePop),
-        // same route PopScope guards — needed here because this dialog has
-        // no ✕ of its own, so the barrier is normally the ONLY way out (user
-        // 2026-09-06: "ich kann auch nicht aus dem Gebäude rausklicken" —
-        // the one-lit-control window must hold for the WHOLE dialog, not
-        // just the buttons inside it). Lifts itself the instant
-        // [oneLitControl] does, same as everything [lockable] guards.
+        final size = MediaQuery.sizeOf(context);
+        // The Effects/Crew row is the one thing that must NOT change size from
+        // building to building (user 2026-09-19), so its height comes from the
+        // screen, not from what is inside.
+        final middleH = (size.height - _kDialogChrome).clamp(160.0, 260.0);
+        final panels = liveB.isComplete
+            ? _buildPanels(
+                context,
+                ctrl,
+                liveB,
+                def,
+                functional,
+                spotlightSlot: oneLitControl,
+              )
+            : null;
+        final actions = [
+          for (final a in _primaryActions(
+            ctrl,
+            context,
+            liveB,
+            def,
+            functional,
+            onMap: onMap,
+          ))
+            lockable(a),
+        ];
+        // PAUSE, a round button in the hero (user 2026-08-27). Only for
+        // buildings that actually RUN something: pausing a house or a store
+        // would be a switch with nothing behind it. Taken away for the
+        // tutorial's one-lit-control window.
+        final pause = liveB.isComplete && _canPause(def) && !oneLitControl
+            ? _circleBtn(
+                liveB.isPaused ? Icons.play_arrow : Icons.pause,
+                () => ctrl.setPaused(liveB.id, !liveB.isPaused),
+              )
+            : null;
+        final upgradeBar = liveB.isComplete && ctrl.isUpgradable(def)
+            ? lockable(_upgradeBar(context, ctrl, liveB, def))
+            : null;
+        final notes = liveB.isComplete && def.workshops.isNotEmpty
+            ? _crewNotes(liveB, def, functional)
+            : null;
         return PopScope(
           canPop: !oneLitControl,
           child: Dialog(
             backgroundColor: Colors.transparent,
-            // The app's default DialogTheme (parchment_theme.dart) draws a
-            // faint light border around every Material Dialog's own laid-out
-            // bounds. Harmless when a dialog's content stays inside those
-            // bounds — invisible, exactly covered by the content's own
-            // matching edge — but THIS dialog deliberately lets the art rise
-            // past them (Clip.none below), so that inherited border stayed
-            // put at the "official" top edge and showed through every gap in
-            // the roofline above it (user 2026-08-27: "die Kante der Box
-            // schimmert durch das Gebäude hindurch"). The visible card is the
-            // inner Container's own gradient, which needs no second, redundant
-            // border drawn behind it.
+            // The app's default DialogTheme draws a faint border around the
+            // Dialog's own bounds; this dialog lets the art rise past them
+            // (Clip.none), so the shape carries no side.
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.all(Radius.circular(16)),
             ),
             insetPadding: const EdgeInsets.symmetric(
               horizontal: 14,
-              vertical: 24,
+              vertical: 12,
             ),
             child: Stack(
               // Clip.none twice over (here and in the scroll view): the art is
               // bottom-anchored in its slot and must be free to rise past the
-              // dialog's top edge, the way the build-menu cards do.
+              // top edge, the way the build-menu cards do.
               clipBehavior: Clip.none,
               children: [
-                Container(
-                  width: 400,
-                  // The build menu's PARCHMENT is the dialog surface too (user
-                  // 2026-07-23) — one warm visual language for both places you
-                  // look at a building.
-                  //
-                  // NOT clipped at the Container level — the art further down
-                  // ([_artPanel]) deliberately rises past THIS box's own top
-                  // edge (see the Clip.none comments above), so clipping here
-                  // would cut the art off along with the band. The bands get
-                  // their own ClipRRect instead (below), sized to this WHOLE
-                  // Container rather than to each band's own narrow box — a
-                  // radius equal to the band's own width clipped away nearly
-                  // the entire band near the top instead of just the sliver
-                  // that actually overlaps the card's true corner curve (user
-                  // 2026-08-31, after the first attempt: "soll auch hier ganz
-                  // bis zum Rand der Box kommen").
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    gradient: ParchmentPage.pageGradient,
-                    // Lifts the card off whatever's behind it — the settlement
-                    // map, usually (user 2026-09-05: "bei solchen Menüs,
-                    // welche überlagert angezeigt werden bitte einen Schatten
-                    // hinzufügen"). Small and offset down-right, same as
-                    // every other [FoE.drop] user, so it reads as a shadow
-                    // under this box rather than a line crossing the art that
-                    // rises past its top edge.
-                    boxShadow: FoE.drop(),
-                  ),
-                  child: Stack(
-                    children: [
-                      // Ornament FIRST — it is wallpaper, so it belongs behind
-                      // the content and never over a line of text (user
-                      // 2026-07-22).
-                      //
-                      // The meander band is BACK (user 2026-08-31: "hier das
-                      // Mäanderband auch hinzufügen") — this dialog was the one
-                      // exception that dropped it for a carved groove instead
-                      // (2026-08-27: "lösche die Dreieckverzierung und ersetze
-                      // sie mit etwas, was mehr passt"), back when the band was
-                      // still a rough zigzag guess; now that it is traced
-                      // pixel-for-pixel off the real key pattern, every sheet
-                      // wears the same one again.
-                      // No Center wrapper (unlike the groove it replaces) — a
-                      // bare CustomPaint (which MeanderStrip is) has no
-                      // intrinsic size, so Center's loose constraints collapsed
-                      // it to Size.zero and the band never painted (user
-                      // 2026-08-31: "ist noch nicht da"). Positioned's own
-                      // tight box, straight onto the widget, is what
-                      // ParchmentPage's own bands already rely on.
-                      Positioned.fill(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Stack(
-                            children: [
-                              // Flush to the box's own top/bottom edge (user
-                              // 2026-09-01: "hier auch") — the same fillHeight
-                              // fix the era panel and the away-digest sheet
-                              // got: a hard-edged card, not a free page
-                              // margin, so the usual centred-with-margin run
-                              // left a visible gap at both ends.
-                              Positioned(
-                                left: 14,
-                                top: 0,
-                                bottom: 0,
-                                width: 16,
-                                child: MeanderStrip(
-                                  color: _dlgOrnament,
-                                  fillHeight: true,
-                                ),
-                              ),
-                              Positioned(
-                                right: 14,
-                                top: 0,
-                                bottom: 0,
-                                width: 16,
-                                child: MeanderStrip(
-                                  color: _dlgOrnament,
-                                  flip: true,
-                                  fillHeight: true,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: SingleChildScrollView(
-                              clipBehavior: Clip.none,
-                              // Wide side padding: the meander bands live in that
-                              // margin, so the text must keep clear of it.
-                              padding: const EdgeInsets.fromLTRB(
-                                36,
-                                14,
-                                36,
-                                14,
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  // ── Hero: art (rising out of the card), name, level
-                                  //    pill, what it does ───────────────────────────
-                                  // Footprint + level + XP/state now live in the hero masthead
-                                  // (user 2026-07-24) — the separate stat-chip box is gone.
-                                  // Guided tutorial: one banner explaining the
-                                  // concept, right where the player lands
-                                  // after tapping the spotlit Healing Hut
-                                  // (user 2026-08-24: "Detailscreen erklären",
-                                  // reworded 2026-09-06 to the general rule
-                                  // rather than a tour of every card — Effects
-                                  // and Upgrade are dimmed and dead below
-                                  // anyway for as long as this shows, see
-                                  // [oneLitControl]).
-                                  if (oneLitControl) ...[
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: FoE.gold.withValues(alpha: 0.14),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: FoE.borderGold,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        'A building only works once it has a '
-                                        'worker posted to it — this Healing '
-                                        'Hut heals nobody until someone is '
-                                        'stationed there. Tap Manage Work '
-                                        'below and post a monster to its '
-                                        'medicine role.',
-                                        style: FoE.label(
-                                          size: 11,
-                                        ).copyWith(color: _dlgInk),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                  ],
-                                  _heroRow(ctrl, liveB, def, functional),
-                                  const SizedBox(height: 10),
-                                  // Under construction: the countdown replaces the
-                                  // production card entirely — nothing is produced yet.
-                                  if (!liveB.isComplete)
-                                    _sectionCard(
-                                      title: 'Under construction',
-                                      child: _BuildCountdown(
-                                        ctrl: ctrl,
-                                        buildingId: liveB.id,
-                                      ),
-                                    )
-                                  else
-                                    // ── Effects: base output, housing, who works here, total ──
-                                    // (user 2026-07-24: a house's gold + housing are EFFECTS, so
-                                    // the card is "Effects", not just "Production".) Dimmed and
-                                    // dead during assignHealer's own one-lit-control window —
-                                    // see [lockable].
-                                    lockable(
-                                      _sectionCard(
-                                        title: 'Effects',
-                                        // PAUSE, as a small trailing button (user
-                                        // 2026-08-27) — moved off the bottom
-                                        // pill row and onto this title, the
-                                        // same "green circle" the Upgrade card
-                                        // wears. Only for buildings that
-                                        // actually RUN something: pausing a
-                                        // house or a store would be a switch
-                                        // with nothing behind it, since housing
-                                        // and storage are what a building IS,
-                                        // not what it does, and keep counting
-                                        // either way.
-                                        trailing: _canPause(def)
-                                            ? Pressable(
-                                                behavior:
-                                                    HitTestBehavior.opaque,
-                                                onTap: () => ctrl.setPaused(
-                                                  liveB.id,
-                                                  !liveB.isPaused,
-                                                ),
-                                                child: Container(
-                                                  width: 24,
-                                                  height: 24,
-                                                  decoration:
-                                                      const BoxDecoration(
-                                                        color: kActionGreen,
-                                                        shape: BoxShape.circle,
-                                                      ),
-                                                  child: Icon(
-                                                    liveB.isPaused
-                                                        ? Icons.play_arrow
-                                                        : Icons.pause,
-                                                    size: 15,
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                              )
-                                            : null,
-                                        child: _productionSection(
-                                          ctrl,
-                                          liveB,
-                                          def,
-                                          functional,
-                                        ),
-                                      ),
-                                    ),
-                                  const SizedBox(height: 6),
-                                  // Crafting recipe + the notes that belong to a staffed
-                                  // building (the workers themselves live in the production
-                                  // card above).
-                                  if (liveB.isComplete &&
-                                      def.workshops.isNotEmpty) ...[
-                                    lockable(
-                                      _workshopExtras(liveB, def, functional),
-                                    ),
-                                    const SizedBox(height: 4),
-                                  ],
-                                  // ── Manage: the one door into staffing
-                                  // every post this building has (user
-                                  // 2026-08-27) — between Effects and
-                                  // Upgrade, replacing the per-post "+". Sits
-                                  // CLOSER to Effects than to Upgrade (user
-                                  // 2026-08-31: "der Manage Button gehört zu
-                                  // Effects") — it staffs the posts Effects
-                                  // reads out, Upgrade is a separate decision.
-                                  // NEVER dimmed by [lockable] — this is the
-                                  // one control assignHealer's own
-                                  // one-lit-control window leaves lit; see the
-                                  // anchorKey below.
-                                  if (liveB.isComplete &&
-                                      functional &&
-                                      def.workshops.isNotEmpty) ...[
-                                    KeyedSubtree(
-                                      key: oneLitControl
-                                          ? IntroSpotlightAnchors.of(
-                                              'healing-hut-manage-work',
-                                            )
-                                          : null,
-                                      child: _primaryActionButton(
-                                        'Manage Work',
-                                        () => _manageWorkers(
-                                          context,
-                                          ctrl,
-                                          liveB,
-                                          def,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                  ],
-                                  // ── Upgrade: what it buys, cost inside the button ──
-                                  if (liveB.isComplete &&
-                                      ctrl.isUpgradable(def)) ...[
-                                    lockable(
-                                      _sectionCard(
-                                        title: 'Upgrade',
-                                        // Small right-aligned peek at the effects at MAX level
-                                        // (user 2026-07-24) — replaces the big bottom button.
-                                        //
-                                        // In a GREEN CIRCLE (user 2026-07-26: "damit man sieht,
-                                        // dass es ein Button ist"). A bare glyph on parchment
-                                        // reads as decoration next to a heading; the settlement's
-                                        // action green is what everything tappable already wears,
-                                        // so the circle is the whole affordance.
-                                        trailing: Pressable(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () => showBuildingUpgradeSheet(
-                                            context,
-                                            def,
-                                          ),
-                                          child: Container(
-                                            width: 24,
-                                            height: 24,
-                                            decoration: const BoxDecoration(
-                                              color: kActionGreen,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                              Icons.query_stats,
-                                              size: 15,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                        child: _upgradeSection(
-                                          context,
-                                          ctrl,
-                                          liveB,
-                                          def,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                  ],
-                                  // Housing lives HERE, not in the top bar (user decision
-                                  // 2026-07-17): the Castle is the settlement's
-                                  // administrative heart, so its dialog owns the population
-                                  // overview. isMainBuilding, not connectivity — the hall IS
-                                  // the road network's root and never needs a connection.
-                                  // Region ascension is gone (user 2026-09-05):
-                                  // beating a region's boss now unlocks the
-                                  // next region's buildings/costs/level cap
-                                  // immediately and for free — nothing left to
-                                  // do or pay at the hall.
-                                  // ── What this building lets you DO ─────────────
-                                  lockable(
-                                    _actionArea(
-                                      context,
-                                      liveB,
-                                      def,
-                                      functional,
-                                    ),
-                                  ),
-                                  // THE thing it is for, LAST (user 2026-07-27):
-                                  // the biggest button on the card, at the foot
-                                  // of it, so the dialog ends on the way in
-                                  // rather than on a row of numbers.
-                                  for (final action in _primaryActions(
-                                    ctrl,
-                                    context,
-                                    liveB,
-                                    def,
-                                    functional,
-                                    onOpenBuildMenu: onOpenBuildMenu,
-                                  )) ...[
-                                    const SizedBox(height: 12),
-                                    lockable(action),
-                                  ],
-                                  const SizedBox(height: 2),
-                                ],
-                              ),
+                SizedBox(
+                  width: (size.width - 28).clamp(360.0, 728.0),
+                  // NO PLATE (user 2026-09-18) — the cards stand straight on
+                  // the dimmed map, each with its own hard shadow.
+                  child: SingleChildScrollView(
+                    clipBehavior: Clip.none,
+                    padding: const EdgeInsets.fromLTRB(0, 8, 0, 10),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Guided tutorial: one banner explaining the concept,
+                        // right where the player lands after tapping the
+                        // spotlit Healing Hut (user 2026-08-24).
+                        if (oneLitControl) ...[
+                          creamCard(
+                            padding: const EdgeInsets.all(10),
+                            // Amber underneath instead of tan: the note is the
+                            // one thing to read here.
+                            deep: CreamPalette.goldDeep,
+                            child: Text(
+                              'A building only works once it has a '
+                              'worker posted to it — this Healing '
+                              'Hut heals nobody until someone is '
+                              'stationed there. Tap the + under '
+                              'Crew and post a monster to its '
+                              'medicine role.',
+                              style: FoE.label(
+                                size: 11,
+                              ).copyWith(color: kBoxInk),
                             ),
                           ),
+                          const SizedBox(height: 10),
                         ],
-                      ),
-                    ],
+                        _heroCard(
+                          ctrl,
+                          liveB,
+                          def,
+                          functional,
+                          actions: actions,
+                          pause: pause,
+                        ),
+                        const SizedBox(height: 10),
+                        if (panels == null)
+                          // Under construction: the countdown replaces both
+                          // cards — nothing is produced and nobody works yet.
+                          sectionCard(
+                            title: 'Under construction',
+                            icon: Icons.construction,
+                            child: _BuildCountdown(
+                              ctrl: ctrl,
+                              buildingId: liveB.id,
+                            ),
+                          )
+                        else
+                          // NOT dimmed during assignHealer's one-lit-control
+                          // window: its empty "+" tile is the lit control.
+                          SizedBox(
+                            height: middleH,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  flex: 5,
+                                  child: sectionCard(
+                                    title: 'Effects',
+                                    icon: Icons.bolt,
+                                    expand: true,
+                                    child: _EffectsBody(items: panels.effects),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 7,
+                                  child: _crewCard(
+                                    panels,
+                                    def,
+                                    functional,
+                                    notes == null ? null : lockable(notes),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        // The bar slot: Upgrade for a finished building, the
+                        // buy-out for one still under construction.
+                        if (!liveB.isComplete) ...[
+                          const SizedBox(height: 10),
+                          creamCard(
+                            padding: const EdgeInsets.all(8),
+                            child: _skipBuildButton(context, liveB),
+                          ),
+                        ] else if (upgradeBar != null) ...[
+                          const SizedBox(height: 10),
+                          upgradeBar,
+                        ],
+                      ],
+                    ),
                   ),
                 ),
-                // No ✕ (user 2026-07-22) — the level sits where it used to
-                // be; tapping outside the dialog closes it.
+                // No ✕ (user 2026-07-22) — tapping outside the dialog closes it.
                 // Guided tutorial: the one lit control (user 2026-09-06) —
                 // see [oneLitControl]/[lockable] above for what it dims.
                 if (oneLitControl)
                   const IntroSpotlightOverlay(
-                    anchorName: 'healing-hut-manage-work',
-                    hint: 'Tap Manage Work to post a monster here',
+                    anchorName: 'healing-hut-assign-slot',
+                    hint: 'Tap the + to post a monster here',
                   ),
               ],
             ),
@@ -532,190 +323,200 @@ Future<void> showBuildingDetailDialog(
   );
 }
 
-// ── Detail dialog pieces (reference layout, user 2026-07-22) ─
-/// The recess a section sits in — a shade sunk into the parchment (user
-/// 2026-07-23), so a grouped block reads as a pressed panel rather than a
-/// second colour.
-final Color _dlgInset = kParchmentDeep.withValues(alpha: 0.55);
+// ── Dialog measures ─────────────────────────────────────
+// A landscape screen is ~430 tall. The Effects/Crew row gets whatever the rest
+// leaves: 24 (dialog inset) + 18 (scroll padding) + hero + upgrade bar + the two
+// 10px gaps + 4 of slack.
+const double _kHeroH = 80;
+const double _kBarH = 52;
+const double _kDialogChrome = 24 + 18 + _kHeroH + _kBarH + 10 + 10 + 4;
 
-/// One grouped block of the dialog (user 2026-07-22, modern pass): a titled
-/// recess. Grouping is what turned a long run of loose rows into something
-/// scannable — production, upgrade and construction each own a card.
-Widget _sectionCard({
-  required Widget child,
-  String? title,
-  Widget? trailing,
-}) => Container(
-  padding: EdgeInsets.fromLTRB(12, title == null ? 12 : 9, 12, 12),
-  decoration: ShapeDecoration(color: _dlgInset, shape: FoE.facet(radius: 14)),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      if (title != null) ...[
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                title.toUpperCase(),
-                style: FoE.dim(size: 9).copyWith(
-                  color: _dlgInkFaint,
-                  letterSpacing: 1.0,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            // A small right-aligned action for the section (e.g. the Upgrade
-            // card's "effects at full upgrade" peek, user 2026-07-24).
-            if (trailing != null) trailing,
-          ],
-        ),
-        const SizedBox(height: 8),
-      ],
-      child,
-    ],
-  ),
-);
-
-/// Art, name, what the building does, level and footprint — the card's
-/// masthead. The footprint (2×2) and the XP/state sit UNDER the level (user
-/// 2026-07-24), which retired the separate stat-chip box; the description
-/// reads BETWEEN the art and that column (user 2026-07-26) rather than as a
-/// full-width line beneath both.
-Widget _heroRow(
+// ── Detail dialog pieces ─────────────────────────────────
+/// The masthead: art rising out of the card's top edge, name, level / footprint
+/// / state pills, and at the right the building's primary actions ("what it is
+/// FOR" — Healing, Breeding, Market …) and the pause switch.
+///
+/// Footprint (3×3), level and the XP/state used to sit in a column at the
+/// right; as pills under the name they read as the asides they are and free the
+/// right edge for the buttons.
+Widget _heroCard(
   SettlementController ctrl,
   PlacedBuilding b,
   BuildingDef def,
-  bool functional,
-) {
+  bool functional, {
+  required List<Widget> actions,
+  Widget? pause,
+}) {
   // XP/h a worker earns here: the training rate, else the settlement-wide
   // work rate — EVERY building that stations monsters pays it (user
-  // 2026-07-30), so this pill is now on every staffed building instead of the
-  // eleven that happened to carry an `xp` effect.
+  // 2026-07-30), so this pill is on every staffed building.
   final xpRate = def.workshops.isEmpty
       ? 0.0
       : def.workshops.any((w) => w.resource == WorkshopRole.kTraining)
       ? kTrainingXpPerHour
       : workXpPerHourAt(b.level);
   final (String, Color)? status = !b.isComplete
-      ? ('Building', _dlgAccent)
+      ? ('Building', kBoxAccent)
       : !functional
       ? ('No road', FoE.danger)
       : xpRate > 0
-      ? ('${xpRate.toStringAsFixed(0)} XP/h', _dlgInk)
+      ? ('${xpRate.toStringAsFixed(0)} XP/h', kBoxInk)
       : null;
-  return Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      _artPanel(def),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  return creamCard(
+    child: SizedBox(
+      height: _kHeroH,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Bottom-anchored in a short slot so the taller art rises past the
+          // card's top edge (user 2026-07-22).
+          // Paused: the art loses its colour, like on the map (user 2026-09-22).
+          Positioned(
+            left: 12,
+            top: 8,
+            child: b.isComplete && b.isPaused
+                ? ColorFiltered(
+                    colorFilter: kPausedFilter,
+                    child: _artPanel(def),
+                  )
+                : _artPanel(def),
+          ),
+          Positioned(
+            left: 156,
+            right: 12,
+            top: 0,
+            bottom: 0,
+            child: Row(
               children: [
                 Expanded(
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // No description caption below the name any more
-                      // (user 2026-08-27: "Beschreibung des Gebäudes
-                      // überall entfernen") — the Effects card right
-                      // below already says what the building does, in
-                      // more exact terms than this summary line ever did.
                       Text(
                         def.name,
-                        style: FoE.title(size: 16).copyWith(color: _dlgInk),
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        style: FoE.title(size: 18).copyWith(color: kBoxInk),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          // The hall shows its level too (user 2026-07-25): it
+                          // gains a level with every era.
+                          if (ctrl.isUpgradable(def) || def.isMainBuilding)
+                            _pill('Lv ${b.level}'),
+                          _pill(
+                            '${def.gridW}×${def.gridH}',
+                            icon: Icons.grid_on,
+                          ),
+                          // The pause, as a pill of its own beside level and
+                          // size — the rest of the dialog says it in words.
+                          if (b.isComplete && b.isPaused)
+                            _pill('⏸️ Paused', color: CreamPalette.warn),
+                          if (status != null)
+                            _pill(status.$1, color: status.$2),
+                        ],
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Level, then footprint, then XP/state — right-aligned.
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // The hall shows its level too (user 2026-07-25): it
-                    // isn't upgradable by hand, but it gains a level with
-                    // every era — i.e. every region boss — so the number is
-                    // real progress the player earned.
-                    if (ctrl.isUpgradable(def) || def.isMainBuilding)
-                      _levelPill(b.level),
-                    // The FOOTPRINT, smaller and with its own icon (user
-                    // 2026-07-26). At the level pill's size a bare "4×4"
-                    // competed with the level for the eye; shrunk and
-                    // labelled, it reads as the aside it is.
-                    Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.grid_on, size: 10, color: _dlgInkSoft),
-                          const SizedBox(width: 3),
-                          Text(
-                            '${def.gridW}×${def.gridH}',
-                            style: FoE.dim(
-                              size: 9,
-                            ).copyWith(color: _dlgInkSoft),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (status != null)
-                      Text(
-                        status.$1,
-                        style: FoE.value(size: 11).copyWith(color: status.$2),
-                      ),
-                  ],
-                ),
+                for (final a in actions) ...[const SizedBox(width: 8), a],
+                if (pause != null) ...[const SizedBox(width: 8), pause],
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    ],
+    ),
   );
 }
 
-/// Just the level, no box (user 2026-07-23) — plain accent text.
-Widget _levelPill(int level) => Padding(
-  padding: const EdgeInsets.only(top: 2),
-  child: Text(
-    'Lv $level',
-    style: FoE.label(
-      size: 12,
-    ).copyWith(color: _dlgAccent, fontWeight: FontWeight.w800),
+/// A small flat label on a card: a tinted rounded plate, no shadow (a shadow
+/// would say "you can press this").
+Widget _pill(String text, {IconData? icon, Color? color}) => Container(
+  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+  decoration: BoxDecoration(
+    color: CreamPalette.tan.withValues(alpha: 0.18),
+    borderRadius: BorderRadius.circular(9),
+  ),
+  child: Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (icon != null) ...[
+        Icon(icon, size: 10, color: kBoxInkSoft),
+        const SizedBox(width: 3),
+      ],
+      Text(
+        text,
+        style: FoE.value(size: 10.5).copyWith(color: color ?? kBoxInk),
+      ),
+    ],
   ),
 );
 
-/// Everything this building lets you DO, in one place at the foot of the
-/// card (user 2026-07-22, modern pass). The features are compact PILLS in a
-/// wrap — a stack of full-width buttons made a Castle dialog scroll
-/// for no reason. The two that carry live numbers (healing's price, the
-/// build-skip toll) stay full width, because that number is the decision.
+/// The kit's round amber button (pause, "what does the max level look like").
+Widget _circleBtn(IconData icon, VoidCallback onTap, {double size = 32}) =>
+    Pressable(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: CreamPalette.gold,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: CreamPalette.goldDeep, offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Icon(icon, size: size * 0.55, color: CreamPalette.ink),
+      ),
+    );
+
+/// The Crew card: every post's seats as scaling tiles, plus the notes that
+/// belong to a staffed building.
+Widget _crewCard(_Panels p, BuildingDef def, bool functional, Widget? notes) {
+  final slots = p.posts.fold<int>(0, (s, g) => s + g.slots);
+  final staffed = p.posts.fold<int>(0, (s, g) => s + g.workers);
+  Widget empty(String text) => Center(
+    child: Text(
+      text,
+      textAlign: TextAlign.center,
+      style: FoE.dim(size: 11).copyWith(color: kBoxInkFaint),
+    ),
+  );
+  return sectionCard(
+    title: 'Crew',
+    icon: Icons.groups,
+    trailing: def.workshops.isEmpty || !functional
+        ? null
+        : Text(
+            '$staffed/$slots',
+            style: FoE.value(size: 12).copyWith(color: kBoxInk),
+          ),
+    expand: true,
+    child: def.workshops.isEmpty
+        ? empty('Nobody works in this building.')
+        : !functional
+        ? empty('Connect to a road to staff this workshop.')
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _CrewGrid(groups: p.posts)),
+              if (notes != null)
+                Padding(padding: const EdgeInsets.only(top: 4), child: notes),
+            ],
+          ),
+  );
+}
+
 /// A building can be paused when it RUNS something: a work post, or a
 /// worker-free `production` effect. Everything else has nothing to stop.
 bool _canPause(BuildingDef def) =>
     def.workshops.isNotEmpty || def.effectKeys('production').isNotEmpty;
-
-/// Any building still under construction can be bought out.
-///
-/// The Castle's own "🏠 Population X/Y" pill — a second, redundant door
-/// into its own bottom sheet — is GONE (user 2026-08-31: "diesen
-/// Population Button inkl. dem Menü kann gelöscht werden"). It was
-/// Castle-only (`def.isMainBuilding`); every sheltering building, Castle
-/// included, already has the wide "Population" button below
-/// ([_primaryActions]) leading to the SAME budget on Management's Housing
-/// tab, so nothing lost the door — it just stopped having two of them.
-Widget _actionArea(
-  BuildContext context,
-  PlacedBuilding b,
-  BuildingDef def,
-  bool functional,
-) => b.isComplete ? const SizedBox.shrink() : _skipBuildButton(context, b);
 
 /// THE thing this building is FOR — one big green button at the head of the
 /// dialog (user 2026-07-27: "der Breeding button muss viel prominenter sein,
@@ -741,7 +542,7 @@ List<Widget> _primaryActions(
   PlacedBuilding b,
   BuildingDef def,
   bool functional, {
-  VoidCallback? onOpenBuildMenu,
+  bool onMap = false,
 }) {
   if (!functional) return const [];
   final (String, VoidCallback)? action = switch (def.id) {
@@ -780,20 +581,15 @@ List<Widget> _primaryActions(
     ),
     kBreedingHutBuildingId => (
       'Breeding',
-      () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const BreedingScreen()),
-      ),
+      () =>
+          pushMenu(context, const HatcheryScreen(startOn: NurseryTab.breeding)),
     ),
     // Incubating and hatching belong to the HATCHERY (user 2026-07-26: "ein
     // ei ausbrüten muss zu der hatchery"), so the building opens them the
     // same way the Breeding Hut opens mating.
     kHatcheryBuildingId => (
       'Hatchery',
-      () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const HatcheryScreen()),
-      ),
+      () => pushMenu(context, const HatcheryScreen()),
     ),
     // A SCREEN, like the Hatchery and the Breeding Hut (user 2026-07-27) —
     // the Market was the last building feature that still opened as a sheet.
@@ -810,12 +606,17 @@ List<Widget> _primaryActions(
       'Training battle',
       () => _startTrainingBattle(context),
     ),
-    // The camp houses the builders, so it is a door to the Build menu (user
-    // 2026-07-29: "das build menü soll auch durch das build camp aufrufbar
-    // sein") — the same menu the corner pad opens, not a second one.
-    kBuilderCampBuildingId when onOpenBuildMenu != null => (
+    // The camp houses the builders, so it is a door to the Build picker
+    // (user 2026-07-29: "das build menü soll auch durch das build camp
+    // aufrufbar sein"). That picker is a permanent bottom carousel on the
+    // settlement screen now (2026-09-18), not a screen to push — so this
+    // button's whole job is to get this dialog out of the way and reveal
+    // the carousel, which is already sitting right there underneath it.
+    // Hidden entirely off the map (Housing/Work/a resource tab): popping
+    // there would land back on THAT screen with no carousel to reveal.
+    kBuilderCampBuildingId when onMap => (
       'Build',
-      onOpenBuildMenu,
+      () => Navigator.of(context).pop(),
     ),
     // The post grants the expedition slots and shortens every trip, so it is
     // where the trips live (user 2026-07-29: "Trips soll über den Scoutpost
@@ -832,10 +633,7 @@ List<Widget> _primaryActions(
     ),
     kScoutPostBuildingId => (
       'Expeditions',
-      () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ExpeditionsScreen()),
-      ),
+      () => pushMenu(context, const ExpeditionsScreen()),
     ),
     _ => null,
   };
@@ -847,13 +645,7 @@ List<Widget> _primaryActions(
   // screen now (2026-09-11), not a Management tab — Management's tabs went
   // to the expedition target drawers instead.
   if (def.isMainBuilding) {
-    actions.add((
-      'Workers',
-      () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const WorkScreen()),
-      ),
-    ));
+    actions.add(('Workers', () => pushMenu(context, const WorkScreen())));
   }
   // AND EVERY HOUSE OPENS THE POPULATION BUDGET. Keyed on what a building DOES
   // — shelters monsters — not on a list of ids, so a new dwelling in a later
@@ -862,10 +654,7 @@ List<Widget> _primaryActions(
   if (def.sheltersMonsters(ctrl.dungeonMaxStage)) {
     actions.add((
       'Population',
-      () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const HousingScreen()),
-      ),
+      () => pushMenu(context, const WorkScreen(startOn: WorkTab.housing)),
     ));
   }
   return [
@@ -877,37 +666,34 @@ List<Widget> _primaryActions(
   ];
 }
 
-/// The prominent form: full width, tall, the settlement's action green, with
-/// a chevron so it reads as "this opens something".
+/// A primary action, in the hero: a compact amber pill with a chevron so it
+/// reads as "this opens something".
 ///
 /// NO emoji (user 2026-07-27) — the label names the feature, and the chevron
 /// is the whole affordance.
-Widget _primaryActionButton(String label, VoidCallback onTap) =>
-    Pressable(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: parchmentButton(),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: FoE.title(
-                  size: 16,
-                ).copyWith(color: parchmentButtonInk()),
-              ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              size: 22,
-              color: parchmentButtonInk().withValues(alpha: 0.85),
-            ),
-          ],
+Widget _primaryActionButton(String label, VoidCallback onTap) => Pressable(
+  onTap: onTap,
+  child: Container(
+    height: 40,
+    padding: const EdgeInsets.only(left: 14, right: 8),
+    decoration: goldButton(),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: FoE.title(size: 14).copyWith(color: goldButtonInk()),
         ),
-      ),
-    );
+        const SizedBox(width: 2),
+        Icon(
+          Icons.chevron_right,
+          size: 20,
+          color: goldButtonInk().withValues(alpha: 0.85),
+        ),
+      ],
+    ),
+  ),
+);
 
 /// The building art, free-standing — no tile box behind it (user
 /// 2026-07-22). Bottom-anchored in a fixed slot so taller art rises out of
@@ -916,11 +702,11 @@ Widget _artPanel(BuildingDef def) => SizedBox(
   // Bigger (user request 2026-08-27), from 140 — Clip.none twice over (here
   // and the scroll view above) is what lets the extra height rise past the
   // dialog's own top edge instead of needing more room reserved for it.
-  width: 175,
+  width: 128,
   // Deliberately much shorter than the art is wide: the sprite is
   // bottom-anchored, so a short slot is what PUSHES it up and out over the
   // dialog's top edge (user 2026-07-22).
-  height: 85,
+  height: 64,
   child: Stack(
     clipBehavior: Clip.none,
     children: [
@@ -934,31 +720,13 @@ Widget _artPanel(BuildingDef def) => SizedBox(
           child: ShadowedBuildingIcon(
             imageUrl: def.imageUrl,
             defId: def.id,
-            width: 175,
+            width: 128,
           ),
         ),
       ),
     ],
   ),
 );
-
-// ── Ink on the detail dialog's PARCHMENT surface ──────────
-// The dialog wears the build menu's parchment now (user 2026-07-23), so its
-// ink is the paper's own dark brown in three weights — the app's white would
-// vanish on it, exactly the reverse of the old blue tile.
-const Color _dlgInk = kParchmentInk;
-final Color _dlgInkSoft = kParchmentInk.withValues(alpha: 0.78);
-final Color _dlgInkFaint = kParchmentInk.withValues(alpha: 0.55);
-
-/// The meander band's own ink — as faint as [ParchmentPage.ornament], not
-/// [_dlgInkFaint] (that one is for TEXT, and at 0.55 the band would compete
-/// with the content it's meant to sit quietly behind).
-final Color _dlgOrnament = kParchmentInk.withValues(alpha: 0.22);
-
-/// The warm ACCENT for labels on the parchment (user 2026-07-23) — see
-/// [_kDlgAccent]. Buttons keep goldBright: they wear the dark FoE.btn
-/// surface, so the light gold still pops there.
-const Color _dlgAccent = _kDlgAccent;
 
 /// A system role's contribution. The wording lives in
 /// workshop_role_effects.dart, shared with the build menu, the upgrade sheet
@@ -997,19 +765,74 @@ String _resLabel(String res) =>
     kGoodsDefs[res]?.name ??
     (res.isEmpty ? 'Resource' : res[0].toUpperCase() + res.substring(1));
 
-/// Production block (user 2026-07-22): the worker-independent BASE line
-/// first, then one row per stationed monster with what THAT monster adds on
-/// the right, and a "+" under the last worker to post another.
-Widget _productionSection(
+// ── Effects + Crew panels ────────────────────────────────
+/// One line of the Effects card and the room it takes, so [_EffectsBody] can
+/// tell whether they fit one column before laying anything out.
+class _EffItem {
+  final Widget w;
+  final double h;
+
+  /// For a block that WRAPS (the storage chips): its height depends on the width
+  /// it is given, so it asks for the full width and says how tall that makes it.
+  final double Function(double width)? hAt;
+  const _EffItem(this.w, this.h, {this.hAt});
+
+  bool get wide => hAt != null;
+  double heightAt(double width) => hAt?.call(width) ?? h;
+}
+
+/// One work post's seats: how full it is and a builder per tile (monsters that
+/// are posted, then the free seats), each taking the scale [_CrewGrid] chose.
+class _PostGroup {
+  /// The post's name — printed over its seats when the building has several.
+  final String label;
+  final int workers;
+  final int slots;
+  final List<Widget Function(double u)> tiles;
+
+  /// "Improves …" — what a COMBINED post feeds, spelled out because with no
+  /// monster posted nothing else on the card says so (user 2026-07-30).
+  final String? improves;
+
+  const _PostGroup({
+    required this.label,
+    required this.workers,
+    required this.slots,
+    required this.tiles,
+    this.improves,
+  });
+}
+
+class _Panels {
+  final List<_EffItem> effects;
+  final List<_PostGroup> posts;
+  const _Panels(this.effects, this.posts);
+}
+
+/// Everything the Effects and Crew cards show, worked out once: the
+/// worker-independent BASE lines (production, storage, housing, every other
+/// authored effect), each post's seats, and the Total / Consumes lines that
+/// tally the base plus everyone working.
+_Panels _buildPanels(
+  BuildContext context,
   SettlementController ctrl,
   PlacedBuilding b,
   BuildingDef def,
-  bool functional,
-) {
+  bool functional, {
+
+  /// The tutorial's one lit control: the first empty seat carries the
+  /// spotlight anchor.
+  bool spotlightSlot = false,
+}) {
   final creaturesCtrl = CreaturesController();
   // Same math workshopPower uses, scoped to one building: level yield.
   final f = buildingYieldFactor(b.level);
-  final rows = <Widget>[];
+  final effects = <_EffItem>[];
+  void put(Widget w, double h, {double Function(double width)? hAt}) =>
+      effects.add(_EffItem(w, h, hAt: hAt));
+
+  /// The height of a headline row with [lines] value lines.
+  double lineH(int lines) => 5.0 + 16.0 * lines;
 
   // Running per-resource tally: base first, every present worker on top —
   // what the Total line at the foot reports.
@@ -1021,33 +844,14 @@ Widget _productionSection(
   /// nor printed like a resource (see [_systemRoleValue]).
   final systemPower = <String, double>{};
 
-  /// "+4.5/h" and its glyph, SEPARATELY, per produced resource — ONE LINE
-  /// EACH (user 2026-07-27: several outputs on a single row ran the card's
-  /// whole width and read as one long number). Split rather than one
-  /// "+4.5/h 🪵" string (user 2026-08-31: "Alles soll rechts genau
-  /// 'gleichbündig' sein") so [headline] can put every row's glyph in the
-  /// SAME reserved slot, whether that row has one or not — an inline glyph
-  /// pushed its own number left of wherever a glyph-less row's (storage,
-  /// housing) landed.
-  ///
-  /// Construction is counted in BUILD POINTS, not units per hour — the unit
-  /// it is authored in and the one a builder's stat is measured in (user
-  /// 2026-07-26). Printing it "/h" made a builder's 30 look like 30 wood.
-  List<(String text, String icon)> amountsWithIcons(Map<String, double> m) => [
+  /// "+4.5/h 🪵" per produced resource. Construction is counted in BUILD
+  /// POINTS, not units per hour — the unit it is authored in and the one a
+  /// builder's stat is measured in (user 2026-07-26).
+  List<String> amounts(Map<String, double> m) => [
     for (final e in m.entries)
       if (e.value > 0)
-        (
-          e.key == WorkshopRole.kConstruction
-              ? '+${e.value.toStringAsFixed(0)} points'
-              : '+${e.value.toStringAsFixed(1)}/h',
-          _resEmoji(e.key),
-        ),
-  ];
-
-  /// The old combined "+4.5/h 🪵" shape, for callers (Total) that are not
-  /// yet split into [headline]'s reserved-slot layout.
-  List<String> amounts(Map<String, double> m) => [
-    for (final a in amountsWithIcons(m)) '${a.$1} ${a.$2}',
+        '${e.key == WorkshopRole.kConstruction ? '+${e.value.toStringAsFixed(0)} points' : '+${e.value.toStringAsFixed(1)}/h'} '
+            '${_resEmoji(e.key)}',
   ];
 
   /// Label left, value(s) right — stacked, right-aligned, one per line. With
@@ -1055,27 +859,21 @@ Widget _productionSection(
   /// reads as that block's heading.
   ///
   /// Pass [icons] (same length as [values]) to put each value's glyph in its
-  /// own fixed-width slot AFTER the number instead of inside the string —
-  /// otherwise a row with a trailing glyph (production) and one without
-  /// (storage, housing) put their NUMBERS at two different right edges even
-  /// though the two blocks themselves lined up (user 2026-08-31: "Alles
-  /// soll rechts genau 'gleichbündig' sein"). Omit [icons] entirely for the
-  /// old behaviour — plain right-aligned text, no reserved slot — where a
-  /// value already carries everything it needs inline (Total, Consumes).
+  /// own fixed-width slot AFTER the number, so a row with a trailing glyph
+  /// (production) and one without (storage, housing) put their NUMBERS at the
+  /// same right edge (user 2026-08-31: "Alles soll rechts genau
+  /// 'gleichbündig' sein"). Omit [icons] for plain right-aligned text.
   Widget headline(
     String label,
     List<String> values, {
     Color? color,
     List<String?>? icons,
     // A SUB-category row, nested under its own "Production"/"Storage"
-    // heading rather than reading as a heading itself (user 2026-09-01:
-    // "Wood, stone gold, housing etc. etwas nach innen versetzt und in
-    // weiss"). Null/0 keeps every other caller's look — the accent-gold
-    // label flush with the card's edge — exactly as before.
+    // heading rather than reading as a heading itself.
     Color? labelColor,
     double indent = 0,
   }) => Padding(
-    padding: EdgeInsets.only(left: indent),
+    padding: EdgeInsets.fromLTRB(indent, 2.5, 0, 2.5),
     child: Row(
       crossAxisAlignment: values.length > 1
           ? CrossAxisAlignment.start
@@ -1083,7 +881,7 @@ Widget _productionSection(
       children: [
         Text(
           label,
-          style: FoE.label(size: 12).copyWith(color: labelColor ?? _dlgAccent),
+          style: FoE.label(size: 12).copyWith(color: labelColor ?? kBoxAccent),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -1097,16 +895,13 @@ Widget _productionSection(
                         textAlign: TextAlign.end,
                         style: FoE.value(
                           size: 12,
-                        ).copyWith(color: color ?? _dlgInk),
+                        ).copyWith(color: color ?? kBoxInk),
                       )
                     : Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Flexible, not bare (2026-09-01: a copy of this
-                          // exact row in building_upgrade_sheet.dart
-                          // overflowed on a narrower card) — shrinks to an
-                          // ellipsis instead of running past whatever width
-                          // this Expanded actually has.
+                          // Flexible: shrinks to an ellipsis instead of running
+                          // past whatever width this Expanded actually has.
                           Flexible(
                             child: Text(
                               values[i],
@@ -1114,7 +909,7 @@ Widget _productionSection(
                               overflow: TextOverflow.ellipsis,
                               style: FoE.value(
                                 size: 12,
-                              ).copyWith(color: color ?? _dlgInk),
+                              ).copyWith(color: color ?? kBoxInk),
                             ),
                           ),
                           SizedBox(
@@ -1137,11 +932,16 @@ Widget _productionSection(
     ),
   );
 
+  Widget heading(String text) => Padding(
+    padding: const EdgeInsets.only(top: 2, bottom: 2),
+    child: Text(text, style: FoE.label(size: 12).copyWith(color: kBoxAccent)),
+  );
+
   // PAUSED SAYS SO FIRST (user 2026-08-01). The figures below stay — they are
   // what the building WOULD make — and this line is why none of it is
   // happening, in the same place the empty-tank warning lands.
   if (b.isPaused) {
-    rows.add(
+    put(
       Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(
@@ -1150,6 +950,7 @@ Widget _productionSection(
           style: FoE.dim(size: 11).copyWith(color: FoE.danger),
         ),
       ),
+      40,
     );
   }
 
@@ -1164,43 +965,22 @@ Widget _productionSection(
     if (v != 0) base[res] = (base[res] ?? 0) + v;
   }
   base.forEach(add);
-  // A building with no production effect at all (a store, a house) never
-  // gets a row here, and neither does one that HAS the effect but makes
-  // nothing at this level (user 2026-08-27: "Ressource ist null, daher
-  // soll es nicht angezeigt werden") — an empty "Resource —" line is not
-  // an effect, it is the absence of one. "offline" still shows: that is
-  // real information about a production effect the building DOES have,
-  // just currently blocked.
   final storageKeys = def.effectKeys('storage').toList();
   final hasProduction = def.effectKeys('production').isNotEmpty;
-  // "Production" is the CATEGORY heading, same shape as "Storage" below it
-  // — not a row's own label any more (user 2026-09-01, the Castle: "Zudem
-  // sind Production und Storage Überkategorien. Wood Stone Gold etc.
-  // Unterkategorien. Diese sollten unter Production auch noch stehen" —
-  // and "Resource in Production umbenennen"). A multi-resource building
-  // used to merge every output into ONE row labelled the generic
-  // "Resource", with each value line carrying its own icon; now every
-  // resource gets its OWN named row under the "Production" heading,
-  // exactly like Wood/Stone/Gold already do under "Storage".
+  // "Production" is the CATEGORY heading, same shape as "Storage" below it;
+  // every resource gets its OWN named row under it (user 2026-09-01). A store
+  // or a house never gets one, and neither does a building that HAS the effect
+  // but makes nothing at this level (user 2026-08-27) — "offline" still shows:
+  // that is real information about an effect the building DOES have.
   if (hasProduction && (base.isNotEmpty || !functional)) {
-    rows.add(
-      Padding(
-        padding: const EdgeInsets.only(top: 2, bottom: 2),
-        child: Text(
-          'Production',
-          style: FoE.label(size: 12).copyWith(color: _dlgAccent),
-        ),
-      ),
-    );
-    // Highest producer first (user 2026-09-01: "nach Produktion ordnen,
-    // höchste Produktion immer oben") — not the arbitrary order
-    // effectKeys('production') happened to author them in.
+    put(heading('Production'), 19);
+    // Highest producer first (user 2026-09-01), not authoring order.
     final keys =
         (base.isNotEmpty ? base.keys : def.effectKeys('production')).toList()
           ..sort((a, b) => (base[b] ?? 0).compareTo(base[a] ?? 0));
     for (final key in keys) {
       final v = base[key] ?? 0;
-      rows.add(
+      put(
         headline(
           _resLabel(key),
           [
@@ -1211,105 +991,89 @@ Widget _productionSection(
                 : 'offline',
           ],
           icons: [functional ? _resEmoji(key) : null],
-          color: !functional ? FoE.danger : _dlgInk,
-          labelColor: Colors.white,
+          color: !functional ? FoE.danger : kBoxInk,
+          labelColor: kBoxInk,
           indent: 12,
         ),
+        lineH(1),
       );
     }
   }
   // ── What it can HOLD ──
-  // One heading, then the resource and the bare number (user 2026-07-30:
-  // "«Ressource» zu «Storage» ändern, dafür überall sonst storage löschen" +
-  // "Gib nur die Zahl, ohne Max und ohne Icon"). It used to repeat
-  // "Storage · " on every row and add "max" and a glyph to every value —
-  // four ways of saying the same thing, four times over.
+  // One heading, then the resource and the bare number (user 2026-07-30).
   if (storageKeys.isNotEmpty) {
-    rows.add(
-      Padding(
-        padding: const EdgeInsets.only(top: 2, bottom: 2),
-        child: Text(
-          buildingEffectLabel('storage'),
-          style: FoE.label(size: 12).copyWith(color: _dlgAccent),
-        ),
-      ),
-    );
+    put(heading(buildingEffectLabel('storage')), 19);
     // The staff's room is part of the ceiling this store actually has (user
     // 2026-07-30), so it is part of the number on the row — with the split
     // spelled out, because one of the two halves is a decision you can make
-    // right now. PER RESOURCE, because the post's dials are: the same worker
-    // can be worth more room in timber than in fur. Only when somebody is
-    // really working: the same rule storageCapacity applies (an unconnected
-    // store counts for nothing).
+    // right now. Only when somebody is really working: the same rule
+    // storageCapacity applies (an unconnected store counts for nothing).
+    // A GRID of small tiles — the glyph and the ceiling, with the staff's share
+    // in a second line only where somebody is posted (user 2026-09-22: "sobald
+    // Monster eingestellt sind, wird nicht mehr alles korrekt angezeigt"). A row
+    // per resource with a second line each grew with every good the store holds
+    // and shrank the whole card to nothing; tiles wrap to the width they get.
+    final tiles = <Widget>[];
+    var anyPosted = false;
     for (final key in storageKeys) {
       if (def.effectEntry('storage', key, era) == null) continue;
       final v = buildingEffectValueAt(def, 'storage', key, era, b.level);
       final posted = functional ? ctrl.storageRoomPosted(b, key) : 0.0;
-      rows.add(
-        headline(
-          _resLabel(key),
-          [
-            formatBuildingEffect('storage', key, v + posted),
-            if (posted > 0)
-              '${formatBuildingEffect('storage', key, v)} + '
-                  '${shortNumberAbove(posted)} 👷',
-          ],
-          // Same reserved glyph slot the production row above uses (user
-          // 2026-08-31: "Alles soll rechts genau 'gleichbündig' sein"), now
-          // filled with the resource's own icon (user 2026-08-31: "Hinter
-          // der Zahl beim Storage auch das entsprechende Icon hinzufügen")
-          // — the worker-split second line already carries its 👷 inline,
-          // so only the main line gets one from here.
-          icons: [_resEmoji(key), if (posted > 0) null],
-          color: functional ? _dlgInk : _dlgInkFaint,
-          labelColor: Colors.white,
-          indent: 12,
+      if (posted > 0) anyPosted = true;
+      tiles.add(
+        _StorageTile(
+          emoji: _resEmoji(key),
+          label: _resLabel(key),
+          total: formatBuildingEffect('storage', key, v + posted),
+          share: posted > 0 ? '+${shortNumberAbove(posted)} 👷' : null,
+          dim: !functional,
         ),
       );
     }
+    if (tiles.isNotEmpty) {
+      final tileH = anyPosted ? _StorageTile.heightWith : _StorageTile.height;
+      put(
+        Padding(
+          padding: const EdgeInsets.only(left: 12, top: 2, bottom: 4),
+          child: Wrap(spacing: 6, runSpacing: 5, children: tiles),
+        ),
+        6 + tileH,
+        hAt: (width) {
+          final perRow = math.max(
+            1,
+            ((width - 12 + 6) / (_StorageTile.width + 6)).floor(),
+          );
+          final rows = (tiles.length / perRow).ceil();
+          return 6 + rows * tileH + (rows - 1) * 5;
+        },
+      );
+    }
   }
-  // A production key worth nothing at this level is not one of the
-  // building's CURRENT effects, so — unlike the 2026-07-30 version of this
-  // card — it gets no row here at all (user 2026-08-27: "Leere und
-  // künftige Effekte nicht unter Effects auflisten"). It still shows up on
-  // the Upgrade card, which is exactly where "not yet" belongs.
-  //
   // Housing capacity (a count, not a /h rate — its own row). No glyph
-  // (user 2026-08-27: "Icons bei den Effekts nur für die Ressourcen
-  // behalten") — housing is a seat count, not a resource.
+  // (user 2026-08-27): housing is a seat count, not a resource.
   final housing = def.hasEffect('housing', era)
       ? def.effectAt('housing', '', era, level: b.level)
       : def.housingCapacity * f;
   if (housing > 0) {
-    rows.add(
+    put(
       headline(
         'Housing',
         ['${housing.round()}'],
         icons: const [null],
-        labelColor: Colors.white,
+        labelColor: kBoxInk,
         indent: 12,
       ),
+      lineH(1),
     );
   }
 
   // ── EVERY OTHER AUTHORED EFFECT, IN ITS OWN UNIT ──
-  // The card printed production and housing and stopped. So a Scout Post —
-  // whose entire job is granting expedition slots and hunt lengths — had an
-  // Effects card that listed nothing, and the Caravanserai, the Builder Camp
-  // and the Healing Hut were all in the same position: the effect worked, it
-  // was simply never said out loud.
-  //
   // Read through buildingEffectValueAt so a row cannot promise a curve the
-  // runtime does not apply, and named/formatted from the shared vocabulary,
-  // so a slot count reads "1" and a travel cut reads "−10 % travel". No
-  // glyph (user 2026-08-27: "Icons bei den Effekts nur für die Ressourcen
-  // behalten") — none of these rows is a resource; that glyph is the
-  // production row's alone. Storage has its own grouped block above, so
-  // it is left out here.
-  //
-  // pending rows (worth nothing until a later level) are skipped (user
-  // 2026-08-27) — Effects lists what the building does UP TO AND
-  // INCLUDING this level, not what it will do.
+  // runtime does not apply, and named/formatted from the shared vocabulary, so
+  // a slot count reads "1" and a travel cut reads "−10 % travel". No glyph
+  // (user 2026-08-27) — none of these rows is a resource. Pending rows (worth
+  // nothing until a later level) are skipped: Effects lists what the building
+  // does UP TO AND INCLUDING this level. Storage has its own block above.
   for (final row in buildingEffectCardRows(
     def,
     era,
@@ -1317,52 +1081,20 @@ Widget _productionSection(
     withEmoji: false,
   )) {
     if (row.pending) continue;
-    rows.add(
+    put(
       headline(
         row.label,
         [row.value],
         icons: const [null],
-        color: !functional ? _dlgInkFaint : _dlgInk,
+        color: !functional ? kBoxInkFaint : kBoxInk,
       ),
+      lineH(1),
     );
   }
 
-  // ── Workers: who is posted here and what each one adds ──
-  //
-  // The section heading only exists to TOTAL several posts. With one post it
-  // said exactly what that post's own header says, one line apart — "Workers
-  // 1/2" twice over (user 2026-07-26: "doppelt gemoppelt"). A building with
-  // one post gets the per-post row alone, and that row is the heading.
-  if (def.workshops.length > 1) {
-    final totalSlots = def.workshops.fold<int>(
-      0,
-      (sum, role) => sum + effectiveSlots(role, b.level),
-    );
-    final totalStaffed = creaturesCtrl.creatures
-        .where((c) => c.assignedBuildingId == b.id)
-        .length;
-    rows
-      ..add(const SizedBox(height: 10))
-      ..add(
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Workers',
-                style: FoE.label(size: 12).copyWith(color: _dlgAccent),
-              ),
-            ),
-            Text(
-              '$totalStaffed/$totalSlots',
-              style: FoE.value(
-                size: 11,
-              ).copyWith(color: functional ? _dlgInk : _dlgInkFaint),
-            ),
-          ],
-        ),
-      );
-  }
+  // ── Crew: who is posted here, one group per post ──
   var trainees = 0;
+  final groups = <_PostGroup>[];
   // A worker's effective output, summed across every part a COMBINED post
   // splits it into — the same figure the Total line banks per creature.
   double workerOutput(CreatureInstance c, WorkshopRole role) => role
@@ -1370,6 +1102,9 @@ Widget _productionSection(
       .values
       .fold(0.0, (sum, v) => sum + v);
   for (final role in def.workshops) {
+    // An unconnected building has nobody working: no seats to show, nothing
+    // to tally (the Crew card says "connect to a road").
+    if (!functional) continue;
     final assigned =
         creaturesCtrl.creatures
             .where(
@@ -1377,9 +1112,7 @@ Widget _productionSection(
                   c.assignedBuildingId == b.id && c.assignedStat == role.stat,
             )
             .toList()
-          // Highest producer first (user 2026-09-01: sort the stationed monsters
-          // by their effective production/h, same as the Production section
-          // above) — not the arbitrary order they happened to get posted in.
+          // Highest producer first (user 2026-09-01).
           ..sort(
             (x, y) => workerOutput(y, role).compareTo(workerOutput(x, role)),
           );
@@ -1388,46 +1121,10 @@ Widget _productionSection(
     // A legendary-boost slot: a stationed legendary multiplies the building's
     // production by (1 + mult), regardless of its stats (user 2026-07-24).
     final boost = role.resource == WorkshopRole.kLegendaryBoost;
-    rows.add(const SizedBox(height: 8));
-    // The post's header: what it is, how full it is, and the way IN. Editing
-    // used to be a separate centred button under the worker list (user
-    // 2026-07-26: "das edit menü für die workers soll irgendwie und irgendwo
-    // auf die Zeile von Workers und n/n kommen") — the count and the control
-    // that changes it belong together, and it saves a whole row per post.
-    //
-    // It renders for a single-post building too now. It used to be hidden
-    // there because the label only repeated the description; carrying the
-    // seat count and the edit affordance, it earns its line.
-    //
-    // And it NAMES the post even when there is only one (user 2026-07-30:
-    // every effect a building has must be readable off this card). A bare
-    // "Workers 0/1" was the one place the card said nothing: an empty Scout
-    // Post never mentioned travel or carrying, an empty Healing Hut never
-    // mentioned healing time. What the post feeds is a fact about the
-    // BUILDING, so it does not wait for somebody to be posted in it.
-    rows.add(
-      _workerHeaderRow(
-        b: b,
-        role: role,
-        // JUST THE STAT (user 2026-07-30: "Production -> Fur bitte nur
-        // Production schreiben. Bei allen Gebäuden übernehmen"). The row
-        // already carries what it makes, twice over: the value on the right
-        // ends in the resource's own glyph, and the whole block sits under the
-        // heading that names it. "Production → Fur  1/1  +3.5/h 🦫" said "fur"
-        // three times on one line.
-        //
-        // Training and the legendary slot keep their arrow: neither is a
-        // stat→resource pair, and their left side alone would name nothing.
-        label: _workRoleLabel(role),
-        count: '${assigned.length}/$slotCap',
-        enabled: functional,
-      ),
-    );
     // A COMBINED post feeds several systems at once, and its name can only be
-    // the trip as a whole ("Expedition", "Caravan"). So it spells the parts
-    // out — with no monster posted there is nothing else on the card that
-    // would (user 2026-07-30). Parts dialled to zero are left out: they do
-    // nothing, and the row is about what this post actually improves.
+    // the trip as a whole ("Expedition", "Caravan"). Parts dialled to zero are
+    // left out: they do nothing.
+    String? improves;
     if (role.isCombined) {
       final parts = [
         for (final p in role.parts.entries)
@@ -1435,48 +1132,50 @@ Widget _productionSection(
             '${workshopRoleEmoji(p.value)} '
                 '${workshopRoleName(p.value) ?? p.value}',
       ];
-      if (parts.isNotEmpty) {
-        rows.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Text(
-              'Improves ${parts.join(' · ')}',
-              style: FoE.dim(size: 10).copyWith(color: _dlgInkSoft),
+      if (parts.isNotEmpty) improves = 'Improves ${parts.join(' · ')}';
+    }
+    final free = (slotCap - assigned.length).clamp(0, 1 << 20);
+    groups.add(
+      _PostGroup(
+        label: _workRoleLabel(role),
+        workers: assigned.length,
+        slots: slotCap,
+        improves: improves,
+        tiles: [
+          for (final c in assigned)
+            (u) => _workerTile(
+              c,
+              role,
+              b.level,
+              training,
+              boost,
+              storageKeys,
+              u: u,
+              onTap: () =>
+                  _openAssignPicker(context, ctrl, b, role, swapId: c.id),
             ),
-          ),
-        );
-      }
-    }
-    // No per-post "XP/h each" line (user 2026-08-27: "xp Anzeige löschen,
-    // da diese oben bereits angezeigt wird") — the masthead's own XP pill
-    // already says it, and it does so once per building instead of once
-    // per post.
-    if (!functional) {
-      rows.add(
-        Text(
-          'Connect to a road to staff this workshop',
-          style: FoE.dim(size: 10).copyWith(color: FoE.danger),
-        ),
-      );
-      continue;
-    }
+          for (var i = 0; i < free; i++)
+            (u) => _emptyWorkerTile(
+              u: u,
+              onTap: () => _openAssignPicker(context, ctrl, b, role),
+              // Only the first free seat is the lit control while the tutorial
+              // walks the player through posting a worker.
+              anchorKey: spotlightSlot && i == 0
+                  ? IntroSpotlightAnchors.of('healing-hut-assign-slot')
+                  : null,
+            ),
+        ],
+      ),
+    );
     for (final c in assigned) {
-      rows.add(_workerRow(c, role, b.level, training, boost, storageKeys));
-      // Only monsters that are actually HERE contribute — same rule
-      // _workerRow shows and workshopPower applies.
       // Same predicate the economy uses — the row and the total can no longer
       // disagree about who is working (user 2026-07-30).
       if (!creaturesCtrl.isWorkingNow(c)) continue;
       // A STORE post is already fully stated by the Storage rows above (base
-      // + 👷, per resource), and its room has no single figure to total — one
-      // dial per resource is the point (user 2026-07-30). Repeating it under
-      // "Total" would be the same numbers a second time, and a wrong one: the
-      // flat mult is only the fallback.
+      // + 👷, per resource), and its room has no single figure to total.
       if (role.resource == WorkshopRole.kStorageRoom) continue;
       // The runtime's own per-worker formula, including its per-role level
-      // scaling — so the displayed output is what banks, and a COMBINED post
-      // lands in all three of its buckets here exactly as it does in
-      // workshopPower (user 2026-07-29).
+      // scaling — so the displayed output is what banks.
       final contribution = role.contribution(
         (s) => c.statValue(s).toDouble(),
         b.level,
@@ -1492,20 +1191,13 @@ Widget _productionSection(
           systemPower[out.key] = (systemPower[out.key] ?? 0) + out.value;
         }
       } else {
-        // One formula for every post (2026-07-26). Construction differs only
-        // in its UNIT — build points, the same unit the building's passive
-        // `production`/`construction` is authored in, so the two share this
-        // tally.
         add(role.resource, contribution[role.resource] ?? 0);
       }
     }
-    // (The way in moved UP to this post's header row — user 2026-07-26.)
   }
 
   // Energy scales every rate here the SAME way GameEngine.hourlyRates scales
-  // the header's own numbers (user 2026-09-14) — both used to zero out
-  // together at 0 energy under the old hard gate; now both fade together
-  // under the new continuous rate instead, so the two never disagree.
+  // the header's own numbers (user 2026-09-14), so the two never disagree.
   final energyRate = ctrl.energyMultiplier;
   if (energyRate != 1.0) {
     for (final k in total.keys.toList()) {
@@ -1516,13 +1208,9 @@ Widget _productionSection(
     }
   }
 
-  // ── Was dafür verbrannt wird (user 2026-07-31) ──
-  // "clay rafinery soll anzeigen, welche Ressourcen verbraucht werden, um die
-  // neue herzustellen"
-  //
+  // ── What is burned for it (user 2026-07-31) ──
   // Read off the SAME tally the Total prints, so the two halves of the trade
-  // can never drift apart: 7 Timber Frame an hour is 14 wood and 14 stone an
-  // hour, and if the rate changes the burn changes with it.
+  // can never drift apart.
   final recipes = refiningRecipes([
     ...def.effectKeys('production'),
     for (final r in def.workshops) r.resource,
@@ -1531,8 +1219,7 @@ Widget _productionSection(
     for (final id in recipes.keys) id: total[id] ?? 0,
   });
   // AN EMPTY INPUT STOCK PRODUCES NOTHING — the same rule the tick applies
-  // (GameEngine._tickGoods caps output at what the inputs cover), and the same
-  // lie the energy fix removed: a card promising +7/h with no wood in the yard.
+  // (GameEngine._tickGoods caps output at what the inputs cover).
   final res = ctrl.resources;
   final starved = <String>[
     if (res != null)
@@ -1552,60 +1239,56 @@ Widget _productionSection(
         for (final e in systemPower.entries)
           _systemRoleValue(e.key, e.value, withGlyph: systemPower.length > 1),
     ];
-    // THE TOP BAR AND THIS CARD MUST AGREE (user 2026-07-30: "fur lodge
-    // produziert 3.5 pro Stunde, oben wird mir dies aber nicht angezeigt").
-    // The header applies the SAME energy multiplier every rate the
-    // settlement banks reads (GameEngine.hourlyRates) — low energy is no
-    // longer a hard stop (user 2026-09-14), so it shows up here as a
-    // reduced (not zeroed) Total instead of a special "no energy" halt text.
+    // THE TOP BAR AND THIS CARD MUST AGREE (user 2026-07-30): low energy shows
+    // up as a reduced (not zeroed) Total.
     final halted =
         functional && parts.isNotEmpty && (b.isPaused || starved.isNotEmpty);
     final haltReason = b.isPaused
         ? '0/h · paused'
         : '0/h · no ${starved.map(_resLabel).join(' / ')}';
-    rows
-      ..add(const SizedBox(height: 8))
-      ..add(
-        headline(
-          'Total',
-          !functional
-              ? const ['offline']
-              : halted
-              ? [haltReason]
-              : parts.isEmpty
-              ? const ['—']
-              : parts,
-          color: !functional || halted
-              ? FoE.danger
-              : parts.isEmpty
-              ? _dlgInkFaint
-              : _dlgInk,
-        ),
-      );
+    final values = !functional
+        ? const ['offline']
+        : halted
+        ? [haltReason]
+        : parts.isEmpty
+        ? const ['—']
+        : parts;
+    put(const SizedBox(height: 6), 6);
+    put(
+      headline(
+        'Total',
+        values,
+        color: !functional || halted
+            ? FoE.danger
+            : parts.isEmpty
+            ? kBoxInkFaint
+            : kBoxInk,
+      ),
+      lineH(values.length),
+    );
   }
 
   if (recipes.isNotEmpty) {
-    rows
-      ..add(const SizedBox(height: 8))
-      ..add(
-        headline(
-          'Consumes',
-          burn.isEmpty
-              // Nothing is being made, so nothing is being burned — the RULE
-              // is still the point of the building, and it is on the line
-              // below.
-              ? const ['—']
-              : [
-                  for (final e in burn.entries)
-                    '−${e.value.toStringAsFixed(1)}/h ${_resEmoji(e.key)}',
-                ],
-          color: burn.isEmpty ? _dlgInkFaint : _dlgInk,
-        ),
-      );
-    // The recipe itself, per unit — what the burn above is derived from, and
-    // the only line that is true whether or not anybody is posted here.
+    put(const SizedBox(height: 6), 6);
+    put(
+      headline(
+        'Consumes',
+        burn.isEmpty
+            // Nothing is being made, so nothing is being burned — the RULE
+            // is still the point of the building, and it is on the line below.
+            ? const ['—']
+            : [
+                for (final e in burn.entries)
+                  '−${e.value.toStringAsFixed(1)}/h ${_resEmoji(e.key)}',
+              ],
+        color: burn.isEmpty ? kBoxInkFaint : kBoxInk,
+      ),
+      lineH(burn.isEmpty ? 1 : burn.length),
+    );
+    // The recipe itself, per unit — the only line that is true whether or not
+    // anybody is posted here.
     for (final e in recipes.entries) {
-      rows.add(
+      put(
         Padding(
           padding: const EdgeInsets.only(top: 2),
           child: Text(
@@ -1613,13 +1296,14 @@ Widget _productionSection(
                 '${_resEmoji(i.key)}').join(' + ')}'
             ' → 1 ${_resEmoji(e.key)}',
             textAlign: TextAlign.end,
-            style: FoE.dim(size: 11),
+            style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
           ),
         ),
+        19,
       );
     }
     if (starved.isNotEmpty && functional) {
-      rows.add(
+      put(
         Padding(
           padding: const EdgeInsets.only(top: 2),
           child: Text(
@@ -1628,11 +1312,281 @@ Widget _productionSection(
             style: FoE.dim(size: 11).copyWith(color: FoE.danger),
           ),
         ),
+        34,
       );
     }
   }
 
-  return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
+  return _Panels(effects, groups);
+}
+
+/// The Effects card's body. One column while everything fits; when it does not,
+/// the plain rows split into TWO columns (at the row boundary nearest the
+/// middle) while the wrapping blocks — the storage tiles — keep the full width;
+/// and if even that is too tall the card SCROLLS, with a "more" cue, instead of
+/// shrinking every line to a size nobody can read (user 2026-09-22: the
+/// Storehouse "wird nicht mehr alles korrekt angezeigt, da es zu wenig Platz
+/// hat"). "Alle Effekte" (user 2026-09-19) still holds: nothing is dropped.
+class _EffectsBody extends StatelessWidget {
+  final List<_EffItem> items;
+  const _EffectsBody({required this.items});
+
+  static const double _gap = 16;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, c) {
+      final w = c.maxWidth;
+      double sumAt(Iterable<_EffItem> l, double width) =>
+          l.fold(0.0, (s, i) => s + i.heightAt(width));
+
+      Widget column(List<_EffItem> l) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [for (final i in l) i.w],
+      );
+
+      final one = sumAt(items, w);
+      if (one * 1.06 <= c.maxHeight || items.length < 2) {
+        return _cue(column(items), one > c.maxHeight);
+      }
+
+      // Two columns: consecutive plain rows are split in half side by side; a
+      // wrapping block breaks the run and spans the full width.
+      final colW = (w - _gap) / 2;
+      final segments = <Widget>[];
+      var twoH = 0.0;
+      var run = <_EffItem>[];
+      void flush() {
+        if (run.isEmpty) return;
+        final total = sumAt(run, colW);
+        var cut = run.length;
+        if (run.length > 1) {
+          var acc = 0.0;
+          cut = run.length - 1;
+          for (var i = 0; i < run.length; i++) {
+            if (acc + run[i].h / 2 >= total / 2) {
+              cut = i.clamp(1, run.length - 1);
+              break;
+            }
+            acc += run[i].h;
+          }
+        }
+        final left = run.sublist(0, cut), right = run.sublist(cut);
+        twoH += math.max(sumAt(left, colW), sumAt(right, colW));
+        segments.add(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: colW, child: column(left)),
+              const SizedBox(width: _gap),
+              SizedBox(width: colW, child: column(right)),
+            ],
+          ),
+        );
+        run = [];
+      }
+
+      for (final i in items) {
+        if (i.wide) {
+          flush();
+          twoH += i.heightAt(w);
+          segments.add(i.w);
+        } else {
+          run.add(i);
+        }
+      }
+      flush();
+
+      final body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: segments,
+      );
+      // Whichever layout is shorter; if it still does not fit, it scrolls.
+      if (twoH <= one) return _cue(body, twoH * 1.02 > c.maxHeight);
+      return _cue(column(items), true);
+    },
+  );
+
+  Widget _cue(Widget body, bool scrolls) => scrolls
+      ? ScrollCue(
+          builder: (context, controller) => SingleChildScrollView(
+            controller: controller,
+            padding: const EdgeInsets.only(bottom: 4),
+            child: body,
+          ),
+        )
+      : body;
+}
+
+/// One storage tile: the good's glyph and the ceiling this store gives it, and —
+/// only where staff is posted — their share on a second line.
+class _StorageTile extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final String total;
+  final String? share;
+  final bool dim;
+  const _StorageTile({
+    required this.emoji,
+    required this.label,
+    required this.total,
+    required this.share,
+    required this.dim,
+  });
+
+  static const double width = 84;
+  static const double height = 26;
+  static const double heightWith = 38;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: label,
+    child: Container(
+      width: width,
+      height: share == null ? height : heightWith,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      decoration: BoxDecoration(
+        color: kBoxInk.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 13)),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  total,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FoE.value(
+                    size: 12,
+                  ).copyWith(color: dim ? kBoxInkFaint : kBoxInk),
+                ),
+              ),
+            ],
+          ),
+          if (share != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 18),
+              child: Text(
+                share!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: FoE.dim(size: 9.5).copyWith(color: kBoxInkSoft),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// The Crew card's body: every post's seats as tiles at the LARGEST scale at
+/// which all of them fit the card ([_fitScale]) — a handful of monsters get big
+/// tiles, 24 get small ones, and the card itself never changes size.
+class _CrewGrid extends StatelessWidget {
+  final List<_PostGroup> groups;
+  const _CrewGrid({required this.groups});
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, c) {
+      final u = _fitScale(groups, c.maxWidth, c.maxHeight);
+      final several = groups.length > 1;
+      return SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < groups.length; i++) ...[
+              if (i > 0) const SizedBox(height: _kGroupGap),
+              if (several)
+                SizedBox(
+                  height: _kGroupHeaderH,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          groups[i].label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: FoE.label(
+                            size: 11,
+                          ).copyWith(color: kBoxAccent),
+                        ),
+                      ),
+                      Text(
+                        '${groups[i].workers}/${groups[i].slots}',
+                        style: FoE.value(size: 11).copyWith(color: kBoxInk),
+                      ),
+                    ],
+                  ),
+                ),
+              if (groups[i].improves != null)
+                SizedBox(
+                  height: _kImprovesH,
+                  child: Text(
+                    groups[i].improves!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: FoE.dim(size: 10).copyWith(color: kBoxInkSoft),
+                  ),
+                ),
+              Wrap(
+                spacing: _kSeatGap,
+                runSpacing: _kSeatRowGap,
+                children: [for (final t in groups[i].tiles) t(u)],
+              ),
+            ],
+          ],
+        ),
+      );
+    },
+  );
+}
+
+const double _kSeatGap = 5;
+const double _kSeatRowGap = 3;
+const double _kGroupGap = 6;
+const double _kGroupHeaderH = 18;
+const double _kImprovesH = 13;
+
+/// The tile scale range. 1.0 is the size the tiles were drawn at (60×88 with
+/// the monster's head rising 16 out of the card); at 24 seats in the card's
+/// ~390×175 the fit lands near 0.6.
+const double _kMaxTileScale = 1.25;
+const double _kMinTileScale = 0.5;
+
+/// The height [groups] take at scale [u] in a body [w] wide — the same wrap
+/// arithmetic the [Wrap] itself does (1/2 px of margin, so a rounding
+/// difference can only make the real thing SHORTER than this).
+double _crewHeight(List<_PostGroup> groups, double w, double u) {
+  final tw = _kWorkerTileW * u;
+  final th = (_kWorkerTileH + _kWorkerTileRise) * u;
+  final cols = math.max(1, ((w - 0.5 + _kSeatGap) / (tw + _kSeatGap)).floor());
+  var total = 0.0;
+  for (var i = 0; i < groups.length; i++) {
+    final n = groups[i].tiles.length;
+    if (i > 0) total += _kGroupGap;
+    if (groups.length > 1) total += _kGroupHeaderH;
+    if (groups[i].improves != null) total += _kImprovesH;
+    if (n == 0) continue;
+    final rows = (n / cols).ceil();
+    total += rows * th + (rows - 1) * _kSeatRowGap;
+  }
+  return total;
+}
+
+/// The largest tile scale at which every seat fits [w]×[h]; the floor if none
+/// does (the grid then scrolls — past ~40 seats).
+double _fitScale(List<_PostGroup> groups, double w, double h) {
+  for (var u = _kMaxTileScale; u > _kMinTileScale; u -= 0.02) {
+    if (_crewHeight(groups, w, u) <= h) return u;
+  }
+  return _kMinTileScale;
 }
 
 /// A recipe amount: "2", not "2.0".
@@ -1642,7 +1596,21 @@ String _num(double v) =>
 /// One stationed monster: sprite + name left, ITS hourly contribution right.
 /// Read-only — posting and un-posting both happen in the Edit sheet below
 /// (user 2026-07-22, the ✕ per row is gone).
-Widget _workerRow(
+/// What one posted monster is doing here, worked out once — shown as a tile in
+/// [_workerGrid].
+typedef _WorkerReadout = ({
+  /// Why it is not working, or null when it is.
+  String? absence,
+
+  /// The one-line figure (or the absence).
+  String value,
+
+  /// The stacked figures, for a post that feeds several systems or stores
+  /// several goods; empty for every other.
+  List<String> lines,
+});
+
+_WorkerReadout _workerReadout(
   CreatureInstance c,
   WorkshopRole role,
   int level,
@@ -1733,56 +1701,115 @@ Widget _workerRow(
       : workshopRoleFeedsSystem(role.resource)
       ? workshopPowerParts(contribution, withGlyph: role.isCombined)
       : const <String>[];
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
-    // Shared by every building's worker list (user 2026-08-30: "bitte bei
-    // allen Gebäuden anpassen") — this one row IS all of them, so the
-    // bigger icon and the explicit centring land everywhere at once.
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        SizedBox(
-          width: 32,
-          height: 32,
-          child: c.imageUrl == null
-              ? Icon(Icons.pets, size: 22, color: _dlgAccent)
-              : CreatureSprite(
-                  url: c.imageUrl!,
-                  fallback: Icon(Icons.pets, size: 22, color: _dlgAccent),
-                ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            training ? '${c.displayName} · Lv ${c.level}' : c.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: FoE.label(size: 12).copyWith(color: _dlgInk),
+  return (absence: absence, value: value, lines: lines);
+}
+
+/// The tiles' natural size at scale 1. [_CrewGrid] scales all three together
+/// (see [_fitScale]); [_kWorkerTileRise] is the empty strip above the card the
+/// monster's head rises into.
+const double _kWorkerTileW = 60;
+const double _kWorkerTileH = 72;
+const double _kWorkerTileRise = 16;
+
+/// A posted monster, as one of the build menu's cards (user 2026-09-18, "Variante
+/// 3"): a light card with a hard tan shadow, the monster rising OUT of its top
+/// edge with a cast shadow of its own, and its figure underneath. [u] scales
+/// the whole tile; the name only shows while the tile is big enough to carry it
+/// (long-press always gives name and details).
+Widget _workerTile(
+  CreatureInstance c,
+  WorkshopRole role,
+  int level,
+  bool training,
+  bool boost,
+  List<String> storageKeys, {
+  required double u,
+  required VoidCallback onTap,
+}) {
+  final r = _workerReadout(c, role, level, training, boost, storageKeys);
+  final absent = r.absence != null;
+  // The figure, or just the glyph of why it isn't working.
+  final label = absent
+      ? r.absence!.split(' ').first
+      : (r.lines.isNotEmpty ? r.lines.first : r.value);
+  final details = [
+    training ? '${c.displayName} · Lv ${c.level}' : c.displayName,
+    absent ? r.absence! : (r.lines.length > 1 ? r.lines.join('   ') : r.value),
+  ].join('\n');
+  final showName = u >= 0.9;
+  return Tooltip(
+    message: details,
+    // A tap is the swap; the details wait for a long press.
+    triggerMode: TooltipTriggerMode.longPress,
+    child: Pressable(
+      onTap: onTap,
+      child: Opacity(
+        opacity: absent ? 0.55 : 1,
+        child: SizedBox(
+          width: _kWorkerTileW * u,
+          height: (_kWorkerTileH + _kWorkerTileRise) * u,
+          child: CreatureSeatTile(
+            face: CreatureFace.of(c),
+            name: showName ? c.displayName : null,
+            figure: label,
+            u: u,
           ),
         ),
-        // Stacked when the post feeds several systems at once, so each
-        // amplifier is its own line instead of one long run-on figure
-        // (user 2026-07-29). Right-aligned, so the numbers line up under
-        // each other rather than drifting with the glyph widths.
-        if (lines.length > 1)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final l in lines)
-                Text(l, style: FoE.value(size: 11).copyWith(color: _dlgInk)),
-            ],
-          )
-        else
-          Text(
-            value,
-            style: FoE.value(
-              size: 11,
-            ).copyWith(color: absent ? _dlgInkFaint : _dlgInk),
-          ),
-      ],
+      ),
     ),
   );
+}
+
+/// A free seat: the same card at the same scale, dashed and empty, with an
+/// amber "+".
+Widget _emptyWorkerTile({
+  required double u,
+  required VoidCallback onTap,
+  Key? anchorKey,
+}) {
+  final plus = (26 * u).clamp(16.0, 34.0);
+  final tile = Semantics(
+    label: 'Free seat — post a monster',
+    button: true,
+    child: Pressable(
+      onTap: onTap,
+      child: SizedBox(
+        width: _kWorkerTileW * u,
+        height: (_kWorkerTileH + _kWorkerTileRise) * u,
+        child: Padding(
+          padding: EdgeInsets.only(top: _kWorkerTileRise * u),
+          child: CustomPaint(
+            painter: DashedRRectPainter(
+              color: CreamPalette.tan.withValues(alpha: 0.85),
+              radius: 12 * u,
+            ),
+            child: Center(
+              child: Container(
+                width: plus,
+                height: plus,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: CreamPalette.gold,
+                  boxShadow: [
+                    BoxShadow(
+                      color: CreamPalette.goldDeep,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.add,
+                  size: plus * 0.7,
+                  color: CreamPalette.ink,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  return anchorKey == null ? tile : KeyedSubtree(key: anchorKey, child: tile);
 }
 
 /// Buy out the rest of a construction. Priced on the REAL remaining wait
@@ -1842,47 +1869,47 @@ Map<String, double> _passiveOutputs(
 }
 
 // ── Level upgrade ─────────────────────────────────────────
-/// One "label … now → next 🏠" row of the upgrade table.
-///
-/// Only ever built for a number the level actually MOVES (user 2026-07-26:
-/// "nur anzeigen, wenn es effektiv auch etwas ändert, Stats die gleich
-/// bleiben, sollen nicht angezeigt werden") — the caller filters. At max
-/// level there is no next value, so the row states the current one.
-Widget _upgradeLineRow({
-  required String label,
-  required String emoji,
-  required String now,
-  required String next,
-  required bool atMax,
-  bool onlyNext = false,
-}) => Padding(
-  padding: const EdgeInsets.only(bottom: 5),
-  child: Row(
-    children: [
-      Text(label, style: FoE.label(size: 12).copyWith(color: _dlgAccent)),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(
-          // [emoji] may be empty — the worker/effect rows name themselves on
-          // the left and carry no icon (user 2026-07-27).
-          (atMax || onlyNext
-                  ? '${onlyNext && !atMax ? next : now} $emoji'
-                  : '$now  →  $next $emoji')
-              .trimRight(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.end,
-          style: FoE.value(size: 12).copyWith(color: _dlgInk),
-        ),
-      ),
-    ],
-  ),
-);
+/// The level-up chips for the work posts and authored effects that change. Lines
+/// of one group (a store's storage per good) collapse into ONE chip once there are
+/// more than three — "Storage · each 1,050 → 1,600" when every good moves the same
+/// way, "Storage · 12 values up" when they differ — so a store with twenty goods
+/// does not drown the bar in twenty chips (user 2026-09-22).
+List<String> _workChips(List<UpgradeLine> lines) {
+  final byGroup = <String?, List<UpgradeLine>>{};
+  for (final l in lines) {
+    byGroup.putIfAbsent(l.group, () => []).add(l);
+  }
+  final out = <String>[];
+  for (final e in byGroup.entries) {
+    final group = e.key;
+    final ls = e.value;
+    String one(UpgradeLine l) =>
+        '${group != null ? '$group · ' : ''}${l.label} '
+        '${l.onlyNext ? l.next : '${l.now} → ${l.next}'}';
+    if (group == null || ls.length <= 3) {
+      out.addAll(ls.map(one));
+      continue;
+    }
+    final first = ls.first;
+    final same = ls.every((l) => l.now == first.now && l.next == first.next);
+    out.add(
+      same
+          ? (first.onlyNext
+                ? '$group · each ${first.next}'
+                : '$group · each ${first.now} → ${first.next}')
+          : '$group · ${ls.length} values up',
+    );
+  }
+  return out;
+}
 
-/// Shows what this level yields, what the next one does to it, the cost and
-/// build time, and the upgrade button. See building_definitions' level
-/// scaling for the curves behind the numbers.
-Widget _upgradeSection(
+/// The Upgrade bar — one line that never moves: "Lv 4 → Lv 5", what the level
+/// buys as small chips (only what it actually MOVES — user 2026-07-26: "nur
+/// anzeigen, wenn es effektiv auch etwas ändert"), the round button that opens
+/// the max-level preview, and the Upgrade button with its cost inside (user
+/// 2026-07-22 — the price is part of the offer, not a caption above it). See
+/// building_definitions' level scaling for the curves behind the numbers.
+Widget _upgradeBar(
   BuildContext context,
   SettlementController ctrl,
   PlacedBuilding b,
@@ -1908,135 +1935,122 @@ Widget _upgradeSection(
     return '${val.toStringAsFixed(1)}/h';
   }
 
-  // What a level does to the WORK POSTS (a production building's whole
-  // output rides on these) AND to every other authored effect — a Builder
-  // Camp's "+1 build site at level 3" used to be nowhere in this panel, so a
-  // level whose entire point was that bonus looked like it bought nothing
+  // What a level does to the WORK POSTS AND to every other authored effect — a
+  // Builder Camp's "+1 build site at level 3" would otherwise be nowhere, and a
+  // level whose entire point was that bonus would look like it bought nothing
   // (user 2026-07-26).
   final era = ctrl.dungeonMaxStage;
   final workLines = [
     ...workshopUpgradeLines(def, b.level, target),
     ...buildingEffectUpgradeLines(def, b.level, target, era),
   ];
+  final movedKeys = [
+    for (final k in outKeys)
+      if ((now[k] ?? 0) != (next[k] ?? 0)) k,
+  ];
+  final movedWork = workLines.where((l) => l.changed).toList();
+  final chips = <String>[
+    for (final k in movedKeys)
+      '${k == kHousingOutputKey ? 'Housing' : _resLabel(k)} '
+          '${fmtOut(k, next[k])} ${k == kHousingOutputKey ? '🏠' : _resEmoji(k)}',
+    ..._workChips(movedWork),
+  ];
 
-  // ONLY what the level moves (user 2026-07-26: "nur anzeigen, wenn es
-  // effektiv auch etwas ändert, Stats die gleich bleiben, sollen nicht
-  // angezeigt werden"). A "5 → 5" row costs a line of the panel to say
-  // nothing, and three of them bury the one number that did change.
-  //
-  // At MAX level there is no next value to compare against, so the panel
-  // keeps stating what the building currently yields.
-  final movedKeys = atMax
-      ? outKeys
-      : [
-          for (final k in outKeys)
-            if ((now[k] ?? 0) != (next[k] ?? 0)) k,
-        ];
-  final movedWork = atMax
-      ? const <UpgradeLine>[]
-      : workLines.where((l) => l.changed).toList();
-
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // One row per output, current → next, in the same table shape as the
-        // Base/Total lines above ("Output %" removed, user 2026-07-24).
-        // Same shape as the Effects card (user 2026-07-24): the resource/
-        // effect label on the LEFT, the numbers (now → next) then the icon on
-        // the far RIGHT.
-        for (final k in movedKeys)
-          _upgradeLineRow(
-            label: k == kHousingOutputKey ? 'Housing' : _resLabel(k),
-            emoji: k == kHousingOutputKey ? '🏠' : _resEmoji(k),
-            now: fmtOut(k, now[k]),
-            next: fmtOut(k, next[k]),
-            atMax: atMax,
-            // Just the new number (user request) — the old value cost a
-            // reader two numbers to find the one that changed.
-            onlyNext: true,
-          ),
-        // Worker slots and per-worker yield, after the outputs: the outputs
-        // are WHAT it makes, these are what makes them.
-        for (var i = 0; i < movedWork.length; i++) ...[
-          // The group heading, printed once when it changes — "Storage" over
-          // its per-resource rows (user 2026-07-30).
-          if (movedWork[i].group != null &&
-              (i == 0 || movedWork[i - 1].group != movedWork[i].group))
-            Padding(
-              padding: const EdgeInsets.only(top: 2, bottom: 3),
-              child: Text(
-                movedWork[i].group!,
-                style: FoE.label(size: 12).copyWith(color: _dlgAccent),
-              ),
-            ),
-          _upgradeLineRow(
-            label: movedWork[i].label,
-            // NO trailing icon here (user 2026-07-27: "icons rechts entfernen
-            // für xp und workers"). A resource row needs its emoji — that is
-            // what says WHICH resource — but "Workers" and "XP" already say
-            // what they are on the left, so the glyph was decoration.
-            emoji: '',
-            now: movedWork[i].now,
-            next: movedWork[i].next,
-            atMax: false,
-            onlyNext: movedWork[i].onlyNext,
-          ),
-        ],
-        // With everything filtered out the panel would be a bare button, and
-        // "no rows" reads as a rendering fault rather than as an answer.
-        if (!atMax && movedKeys.isEmpty && movedWork.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 5),
-            child: Text(
-              'This level changes no values — only the cost.',
-              style: FoE.dim(size: 11).copyWith(color: _dlgInkSoft),
-            ),
-          ),
-        const SizedBox(height: 8),
-        if (atMax)
-          Text(
-            'Maximum level reached.',
-            style: FoE.dim(size: 11).copyWith(color: _dlgInkSoft),
-          )
-        else
-          // Cost and build time live INSIDE the button (user 2026-07-22) —
-          // the price is part of the offer, not a caption above it.
-          Pressable(
-            onTap: afford ? () => _doUpgrade(context, ctrl, b.id) : null,
-            // No more blanket dimming/reddening when it can't afford (user
-            // 2026-09-01: "wenn upgrade nicht geht, nur das rot einfärben,
-            // welches fehlt" — the whole line used to fade AND turn red
-            // together, so "too little wood" looked identical to "too
-            // little wood and stone and gold." Only the actual short
-            // resource(s) turn red now; the button's own active/inactive
-            // decoration is still the tap cue.
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              alignment: Alignment.center,
-              decoration: parchmentButton(active: afford),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Upgrade',
-                    style: FoE.label(
-                      size: 13,
-                    ).copyWith(color: parchmentButtonInk(active: afford)),
-                  ),
-                  const SizedBox(height: 3),
-                  _costLine(
-                    def.resourceCostAt(target),
-                    stock,
-                    fmtDuration(def.constructionSecondsAt(target)),
-                  ),
-                ],
-              ),
-            ),
-          ),
+  Widget chip(String text) => Container(
+    margin: const EdgeInsets.only(right: 6),
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [CreamPalette.tileTop, CreamPalette.tileBottom],
+      ),
+      borderRadius: BorderRadius.circular(9),
+      boxShadow: [
+        BoxShadow(color: CreamPalette.tanShadow, offset: const Offset(0, 2)),
       ],
+    ),
+    child: Text(text, style: FoE.value(size: 11).copyWith(color: kBoxInk)),
+  );
+
+  return creamCard(
+    padding: const EdgeInsets.fromLTRB(14, 0, 8, 0),
+    child: SizedBox(
+      height: _kBarH,
+      child: Row(
+        children: [
+          Text(
+            atMax ? 'Level ${b.level}' : 'Lv ${b.level} → Lv $target',
+            style: FoE.title(size: 14).copyWith(color: kBoxInk),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: atMax
+                ? Text(
+                    'Maximum level reached.',
+                    style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+                  )
+                // A level that moves nothing says so, rather than leaving a
+                // bare button that reads as a rendering fault.
+                : chips.isEmpty
+                ? Text(
+                    'This level changes no values — only the cost.',
+                    style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+                  )
+                // Long lists (a store's every good) scroll sideways and SAY so
+                // (user 2026-09-22: the level-up effects "werden nicht schön
+                // dargestellt"): a fade and a ▸ tab until the end is reached.
+                : ScrollCue(
+                    axis: Axis.horizontal,
+                    builder: (context, controller) => SingleChildScrollView(
+                      controller: controller,
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: [for (final t in chips) chip(t)]),
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 6),
+          // Small right-aligned peek at the effects at MAX level (user
+          // 2026-07-24).
+          _circleBtn(
+            Icons.query_stats,
+            () => showBuildingUpgradeSheet(context, def),
+            size: 28,
+          ),
+          if (!atMax) ...[
+            const SizedBox(width: 10),
+            Pressable(
+              onTap: afford ? () => _doUpgrade(context, ctrl, b.id) : null,
+              // Only the resource(s) you are short of turn red, not the whole
+              // line (user 2026-09-01); the button's own active/inactive
+              // decoration is the tap cue.
+              child: Container(
+                width: 178,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: goldButton(active: afford),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Upgrade',
+                      style: FoE.label(
+                        size: 13,
+                      ).copyWith(color: goldButtonInk(active: afford)),
+                    ),
+                    const SizedBox(height: 2),
+                    _costLine(
+                      def.resourceCostAt(target),
+                      stock,
+                      fmtDuration(def.constructionSecondsAt(target)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     ),
   );
 }
@@ -2067,7 +2081,7 @@ Widget _costLine(
   String buildTime,
 ) {
   const base = {'wood': '🪵', 'stone': '🪨', 'gold': '🪙'};
-  final ink = parchmentButtonInk(active: true);
+  final ink = goldButtonInk(active: true);
   return Wrap(
     alignment: WrapAlignment.center,
     spacing: 8,
@@ -2092,11 +2106,11 @@ Widget _functionBtn(String label, VoidCallback onTap) => SizedBox(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: parchmentButton(),
+      decoration: goldButton(),
       alignment: Alignment.center,
       child: Text(
         label,
-        style: FoE.label(size: 13).copyWith(color: parchmentButtonInk()),
+        style: FoE.label(size: 13).copyWith(color: goldButtonInk()),
       ),
     ),
   ),
@@ -2105,190 +2119,61 @@ Widget _functionBtn(String label, VoidCallback onTap) => SizedBox(
 // ── Worker assignment (creature economy) ──────────────────
 // Each workshop role is staffed by SPECIFIC creatures; a role's output is
 // the sum of its workers' civilian stat, so the player picks who works where.
-// The roster itself lives in _productionSection now — what's left here is the
-// recipe picker and the notes about the crew as a whole.
-Widget _workshopExtras(PlacedBuilding b, BuildingDef def, bool functional) {
+// The seats themselves live in the Crew card ([_CrewGrid]) — what's left here
+// are the notes about the crew as a whole.
+Widget? _crewNotes(PlacedBuilding b, BuildingDef def, bool functional) {
   final ctrl = CreaturesController();
   final posted = ctrl.creatures.where((c) => c.assignedBuildingId == b.id);
   // Counts who's actually HERE — away creatures earn no XP either
   // (accruePassiveXp uses the same rule).
   final stationed = posted.where(ctrl.isWorkingNow).length;
   final away = posted.length - stationed;
+  // Nothing to say = no line.
+  if (!(stationed > 0 && !functional) && away <= 0) return null;
   return Column(
+    mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      // The recipe picker used to live here as a Wrap of chips. It is the
-      // Crafting screen now, opened by this dialog's own primary action —
-      // see _primaryAction (user 2026-07-29).
-      // The XP rate itself now sits next to the Workers heading; only the
-      // "nobody is earning it" case still needs saying.
       if (stationed > 0 && !functional)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(
-            'No road connection — nobody here is working, or earning XP.',
-            style: FoE.dim(size: 11).copyWith(color: FoE.danger),
-          ),
+        Text(
+          'No road connection — nobody here is working, or earning XP.',
+          style: FoE.dim(size: 11).copyWith(color: FoE.danger),
         ),
       if (away > 0)
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            '🎒 $away on expedition — post${away > 1 ? 's' : ''} held, '
-            'no output until they return',
-            style: FoE.dim(size: 10).copyWith(color: _dlgAccent),
-          ),
+        Text(
+          '🎒 $away on expedition — post${away > 1 ? 's' : ''} held, '
+          'no output until they return',
+          style: FoE.dim(size: 10).copyWith(color: kBoxAccent),
         ),
     ],
   );
 }
 
-/// A work post's header: what it is, how full it is, and the way in.
-///
-/// The WHOLE row opens the assign sheet (user 2026-07-26) — the seat count
-/// and the control that changes it were a row apart, with a centred "Edit"
-/// button under the worker list. Tapping the count is what anyone tries
-/// first anyway, and every post gets a row back.
-///
-/// [enabled] is false for an unconnected building: there is nothing to edit
-/// until it has a road, so the row says the count and stays inert.
-// No per-role "+" any more, and the row itself no longer opens the
-// picker (user 2026-08-27: "anstelle des '+' Buttons zwischen der
-// effects und upgrade box einen 'Manage' Button") — ONE button between
-// the Effects and Upgrade cards now owns staffing for every role, so
-// this row is purely a readout: what the post is, how full it is.
-Widget _workerHeaderRow({
-  required PlacedBuilding b,
-  required WorkshopRole role,
-  required String label,
-  required String count,
-  required bool enabled,
-}) => Padding(
-  padding: const EdgeInsets.only(bottom: 4),
-  child: Row(
-    children: [
-      Expanded(
-        child: Text(
-          label,
-          style: FoE.label(
-            size: 11,
-          ).copyWith(color: enabled ? _dlgAccent : _dlgInkFaint),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-      const SizedBox(width: 8),
-      Text(
-        count,
-        style: FoE.value(
-          size: 12,
-        ).copyWith(color: enabled ? _dlgInk : _dlgInkFaint),
-      ),
-    ],
-  ),
-);
-
+/// [swapId] opens the picker straight in swap mode for that monster.
 void _openAssignPicker(
   BuildContext context,
   SettlementController ctrl,
   PlacedBuilding b,
-  WorkshopRole role,
-) => showModalBottomSheet<void>(
-  context: context,
-  isScrollControlled: true,
-  backgroundColor: Colors.transparent,
-  builder: (_) => AssignWorkersSheet(ctrl: ctrl, building: b, role: role),
+  WorkshopRole role, {
+  String? swapId,
+}) => showAssignWorkers(
+  context,
+  ctrl: ctrl,
+  building: b,
+  role: role,
+  swapId: swapId,
 );
 
 /// Training and the legendary slot keep their arrow: neither is a
 /// stat→resource pair, and their left side alone would name nothing.
-/// Shared between the Effects card's read-only post rows and the
-/// Manage picker, so the two cannot drift apart on what a post is called.
+/// Shared between the Effects card's post headers and the assignment picker,
+/// so the two cannot drift apart on what a post is called.
 String _workRoleLabel(WorkshopRole role) => switch (role.resource) {
   WorkshopRole.kTraining => 'Training → XP',
   WorkshopRole.kLegendaryBoost =>
     '⭐ Legendary → ×${(1 + role.mult).toStringAsFixed(1)}',
   _ => role.stat.label,
 };
-
-/// ONE door into staffing, for every post a building has (user 2026-08-27:
-/// "anstelle des '+' Buttons zwischen der effects und upgrade box einen
-/// 'Manage' Button"). A single-post building (almost all of them) goes
-/// straight to that post's picker; a combined one (the Scout Post, the
-/// Storehouse) offers the roles to choose from first.
-void _manageWorkers(
-  BuildContext context,
-  SettlementController ctrl,
-  PlacedBuilding b,
-  BuildingDef def,
-) {
-  if (def.workshops.length == 1) {
-    _openAssignPicker(context, ctrl, b, def.workshops.first);
-    return;
-  }
-  final creaturesCtrl = CreaturesController();
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (sheetCtx) => ParchmentSheet(
-      title: 'Manage Work',
-      initialSize: 0.4,
-      minSize: 0.3,
-      maxSize: 0.7,
-      builder: (_, scrollCtrl) => ListView(
-        controller: scrollCtrl,
-        // +16/+16 (2026-09-06): ParchmentSheet's own bands widened from
-        // flush-to-edge to a 14px inset/16px wide band.
-        padding: const EdgeInsets.fromLTRB(36, 12, 36, 20),
-        children: [
-          for (final role in def.workshops)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Pressable(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _openAssignPicker(context, ctrl, b, role);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: ParchmentSheet.card,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _workRoleLabel(role),
-                          style: FoE.label(
-                            size: 13,
-                          ).copyWith(color: ParchmentSheet.ink),
-                        ),
-                      ),
-                      Text(
-                        '${creaturesCtrl.creatures.where((c) => c.assignedBuildingId == b.id && c.assignedStat == role.stat).length}/${effectiveSlots(role, b.level)}',
-                        style: FoE.value(
-                          size: 13,
-                        ).copyWith(color: ParchmentSheet.inkSoft),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.chevron_right,
-                        size: 18,
-                        color: ParchmentSheet.inkFaint,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    ),
-  );
-}
 
 // ── Live build countdown ───────────────────────────────────
 // showDialog builds its content once — the Dialog's own subtree never
@@ -2403,7 +2288,7 @@ class _BuildCountdownState extends State<_BuildCountdown> {
     if (_done) {
       return Text(
         'Complete!',
-        style: FoE.dim(size: 11).copyWith(color: _kDlgAccent),
+        style: FoE.dim(size: 11).copyWith(color: kBoxAccent),
       );
     }
     final builtNow = _builtNowGameSeconds;
@@ -2417,7 +2302,7 @@ class _BuildCountdownState extends State<_BuildCountdown> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RecessBar(value: pct / 100.0, color: _kDlgAccent, height: 12),
+        RecessBar(value: pct / 100.0, color: kBoxAccent, height: 12),
         const SizedBox(height: 6),
         Text(
           _queued
@@ -2432,7 +2317,7 @@ class _BuildCountdownState extends State<_BuildCountdown> {
               : '$pct%  ·  ${fmtDuration(secondsLeft)} remaining',
           // On the dialog's parchment recess — the warm accent reads, the app's
           // light gold does not.
-          style: FoE.dim(size: 11).copyWith(color: _kDlgAccent),
+          style: FoE.dim(size: 11).copyWith(color: kBoxAccent),
         ),
       ],
     );

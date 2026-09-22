@@ -47,13 +47,15 @@ List<Combatant>? spawnPathBattle(
       final e = node.enemies[i];
       final sp = kSpeciesDefs[e.speciesId];
       if (sp == null) continue;
-      out.add(Combatant.fromSpecies(
-        sp,
-        level: e.level,
-        id: 'w${battleNumber}_$i',
-        isBoss: node.isBoss,
-        statScale: statScale,
-      ));
+      out.add(
+        Combatant.fromSpecies(
+          sp,
+          level: e.level,
+          id: 'w${battleNumber}_$i',
+          isBoss: node.isBoss,
+          statScale: statScale,
+        ),
+      );
     }
     if (out.isNotEmpty) return out;
   }
@@ -63,7 +65,8 @@ List<Combatant>? spawnPathBattle(
   if (isBossBattle(battleNumber)) {
     final ranked = pool.toList()
       ..sort((a, b) => b.rarity.index.compareTo(a.rarity.index));
-    final boss = kSpeciesDefs[area.bossSpeciesId] ??
+    final boss =
+        kSpeciesDefs[area.bossSpeciesId] ??
         (ranked.isEmpty ? null : ranked.first);
     if (boss == null) return null;
     return [
@@ -73,7 +76,7 @@ List<Combatant>? spawnPathBattle(
         id: 'boss',
         isBoss: true,
         statScale: statScale,
-      )
+      ),
     ];
   }
   if (pool.isEmpty) return null;

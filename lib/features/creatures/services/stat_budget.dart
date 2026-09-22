@@ -73,17 +73,12 @@ const double kBudgetTolerance = 0.10;
 /// defense AND speed at once), so even this tight 1.15× legendary/common spread
 /// is ~1.5× combat power. Re-run the combat Monte-Carlo (⚗️ Combat Lab) after
 /// ANY change here.
-const Map<CreatureRarity, double> kBaseBudgetByRarity = {
-  // Compressed AGAIN (user 2026-07-22: "die Unterschiede sollen nicht so
-  // gross sein"): +5 per step, was +10. Legendary/common is now 1.074× budget
-  // ≈ ~1.24× combat power under the cubic law — rarity is flavour and a catch
-  // trophy, level is the power axis.
-  CreatureRarity.common: 270,
-  CreatureRarity.uncommon: 275,
-  CreatureRarity.rare: 280,
-  CreatureRarity.epic: 285,
-  CreatureRarity.legendary: 290,
-};
+// The hardcoded kBaseBudgetByRarity table that used to stand here is gone
+// (2026-09-21). Base and growth have come from the LIVE config since
+// 2026-07-24 — see [budgetBaseTotal]/[budgetGrowthTotal], which read
+// kSpeciesBalance — and nothing had read the constant since. It had already
+// drifted out of step with both the config and docs/balancing.md's own copy
+// of the table, which is what a second source of truth does.
 
 // ── Archetypes (docs/balancing.md §3) ───────────────────────
 // Every species spends the SAME budget for its rarity/tier — archetypes only
@@ -118,78 +113,79 @@ enum CombatArchetype {
   const CombatArchetype(this.label);
 }
 
-const Map<CombatArchetype, Map<CreatureStat, double>> kCombatArchetypeWeights = {
-  CombatArchetype.allrounder: {
-    CreatureStat.hp: 60,
-    CreatureStat.attack: 40,
-    CreatureStat.defense: 40,
-    CreatureStat.speed: 40,
-    CreatureStat.catchRate: 20,
-  },
-  CombatArchetype.bulwark: {
-    CreatureStat.hp: 90,
-    CreatureStat.attack: 30,
-    CreatureStat.defense: 40,
-    CreatureStat.speed: 20,
-    CreatureStat.catchRate: 20,
-  },
-  CombatArchetype.berserker: {
-    CreatureStat.hp: 40,
-    CreatureStat.attack: 90,
-    CreatureStat.defense: 25,
-    CreatureStat.speed: 25,
-    CreatureStat.catchRate: 20,
-  },
-  CombatArchetype.guardian: {
-    CreatureStat.hp: 45,
-    CreatureStat.attack: 25,
-    CreatureStat.defense: 90,
-    CreatureStat.speed: 20,
-    CreatureStat.catchRate: 20,
-  },
-  CombatArchetype.sprinter: {
-    CreatureStat.hp: 40,
-    CreatureStat.attack: 30,
-    CreatureStat.defense: 20,
-    CreatureStat.speed: 90,
-    CreatureStat.catchRate: 20,
-  },
-  CombatArchetype.tank: {
-    CreatureStat.hp: 75,
-    CreatureStat.attack: 25,
-    CreatureStat.defense: 60,
-    CreatureStat.speed: 20,
-    CreatureStat.catchRate: 20,
-  },
-  CombatArchetype.bruiser: {
-    CreatureStat.hp: 65,
-    CreatureStat.attack: 65,
-    CreatureStat.defense: 30,
-    CreatureStat.speed: 20,
-    CreatureStat.catchRate: 20,
-  },
-  CombatArchetype.glassCannon: {
-    CreatureStat.hp: 35,
-    CreatureStat.attack: 70,
-    CreatureStat.defense: 20,
-    CreatureStat.speed: 55,
-    CreatureStat.catchRate: 20,
-  },
-  CombatArchetype.skirmisher: {
-    CreatureStat.hp: 45,
-    CreatureStat.attack: 55,
-    CreatureStat.defense: 25,
-    CreatureStat.speed: 55,
-    CreatureStat.catchRate: 20,
-  },
-  CombatArchetype.duelist: {
-    CreatureStat.hp: 45,
-    CreatureStat.attack: 30,
-    CreatureStat.defense: 60,
-    CreatureStat.speed: 45,
-    CreatureStat.catchRate: 20,
-  },
-};
+const Map<CombatArchetype, Map<CreatureStat, double>> kCombatArchetypeWeights =
+    {
+      CombatArchetype.allrounder: {
+        CreatureStat.hp: 60,
+        CreatureStat.attack: 40,
+        CreatureStat.defense: 40,
+        CreatureStat.speed: 40,
+        CreatureStat.catchRate: 20,
+      },
+      CombatArchetype.bulwark: {
+        CreatureStat.hp: 90,
+        CreatureStat.attack: 30,
+        CreatureStat.defense: 40,
+        CreatureStat.speed: 20,
+        CreatureStat.catchRate: 20,
+      },
+      CombatArchetype.berserker: {
+        CreatureStat.hp: 40,
+        CreatureStat.attack: 90,
+        CreatureStat.defense: 25,
+        CreatureStat.speed: 25,
+        CreatureStat.catchRate: 20,
+      },
+      CombatArchetype.guardian: {
+        CreatureStat.hp: 45,
+        CreatureStat.attack: 25,
+        CreatureStat.defense: 90,
+        CreatureStat.speed: 20,
+        CreatureStat.catchRate: 20,
+      },
+      CombatArchetype.sprinter: {
+        CreatureStat.hp: 40,
+        CreatureStat.attack: 30,
+        CreatureStat.defense: 20,
+        CreatureStat.speed: 90,
+        CreatureStat.catchRate: 20,
+      },
+      CombatArchetype.tank: {
+        CreatureStat.hp: 75,
+        CreatureStat.attack: 25,
+        CreatureStat.defense: 60,
+        CreatureStat.speed: 20,
+        CreatureStat.catchRate: 20,
+      },
+      CombatArchetype.bruiser: {
+        CreatureStat.hp: 65,
+        CreatureStat.attack: 65,
+        CreatureStat.defense: 30,
+        CreatureStat.speed: 20,
+        CreatureStat.catchRate: 20,
+      },
+      CombatArchetype.glassCannon: {
+        CreatureStat.hp: 35,
+        CreatureStat.attack: 70,
+        CreatureStat.defense: 20,
+        CreatureStat.speed: 55,
+        CreatureStat.catchRate: 20,
+      },
+      CombatArchetype.skirmisher: {
+        CreatureStat.hp: 45,
+        CreatureStat.attack: 55,
+        CreatureStat.defense: 25,
+        CreatureStat.speed: 55,
+        CreatureStat.catchRate: 20,
+      },
+      CombatArchetype.duelist: {
+        CreatureStat.hp: 45,
+        CreatureStat.attack: 30,
+        CreatureStat.defense: 60,
+        CreatureStat.speed: 45,
+        CreatureStat.catchRate: 20,
+      },
+    };
 
 /// Non-combat archetypes: one focus stat takes [kCivilFocusShare] of the
 /// budget, the rest spreads evenly. `generalist` spreads everything evenly.
@@ -346,8 +342,11 @@ Map<CreatureStat, StatCurve> buildArchetypeCurves({
 }) {
   final b = defaultBudget(rarity: rarity, tier: tier);
   return {
-    ..._distribute(kCombatArchetypeWeights[combat]!, b.combatBase,
-        b.combatGrowth),
+    ..._distribute(
+      kCombatArchetypeWeights[combat]!,
+      b.combatBase,
+      b.combatGrowth,
+    ),
     ..._distribute(civilArchetypeWeights(civil), b.workBase, b.workGrowth),
   };
 }
@@ -566,7 +565,8 @@ Map<CreatureStat, StatCurve> rollCurves({
   if (bias == 0 || archetypeWeights.isEmpty) {
     return (baseWeights, growthWeights);
   }
-  final mean = archetypeWeights.values.fold(0.0, (a, b) => a + b) /
+  final mean =
+      archetypeWeights.values.fold(0.0, (a, b) => a + b) /
       archetypeWeights.length;
   final newBase = {...baseWeights};
   final newGrowth = {...growthWeights};
@@ -576,8 +576,10 @@ Map<CreatureStat, StatCurve> rollCurves({
     final swing = bias.clamp(-1.0, 1.0) * kSpeciesMaturitySwing * excess;
     final stat = entry.key;
     newBase[stat] = ((newBase[stat] ?? 0) - swing).clamp(0.0, double.infinity);
-    newGrowth[stat] =
-        ((newGrowth[stat] ?? 0) + swing).clamp(0.0, double.infinity);
+    newGrowth[stat] = ((newGrowth[stat] ?? 0) + swing).clamp(
+      0.0,
+      double.infinity,
+    );
   }
   return (newBase, newGrowth);
 }
@@ -649,8 +651,7 @@ Map<CreatureStat, StatCurve> normalizeStatBudget({
     for (final s in present) {
       final curve = stats[s]!;
       final scaledBases = [
-        for (var stage = 0; stage < 3; stage++)
-          curve.baseAt(stage) * baseScale,
+        for (var stage = 0; stage < 3; stage++) curve.baseAt(stage) * baseScale,
       ];
       // Keep each stat's share of the group's growth; a zero-growth group
       // re-derives growth from the scaled base so the growth line reaches
@@ -713,10 +714,10 @@ StatBudgetReport auditStatBudget({
 }) {
   final t = targets ?? defaultBudget(rarity: rarity, tier: tier);
 
-  double baseSum(bool Function(CreatureStat) where, int stage) =>
-      CreatureStat.values
-          .where(where)
-          .fold(0.0, (sum, s) => sum + (stats[s]?.baseAt(stage) ?? 0));
+  double baseSum(bool Function(CreatureStat) where, int stage) => CreatureStat
+      .values
+      .where(where)
+      .fold(0.0, (sum, s) => sum + (stats[s]?.baseAt(stage) ?? 0));
   double growthSum(bool Function(CreatureStat) where) => CreatureStat.values
       .where(where)
       .fold(0.0, (sum, s) => sum + (stats[s]?.growth ?? 0));
@@ -745,8 +746,7 @@ StatBudgetReport auditStatBudget({
       ),
     ],
     combatBaseByStage: [
-      for (var stage = 0; stage < 3; stage++)
-        baseSum((s) => s.isCombat, stage),
+      for (var stage = 0; stage < 3; stage++) baseSum((s) => s.isCombat, stage),
     ],
   );
 }
@@ -758,10 +758,10 @@ StatBudgetReport auditStatBudget({
 // 2026-07-17). The dev list flag and its fix button use these; the editor's own
 // panel still audits against the author's chosen split.
 
-double _totalBaseOf(Map<CreatureStat, StatCurve> stats) => CreatureStat.values
-    .fold(0.0, (s, st) => s + (stats[st]?.baseAt(0) ?? 0));
-double _totalGrowthOf(Map<CreatureStat, StatCurve> stats) => CreatureStat.values
-    .fold(0.0, (s, st) => s + (stats[st]?.growth ?? 0));
+double _totalBaseOf(Map<CreatureStat, StatCurve> stats) =>
+    CreatureStat.values.fold(0.0, (s, st) => s + (stats[st]?.baseAt(0) ?? 0));
+double _totalGrowthOf(Map<CreatureStat, StatCurve> stats) =>
+    CreatureStat.values.fold(0.0, (s, st) => s + (stats[st]?.growth ?? 0));
 
 /// Whether [stats] spend the full rarity/tier budget in TOTAL (stage-0 base and
 /// growth), regardless of the combat/work split.

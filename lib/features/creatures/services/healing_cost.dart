@@ -157,10 +157,8 @@ Duration healDuration(CreatureInstance c) {
 }
 
 /// Longest treatment in [creatures] — what "heal all" will actually take.
-Duration healDurationFor(List<CreatureInstance> creatures) => creatures.fold(
-  Duration.zero,
-  (longest, c) {
-    final d = healDuration(c);
-    return d > longest ? d : longest;
-  },
-);
+Duration healDurationFor(List<CreatureInstance> creatures) =>
+    creatures.fold(Duration.zero, (longest, c) {
+      final d = healDuration(c);
+      return d > longest ? d : longest;
+    });

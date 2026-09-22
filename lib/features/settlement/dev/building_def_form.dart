@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import '../../../core/theme/foe_theme.dart';
+import 'dev_foe.dart';
 import '../data/building_art.dart';
 import '../data/building_definitions.dart';
 import '../data/iso_grid.dart';
@@ -87,6 +87,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
   late bool _isRoad;
   String? _requiredTechId;
   late int _maxCount;
+
   /// Which Build-menu drawer this building appears in. Null = "Automatic",
   /// i.e. let categoryOfBuilding derive it — the state every bundled building
   /// starts in, so nothing had to be hand-sorted for the field to exist.
@@ -125,12 +126,14 @@ class _BuildingDefFormState extends State<BuildingDefForm>
       (
         order: order,
         id: 'era_$order',
-        name: kAreaDefs.values
+        name:
+            kAreaDefs.values
                 .where((a) => a.battleStage == order)
                 .firstOrNull
                 ?.name ??
             'Region $order',
-        emoji: kAreaDefs.values
+        emoji:
+            kAreaDefs.values
                 .where((a) => a.battleStage == order)
                 .firstOrNull
                 ?.emoji ??
@@ -147,7 +150,12 @@ class _BuildingDefFormState extends State<BuildingDefForm>
   }
 
   /// Every resource an author can charge for: the settlement raws + all goods.
-  List<String> get _allResourceIds => ['wood', 'stone', 'gold', ...kGoodsDefs.keys];
+  List<String> get _allResourceIds => [
+    'wood',
+    'stone',
+    'gold',
+    ...kGoodsDefs.keys,
+  ];
 
   String _resourceLabel(String id) {
     final g = kGoodsDefs[id];
@@ -229,7 +237,8 @@ class _BuildingDefFormState extends State<BuildingDefForm>
     // (user 2026-07-25) — what this effect says is what the house pays.
     final isHouse = _effects.any((e) => e['type'] == 'housing');
     final hasGold = _effects.any(
-        (e) => e['type'] == 'production' && e['key'] == 'gold');
+      (e) => e['type'] == 'production' && e['key'] == 'gold',
+    );
     if (isHouse && !hasGold) {
       // A starting point to edit, not a hidden rule: the passive house-gold
       // curve used to live in code (HouseEconomy) and was invisible here. It is
@@ -363,8 +372,9 @@ class _BuildingDefFormState extends State<BuildingDefForm>
     final firstEra = costPerEra.keys.isEmpty
         ? null
         : (costPerEra.keys.toList()..sort()).first;
-    final resourceCost =
-        firstEra == null ? const <String, double>{} : costPerEra[firstEra]!;
+    final resourceCost = firstEra == null
+        ? const <String, double>{}
+        : costPerEra[firstEra]!;
 
     // Build the non-effects fields via the normal constructor, dump to a row,
     // splice in the edited effects and re-parse through fromDefRow — the exact
@@ -452,8 +462,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
     // is retired rather than deleted — the fallback is code, so absence cannot
     // express "gone" — and that is reversible. A custom one is not.
     final bundled = kFallbackBuildingDefs.containsKey(_id);
-    final placed = SettlementController()
-        .buildings
+    final placed = SettlementController().buildings
         .where((b) => b.buildingTypeId == _id)
         .length;
     final ok = await confirmDeleteDialog(
@@ -484,8 +493,9 @@ class _BuildingDefFormState extends State<BuildingDefForm>
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
       }
     }
   }
@@ -514,7 +524,10 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                     ),
                   )
                 : IconButton(
-                    icon: const Icon(Icons.save_outlined, color: FoE.goldBright),
+                    icon: const Icon(
+                      Icons.save_outlined,
+                      color: FoE.goldBright,
+                    ),
                     tooltip: 'Save',
                     onPressed: _save,
                   ),
@@ -716,9 +729,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
               children: [
                 Icon(c.icon, size: 16, color: FoE.gold),
                 const SizedBox(width: 8),
-                Flexible(
-                  child: Text(c.label, overflow: TextOverflow.ellipsis),
-                ),
+                Flexible(child: Text(c.label, overflow: TextOverflow.ellipsis)),
               ],
             ),
           ),
@@ -739,9 +750,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
       // · Stone Age" is wider than a phone row, and the dropdown sizes to
       // its widest item whether or not that item is the selected one.
       isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: 'First buildable in region',
-      ),
+      decoration: const InputDecoration(labelText: 'First buildable in region'),
       dropdownColor: FoE.panelDark,
       style: FoE.label(size: 15).copyWith(color: FoE.parchment),
       items: [
@@ -768,9 +777,9 @@ class _BuildingDefFormState extends State<BuildingDefForm>
     final battle = _id.trim().isEmpty ? 0 : buildingUnlockBattle(_id.trim());
     final text = battle > 0
         ? 'Unlocked at node $battle. Change it in the Path editor '
-            '(node reward → buildings).'
+              '(node reward → buildings).'
         : 'Buildable from its region. Set it as a node reward in the Path '
-            'editor to unlock it later.';
+              'editor to unlock it later.';
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InputDecorator(
@@ -903,8 +912,10 @@ class _BuildingDefFormState extends State<BuildingDefForm>
               padding: const EdgeInsets.symmetric(vertical: 8),
               decoration: FoE.btn(),
               alignment: Alignment.center,
-              child: Text('+ Resource',
-                  style: FoE.label(size: 12).copyWith(color: FoE.goldBright)),
+              child: Text(
+                '+ Resource',
+                style: FoE.label(size: 12).copyWith(color: FoE.goldBright),
+              ),
             ),
           ),
         ],
@@ -922,8 +933,10 @@ class _BuildingDefFormState extends State<BuildingDefForm>
             flex: 2,
             child: DropdownButtonFormField<String>(
               initialValue: good,
-              decoration:
-                  const InputDecoration(labelText: 'Resource', isDense: true),
+              decoration: const InputDecoration(
+                labelText: 'Resource',
+                isDense: true,
+              ),
               dropdownColor: FoE.panelDark,
               isExpanded: true,
               style: FoE.label(size: 13).copyWith(color: FoE.parchment),
@@ -933,7 +946,9 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                     DropdownMenuItem(
                       value: id,
                       // Show WHICH era introduces the resource (user 2026-07-24).
-                      child: Text('${_resourceLabel(id)} · era ${_resourceEra(id)}'),
+                      child: Text(
+                        '${_resourceLabel(id)} · era ${_resourceEra(id)}',
+                      ),
                     ),
               ],
               onChanged: (v) => _renameCostResource(band.era, good, v),
@@ -948,19 +963,26 @@ class _BuildingDefFormState extends State<BuildingDefForm>
               initialValue: (map[good] ?? 0) == 0
                   ? ''
                   : (map[good] ?? 0).toStringAsFixed(0),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               style: FoE.label(size: 13).copyWith(color: FoE.parchment),
               decoration: InputDecoration(
                 labelText: 'Amount @level ${band.first}',
                 isDense: true,
               ),
-              onChanged: (v) => setState(() =>
-                  (_costByEra[band.era] ??= {})[good] = double.tryParse(v) ?? 0),
+              onChanged: (v) => setState(
+                () => (_costByEra[band.era] ??= {})[good] =
+                    double.tryParse(v) ?? 0,
+              ),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline,
-                color: Colors.redAccent, size: 20),
+            icon: const Icon(
+              Icons.delete_outline,
+              color: Colors.redAccent,
+              size: 20,
+            ),
             onPressed: () => setState(() => _costByEra[band.era]?.remove(good)),
           ),
         ],
@@ -1013,8 +1035,10 @@ class _BuildingDefFormState extends State<BuildingDefForm>
             children: [
               SizedBox(
                 width: 76,
-                child: Text('L$lvl · era ${b.era}',
-                    style: FoE.label(size: 12).copyWith(color: FoE.gold)),
+                child: Text(
+                  'L$lvl · era ${b.era}',
+                  style: FoE.label(size: 12).copyWith(color: FoE.gold),
+                ),
               ),
               Expanded(
                 child: Text(
@@ -1033,8 +1057,10 @@ class _BuildingDefFormState extends State<BuildingDefForm>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Cost per level (preview)',
-              style: FoE.label(size: 13).copyWith(color: FoE.gold)),
+          Text(
+            'Cost per level (preview)',
+            style: FoE.label(size: 13).copyWith(color: FoE.gold),
+          ),
           const SizedBox(height: 6),
           ...rows,
         ],
@@ -1074,7 +1100,8 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                     labelText: '${era.emoji} Era ${era.order}',
                     isDense: true,
                   ),
-                  onChanged: (v) => _setMaxLevel(era.order, int.tryParse(v) ?? 0),
+                  onChanged: (v) =>
+                      _setMaxLevel(era.order, int.tryParse(v) ?? 0),
                 ),
               ),
           ],
@@ -1190,9 +1217,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                 child: _intField(
                   'Passive points (building effects)',
                   _calcPassivePoints,
-                  (v) => setState(
-                    () => _calcPassivePoints = v.clamp(0, 99999),
-                  ),
+                  (v) => setState(() => _calcPassivePoints = v.clamp(0, 99999)),
                   keyId: 'passive-$_calcGen',
                 ),
               ),
@@ -1201,9 +1226,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                 child: _intField(
                   'Points per stat point',
                   _calcMult.round(),
-                  (v) => setState(
-                    () => _calcMult = v.clamp(0, 999).toDouble(),
-                  ),
+                  (v) => setState(() => _calcMult = v.clamp(0, 999).toDouble()),
                   keyId: 'mult-$_calcGen',
                 ),
               ),
@@ -1220,8 +1243,10 @@ class _BuildingDefFormState extends State<BuildingDefForm>
               padding: const EdgeInsets.symmetric(vertical: 8),
               decoration: FoE.btn(),
               alignment: Alignment.center,
-              child: Text('+ Monster (construction stat)',
-                  style: FoE.label(size: 12)),
+              child: Text(
+                '+ Monster (construction stat)',
+                style: FoE.label(size: 12),
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -1275,8 +1300,11 @@ class _BuildingDefFormState extends State<BuildingDefForm>
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline,
-                color: Colors.redAccent, size: 20),
+            icon: const Icon(
+              Icons.delete_outline,
+              color: Colors.redAccent,
+              size: 20,
+            ),
             onPressed: () => setState(() {
               _builders.removeAt(i);
               _calcGen++;
@@ -1307,7 +1335,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
       builder: (ctx) => Theme(
         data: buildDevModeTheme(),
         child: AlertDialog(
-            title: Text('Construction points', style: FoE.title(size: 15)),
+          title: Text('Construction points', style: FoE.title(size: 15)),
           content: SingleChildScrollView(
             child: Text(
               'Building is measured in CONSTRUCTION POINTS — every point counts '
@@ -1379,8 +1407,10 @@ class _BuildingDefFormState extends State<BuildingDefForm>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Effective build time per level',
-              style: FoE.label(size: 13).copyWith(color: FoE.gold)),
+          Text(
+            'Effective build time per level',
+            style: FoE.label(size: 13).copyWith(color: FoE.gold),
+          ),
           const SizedBox(height: 6),
           ...rows,
         ],
@@ -1410,80 +1440,86 @@ class _BuildingDefFormState extends State<BuildingDefForm>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            alignment: Alignment.center,
-            decoration: FoE.panel(radius: 8),
-            // defId, so the BUNDLED render previews here exactly as the map
-            // draws it — the upload is the fallback now, not the source.
-            child: BuildingIcon(
-              imageUrl: _imageUrl,
-              defId: _id.trim(),
-              size: 40,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _hasModel ? 'Bild — Modell mitgeliefert' : 'Image (PNG)',
-                  style: FoE.label(size: 12).copyWith(color: FoE.gold),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                alignment: Alignment.center,
+                decoration: FoE.panel(radius: 8),
+                // defId, so the BUNDLED render previews here exactly as the map
+                // draws it — the upload is the fallback now, not the source.
+                child: BuildingIcon(
+                  imageUrl: _imageUrl,
+                  defId: _id.trim(),
+                  size: 40,
                 ),
-                const SizedBox(height: 6),
-                if (_hasModel) ...[
-                  Text(
-                    'Dieses Gebäude bringt seinen Render mit. Der Knopf setzt '
-                    'Grundfläche und Bildlage auf die Werte, die der Renderer '
-                    'gemessen hat — und löscht die hochgeladene URL, weil das '
-                    'mitgelieferte Bild sie ohnehin überstimmt.',
-                    style: FoE.dim(size: 11),
-                  ),
-                  const SizedBox(height: 6),
-                  Pressable(
-                    onTap: _applyFromModel,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _hasModel ? 'Bild — Modell mitgeliefert' : 'Image (PNG)',
+                      style: FoE.label(size: 12).copyWith(color: FoE.gold),
+                    ),
+                    const SizedBox(height: 6),
+                    if (_hasModel) ...[
+                      Text(
+                        'Dieses Gebäude bringt seinen Render mit. Der Knopf setzt '
+                        'Grundfläche und Bildlage auf die Werte, die der Renderer '
+                        'gemessen hat — und löscht die hochgeladene URL, weil das '
+                        'mitgelieferte Bild sie ohnehin überstimmt.',
+                        style: FoE.dim(size: 11),
                       ),
-                      decoration: FoE.btn(),
-                      alignment: Alignment.center,
-                      child: Text('Vom Modell übernehmen',
-                          style: FoE.label(size: 13)),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                Pressable(
-                  onTap: _uploadingImage ? null : _uploadImage,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: FoE.btn(),
-                    alignment: Alignment.center,
-                    child: _uploadingImage
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(
-                            _imageUrl == null ? 'Upload PNG' : 'Replace PNG',
+                      const SizedBox(height: 6),
+                      Pressable(
+                        onTap: _applyFromModel,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: FoE.btn(),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'Vom Modell übernehmen',
                             style: FoE.label(size: 13),
                           ),
-                  ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    Pressable(
+                      onTap: _uploadingImage ? null : _uploadImage,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: FoE.btn(),
+                        alignment: Alignment.center,
+                        child: _uploadingImage
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(
+                                _imageUrl == null
+                                    ? 'Upload PNG'
+                                    : 'Replace PNG',
+                                style: FoE.label(size: 13),
+                              ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
           ),
           if (_imageUrl != null || _hasModel) ...[
             const SizedBox(height: 10),
@@ -1654,13 +1690,16 @@ class _SearchPickerDialogState extends State<_SearchPickerDialog> {
   @override
   Widget build(BuildContext context) {
     final q = _query.trim().toLowerCase();
-    final entries = widget.items.entries
-        .where((e) =>
-            q.isEmpty ||
-            e.value.toLowerCase().contains(q) ||
-            e.key.toLowerCase().contains(q))
-        .toList()
-      ..sort((a, b) => a.value.compareTo(b.value));
+    final entries =
+        widget.items.entries
+            .where(
+              (e) =>
+                  q.isEmpty ||
+                  e.value.toLowerCase().contains(q) ||
+                  e.key.toLowerCase().contains(q),
+            )
+            .toList()
+          ..sort((a, b) => a.value.compareTo(b.value));
     return Theme(
       data: buildDevModeTheme(),
       child: AlertDialog(
@@ -1698,8 +1737,10 @@ class _SearchPickerDialogState extends State<_SearchPickerDialog> {
           TextButton(
             onPressed: () =>
                 Navigator.pop(context, _SearchPickerDialog.cancelled),
-            child: Text('Abbrechen',
-                style: FoE.label(size: 13).copyWith(color: FoE.textDim)),
+            child: Text(
+              'Abbrechen',
+              style: FoE.label(size: 13).copyWith(color: FoE.textDim),
+            ),
           ),
         ],
       ),
@@ -1720,8 +1761,10 @@ class _SearchPickerDialogState extends State<_SearchPickerDialog> {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(label,
-                style: FoE.label(size: 14).copyWith(color: FoE.parchment)),
+            child: Text(
+              label,
+              style: FoE.label(size: 14).copyWith(color: FoE.parchment),
+            ),
           ),
         ],
       ),

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/foe_theme.dart';
 
-/// Frames the whole app to a phone-sized viewport when it runs on a screen
-/// wider than a phone.
+/// Frames the whole app to a landscape-phone-sized viewport when it runs on a
+/// screen bigger than that.
 ///
 /// WHY: this is a phone game, but it is developed and playtested in a desktop
 /// browser at ~2500px. Without this, every screen stretches into a shape that
@@ -14,15 +14,19 @@ import '../theme/foe_theme.dart';
 /// Hung off MaterialApp.builder so it wraps the Navigator itself: pushed
 /// routes, dialogs and bottom sheets are all inside the frame, not around it.
 ///
-/// On an actual phone this is a no-op — [FoE.phoneMaxWidth] is never exceeded,
-/// so the app renders edge to edge exactly as before.
+/// LANDSCAPE (2026-09-18, the app-wide orientation switch): the phone shape
+/// this frames to is now wide-short rather than narrow-tall, so both axes get
+/// their own cap — [FoE.phoneMaxWidth] (430) is the SHORT axis now (a
+/// landscape phone's height), and [_maxLong] (932) is the LONG one (its
+/// width). On an actual landscape phone this is a no-op — neither cap is
+/// exceeded, so the app renders edge to edge exactly as before.
 class PhoneFrame extends StatelessWidget {
   final Widget child;
 
-  /// Tallest we let the framed viewport get. Roughly a large phone; without a
-  /// cap, a maximised desktop window would render a 430x1400 sliver that is
-  /// no more honest than the stretched version.
-  static const double _maxHeight = 932;
+  /// The long axis' cap — a landscape phone's width. Without one, a
+  /// maximised desktop window would render a 1400x430 sliver that is no
+  /// more honest than the stretched version.
+  static const double _maxLong = 932;
 
   const PhoneFrame({super.key, required this.child});
 
@@ -31,10 +35,11 @@ class PhoneFrame extends StatelessWidget {
     builder: (context, constraints) {
       final w = constraints.maxWidth;
       final h = constraints.maxHeight;
-      if (w <= FoE.phoneMaxWidth) return child;
+      final shortMax = FoE.phoneMaxWidth;
+      if (w <= _maxLong && h <= shortMax) return child;
 
-      final frameW = FoE.phoneMaxWidth;
-      final frameH = h > _maxHeight ? _maxHeight : h;
+      final frameW = w > _maxLong ? _maxLong : w;
+      final frameH = h > shortMax ? shortMax : h;
 
       return ColoredBox(
         color: const Color(0xFF07080A),

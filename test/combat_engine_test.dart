@@ -750,16 +750,22 @@ void main() {
     });
 
     test('a banked pool buys two attacks in one turn', () {
-      final a = make(id: 'a', stage: 2); // capacity 8, regen 5
+      // capacity 8, regen 4 (user 2026-09-07 dropped the 3rd-form regen from
+      // 5 to 4); attack costs 2 AP, not 3 (user 2026-09-08 made the basic
+      // attack's cost an explicit dial instead of power-derived) — see
+      // Dials.apRegen3/basicAttackApCost's own doc comments.
+      final a = make(id: 'a', stage: 2); // capacity 8, regen 4
       final b = make(id: 'b', player: false, hp: 5000);
       final engine = CombatEngine(players: [a], enemies: [b]);
       engine.endTurn(); // bank the opening 2
       engine.basicAttack(b, a);
-      expect(engine.turnAp, 7); // 2 + 5
-      engine.basicAttack(a, b); // 7 → 4
+      expect(engine.turnAp, 6); // 2 + 4
+      engine.basicAttack(a, b); // 6 → 4
       expect(engine.currentActor, a, reason: 'still a\'s turn, 4 AP left');
-      engine.basicAttack(a, b); // 4 → 1
-      expect(engine.currentActor, b, reason: '1 AP < 3, a\'s turn ends');
+      engine.basicAttack(a, b); // 4 → 2
+      expect(engine.currentActor, a, reason: 'still a\'s turn, 2 AP left (>= attack cost)');
+      engine.basicAttack(a, b); // 2 → 0
+      expect(engine.currentActor, b, reason: '0 AP < 2, a\'s turn ends');
     });
 
     test('End Turn banks the unspent AP instead of forfeiting them', () {

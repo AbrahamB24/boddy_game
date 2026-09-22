@@ -30,7 +30,9 @@ import '../../../core/theme/foe_theme.dart';
 const Color kParchmentLight = FoE.panelMid; // the sheet
 const Color kParchmentMid = FoE.bg; // its shade / the page ground
 const Color kParchmentDeep = FoE.panelLight; // the band, the roller
-const Color kParchmentShade = Color(0xFF0C2841); // FoE.bg, shaded — deepest, under an edge
+const Color kParchmentShade = Color(
+  0xFF0C2841,
+); // FoE.bg, shaded — deepest, under an edge
 const Color kParchmentInk = FoE.parchment; // what you write with
 
 /// WHAT A RAISED THING CASTS. Its own constant since the theme went dark (user
@@ -46,14 +48,13 @@ const Color kPageShadow = Color(0xFF000000);
 // border — just the fill), faded parchment when not. Use [parchmentButton] for
 // the surface and [parchmentButtonInk] for whatever sits on it.
 /// The settlement's action colour — the button fill (was the lawn green of
-/// the map, then coral; now [FoE.positive]'s cyan-blue, same "good/go" role,
-/// 2026-09-05 third pass — coral clashed against the navy/teal chrome once
-/// seen live, see [FoE.gold]'s own doc). [Deep] is a shade under it for
-/// recesses.
+/// the map, then cyan-blue; green again since 2026-09-22, [FoE.positive]).
 const Color kActionGreen = FoE.positive;
-const Color kActionGreenDeep = Color(0xFF3B9DBB); // FoE.positive, shaded — computed by hand, shade() isn't const
 
-ShapeDecoration parchmentButton({bool active = true}) => ShapeDecoration(color: active ? kActionGreen : kParchmentInk.withValues(alpha: 0.10), shape: FoE.facet(radius: 12));
+ShapeDecoration parchmentButton({bool active = true}) => ShapeDecoration(
+  color: active ? kActionGreen : kParchmentInk.withValues(alpha: 0.10),
+  shape: FoE.facet(radius: 12),
+);
 
 /// Ink on a [parchmentButton]: dark on the fill when live (the fill is
 /// bright enough — coral, then this cyan-blue — that the old near-white ink

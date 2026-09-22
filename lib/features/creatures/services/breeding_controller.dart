@@ -8,6 +8,7 @@ import '../../../core/notifications/game_notifications.dart';
 import '../../../core/supabase/supabase_client.dart';
 import '../../common/events/game_events.dart';
 import '../../settlement/data/item_definitions.dart';
+import '../../settlement/services/daily_tasks.dart' show DailyTaskKind;
 import '../../settlement/settlement_controller.dart';
 import '../models/breeding_job.dart';
 import '../models/creature_enums.dart';
@@ -43,7 +44,15 @@ class BreedingController extends ChangeNotifier {
   bool isLoading = false;
   bool _loadedOnce = false;
 
-  String? get _userId => supabase.auth.currentUser?.id;
+  /// The signed-in user, or null — also null before Supabase is initialised
+  /// (a widget test), where reading `supabase` would throw.
+  String? get _userId {
+    try {
+      return supabase.auth.currentUser?.id;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> load({bool force = false}) async {
     if (isLoading || (_loadedOnce && !force)) return;
@@ -85,10 +94,10 @@ class BreedingController extends ChangeNotifier {
           await _svc.updateStatus(
             j.id,
             BreedingStatus.egg,
-            childBase:
-                child == null ? null : BreedingJob.genesToJson(child.$1),
-            childSlope:
-                child == null ? null : BreedingJob.genesToJson(child.$2),
+            childBase: child == null ? null : BreedingJob.genesToJson(child.$1),
+            childSlope: child == null
+                ? null
+                : BreedingJob.genesToJson(child.$2),
           );
         } catch (e) {
           debugPrint('[BreedingController] promote egg failed: $e');
@@ -128,10 +137,18 @@ class BreedingController extends ChangeNotifier {
     // Flat odds since 2026-07-27 — the parents' breeding stat plays no part.
     final favored = breedingFavoredChance();
     return (
-      CreatureInstance.inheritGenes(a.statBase, b.statBase, _rng,
-          favoredChance: favored),
-      CreatureInstance.inheritGenes(a.statSlope, b.statSlope, _rng,
-          favoredChance: favored),
+      CreatureInstance.inheritGenes(
+        a.statBase,
+        b.statBase,
+        _rng,
+        favoredChance: favored,
+      ),
+      CreatureInstance.inheritGenes(
+        a.statSlope,
+        b.statSlope,
+        _rng,
+        favoredChance: favored,
+      ),
     );
   }
 
@@ -161,9 +178,11 @@ class BreedingController extends ChangeNotifier {
   void _syncBlockedIds() {
     CreaturesController().breedingIds
       ..clear()
-      ..addAll(jobs
-          .where((j) => j.status == BreedingStatus.breeding)
-          .expand((j) => [j.parentAId, j.parentBId]));
+      ..addAll(
+        jobs
+            .where((j) => j.status == BreedingStatus.breeding)
+            .expand((j) => [j.parentAId, j.parentBId]),
+      );
   }
 
   // ── Slot accounting (user 2026-07-24) ─────────────────────────
@@ -276,13 +295,15 @@ class BreedingController extends ChangeNotifier {
       jobs.add(job);
       // Both breeding clocks get a reminder (user 2026-07-30): a mating runs for
       // hours and the egg it lays is the thing the player came for.
-      unawaited(GameNotifications.schedule(
-        kind: NotifyKind.breeding,
-        key: job.id,
-        at: job.readyAt,
-        title: '🥚 An egg was laid',
-        body: 'Your pair is done — the egg is ready for the Hatchery.',
-      ));
+      unawaited(
+        GameNotifications.schedule(
+          kind: NotifyKind.breeding,
+          key: job.id,
+          at: job.readyAt,
+          title: '🥚 An egg was laid',
+          body: 'Your pair is done — the egg is ready for the Hatchery.',
+        ),
+      );
       _syncBlockedIds();
       notifyListeners();
       CreaturesController().notifyListeners();
@@ -327,14 +348,20 @@ class BreedingController extends ChangeNotifier {
     if (i < 0) return 'Egg is gone.';
     jobs[i] = job.copyWith(status: BreedingStatus.hatching, readyAt: readyAt);
     try {
-      await _svc.updateStatus(job.id, BreedingStatus.hatching, readyAt: readyAt);
-      unawaited(GameNotifications.schedule(
-        kind: NotifyKind.breeding,
-        key: job.id,
-        at: readyAt,
-        title: '🐣 Ready to hatch',
-        body: 'The egg in the Hatchery has finished incubating.',
-      ));
+      await _svc.updateStatus(
+        job.id,
+        BreedingStatus.hatching,
+        readyAt: readyAt,
+      );
+      unawaited(
+        GameNotifications.schedule(
+          kind: NotifyKind.breeding,
+          key: job.id,
+          at: readyAt,
+          title: '🐣 Ready to hatch',
+          body: 'The egg in the Hatchery has finished incubating.',
+        ),
+      );
       notifyListeners();
       return null;
     } catch (e) {
@@ -351,28 +378,34 @@ class BreedingController extends ChangeNotifier {
     if (def == null || def.kind != ItemKind.breedSpeed) {
       return 'Not an accelerator.';
     }
-    if (job.status == BreedingStatus.egg) return 'The egg has no running timer.';
+    if (job.status == BreedingStatus.egg) {
+      return 'The egg has no running timer.';
+    }
     if (job.isReady) return 'It is already done.';
     final err = await SettlementController().consumeItem(itemId);
     if (err != null) return err;
     final remainingMs = job.readyAt.difference(DateTime.now()).inMilliseconds;
-    final cutMs =
-        (remainingMs * (1 - def.magnitude)).round().clamp(0, remainingMs);
+    final cutMs = (remainingMs * (1 - def.magnitude)).round().clamp(
+      0,
+      remainingMs,
+    );
     final newReadyAt = DateTime.now().add(Duration(milliseconds: cutMs));
     final i = jobs.indexWhere((j) => j.id == job.id);
     if (i < 0) return 'Job is gone.';
     jobs[i] = job.copyWith(readyAt: newReadyAt);
     // Same key, so this REPLACES the old promise rather than adding a second one
     // at the time the accelerator just cancelled.
-    unawaited(GameNotifications.schedule(
-      kind: NotifyKind.breeding,
-      key: job.id,
-      at: newReadyAt,
-      title: job.status == BreedingStatus.hatching
-          ? '🐣 Ready to hatch'
-          : '🥚 An egg was laid',
-      body: 'Hurried along — it is done sooner than planned.',
-    ));
+    unawaited(
+      GameNotifications.schedule(
+        kind: NotifyKind.breeding,
+        key: job.id,
+        at: newReadyAt,
+        title: job.status == BreedingStatus.hatching
+            ? '🐣 Ready to hatch'
+            : '🥚 An egg was laid',
+        body: 'Hurried along — it is done sooner than planned.',
+      ),
+    );
     try {
       await _svc.updateStatus(job.id, job.status, readyAt: newReadyAt);
     } catch (e) {
@@ -463,7 +496,8 @@ class BreedingController extends ChangeNotifier {
       // creature that gains nothing per level, which reads as a broken child
       // rather than as a missing column.
       if (statSlope.isEmpty) {
-        statSlope = legacy?.$2 ?? CreatureInstance.rollSlopeGenes(species, _rng);
+        statSlope =
+            legacy?.$2 ?? CreatureInstance.rollSlopeGenes(species, _rng);
       }
     }
 
@@ -499,6 +533,8 @@ class BreedingController extends ChangeNotifier {
       );
       notifyListeners();
       creatures.notifyListeners();
+      // Daily goal: a hatched egg counts.
+      SettlementController().reportDailyProgress(DailyTaskKind.hatchEggs);
       return created;
     } catch (e) {
       debugPrint('[BreedingController] hatch failed: $e');

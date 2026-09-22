@@ -19,9 +19,10 @@ enum TeamKind {
   battle,
   caravan;
 
-  static TeamKind fromName(String? name) =>
-      TeamKind.values.firstWhere((k) => k.name == name,
-          orElse: () => TeamKind.battle);
+  static TeamKind fromName(String? name) => TeamKind.values.firstWhere(
+    (k) => k.name == name,
+    orElse: () => TeamKind.battle,
+  );
 }
 
 class SavedTeam {

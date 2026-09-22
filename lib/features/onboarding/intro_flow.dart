@@ -36,13 +36,22 @@
 // values, never a replacement for them — which is also why these constants
 // live here and not in gather_math/capture_math.
 
-/// Master switch (user request 2026-07-17): the guided tutorial is fully
-/// built but currently OFF. While false, SettlementController.load() reads
-/// the persisted step as [IntroStep.done] IN MEMORY ONLY — nothing is
-/// written back, so flipping this to true resumes every account exactly
-/// where its `profiles.intro_step` says. Dev Mode's "restart intro" still
-/// works as a manual override for testing while the switch is off.
-const bool kIntroEnabled = false;
+/// Master switch (user request 2026-07-17). ON since 2026-09-21: the chain,
+/// its jumpstart and its milestone hooks have been complete for a while, and
+/// the last two things holding the switch down are now done too — the guide
+/// card and the spotlight wear the cream kit like the rest of the app, and a
+/// brand-new account actually gets a starting step written
+/// (SettlementService._createProfileRow; without it the tutorial was
+/// unreachable no matter what this said).
+///
+/// While false, SettlementController.load() reads the persisted step as
+/// [IntroStep.done] IN MEMORY ONLY — nothing is written back, so this can go
+/// back to false at any time and every account resumes exactly where its
+/// `profiles.intro_step` says. Turning it on cannot drag a veteran in: a
+/// NULL column reads as done (see SettlementService.loadIntroStep), and
+/// load()'s own self-heal ends the chain for anyone who has already beaten a
+/// region boss. Dev Mode's "restart intro" remains the manual override.
+const bool kIntroEnabled = true;
 
 /// Steps of the tutorial, in order. Persisted as the index on
 /// `profiles.intro_step`; anything out of range reads as [done] so an older
@@ -134,9 +143,11 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     body:
         'That fight cost your monster some HP — and HP never comes back on '
         'its own. Healing is what the Healing Hut is for. Build one now.',
-    // No CTA of its own (user 2026-09-06, same reasoning as firstNode): the
-    // quick menu's own Build tile is the lit target instead — see
-    // SettlementScreen._soloQuickPadAnchor.
+    // No CTA of its own (user 2026-09-06, same reasoning as firstNode) —
+    // the bottom build carousel itself is the lit target now (2026-09-18:
+    // it replaced the quick menu's old Build tile), and it appears the
+    // moment SettlementScreen._buildUnlocked flips true, already showing
+    // its OWN row spotlight for this exact building.
     destination: IntroDestination.build,
   ),
   IntroStep.buildRoad => const IntroCard(
@@ -151,9 +162,9 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
         'linking it back to your Castle to do anything at all. Open '
         'Build, find the road among its own category, and lay one from the '
         'Castle to the Healing Hut before that rule catches you out.',
-    // No CTA of its own (user 2026-09-06, same reasoning as buildHealingHut):
-    // the quick menu's own Build tile is the lit target instead — see
-    // SettlementScreen._soloQuickPadAnchor.
+    // No CTA of its own (user 2026-09-06, same reasoning as buildHealingHut)
+    // — the build carousel's own category-row spotlight is the lit target
+    // now (2026-09-18), pointing at the Roads category specifically.
     destination: IntroDestination.build,
   ),
   IntroStep.assignHealer => const IntroCard(
@@ -247,13 +258,15 @@ const double kJumpstartEnemyStatMult = 0.2;
 /// should be reachable immediately.
 const int kIntroMaxTripSeconds = 12;
 
-/// Fish/meat handed to a brand-new player. Buildings make these deliberately
-/// slowly (workshop mult 0.12) because they are the region-dungeon entry cost
-/// — this is a starter float, not an income, and it is dwarfed by the ~850
-/// wood/day target so it cannot dent the Era-I pace. It also covers the
-/// tutorial's Healing Hut bill (a K.O.'d starter costs ~6–12 goods).
+/// Fish handed to a brand-new player. Buildings make it deliberately slowly
+/// (workshop mult 0.12) because it is the region-dungeon entry cost — this is
+/// a starter float, not an income, and it is dwarfed by the ~850 wood/day
+/// target so it cannot dent the Era-I pace. It also covers the tutorial's
+/// Healing Hut bill (a K.O.'d starter costs ~6–12 goods).
+///
+/// FISH ONLY (user 2026-09-20: "der Spieler startet mit Fisch und nicht mit
+/// Fleisch, da Fleisch später erst kommt") — meat is region 2's luxury.
 const double kJumpstartGiftFish = 20.0;
-const double kJumpstartGiftMeat = 20.0;
 
 // The jumpstart's free "second monster" (kJumpstartFreeTechId = 'team_size_2')
 // was REMOVED (user 2026-07-24): party size is now set by position on the

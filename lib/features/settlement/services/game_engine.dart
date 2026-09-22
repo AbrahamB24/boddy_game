@@ -136,7 +136,15 @@ class GameEngine {
     final connected = <String>{mainHall.id};
     for (final b in buildings) {
       final def = kBuildingDefs[b.buildingTypeId];
-      if (def == null || !b.isComplete || def.isRoad || def.isMainBuilding) {
+      // A STORED building (Umbaumodus tray, user 2026-09-22) isn't standing
+      // anywhere — skipping it here is the one change that pauses its
+      // housing/production, the same way an unconnected building's already
+      // do, with no separate effect-suppression logic needed.
+      if (def == null ||
+          !b.isComplete ||
+          def.isRoad ||
+          def.isMainBuilding ||
+          b.isStored) {
         continue;
       }
       // A Build Plot is a free AREA, not a structure (it has no art) — it just
@@ -326,18 +334,14 @@ class GameEngine {
       );
     }
 
-    // Energy is a daily STEPS FORMULA now (user 2026-09-14), not a draining
-    // pool — [stepsToday] only means anything against TODAY's local day, so
-    // a tick spanning a midnight rollover resets it to 0 before reading the
-    // rate. Deliberately NOT split at the midnight boundary for a tick that
-    // covers real hours on both sides of it (an offline catch-up spanning
-    // overnight): the whole gap is priced at whatever today's rate is right
-    // now, same simplification the old drain model already made about
-    // energy being roughly constant across one catch-up window.
+    // Energy is a POOL again (user 2026-09-20): the window is priced at the
+    // rate the pool ACTUALLY had while it ran down — [energyDrain] integrates
+    // the falling multiplier, so a night away is not paid at the rate you left
+    // with. [stepsToday] only rolls over with the local day; it is a readout.
     final todayKey = dateKeyFor(now.toLocal());
     final stepsToday = energy.stepsDayKey == todayKey ? energy.stepsToday : 0;
-    final energyRate = energyMultiplierForSteps(stepsToday);
-    final double effectiveHours = hoursDelta * energyRate;
+    final drained = energyDrain(energy.energyPct, hoursDelta);
+    final double effectiveHours = drained.effectiveHours;
 
     final connected = connectedBuildingIds(buildings);
 
@@ -388,7 +392,8 @@ class GameEngine {
     final prevNow = energy.lastUpdatedAt;
     final completedAt = <String, DateTime>{};
 
-    final newBuildings = buildings.map((b) {
+    var anyBuildingChanged = false;
+    final ticked = buildings.map((b) {
       if (b.isComplete ||
           b.isQueued ||
           b.constructionSecondsRequired <= 0 ||
@@ -408,8 +413,15 @@ class GameEngine {
           Duration(microseconds: (frac * effectiveHours * 3.6e9).round()),
         );
       }
+      anyBuildingChanged = true;
       return b.copyWith(constructionSecondsBuilt: newBuilt, isComplete: done);
     }).toList();
+    // The SAME list when no site progressed (the normal case). The controller
+    // keys its derived caches — road network, buildable region — on the
+    // identity of this list, and the map's terrain repaints when the region
+    // changes; a fresh-but-equal list every tick threw all of that away every
+    // 10 s for nothing.
+    final newBuildings = anyBuildingChanged ? ticked : buildings;
 
     // Refineries buy their input out of THIS tick's yard (raw already banked
     // plus what was just gathered), so a sawmill can eat the wood the camps
@@ -426,6 +438,7 @@ class GameEngine {
 
     return GameTickResult(
       energy: energy.copyWith(
+        energyPct: drained.endPercent,
         stepsToday: stepsToday,
         stepsDayKey: todayKey,
         lastUpdatedAt: now,
@@ -577,7 +590,7 @@ class GameEngine {
   }
 
   // ── Steps → energy ────────────────────────────────────────
-  /// Credits [steps] toward TODAY's count — [now] decides which local day
+  /// Credits [steps] to the energy pool AND to TODAY's count — [now] decides which local day
   /// that is, resetting [EnergyModel.stepsToday] to just [steps] if the
   /// stored day has rolled over since the last credit (mirrors
   /// [GameTickResult]'s own rollover in [tick], which handles the case
@@ -586,6 +599,11 @@ class GameEngine {
     final todayKey = dateKeyFor(now.toLocal());
     final carried = energy.stepsDayKey == todayKey ? energy.stepsToday : 0;
     return energy.copyWith(
+      // The pool fills by what the steps are worth at ITS level; whatever does
+      // not fit under the ceiling is lost (user 2026-09-20: "die weiteren
+      // Schritte verfallen"). The day's own count still includes them — it is
+      // what you walked, not what it bought.
+      energyPct: energyAfterSteps(energy.energyPct, steps),
       stepsToday: carried + steps,
       stepsDayKey: todayKey,
     );

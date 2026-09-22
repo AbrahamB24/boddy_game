@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/foe_theme.dart';
+import 'dev_foe.dart';
 import '../../creatures/models/area.dart' show kAreaDefs;
 import '../../creatures/models/path_node.dart';
 import '../../creatures/models/species_def.dart' show SpeciesDef, kSpeciesDefs;
@@ -333,7 +333,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
                 '🎲 Zufällig aus ${pool.length} Arten',
                 style: FoE.label(
                   size: 13,
-                ).copyWith(color: pool.isEmpty ? FoE.textDim : Colors.white),
+                ).copyWith(color: pool.isEmpty ? FoE.textDim : FoE.onGold),
               ),
             ),
           ),
@@ -725,7 +725,10 @@ class _PathNodeFormState extends State<PathNodeForm> {
       style: FoE.label(size: 15).copyWith(color: FoE.parchment),
       decoration: const InputDecoration(labelText: 'Region (area)'),
       items: [
-        const DropdownMenuItem(value: null, child: Text('— derive from region —')),
+        const DropdownMenuItem(
+          value: null,
+          child: Text('— derive from region —'),
+        ),
         for (final a in areas)
           DropdownMenuItem(
             value: a.id as String,
@@ -1080,20 +1083,19 @@ class _PathNodeFormState extends State<PathNodeForm> {
   Widget _sectionLabel(String text) =>
       Text(text, style: FoE.label(size: 14).copyWith(color: FoE.gold));
 
-  Widget _chip(String label, bool selected, VoidCallback onTap) =>
-      Pressable(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: FoE.btn(active: selected),
-          child: Text(
-            label,
-            style: FoE.label(
-              size: 12,
-            ).copyWith(color: selected ? Colors.white : FoE.parchment),
-          ),
-        ),
-      );
+  Widget _chip(String label, bool selected, VoidCallback onTap) => Pressable(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: FoE.btn(active: selected),
+      child: Text(
+        label,
+        style: FoE.label(
+          size: 12,
+        ).copyWith(color: selected ? FoE.onGold : FoE.parchment),
+      ),
+    ),
+  );
 
   Widget _addButton(String label, VoidCallback onTap) => Pressable(
     onTap: onTap,
@@ -1147,7 +1149,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
               )
             : Text(
                 'Save',
-                style: FoE.label(size: 14).copyWith(color: Colors.white),
+                style: FoE.label(size: 14).copyWith(color: FoE.onGold),
               ),
       ),
     ),

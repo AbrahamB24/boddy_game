@@ -1,7 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/foe_theme.dart';
+import 'dev_foe.dart';
 import '../../creatures/models/area.dart';
 import '../../creatures/models/species_def.dart';
 import '../../creatures/widgets/battle_scene.dart';
@@ -25,10 +25,7 @@ class AreaDefForm extends StatefulWidget {
 class _SpotDraft {
   String id;
   String resource;
-  _SpotDraft({
-    required this.id,
-    required this.resource,
-  });
+  _SpotDraft({required this.id, required this.resource});
 }
 
 class _AreaDefFormState extends State<AreaDefForm> {
@@ -61,18 +58,19 @@ class _AreaDefFormState extends State<AreaDefForm> {
     _name = d?.name ?? '';
     _emoji = d?.emoji ?? '🗺️';
     _imageUrl = d?.imageUrl;
-    _order = d?.order ??
+    _order =
+        d?.order ??
         (kAreaDefs.values.isEmpty
             ? 1
-            : kAreaDefs.values.map((a) => a.order).reduce((a, b) => a > b ? a : b) + 1);
+            : kAreaDefs.values
+                      .map((a) => a.order)
+                      .reduce((a, b) => a > b ? a : b) +
+                  1);
     _description = d?.description ?? '';
     _battleStage = d?.battleStage ?? _order;
     _spots = [
       for (final s in d?.spots ?? const <ResourceSpotDef>[])
-        _SpotDraft(
-          id: s.id,
-          resource: s.resource,
-        ),
+        _SpotDraft(id: s.id, resource: s.resource),
     ];
     _pool = {...?d?.speciesPoolIds};
     _bossSpeciesId = d?.bossSpeciesId;
@@ -80,18 +78,20 @@ class _AreaDefFormState extends State<AreaDefForm> {
 
   void _addSpot() {
     setState(() {
-      _spots.add(_SpotDraft(
-        id: '${_id.isEmpty ? 'area' : _id}_s${_spotSeq++}',
-        resource: 'wood',
-      ));
+      _spots.add(
+        _SpotDraft(
+          id: '${_id.isEmpty ? 'area' : _id}_s${_spotSeq++}',
+          resource: 'wood',
+        ),
+      );
     });
   }
 
   Future<void> _save() async {
     if (_id.trim().isEmpty || _name.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('id and name are required')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('id and name are required')));
       return;
     }
     setState(() => _saving = true);
@@ -106,7 +106,9 @@ class _AreaDefFormState extends State<AreaDefForm> {
       spots: [
         for (final s in _spots)
           ResourceSpotDef(
-            id: s.id.trim().isEmpty ? '${_id.trim()}_s${_spots.indexOf(s)}' : s.id.trim(),
+            id: s.id.trim().isEmpty
+                ? '${_id.trim()}_s${_spots.indexOf(s)}'
+                : s.id.trim(),
             resource: s.resource,
           ),
       ],
@@ -119,9 +121,9 @@ class _AreaDefFormState extends State<AreaDefForm> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
       }
     }
   }
@@ -151,8 +153,9 @@ class _AreaDefFormState extends State<AreaDefForm> {
       if (mounted) setState(() => _imageUrl = url);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -166,7 +169,7 @@ class _AreaDefFormState extends State<AreaDefForm> {
     child: Row(
       children: [
         ClipPath(
-      clipper: ShapeBorderClipper(shape: FoE.facet(radius: 8)),
+          clipper: ShapeBorderClipper(shape: FoE.facet(radius: 8)),
           child: SizedBox(
             width: 92,
             height: 56,
@@ -180,7 +183,10 @@ class _AreaDefFormState extends State<AreaDefForm> {
                       ),
                     ),
                     child: Center(
-                      child: Text('Region $_battleStage', style: FoE.dim(size: 10)),
+                      child: Text(
+                        'Region $_battleStage',
+                        style: FoE.dim(size: 10),
+                      ),
                     ),
                   )
                 : Image.network(_imageUrl!, fit: BoxFit.cover),
@@ -208,11 +214,12 @@ class _AreaDefFormState extends State<AreaDefForm> {
           Pressable(
             onTap: _pickImage,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: FoE.btn(active: true),
-              child: Text('Bild',
-                  style: FoE.label(size: 12).copyWith(color: Colors.white)),
+              child: Text(
+                'Bild',
+                style: FoE.label(size: 12).copyWith(color: FoE.onGold),
+              ),
             ),
           ),
           if (_imageUrl != null)
@@ -237,8 +244,9 @@ class _AreaDefFormState extends State<AreaDefForm> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
       }
     }
   }
@@ -250,7 +258,10 @@ class _AreaDefFormState extends State<AreaDefForm> {
       data: buildDevModeTheme(),
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_isNew ? 'New Area' : 'Edit Area', style: FoE.title(size: 16)),
+          title: Text(
+            _isNew ? 'New Area' : 'Edit Area',
+            style: FoE.title(size: 16),
+          ),
           actions: [
             if (!_isNew)
               IconButton(
@@ -262,20 +273,39 @@ class _AreaDefFormState extends State<AreaDefForm> {
         body: ListView(
           padding: const EdgeInsets.all(14),
           children: [
-            _textRow('Id (slug, e.g. verdant_hollow)', _id,
-                enabled: _isNew, onChanged: (v) => _id = v),
+            _textRow(
+              'Id (slug, e.g. verdant_hollow)',
+              _id,
+              enabled: _isNew,
+              onChanged: (v) => _id = v,
+            ),
             _textRow('Name', _name, onChanged: (v) => _name = v),
             Row(
               children: [
-                Expanded(child: _textRow('Emoji', _emoji, onChanged: (v) => _emoji = v)),
+                Expanded(
+                  child: _textRow(
+                    'Emoji',
+                    _emoji,
+                    onChanged: (v) => _emoji = v,
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _numRow('Order', _order, onChanged: (v) => _order = v)),
+                Expanded(
+                  child: _numRow('Order', _order, onChanged: (v) => _order = v),
+                ),
               ],
             ),
-            _numRow('Battle stage (unlock gate)', _battleStage,
-                onChanged: (v) => _battleStage = v),
+            _numRow(
+              'Battle stage (unlock gate)',
+              _battleStage,
+              onChanged: (v) => _battleStage = v,
+            ),
             _imageRow(),
-            _textRow('Description', _description, onChanged: (v) => _description = v),
+            _textRow(
+              'Description',
+              _description,
+              onChanged: (v) => _description = v,
+            ),
             const SizedBox(height: 16),
             _sectionLabel('Resource spots'),
             const SizedBox(height: 8),
@@ -285,8 +315,10 @@ class _AreaDefFormState extends State<AreaDefForm> {
             _sectionLabel('Catch pool (empty = every species)'),
             const SizedBox(height: 8),
             if (species.isEmpty)
-              Text('No species defined yet.',
-                  style: FoE.label(size: 12).copyWith(color: FoE.textDim))
+              Text(
+                'No species defined yet.',
+                style: FoE.label(size: 12).copyWith(color: FoE.textDim),
+              )
             else
               Wrap(
                 spacing: 8,
@@ -296,8 +328,11 @@ class _AreaDefFormState extends State<AreaDefForm> {
                     _chip(
                       '${s.element.emoji} ${s.name}',
                       _pool.contains(s.id),
-                      () => setState(() =>
-                          _pool.contains(s.id) ? _pool.remove(s.id) : _pool.add(s.id)),
+                      () => setState(
+                        () => _pool.contains(s.id)
+                            ? _pool.remove(s.id)
+                            : _pool.add(s.id),
+                      ),
                     ),
                 ],
               ),
@@ -309,11 +344,17 @@ class _AreaDefFormState extends State<AreaDefForm> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _chip('None', _bossSpeciesId == null,
-                      () => setState(() => _bossSpeciesId = null)),
+                  _chip(
+                    'None',
+                    _bossSpeciesId == null,
+                    () => setState(() => _bossSpeciesId = null),
+                  ),
                   for (final s in species)
-                    _chip('${s.element.emoji} ${s.name}', _bossSpeciesId == s.id,
-                        () => setState(() => _bossSpeciesId = s.id)),
+                    _chip(
+                      '${s.element.emoji} ${s.name}',
+                      _bossSpeciesId == s.id,
+                      () => setState(() => _bossSpeciesId = s.id),
+                    ),
                 ],
               ),
             const SizedBox(height: 20),
@@ -341,13 +382,19 @@ class _AreaDefFormState extends State<AreaDefForm> {
                 decoration: const InputDecoration(labelText: 'Resource'),
                 items: [
                   for (final r in kResourceEmoji.keys)
-                    DropdownMenuItem(value: r, child: Text('${kResourceEmoji[r]} $r')),
+                    DropdownMenuItem(
+                      value: r,
+                      child: Text('${kResourceEmoji[r]} $r'),
+                    ),
                 ],
                 onChanged: (v) => setState(() => s.resource = v ?? s.resource),
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
+              icon: const Icon(
+                Icons.remove_circle_outline,
+                color: Colors.redAccent,
+              ),
               onPressed: () => setState(() => _spots.remove(s)),
             ),
           ],
@@ -374,9 +421,12 @@ class _AreaDefFormState extends State<AreaDefForm> {
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: FoE.btn(active: selected),
-      child: Text(label,
-          style: FoE.label(size: 12)
-              .copyWith(color: selected ? Colors.white : FoE.parchment)),
+      child: Text(
+        label,
+        style: FoE.label(
+          size: 12,
+        ).copyWith(color: selected ? FoE.onGold : FoE.parchment),
+      ),
     ),
   );
 
@@ -402,9 +452,15 @@ class _AreaDefFormState extends State<AreaDefForm> {
             ? const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: FoE.goldBright),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: FoE.goldBright,
+                ),
               )
-            : Text('Save', style: FoE.label(size: 14).copyWith(color: Colors.white)),
+            : Text(
+                'Save',
+                style: FoE.label(size: 14).copyWith(color: FoE.onGold),
+              ),
       ),
     ),
   );

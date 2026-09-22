@@ -72,7 +72,10 @@ class BattleScene extends StatelessWidget {
             // verbessern") — this fills the whole arena at StackFit.expand,
             // so its own device-pixel width is the right bound; screen width
             // is the closest thing to that available without a LayoutBuilder.
-            cacheWidth: decodeWidthFor(context, MediaQuery.sizeOf(context).width),
+            cacheWidth: decodeWidthFor(
+              context,
+              MediaQuery.sizeOf(context).width,
+            ),
             // A broken URL leaves the ground below standing rather than a grey
             // box with an icon in it — the fallback IS the design, not an error
             // state, so failing back to it costs nothing.
@@ -99,10 +102,7 @@ class BattleScene extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: RadialGradient(
                   radius: 1.1,
-                  colors: [
-                    Colors.transparent,
-                    FoE.bg.withValues(alpha: 0.55),
-                  ],
+                  colors: [Colors.transparent, FoE.bg.withValues(alpha: 0.55)],
                   stops: const [0.55, 1.0],
                 ),
               ),
@@ -127,10 +127,8 @@ class _ArenaGround extends StatelessWidget {
   const _ArenaGround();
 
   @override
-  Widget build(BuildContext context) => const CustomPaint(
-    painter: _ArenaGroundPainter(),
-    size: Size.infinite,
-  );
+  Widget build(BuildContext context) =>
+      const CustomPaint(painter: _ArenaGroundPainter(), size: Size.infinite);
 }
 
 class _ArenaGroundPainter extends CustomPainter {
@@ -159,15 +157,18 @@ class _ArenaGroundPainter extends CustomPainter {
     // happen every frame, and a random lawn would shimmer with them.
     final rnd = math.Random(7);
     for (var i = 0; i < 24; i++) {
-      final c = Offset(rnd.nextDouble() * size.width,
-          rnd.nextDouble() * size.height);
+      final c = Offset(
+        rnd.nextDouble() * size.width,
+        rnd.nextDouble() * size.height,
+      );
       final r = size.shortestSide * (0.04 + rnd.nextDouble() * 0.05);
       canvas.drawCircle(
         c,
         r,
         Paint()
-          ..color = (rnd.nextBool() ? _grassLight : _grassDark)
-              .withValues(alpha: 0.16),
+          ..color = (rnd.nextBool() ? _grassLight : _grassDark).withValues(
+            alpha: 0.16,
+          ),
       );
     }
 
@@ -264,6 +265,14 @@ class TypePodium extends StatelessWidget {
   /// der rechten Seite").
   final bool watermarkLeft;
 
+  /// The rim's thickness. Thick (5) on the arena's big platforms; the battle's
+  /// small monsters ([SockelAvatar]) pass a thinner one so the rim stays a rim.
+  final double gauge;
+
+  /// Adds the half-sphere under the disc — only for the big monsters on the
+  /// battlefield (user 2026-09-21). The small ones keep the plain disc.
+  final bool bowl;
+
   const TypePodium({
     super.key,
     required this.element,
@@ -272,48 +281,86 @@ class TypePodium extends StatelessWidget {
     this.hpFraction,
     this.hpColor = const Color(0xFF6FBF73),
     this.watermarkLeft = true,
+    this.gauge = _PodiumRim.kGauge,
+    this.bowl = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final height = width * 0.34;
+    // FLATTER (user 2026-09-21: "die Kugeln sind flacher" — both ranks): the disc is
+    // a quarter of its width high, not a third.
+    final height = width * 0.24;
     // A true ellipse: BoxShape.circle would draw a circle of the shorter side,
     // which on a wide platform is a coin lying in the middle of it.
     final oval = BorderRadius.all(Radius.elliptical(width / 2, height / 2));
+    // THE HALF-SPHERE (user 2026-09-21: "die Halbkugel unter der Scheibe … nur
+    // für die Monster auf dem Kampffeld"): a bowl under the disc — the lower half
+    // of an ellipse that starts behind the disc and shows below its front edge —
+    // so a fighter stands on a rounded pedestal. It hangs BELOW the widget's own
+    // box (which stays the disc's size, so the arena's layout does not move) into
+    // the gap the arena keeps under every platform.
+    // The bowl starts at the disc's widest line, so its top corners sit exactly on
+    // the disc's left and right extremes — no corner sticks out beside it.
+    final bowlTop = height * 0.5;
+    final bowlDepth = height * 0.25;
+    final bowlH = height - bowlTop + bowlDepth;
     return Opacity(
       opacity: dim ? 0.72 : 1.0,
       child: SizedBox(
         width: width,
         height: height,
         child: Stack(
+          clipBehavior: Clip.none,
           fit: StackFit.expand,
           children: [
-            // The shadow the slab casts. Its own layer because the surface
-            // above is clipped, and a clip eats the shadow of the thing it
-            // clips.
-            //
-            // ONE RING ONLY (user 2026-07-31: "gibt es jetzt 2 Balken?"). There
-            // used to be a second BoxShadow here, a halo in the element's own
-            // colour meant to lift the slab off the region art — but a coloured
-            // glow hugging the edge, next to a coloured rim, is two rings, and
-            // the rim is the health bar. A bar you can mistake for decoration is
-            // worse than a slab that blends in a little.
-            DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: oval,
-                boxShadow: [
-                  BoxShadow(
-                    color: FoE.bg.withValues(alpha: 0.55),
-                    blurRadius: 0,
-                    offset: const Offset(0, 3),
+            if (bowl)
+              // The bowl and the shadow it casts on the ground.
+              Positioned(
+                left: 0,
+                right: 0,
+                top: bowlTop,
+                height: bowlH,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.elliptical(width / 2, bowlH),
+                    ),
+                    color: Color.lerp(element.color, Colors.black, 0.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: FoE.bg.withValues(alpha: 0.55),
+                        blurRadius: 0,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              )
+            else
+              // The shadow the slab casts. Its own layer because the surface
+              // above is clipped, and a clip eats the shadow of the thing it
+              // clips.
+              //
+              // ONE RING ONLY (user 2026-07-31: "gibt es jetzt 2 Balken?"). A
+              // second BoxShadow here used to be a halo in the element's own
+              // colour — but a coloured glow hugging the edge, next to a
+              // coloured rim, is two rings, and the rim is the health bar.
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: oval,
+                  boxShadow: [
+                    BoxShadow(
+                      color: FoE.bg.withValues(alpha: 0.55),
+                      blurRadius: 0,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
               ),
-            ),
             // THE CARD'S OWN SURFACE — same gradient, same embossed glyph.
-            // Watermarked to one SIDE because the monster stands in the
-            // middle and would otherwise be standing on its own type symbol
-            // — [watermarkLeft] picks which.
+            // Watermarked to one SIDE because the monster stands in the middle
+            // and would otherwise be standing on its own type symbol —
+            // [watermarkLeft] picks which.
             ClipRRect(
               borderRadius: oval,
               child: CreatureBackdrop(
@@ -327,28 +374,33 @@ class TypePodium extends StatelessWidget {
                 child: const SizedBox.expand(),
               ),
             ),
-            // A lit near edge — the monster stands ON this, so the front catches
-            // the light and the back does not.
+            // The light: a bright centre falling off toward the rim, so the top
+            // reads as a lit, slightly domed disc (like the Sockel preview). A
+            // WASH, not an edge: the dark band that used to sit at the bottom
+            // traced the ellipse just inside the rim, which was the other half
+            // of "two bars".
             DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: oval,
-                // A WASH, not an edge: the dark band that used to sit at the
-                // bottom traced the ellipse just inside the rim, which is the
-                // other half of "two bars".
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+                gradient: RadialGradient(
+                  center: const Alignment(0, -0.25),
+                  radius: 0.85,
                   colors: [
-                    Colors.white.withValues(alpha: 0.12),
+                    Colors.white.withValues(alpha: 0.32),
+                    Colors.white.withValues(alpha: 0.08),
                     Colors.transparent,
                   ],
-                  stops: const [0.0, 0.75],
+                  stops: const [0.0, 0.55, 1.0],
                 ),
               ),
             ),
             // The health, drawn last so nothing paints over it.
             CustomPaint(
-              painter: _PodiumRim(hpFraction: hpFraction, hpColor: hpColor),
+              painter: _PodiumRim(
+                hpFraction: hpFraction,
+                hpColor: hpColor,
+                gauge: gauge,
+              ),
             ),
           ],
         ),
@@ -376,15 +428,20 @@ class TypePodium extends StatelessWidget {
 class _PodiumRim extends CustomPainter {
   final double? hpFraction;
   final Color hpColor;
+  final double gauge;
 
-  const _PodiumRim({required this.hpFraction, required this.hpColor});
+  const _PodiumRim({
+    required this.hpFraction,
+    required this.hpColor,
+    this.gauge = kGauge,
+  });
 
   static const double _front = 3.1415926535897932;
 
   /// Thick on purpose (user 2026-07-31: "dafür dicker machen, damit er besser
   /// ersichtlich ist") — it is the only gauge each monster has now that the
   /// straight bar under the name is gone.
-  static const double _kGauge = 5.0;
+  static const double kGauge = 5.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -392,12 +449,12 @@ class _PodiumRim extends CustomPainter {
     // Nobody standing here: nothing to report, so nothing is drawn.
     if (frac == null) return;
 
-    final path = (Offset.zero & size).deflate(_kGauge / 2);
+    final path = (Offset.zero & size).deflate(gauge / 2);
     Paint stroke(Color c) => Paint()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..color = c
-      ..strokeWidth = _kGauge;
+      ..strokeWidth = gauge;
 
     // ── NO EMPTY TRACK (user 2026-08-04) ──
     // There used to be a dark arc across the whole front, with the coloured
@@ -417,5 +474,7 @@ class _PodiumRim extends CustomPainter {
 
   @override
   bool shouldRepaint(_PodiumRim old) =>
-      old.hpFraction != hpFraction || old.hpColor != hpColor;
+      old.hpFraction != hpFraction ||
+      old.hpColor != hpColor ||
+      old.gauge != gauge;
 }
