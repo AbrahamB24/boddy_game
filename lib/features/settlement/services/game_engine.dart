@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../data/building_definitions.dart';
+import '../data/building_model.dart';
 import '../data/goods_definitions.dart';
 import '../data/water_cells.dart';
 
@@ -162,12 +163,30 @@ class GameEngine {
         connected.add(b.id);
         continue;
       }
-      final touches = _borderCells(
-        b.gridX,
-        b.gridY,
-        def.gridW,
-        def.gridH,
-      ).any(reachableRoads.contains);
+      // ── THROUGH THE ENTRANCE (user 2026-11-03) ──
+      // "bei jedem Gebäude einen klaren Eingang definieren und dort geht der
+      // Weg bis zu der Strasse". A building whose model names an entrance
+      // is connected only by a road on the cell in front of it; a road
+      // along any other side is just a road going past. Buildings not yet
+      // rebuilt with an entrance keep the old any-side rule.
+      final entrance = entranceFor(b.buildingTypeId, def.gridW, def.gridH);
+      final bool touches;
+      if (entrance != null) {
+        final (rx, ry) = entranceRoadCell(entrance, b.gridX, b.gridY);
+        touches =
+            rx >= 0 &&
+            ry >= 0 &&
+            rx < kGridCols &&
+            ry < kGridRows &&
+            reachableRoads.contains(_cellKey(rx, ry));
+      } else {
+        touches = _borderCells(
+          b.gridX,
+          b.gridY,
+          def.gridW,
+          def.gridH,
+        ).any(reachableRoads.contains);
+      }
       if (touches) connected.add(b.id);
     }
     return connected;

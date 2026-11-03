@@ -21,7 +21,7 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'castle': (1.00000, 0.50000, 0.00000),
   'church': (1.00000, 0.50000, 0.00250),
   'gold_vault': (0.96024, 0.51988, 0.00000),
-  'hatchery': (0.91279, 0.48656, 0.03704),
+  'hatchery': (0.93699, 0.50221, 0.03703),
   'healing_hut': (1.00000, 0.50000, 0.00000),
   'large_house': (1.00000, 0.50000, 0.00000),
   'large_stone_camp': (1.00000, 0.50000, 0.00000),
@@ -32,7 +32,7 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'refinery_e2': (1.00000, 0.50000, 0.00000),
   'scout_post': (1.00000, 0.50000, 0.00000),
   // Fachwerk rebuild 2026-11-03 (tool/blender/buildings/small_house.py).
-  'small_house': (0.90356, 0.48695, 0.04281),
+  'small_house': (0.96086, 0.48613, 0.03364),
   'small_quarry': (1.00000, 0.50000, 0.00000),
   'small_wood_camp': (1.00000, 0.50000, 0.00000),
   'storehouse': (1.00000, 0.50000, 0.00000),

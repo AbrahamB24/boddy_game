@@ -13,6 +13,13 @@ Writes, unless --preview:
     lib/.../building_art.dart                 <id> added to kBundledBuildingArt
     lib/.../building_definitions.dart         <id>'s kChimneyAnchor, projected
                                               from the module's CHIMNEY point
+    assets/images/buildings/<id>_base.webp    the picture minus its swaying
+    assets/images/buildings/<id>_anim.webp    parts, and the atlas of moving
+                                              layers (anim_pass.py)
+    lib/.../building_model.dart               kBuildingAnim + kBuildingEntrance
+
+A module may also define ENTRANCE = (face, k) (fw_kit.entrance_point) and
+GLOW = {material: (kind, amp, period)} to override anim_pass.GLOW_LAYERS.
 
 --preview renders a quick low-sample PNG to the scratch folder only (or --out)
 and touches nothing in the repo. --smooth skips the voxelising (debugging).
@@ -58,10 +65,10 @@ def lower_to_yard():
             ob.location.z -= K.G
 
 
-def voxelize(name):
+def voxelize(name, objs=None):
     """The shipped path: the union voxeliser (voxelizer.py) at fw_kit.VOX."""
     import voxelizer
-    return voxelizer.voxelize(fw_kit.VOX, name + "_voxel")
+    return voxelizer.voxelize(fw_kit.VOX, name + "_voxel", objs=objs)
 
 
 def voxelize_remesh(name):
@@ -229,12 +236,27 @@ def main():
     mod = importlib.import_module('buildings.' + args.id)
     rb.clear()
     K._mats.clear()
+    fw_kit.reset_anims()
     mod.build()
     lower_to_yard()
+    groups = {}
     if args.remesh:
         voxelize_remesh(args.id)
     elif not args.smooth:
-        voxelize(args.id)
+        # The moving parts first, each on its own, then the rest: one grid,
+        # so a group's blocks line up with the building's exactly.
+        import voxelizer
+        specs = {s['name']: s for s in fw_kit.ANIMS}
+        tagged = {}
+        for o in bpy.data.objects:
+            if o.type == 'MESH' and 'anim' in o.keys():
+                tagged.setdefault(o['anim'], []).append(o)
+        for name, obs in tagged.items():
+            g = voxelizer.voxelize(fw_kit.VOX, f'anim_{name}', objs=obs)
+            g['anim'] = name
+            groups[name] = (g, specs[name])
+        voxelize(args.id, objs=[o for o in bpy.data.objects
+                                if o.type == 'MESH' and 'anim' not in o.keys()])
     K.lighting()
     samples = min(args.samples, 24) if args.preview else args.samples
     K.setup_render(samples, RENDER_SCALE, mod.W, mod.H)
@@ -252,10 +274,27 @@ def main():
         write_art_box(args.id, box)
         write_chimney(args.id, anchor)
         return
+    import anim_pass as ap_
     png = os.path.join(ROOT, 'docs', 'renders', f'{args.id}.png')
     K.render(png)
-    ship_webp(png, os.path.join(ROOT, 'assets', 'images', 'buildings',
-                                f'{args.id}.webp'))
+    tmp = os.path.join(HERE, '_out', 'layers')
+    os.makedirs(tmp, exist_ok=True)
+    glow = getattr(mod, 'GLOW', ap_.GLOW_LAYERS)
+    base_png, layers = ap_.render_layers(args.id, groups, glow, tmp, samples)
+    spec = ap_.pack(args.id, png, base_png, layers,
+                    os.path.join(ROOT, 'assets', 'images', 'buildings'),
+                    lambda iw: min(SHIP_MAX_W, round(iw * SHIP_DENSITY)),
+                    WEBP_QUALITY)
+    model_dart = os.path.join(ROOT, 'lib', 'features', 'settlement', 'data',
+                              'building_model.dart')
+    ap_.write_anim(model_dart, args.id, spec)
+    ent = getattr(mod, 'ENTRANCE', None)
+    ap_.write_entrance(model_dart, args.id,
+                       fw_kit.entrance_grid(mod.W, mod.H, *ent) if ent else None)
+    # the footprint this model was made for: the app ignores the entrance
+    # and the moving parts while a database row still says otherwise
+    ap_._set_map_entry(model_dart, 'kModelFootprint', args.id,
+                       f"  '{args.id}': ({mod.W}, {mod.H}),")
     write_art_box(args.id, box)
     write_chimney(args.id, anchor)
     register_bundled(args.id)

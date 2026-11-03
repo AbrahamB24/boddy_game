@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:boddygame/features/settlement/data/building_art.dart';
 import 'package:boddygame/features/settlement/data/building_definitions.dart';
+import 'package:boddygame/features/settlement/data/building_model.dart';
 
 // ── The art SHIPS with the app (user 2026-08-12) ─────────────
 // "baue die Gebäude einmal in das Game ein oder muss ich was bei supabase
@@ -82,6 +83,15 @@ void main() {
           .map((f) => f.uri.pathSegments.last)
           .where((n) => n.endsWith('.webp'))
           .map((n) => n.substring(0, n.length - 5))
+          // A moving building also ships its cut-out base and its atlas of
+          // moving parts (see AnimatedBuildingArt) — the same id's files.
+          .map(
+            (n) =>
+                kBuildingAnim.keys.firstWhere(
+                  (id) => n == '${id}_base' || n == '${id}_anim',
+                  orElse: () => n,
+                ),
+          )
           .toSet();
       expect(
         onDisk.difference(kBundledBuildingArt),

@@ -8,11 +8,19 @@ Reads as: people live here. Washing on a line, a fenced vegetable bed, a bench
 with a cat by the door, firewood against the wall, a chimney (the app draws
 its smoke), flower boxes, warm windows. No guild sign — a home has none.
 
+All four sides are modelled (the house can later be turned). The ENTRANCE is
+the east side's southern cell: the door opens east and the cobbled path runs
+to that cell's outer edge, where the road has to be.
+
+Moving parts: each piece of washing (hanging from the line), every flower
+box, flower patch and bush, the cat's tail; the lantern flickers and the lit
+windows breathe.
+
 Layout (x east, y north; the camera looks from +x/-y):
 
     house (ridge along y, gable south)        woodpile, bush
     vegetable bed + fence    washing line     path from the door to the
-                                              south-east corner
+                                              entrance cell (east, south)
 """
 import math
 import random
@@ -33,6 +41,9 @@ Z_EAVE = G + 1.42               # wall top = eave
 # the chimney pots' mouth (smoke anchor)
 CHX, CHY, CHZ0, CHH = -0.25, 0.52, G + 1.67, 0.62
 CHIMNEY = (CHX, CHY, CHZ0 + CHH + 0.13)
+# the door on the east wall, and the entrance cell its path leads to
+YD = -0.20
+ENTRANCE = ('e', 0)
 
 
 def materials():
@@ -106,8 +117,11 @@ def washing_line(M, a, b, h=0.40):
     t = (1 - total / d.length) / 2
     for w, hh, key in items:
         c = top_a + d * (t + w / 2 / d.length)
-        rbox((c.x, c.y, c.z - hh / 2 - 0.006), (w, 0.012, hh), (0, 0, rot),
-             M[key], bevel=0.003)
+        # each piece swings on its own from where it is pegged
+        with anim(f'wash_{key}', 'sway', pivot=(c.x, c.y, c.z), amp=0.16,
+                  period=2.4):
+            rbox((c.x, c.y, c.z - hh / 2 - 0.006), (w, 0.012, hh), (0, 0, rot),
+                 M[key], bevel=0.003)
         t += (w + 0.03) / d.length
 
 
@@ -140,7 +154,9 @@ def cat(M, x, y, z, rot=0.0):
         ex, ey = x + 0.055 * c - sg * 0.013 * s, y + 0.055 * s + sg * 0.013 * c
         ellipsoid(ex, ey, z + 0.09, 0.008, 0.008, 0.014, M['cat'], seg=6,
                   rings=4)
-    beam(at(-0.04, 0.02), at(-0.09, 0.005), 0.014, M['cat'], bevel=0)
+    # the tail hangs over the bench's edge and flicks
+    with anim('cat_tail', 'sway', pivot=at(-0.04, 0.012), amp=0.35, period=1.9):
+        beam(at(-0.04, 0.012), at(-0.07, -0.085), 0.02, M['cat'], bevel=0)
 
 
 def bench(M, x, y0, y1):
@@ -193,34 +209,56 @@ def build():
     window(M, 's', Y0 - J, xm, Z_EAVE + 0.17, win_s[0] * 0.9, win_s[1] * 0.9,
            shut=None)
 
-    # east (long) face: door, windows, bench, woodpile
-    yd = 0.02
+    # north (back gable) face — modelled like the front, so the house can
+    # later be turned (user 2026-11-03)
+    wall_frame(M, 'n', Y1, X0, X1, Z_PL, Z_UP, 4, braces=(0, 3),
+               holes=[(-0.55, win[0]), (-0.05, win[0])])
+    window(M, 'n', Y1, -0.55, zc0, *win, 'teal')
+    window(M, 'n', Y1, -0.05, zc0, *win, 'red', glow=True,
+           planter=['fl_white', 'fl_blue'])
+    wall_frame(M, 'n', Y1, X0, X1, Z_UP + 0.045, Z_EAVE - 0.03, 4,
+               braces=(0, 3), holes=[(xm, win_up[0])])
+    window(M, 'n', Y1, xm, zc1, *win_up, 'teal', glow=True)
+    gable_wall(M, 'n', Y1, X0, X1, Z_EAVE)
+    window(M, 'n', Y1, xm, Z_EAVE + 0.17, win_s[0] * 0.9, win_s[1] * 0.9,
+           shut=None)
+
+    # east (long) face: the door, a window with the bench under it, woodpile
     wall_frame(M, 'e', X1, Y0, Y1, Z_PL, Z_UP, 5, braces=(0, 4), mid=True,
-               holes=[(yd, door_w), (-0.30, win[0]), (0.40, win[0])])
-    door(M, 'e', X1, yd, door_w, door_h, Z_PL)
-    window(M, 'e', X1, -0.30, zc0, *win, 'mustard', glow=True)
-    window(M, 'e', X1, 0.40, zc0, *win, 'teal',
-           planter=['fl_blue', 'fl_white'])
+               holes=[(YD, door_w), (0.32, win[0])])
+    door(M, 'e', X1, YD, door_w, door_h, Z_PL)
+    window(M, 'e', X1, 0.32, zc0, *win, 'mustard', glow=True)
     wall_frame(M, 'e', X1, Y0 - J, Y1, Z_UP + 0.045, Z_EAVE - 0.03, 5,
                braces=(0, 1, 3, 4), holes=[(-0.20, win_up[0]), (0.50, win_up[0])])
     window(M, 'e', X1, -0.20, zc1, *win_up, 'teal')
     window(M, 'e', X1, 0.50, zc1, *win_up, 'red', glow=True,
            planter=['fl_red', 'fl_pink'])
-    lantern(M, 'e', X1, yd + 0.17, Z_PL + door_h - 0.02)
+    lantern(M, 'e', X1, YD + 0.17, Z_PL + door_h - 0.02)
 
-    # north gable (hidden, but it closes the attic for the voxeliser)
-    gable_fill(M, 'n', Y1, X0, X1, Z_EAVE)
+    # west (long) face
+    wall_frame(M, 'w', X0, Y0, Y1, Z_PL, Z_UP, 5, braces=(0, 4), mid=True,
+               holes=[(-0.12, win[0]), (0.48, win[0])])
+    window(M, 'w', X0, -0.12, zc0, *win, 'teal', planter=['fl_yel', 'fl_red'])
+    window(M, 'w', X0, 0.48, zc0, *win, 'red', glow=True)
+    wall_frame(M, 'w', X0, Y0 - J, Y1, Z_UP + 0.045, Z_EAVE - 0.03, 5,
+               braces=(0, 1, 3, 4), holes=[(-0.20, win_up[0]), (0.50, win_up[0])])
+    window(M, 'w', X0, -0.20, zc1, *win_up, 'mustard', glow=True)
+    window(M, 'w', X0, 0.50, zc1, *win_up, 'teal')
+
     # roof + chimney
     gable_roof(M, xm, (Y0 - J + Y1) / 2, Z_EAVE, Y1 - (Y0 - J), span, 'y',
                M['roof'], oh=0.13, oe=0.14)
     chimney(M, CHX, CHY, CHZ0, CHH)
 
     # ── the yard ──────────────────────────────────────────
-    cobble_path(M, [(X1 + 0.10, yd), (0.66, -0.30), (0.92, -0.95)], seed=4)
-    bench(M, X1 + 0.07, -0.38, yd - door_w / 2 - 0.05)
-    cat(M, X1 + 0.07, -0.20, G + m(0.45) + 0.01, rot=math.radians(-110))
-    woodpile(M, X1 + 0.09, 0.56, 0.84)
-    barrel(M, X1 + 0.09, -0.50, r=0.07, h=0.17)          # rain butt
+    # The path runs from the door to the middle of the entrance cell's outer
+    # edge, where the road has to be.
+    ex, ey = entrance_point(W, H, *ENTRANCE)
+    cobble_path(M, [(X1 + 0.10, YD), (0.70, ey + 0.08), (ex, ey)], seed=4)
+    bench(M, X1 + 0.07, 0.18, 0.46)
+    cat(M, X1 + 0.07, 0.30, G + m(0.45) + 0.01, rot=math.radians(-110))
+    woodpile(M, X1 + 0.09, 0.58, 0.84)
+    barrel(M, X1 + 0.09, -0.52, r=0.07, h=0.17)          # rain butt
 
     veg_bed(M, -0.92, -0.32, -0.94, -0.64)
     fence(M, [(-0.97, -0.58), (-0.27, -0.58), (-0.27, -0.98)])
@@ -231,4 +269,5 @@ def build():
     bush(M, 0.88, 0.30, 0.12, 3, ['fl_yel'])
     flower_patch(M, 0.12, -0.62, 7, ['fl_red', 'fl_yel'], 5)
     flower_patch(M, 0.62, 0.52, 6, ['fl_blue', 'fl_white'], 6)
-    flower_patch(M, -0.90, -0.40, 5, ['fl_pink'], 7, rx=0.08)
+    flower_patch(M, -0.92, -0.30, 5, ['fl_pink'], 7, rx=0.06)
+    flower_patch(M, -0.30, 0.95, 5, ['fl_yel', 'fl_white'], 8, ry=0.04)

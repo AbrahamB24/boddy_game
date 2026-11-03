@@ -4,7 +4,10 @@ Footprint 4 x 3 tiles (20 x 15 m). The reference building of the Fachwerk
 set — the voxel render of THIS model (approved 2026-11-03) fixed the style,
 the scale (its door is 1 x 2 m) and the voxel size every other building uses.
 
-Reads as: eggs. Nests with clutches in the yard, a glowing egg on a stone
+Reads as: eggs. All four sides are modelled; the ENTRANCE is the south
+side's third cell, where the cobbled path to both doors begins. Moving:
+flowers, bushes, flower boxes, the hens (pecking), the guild sign, the
+awning's edge, sparks over the egg; the egg glows, lanterns flicker. Nests with clutches in the yard, a glowing egg on a stone
 shrine, an egg-shaped gable window, a golden egg on the guild sign and on
 both finials, hens, hay.
 
@@ -29,6 +32,16 @@ ID = 'hatchery'
 W, H = 4, 3
 # The chimney pots' mouth (smoke anchor), authoring coordinates.
 CHIMNEY = (-0.35, 0.69, G + 1.52 + 1.20)
+# the entrance: the south side's third cell, where the cobbled path meets
+# the road
+ENTRANCE = ('s', 2)
+# Light layers. The sparks ('mote') are left out: they drift as their own
+# bobbing layers, and a light layer would glow where they USED to be.
+GLOW = {
+    'pane_glow': ('glow', 0.45, 6.0),
+    'lamp': ('flicker', 0.7, 1.0),
+    'egg_glow': ('glow', 0.6, 3.2),
+}
 
 
 def materials():
@@ -109,9 +122,11 @@ def build():
     M = materials()
 
     # path ---------------------------------------------------
-    paths = [[(0.02, -1.46), (0.30, -1.22), (0.40, -0.75), (0.40, -0.25),
+    # from the ENTRANCE cell's outer edge (where the road is) to both doors
+    ex, ey = entrance_point(W, H, *ENTRANCE)
+    paths = [[(ex, ey), (0.42, -1.22), (0.40, -0.75), (0.40, -0.25),
               (0.40, 0.10)],
-             [(0.30, -1.25), (0.80, -1.33), (1.17, -1.30)]]
+             [(0.42, -1.25), (0.80, -1.33), (1.17, -1.30)]]
     rnd = random.Random(5)
     for pl in paths:
         for i in range(len(pl) - 1):
@@ -145,7 +160,10 @@ def build():
               egg=0.2)
     # arched slit window + door at the tower foot, facing the camera
     for ang, zc, kind in ((-62, 0.95, 'slit'), (-20, 0.95, 'slit'),
-                          (-100, 0.30, 'door')):
+                          (-100, 0.30, 'door'),
+                          # the back of the tower, for when the map turns
+                          (60, 0.95, 'slit'), (140, 0.95, 'slit'),
+                          (200, 1.40, 'slit'), (20, 1.40, 'slit')):
         a = math.radians(ang)
         px, py = tx + math.cos(a) * (tr * 0.96), ty + math.sin(a) * (tr * 0.96)
         w, h = (0.07, 0.2) if kind == 'slit' else (0.17, 0.3)
@@ -204,23 +222,31 @@ def build():
            planter=['fl_blue', 'fl_white'])
     window(M, 'e', ux1, 0.72, G + 1.18, 0.2, 0.26, 'teal', glow=True)
     window(M, 'e', ux1, 1.12, G + 1.18, 0.12, 0.24, 'red')
-    # east gable
-    ridge_z = G + up + (my1 - my0 + 2 * 0.0) / 2 * TP
-    tri_prism((my0 - j, G + up), (my1, G + up), ((my0 - j + my1) / 2, ridge_z),
-              ux1 - 0.07, ux1, M['plaster'], axis='y')
+    # frames + openings — north (the back, modelled for turning the map)
+    wall_frame(M, 'n', my1, mx0, mx1, G + 0.1, G + low, 7, braces=(0, 3, 6),
+               holes=[(-0.55, 0.17), (0.25, 0.17), (1.05, 0.17), (1.55, 0.17)])
+    for a, sh, gl in ((-0.55, 'teal', False), (0.25, 'red', True),
+                      (1.05, 'mustard', False), (1.55, 'teal', True)):
+        window(M, 'n', my1, a, G + 0.52, 0.17, 0.22, sh, glow=gl)
+    wall_frame(M, 'n', uy1, ux0, ux1, G + low + 0.045, G + up - 0.07, 7,
+               braces=(0, 1, 5, 6), holes=[(-0.40, 0.2), (0.60, 0.2), (1.40, 0.2)])
+    window(M, 'n', uy1, -0.40, G + 1.18, 0.2, 0.26, 'red', glow=True,
+           planter=['fl_yel', 'fl_white'])
+    window(M, 'n', uy1, 0.60, G + 1.18, 0.2, 0.26, 'teal')
+    window(M, 'n', uy1, 1.40, G + 1.18, 0.2, 0.26, 'mustard', glow=True)
+    # east gable: plaster, king post and rafters (under the tiles), and the
+    # round egg window
+    ridge_z = G + up + (my1 - my0 + j) / 2 * TP
     gm = (my0 - j + my1) / 2
-    # gable framing: king post + two rafters' braces + a round egg window
-    beam((ux1 + 0.012, gm, G + up + 0.27), (ux1 + 0.012, gm, ridge_z - 0.03), 0.05,
-         M['timber'])
-    for sgn in (-1, 1):
-        beam((ux1 + 0.012, gm + sgn * 0.02, ridge_z - 0.06),
-             (ux1 + 0.012, gm + sgn * (my1 - my0 + j) / 2 * 0.98, G + up + 0.03), 0.045,
-             M['timber'])
-
+    gable_wall(M, 'e', ux1, uy0, uy1, G + up)
     ellipsoid(ux1 + 0.025, gm, G + up + 0.17, 0.016, 0.07, 0.085, M['pane_glow'],
               egg=0.2, seg=14, rings=10)
+    # west gable, above the tower's shoulder
+    gable_wall(M, 'w', ux0, uy0, uy1, G + up)
+    ellipsoid(ux0 - 0.025, gm, G + up + 0.17, 0.016, 0.07, 0.085, M['pane_glow'],
+              egg=0.2, seg=14, rings=10)
     # roof
-    gable_roof(M, (mx0 + mx1 + j) / 2, (my0 - j + my1) / 2, G + up,
+    ridge_z = gable_roof(M, (mx0 + mx1 + j) / 2, (my0 - j + my1) / 2, G + up,
                mx1 + j - mx0, my1 - my0 + j, 'x', M['roof'], oh=0.16, oe=0.17)
     # chimney
     cxh = -0.35
@@ -253,26 +279,26 @@ def build():
     window(M, 'e', wx1, -0.80, G + 0.60, 0.15, 0.22, 'red', glow=True)
     window(M, 'e', wx1, -0.34, G + 0.60, 0.15, 0.22, 'teal',
            planter=['fl_yel', 'fl_blue'])
+    # west face of the wing (toward the courtyard's back, seen once turned)
+    wall_frame(M, 'w', wx0, wy0, wy1, G + 0.1, G + wh - 0.07, 5,
+               braces=(0, 1, 3, 4), mid=True, holes=[(-0.80, 0.15), (-0.34, 0.15)])
+    window(M, 'w', wx0, -0.80, G + 0.60, 0.15, 0.22, 'teal', glow=True)
+    window(M, 'w', wx0, -0.34, G + 0.60, 0.15, 0.22, 'red',
+           planter=['fl_pink', 'fl_white'])
     # south gable of the wing (faces the camera on the left)
     wmid = (wx0 + wx1) / 2
     wspan = wx1 - wx0
     wrise = wspan / 2 * TP
-    tri_prism((wx0, G + wh), (wx1, G + wh), (wmid, G + wh + wrise), wy0, wy0 + 0.07,
-              M['plaster'], axis='x')
-    fz = wy0 - 0.012
-    beam((wmid, fz, G + wh + 0.40), (wmid, fz, G + wh + wrise - 0.03), 0.05, M['timber'])
-    for sgn in (-1, 1):
-        beam((wmid + sgn * 0.02, fz, G + wh + wrise - 0.06),
-             (wmid + sgn * (wspan / 2) * 0.98, fz, G + wh + 0.03), 0.045, M['timber'])
+    gable_wall(M, 's', wy0, wx0, wx1, G + wh)
 
     # the egg emblem in the gable
     ellipsoid(wmid, wy0 - 0.02, G + wh + 0.3, 0.075, 0.016, 0.1, M['pane_glow'],
               egg=0.2, seg=14, rings=10)
     # roof: extends back into the main house's roof
     wlen = (0.62) - (wy0 - 0.0)       # from wy0 to y=0.62, centred below
-    gable_roof(M, wmid, (wy0 + 0.62) / 2, G + wh, wlen, wspan, 'y', M['roof2'],
+    wing_ridge = gable_roof(M, wmid, (wy0 + 0.62) / 2, G + wh, wlen, wspan, 'y', M['roof2'],
                oh=0.15, oe=0.16)
-    ellipsoid(wmid, wy0 - 0.16, G + wh + wrise + 0.02, 0.04, 0.04, 0.055, M['gold'],
+    ellipsoid(wmid, wy0 - 0.16, wing_ridge + 0.02, 0.04, 0.04, 0.055, M['gold'],
               egg=0.2)
 
     # awning + table (south wall, west of the door) --------------
@@ -282,9 +308,12 @@ def build():
     tilt = math.atan2(0.16, 0.43)
     rbox((-0.525, -0.065, G + 0.54), (0.83, 0.49, 0.02), (tilt, 0, 0),
          M['awning'], bevel=0.006)
-    for i in range(10):          # scalloped edge
-        rbox((-0.93 + 0.0 + i * 0.09 + 0.045, -0.31, G + 0.44), (0.085, 0.012, 0.045),
-             (tilt, 0, 0), M['awning'], bevel=0.004)
+    # the scalloped edge flutters
+    with anim('awning_edge', 'sway', pivot=(-0.525, -0.31, G + 0.465),
+              amp=0.10, period=2.1):
+        for i in range(10):
+            rbox((-0.93 + 0.0 + i * 0.09 + 0.045, -0.31, G + 0.44),
+                 (0.085, 0.012, 0.045), (tilt, 0, 0), M['awning'], bevel=0.004)
     # table + goods
     rbox((-0.52, -0.06, G + 0.17), (0.74, 0.22, 0.03), (0, 0, 0), M['planks'])
     for px in (-0.86, -0.18):
@@ -308,12 +337,16 @@ def build():
              M['stone'], bevel=0.012)
     cyl(sx, sy, G + 0.07, 0.16, 0.14, 0.04, M['straw'], seg=14)
     egg(M, 'gold', sx, sy, G + 0.11, 0.115, glow=True)
-    for i in range(10):
-        a = random.uniform(0, 6.28)
-        d = random.uniform(0.05, 0.28)
-        ellipsoid(sx + math.cos(a) * d, sy + math.sin(a) * d,
-                  G + random.uniform(0.25, 0.55), 0.011, 0.011, 0.011, M['mote'],
-                  seg=6, rings=4)
+    # sparks drifting over the egg, in two clouds out of step
+    for k in range(2):
+        with anim(f'motes{k}', 'bob', pivot=(sx, sy, G + 0.4), amp=0.008,
+                  period=3.6 + k * 1.3):
+            for i in range(5):
+                a = random.uniform(0, 6.28)
+                d = random.uniform(0.05, 0.28)
+                ellipsoid(sx + math.cos(a) * d, sy + math.sin(a) * d,
+                          G + random.uniform(0.25, 0.55), 0.011, 0.011, 0.011,
+                          M['mote'], seg=6, rings=4)
     bpy.ops.object.light_add(type='POINT', location=(sx, sy, G + 0.3))
     pl = bpy.context.object
     pl.data.energy = 14
@@ -345,13 +378,18 @@ def build():
     rbox((cx + 0.06, cy - 0.131, G + 0.07), (0.07, 0.01, 0.09), (0, 0, 0.25),
          M['pane'])
     beam((cx + 0.28, cy - 0.05, G), (cx + 0.09, cy - 0.12, G + 0.07), 0.04, M['planks'])
-    hen(M, -1.20, -0.88, 0.5, 'hen_w')
-    hen(M, -1.0, -1.18, 2.6, 'hen_r')
-    hen(M, -1.45, -0.62, -0.7, 'hen_r')
+    # the hens peck: each one leans about its feet, at its own pace
+    for i, (hx, hy, rot, key) in enumerate(((-1.20, -0.88, 0.5, 'hen_w'),
+                                            (-1.0, -1.18, 2.6, 'hen_r'),
+                                            (-1.45, -0.62, -0.7, 'hen_r'))):
+        with anim(f'hen{i}', 'sway', pivot=(hx, hy, G), amp=0.22,
+                  period=1.5 + 0.35 * i):
+            hen(M, hx, hy, rot, key)
 
     # barrels, sacks, crates ----------------------------------
-    barrel(M, 0.70, -1.30)
-    barrel(M, 0.83, -1.40, 0.075, 0.17)
+    # (the two barrels moved off the entrance path to the back wall)
+    barrel(M, 0.40, 1.40)
+    barrel(M, 0.56, 1.41, 0.075, 0.17)
     sack(M, 1.45, -1.33, 1.0, 0.2)
     sack(M, 1.38, -1.40, 0.9, -0.3, 'sack')
     crate(M, 1.95, -0.7, 0.14, 0.3)
@@ -365,29 +403,27 @@ def build():
     bush(M, -0.2, 1.42, 0.2, 2)
     bush(M, 1.0, 1.42, 0.18, 3, ['fl_yel'])
     bush(M, -1.8, 0.2, 0.17, 4, ['fl_red'])
-    rnd = random.Random(21)
-    for (cx, cy, n, cols) in ((-1.85, -1.3, 8, ['fl_white', 'fl_pink']),
-                              (0.1, -1.38, 6, ['fl_red', 'fl_yel']),
-                              (-0.9, 0.35, 7, ['fl_blue', 'fl_white']),
-                              (1.85, -1.0, 6, ['fl_blue', 'fl_pink']),
-                              (-1.4, -1.4, 5, ['fl_yel'])):
-        for i in range(n):
-            x = cx + rnd.uniform(-0.18, 0.18)
-            y = cy + rnd.uniform(-0.12, 0.12)
-            h = rnd.uniform(0.05, 0.11)
-            beam((x, y, G), (x, y, G + h), 0.006, M['stem'], bevel=0)
-            ellipsoid(x, y, G + h, 0.02, 0.02, 0.016, M[rnd.choice(cols)], seg=8,
-                      rings=6)
-    # hanging sign (golden egg) on the wing's south-west corner, lanterns at
-    # its door ------------------------------------------------------------
+    # flower patches (each sways on its own — fw_kit.flower_patch)
+    for k, (cx, cy, n, cols) in enumerate(((-1.85, -1.3, 8, ['fl_white', 'fl_pink']),
+                                           (-0.15, -1.38, 6, ['fl_red', 'fl_yel']),
+                                           (-0.9, 0.35, 7, ['fl_blue', 'fl_white']),
+                                           (1.85, -1.0, 6, ['fl_blue', 'fl_pink']),
+                                           (-1.4, -1.4, 5, ['fl_yel']),
+                                           (1.40, 1.42, 6, ['fl_pink', 'fl_white']))):
+        flower_patch(M, cx, cy, n, cols, 21 + k)
+    # hanging sign (golden egg) on the wing's south-west corner — it swings
+    # from its bracket — and lanterns at the wing's door ------------------
     sy_ = wy0 - 0.02
     beam((0.60, sy_, G + 0.86), (0.36, sy_, G + 0.86), 0.03, M['timber'])
     beam((0.60, sy_, G + 0.70), (0.44, sy_, G + 0.84), 0.022, M['timber'])
-    for dx in (0.40, 0.50):
-        beam((dx, sy_, G + 0.86), (dx, sy_, G + 0.78), 0.006, M['iron'], bevel=0)
-    rbox((0.45, sy_, G + 0.69), (0.19, 0.02, 0.15), (0, 0, 0), M['planks'])
-    ellipsoid(0.45, sy_ - 0.016, G + 0.69, 0.045, 0.012, 0.06, M['gold'],
-              egg=0.2)
+    with anim('sign', 'sway', pivot=(0.45, sy_, G + 0.86), amp=0.07,
+              period=3.0):
+        for dx in (0.40, 0.50):
+            beam((dx, sy_, G + 0.86), (dx, sy_, G + 0.78), 0.006, M['iron'],
+                 bevel=0)
+        rbox((0.45, sy_, G + 0.69), (0.19, 0.02, 0.15), (0, 0, 0), M['planks'])
+        ellipsoid(0.45, sy_ - 0.016, G + 0.69, 0.045, 0.012, 0.06, M['gold'],
+                  egg=0.2)
     for lx in (0.95, 1.40):
         beam((lx, wy0 - 0.012, G + 0.66), (lx, wy0 - 0.075, G + 0.66), 0.014,
              M['iron'], bevel=0)

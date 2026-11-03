@@ -20,6 +20,8 @@ import '../creatures/models/species_def.dart' show kSpeciesDefs;
 import 'data/building_art.dart'
     show kBundledBuildingArt, artBoxOf, buildingAsset;
 import 'data/iso_grid.dart' show artPlacement, isoLocalBounds;
+import 'data/building_model.dart' show animFor;
+import 'widgets/animated_building_art.dart' show AnimatedBuildingArt;
 import 'widgets/building_icon.dart' show BuildingIcon, BuildingGroundShadow;
 import 'data/building_definitions.dart';
 import 'data/goods_definitions.dart';
@@ -250,6 +252,18 @@ class _SettlementScreenState extends State<SettlementScreen>
         imageUrl: def.imageUrl,
       );
       if (provider != null) local.add(precacheImage(provider, context));
+      // A building that MOVES on the map draws its cut-out base and its
+      // atlas there, not the still picture above.
+      if (animFor(id, def.gridW, def.gridH) case final spec?) {
+        local
+          ..add(
+            precacheImage(
+              AnimatedBuildingArt.baseProvider(context, id, spec, artWidth),
+              context,
+            ),
+          )
+          ..add(precacheImage(AnimatedBuildingArt.atlasProvider(id), context));
+      }
       if (!def.isBuildPlot) {
         local.add(
           BuildingGroundShadow.preload(defId: id, imageUrl: def.imageUrl),

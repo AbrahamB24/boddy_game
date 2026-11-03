@@ -55,11 +55,22 @@ def _spans(bvh, origin, axis, far):
     return [(ts[i], ts[i + 1]) for i in range(0, len(ts), 2)]
 
 
-def voxelize(V, name='voxels', skip=('blade',)):
+def voxelize(V, name='voxels', skip=('blade',), objs=None):
+    """objs: the meshes to voxelise (all of them by default). They are
+    replaced by the one voxel object, which is returned; nothing else in the
+    scene is touched, so a building's moving parts can be voxelised one
+    group at a time on the same grid."""
     for o in [o for o in bpy.data.objects
               if o.type == 'MESH' and o.name.startswith(skip)]:
         bpy.data.objects.remove(o)
-    objs = [o for o in bpy.data.objects if o.type == 'MESH']
+    if objs is None:
+        objs = [o for o in bpy.data.objects if o.type == 'MESH']
+    def alive(o):
+        try:
+            return o.type == 'MESH' and o.name in bpy.data.objects
+        except ReferenceError:          # removed above (a skipped blade)
+            return False
+    objs = [o for o in objs if alive(o)]
     # matrix_world is evaluated lazily: without this every part placed by
     # location/rotation (beams, roof slabs) is read at the origin, unturned.
     bpy.context.view_layer.update()

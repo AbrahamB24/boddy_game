@@ -54,6 +54,16 @@ PlacedBuilding _b(
   placedAt: DateTime(2026),
 );
 
+/// The road that connects a Small House at (8,10) below the 10x10 hall: its
+/// ENTRANCE (user 2026-11-03) is the east side's southern cell, so the road
+/// runs from (10,9) — touching the hall's edge — down to (10,11), in front
+/// of that cell.
+List<PlacedBuilding> _entranceRoads() => [
+  _b('road1', 'road', 10, 9),
+  _b('road2', 'road', 10, 10),
+  _b('road3', 'road', 10, 11),
+];
+
 void main() {
   setUp(() {
     kBuildingDefs
@@ -96,16 +106,16 @@ void main() {
     // "connected" case to take away from.
     test('housing capacity drops exactly like disconnecting it would', () {
       final hall = _b('hall', 'castle', 0, 0);
-      final road = _b('road1', 'road', 10, 0);
-      final hut = _b('hut1', 'small_house', 11, 0);
+      final roads = _entranceRoads();
+      final hut = _b('hut1', 'small_house', 8, 10);
 
-      final standing = GameEngine.housingCapacity([hall, road, hut]);
+      final standing = GameEngine.housingCapacity([hall, ...roads, hut]);
       final stored = GameEngine.housingCapacity([
         hall,
-        road,
+        ...roads,
         hut.copyWith(isStored: true),
       ]);
-      final removed = GameEngine.housingCapacity([hall, road]);
+      final removed = GameEngine.housingCapacity([hall, ...roads]);
 
       expect(stored, lessThan(standing));
       expect(
@@ -217,14 +227,14 @@ void main() {
 
     test('recalling a building (new list, same layout) still busts the cache', () {
       final hall = _b('hall', 'castle', 0, 0);
-      final road = _b('road1', 'road', 10, 0);
-      final hut = _b('hut1', 'small_house', 11, 0);
-      ctrl.buildings = [hall, road, hut];
+      final roads = _entranceRoads();
+      final hut = _b('hut1', 'small_house', 8, 10);
+      ctrl.buildings = [hall, ...roads, hut];
       expect(ctrl.connectedBuildingIds, contains('hut1'));
 
       // A fresh list — same ids, same gridX/gridY — with just the flag
       // flipped, the way recallAllBuildings itself builds one.
-      ctrl.buildings = [hall, road, hut.copyWith(isStored: true)];
+      ctrl.buildings = [hall, ...roads, hut.copyWith(isStored: true)];
       expect(
         ctrl.connectedBuildingIds,
         isNot(contains('hut1')),

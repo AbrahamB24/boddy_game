@@ -61,6 +61,7 @@ DIM = {
 VOX = 4.1822 / (0.99 * 256)
 
 PITCH = 50.0                      # roof pitch, degrees
+ROOF_THICK = 0.075                # tile slab thickness (gable_roof's default)
 TP = math.tan(math.radians(PITCH))
 
 
@@ -128,15 +129,25 @@ def base_materials():
     return M
 
 
-# ── face helpers: 's' = south wall (normal -y), 'e' = east wall (+x) ──────
+# ── face helpers ────────────────────────────────────────────
+# ALL FOUR SIDES are modelled (user 2026-11-03: "alle Seiten gleich
+# modelliert, damit später Drehungen möglich sein würden"): 's' south
+# (normal -y), 'n' north (+y), 'e' east (+x), 'w' west (-x). `fixed` is the
+# wall plane's y (s, n) or x (e, w); `a` runs along the wall.
+OUT = {'s': (0, -1), 'n': (0, 1), 'e': (1, 0), 'w': (-1, 0)}
+
+
 def P(face, fixed, a, z, off=0.0):
     """A point on a wall: `a` runs along it, `off` pushes it outward."""
-    return Vector((a, fixed - off, z)) if face == 's' else Vector((fixed + off, a, z))
+    ox, oy = OUT[face]
+    if face in ('s', 'n'):
+        return Vector((a, fixed + oy * off, z))
+    return Vector((fixed + ox * off, a, z))
 
 
 def D(face, along, depth, h):
     """Box dimensions for something lying flat on a wall."""
-    return (along, depth, h) if face == 's' else (depth, along, h)
+    return (along, depth, h) if face in ('s', 'n') else (depth, along, h)
 
 
 def wall_frame(M, face, fixed, a0, a1, z0, z1, nb, braces=(), t=0.052,
@@ -218,7 +229,7 @@ def window(M, face, fixed, a, zc, w, h, shut='teal', glow=False, planter=None):
         flowers(face, fixed, a, zc - h / 2 - 0.04, w, planter)
 
 
-def flowers(face, fixed, a, z, w, cols):
+def _flowers(face, fixed, a, z, w, cols):
     rnd = random.Random(int(a * 977) + 3)
     for i in range(7):
         aa = a + (i / 6 - 0.5) * w * 0.9
@@ -259,11 +270,16 @@ def door(M, face, fixed, a, w, h, z0):
 def gable_roof(M, cx, cy, z0, length, span, axis, mat, oh=0.15, oe=0.16,
                thick=0.075, pitch=PITCH):
     """Two tile slabs meeting at a ridge. z0 = eave height of the WALL top.
-    axis = the ridge's direction ('x' or 'y'). Returns the ridge height."""
+    axis = the ridge's direction ('x' or 'y'). Returns the ridge height.
+
+    The slabs SIT ON the walls: their underside runs through the wall top's
+    outer edge, so the tiles are one roof-thickness above the plaster. Laid
+    with their TOP on that edge (as before 2026-11-03) the wall's top corner
+    poked through every eave and voxelised as a pale streak along the roof."""
     tp = math.tan(math.radians(pitch))
     s = span / 2.0
     rise = s * tp
-    zr = z0 + rise
+    zr = z0 + rise + thick / math.cos(math.radians(pitch))
     reach = s + oh
     slope = reach / math.cos(math.radians(pitch))
     d = reach / 2.0
@@ -296,23 +312,27 @@ def gable_fill(M, face, fixed, a0, a1, z_base, pitch=PITCH, depth=0.07,
     """The plain plaster triangle of a gable, its sloped edges SUNK a little
     under the roof's top surface. gable_roof lays the tiles' top exactly on
     the triangle's edge, and two coincident faces voxelise as a streak of
-    plaster across the roof. face 's' builds inward (+y), 'e' inward (-x)."""
+    plaster across the roof. Every face builds INWARD from its wall plane."""
     tp = math.tan(math.radians(pitch))
     mid, half = (a0 + a1) / 2, (a1 - a0) / 2
+    # up INTO the roof slab (which sits a thickness above the wall line, see
+    # gable_roof), but short of its top
     sink = 0.04
-    pts = ((a0 + sink / tp, z_base), (a1 - sink / tp, z_base),
-           (mid, z_base + half * tp - sink))
+    lift = ROOF_THICK / math.cos(math.radians(pitch))
+    pts = ((a0, z_base), (a1, z_base), (mid, z_base + half * tp + lift - sink))
     if face == 's':
         tri_prism(*pts, fixed, fixed + depth, M[mat], axis='x')
     elif face == 'n':
         tri_prism(*pts, fixed - depth, fixed, M[mat], axis='x')
+    elif face == 'w':
+        tri_prism(*pts, fixed, fixed + depth, M[mat], axis='y')
     else:
         tri_prism(*pts, fixed - depth, fixed, M[mat], axis='y')
 
 
 def gable_wall(M, face, fixed, a0, a1, z_base, pitch=PITCH, depth=0.07,
                king=True, emblem_z=None):
-    """The plaster triangle of a gable end facing 's' or 'e', with its king
+    """The plaster triangle of a gable end on any face, with its king
     post and two rafter braces. Returns the apex height."""
     tp = math.tan(math.radians(pitch))
     mid, half = (a0 + a1) / 2, (a1 - a0) / 2
@@ -421,7 +441,7 @@ def hay_scatter(M, cx, cy, r, n, seed=1):
     strands(lst, M['straw'], 'hayscatter')
 
 
-def bush(M, x, y, r=0.22, seed=0, flowers_cols=None):
+def _bush(M, x, y, r=0.22, seed=0, flowers_cols=None):
     rnd = random.Random(seed)
     for i in range(6):
         a = rnd.uniform(0, 6.28)
@@ -439,7 +459,7 @@ def bush(M, x, y, r=0.22, seed=0, flowers_cols=None):
                       M[rnd.choice(flowers_cols)], seg=8, rings=6)
 
 
-def flower_patch(M, cx, cy, n, cols, seed, rx=0.18, ry=0.12):
+def _flower_patch(M, cx, cy, n, cols, seed, rx=0.18, ry=0.12):
     rnd = random.Random(seed)
     for _ in range(n):
         x = cx + rnd.uniform(-rx, rx)
@@ -487,3 +507,98 @@ def person(M, x, y, rot=0.0):
     cyl(x, y, G, 0.035, 0.03, h * 0.5, M['cloth'], seg=10)
     cyl(x, y, G + h * 0.5, 0.045, 0.04, h * 0.36, M['cloth'], seg=10)
     ellipsoid(x, y, G + h * 0.93, 0.024, 0.024, 0.03, M['skin'], seg=10, rings=8)
+
+
+# ── moving parts (user 2026-11-03: "Kleider wiegen sich im Wind, Blumen
+#    wanken, Licht flackert von einer Kerze") ──────────────────────────────
+# Everything built inside `with anim(...)` becomes ONE moving layer: it is
+# voxelised on its own, cut out of the map's base picture and drawn by the app
+# leaning about `pivot` (AnimatedBuildingArt). The pivot is in authoring
+# coordinates (yard at z = G): the line a hanging thing hangs from, the ground
+# a plant grows out of.
+#
+# Kinds and their defaults (amp, period in seconds):
+#   'sway'  washing, flowers, bushes, a cat's tail: shear about the pivot
+#   'bob'   something floating: up and down
+# Light needs no group: every emissive material becomes a glow/flicker layer
+# by itself (see GLOW_LAYERS in make_building.py).
+ANIMS = []
+_ANIM_DEFAULTS = {'sway': (0.10, 2.8), 'bob': (0.006, 3.0)}
+
+
+class anim:
+    def __init__(self, name, kind='sway', pivot=(0, 0, 0), amp=None,
+                 period=None):
+        a, p = _ANIM_DEFAULTS[kind]
+        self.spec = dict(name=name, kind=kind, pivot=tuple(pivot),
+                         amp=a if amp is None else amp,
+                         period=p if period is None else period)
+
+    def __enter__(self):
+        import bpy
+        self._before = set(bpy.data.objects)
+        return self
+
+    def __exit__(self, *exc):
+        import bpy
+        new = [o for o in bpy.data.objects if o not in self._before]
+        for o in new:
+            o['anim'] = self.spec['name']
+        if new:
+            ANIMS.append(self.spec)
+        return False
+
+
+def reset_anims():
+    ANIMS.clear()
+
+
+# ── the entrance (user 2026-11-03) ──────────────────────────
+# One whole footprint cell on the edge, where the building's path meets the
+# road. ENTRANCE = (face, k): the k-th cell along that face, counted in the
+# direction of increasing x (faces s, n) or y (faces e, w).
+def entrance_point(W, H, face, k):
+    """The middle of the entrance cell's OUTER edge — where the path ends."""
+    if face == 's':
+        return (-W / 2 + k + 0.5, -H / 2)
+    if face == 'n':
+        return (-W / 2 + k + 0.5, H / 2)
+    if face == 'e':
+        return (W / 2, -H / 2 + k + 0.5)
+    return (-W / 2, -H / 2 + k + 0.5)
+
+
+def entrance_grid(W, H, face, k):
+    """(cx, cy, dx, dy) for kBuildingEntrance. Grid x = Blender x, but grid y
+    runs the other way: Blender SOUTH (-y) is the grid's +y side (the map's
+    lower-left edge, the one facing the camera)."""
+    if face == 's':
+        return (k, H - 1, 0, 1)
+    if face == 'n':
+        return (k, 0, 0, -1)
+    if face == 'e':
+        return (W - 1, H - 1 - k, 1, 0)
+    return (0, H - 1 - k, -1, 0)
+
+
+# ── plants move by themselves ───────────────────────────────
+# Every flower box, flower patch and bush is its own swaying layer, rooted
+# where it grows. On a face the camera does not see the layer comes out empty
+# and anim_pass drops it, so the hidden sides cost nothing.
+def flowers(face, fixed, a, z, w, cols):
+    p = P(face, fixed, a, z, 0.07)
+    with anim(f'box_{face}{fixed:+.2f}{a:+.2f}{z:.2f}', 'sway',
+              pivot=(p.x, p.y, z), amp=0.10, period=3.1):
+        _flowers(face, fixed, a, z, w, cols)
+
+
+def bush(M, x, y, r=0.22, seed=0, flowers_cols=None):
+    with anim(f'bush{x:+.2f}{y:+.2f}', 'sway', pivot=(x, y, G), amp=0.035,
+              period=4.4):
+        _bush(M, x, y, r, seed, flowers_cols)
+
+
+def flower_patch(M, cx, cy, n, cols, seed, rx=0.18, ry=0.12):
+    with anim(f'patch{cx:+.2f}{cy:+.2f}', 'sway', pivot=(cx, cy, G),
+              amp=0.12, period=3.4):
+        _flower_patch(M, cx, cy, n, cols, seed, rx, ry)

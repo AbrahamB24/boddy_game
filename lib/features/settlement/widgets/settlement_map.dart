@@ -13,6 +13,7 @@ import '../../creatures/models/creature_enums.dart' show kHealingHutBuildingId;
 import '../../onboarding/intro_flow.dart';
 import '../../onboarding/intro_spotlight.dart';
 import '../data/building_art.dart';
+import '../data/building_model.dart';
 import '../data/building_definitions.dart';
 import '../data/iso_grid.dart';
 import '../data/resource_icons.dart';
@@ -22,6 +23,7 @@ import '../models/placed_building.dart';
 import '../settlement_controller.dart';
 import '../../social/social_actions.dart' show confirmDialog;
 import 'building_carousel.dart' show buildingCarouselHeight;
+import 'animated_building_art.dart';
 import 'building_icon.dart';
 import 'building_life.dart';
 import 'road_walkers.dart';
@@ -1887,6 +1889,28 @@ class SettlementMapState extends State<SettlementMap>
                 );
               },
             ),
+          // THE ENTRANCE, over the art (user 2026-11-03: "Dieser Punkt soll
+          // beim Bauen speziell markiert sein und betrifft immer eine ganze
+          // Kachel"). Over, not under: the picture covers most of its own
+          // footprint, and a mark you cannot see while aiming is no mark.
+          if (entranceFor(typeId, def.gridW, def.gridH) case final e?)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _EntrancePainter(
+                    w: def.gridW,
+                    h: def.gridH,
+                    entrance: e,
+                    hasRoad: () {
+                      final (rx, ry) = entranceRoadCell(e, gx, gy);
+                      return widget.ctrl.roadCells.contains(
+                        roadCellKey(rx, ry),
+                      );
+                    }(),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -2583,6 +2607,28 @@ class _BuildingTile extends StatelessWidget {
     this.isDisconnected = false,
   });
 
+  /// The picture of a FINISHED building: moving where its model has moving
+  /// parts (see [AnimatedBuildingArt]), the still render otherwise. A site
+  /// under construction stays still — nobody hangs washing on a scaffold.
+  Widget _livingArt(double width, bool done) {
+    final spec = animFor(def.id, def.gridW, def.gridH);
+    if (done && spec != null && buildingAsset(def.id) != null) {
+      return AnimatedBuildingArt(
+        defId: def.id,
+        spec: spec,
+        width: width,
+        phaseSeed: building.id.hashCode,
+      );
+    }
+    return BuildingIcon(
+      imageUrl: def.imageUrl,
+      defId: def.id,
+      width: width,
+      anchorBottomOverflowTop: true,
+      dimmed: !done,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (def.isRoad) {
@@ -2713,21 +2759,9 @@ class _BuildingTile extends StatelessWidget {
                 : isDisconnected
                 ? ColorFiltered(
                     colorFilter: kDisconnectedFilter,
-                    child: BuildingIcon(
-                      imageUrl: def.imageUrl,
-                      defId: def.id,
-                      width: art.width,
-                      anchorBottomOverflowTop: true,
-                      dimmed: !done,
-                    ),
+                    child: _livingArt(art.width, done),
                   )
-                : BuildingIcon(
-                    imageUrl: def.imageUrl,
-                    defId: def.id,
-                    width: art.width,
-                    anchorBottomOverflowTop: true,
-                    dimmed: !done,
-                  ),
+                : _livingArt(art.width, done),
           ),
           ..._statusOverlays(done: done, queued: queued),
         ],
@@ -2952,6 +2986,94 @@ class _FootprintPainter extends CustomPainter {
   @override
   bool shouldRepaint(_FootprintPainter old) =>
       old.w != w || old.h != h || old.color != color;
+}
+
+/// A building's entrance on its placement ghost: the entrance CELL of the
+/// footprint as a gold tile, the cell in front of it — where the road has to
+/// be — outlined (green when a road already lies there), and an arrow from
+/// one to the other, so the question "where does my road have to go" is
+/// answered while aiming rather than after placing.
+class _EntrancePainter extends CustomPainter {
+  final int w;
+  final int h;
+  final BuildingEntrance entrance;
+  final bool hasRoad;
+
+  const _EntrancePainter({
+    required this.w,
+    required this.h,
+    required this.entrance,
+    required this.hasRoad,
+  });
+
+  /// Grid point (gx, gy), relative to the footprint, in the footprint's own
+  /// box — the same frame footprintPathLocal draws in.
+  Offset _pt(double gx, double gy) =>
+      Offset((h + gx - gy) * kIsoTileW / 2, (gx + gy) * kIsoTileH / 2);
+
+  Path _cell(int cx, int cy) => Path()
+    ..moveTo(_pt(cx.toDouble(), cy.toDouble()).dx, _pt(cx.toDouble(), cy.toDouble()).dy)
+    ..lineTo(_pt(cx + 1.0, cy.toDouble()).dx, _pt(cx + 1.0, cy.toDouble()).dy)
+    ..lineTo(_pt(cx + 1.0, cy + 1.0).dx, _pt(cx + 1.0, cy + 1.0).dy)
+    ..lineTo(_pt(cx.toDouble(), cy + 1.0).dx, _pt(cx.toDouble(), cy + 1.0).dy)
+    ..close();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final (cx, cy, dx, dy) = entrance;
+    const gold = Color(0xFFFFC83D);
+    final cell = _cell(cx, cy);
+    canvas
+      ..drawPath(cell, Paint()..color = gold.withValues(alpha: 0.45))
+      ..drawPath(
+        cell,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5
+          ..color = gold,
+      );
+    final road = _cell(cx + dx, cy + dy);
+    final roadColor = hasRoad ? Colors.greenAccent : Colors.white;
+    canvas
+      ..drawPath(road, Paint()..color = roadColor.withValues(alpha: 0.22))
+      ..drawPath(
+        road,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = roadColor,
+      );
+    // The arrow: from the entrance cell's centre to the road cell's.
+    final from = _pt(cx + 0.5, cy + 0.5);
+    final to = _pt(cx + dx + 0.5, cy + dy + 0.5);
+    final dir = to - from;
+    final len = dir.distance;
+    if (len <= 0) return;
+    final u = dir / len;
+    final n = Offset(-u.dy, u.dx);
+    final tip = from + u * (len * 0.85);
+    final tail = from + u * (len * 0.1);
+    final head = len * 0.22;
+    final arrow = Paint()
+      ..color = gold
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas
+      ..drawLine(tail, tip, arrow)
+      ..drawPath(
+        Path()
+          ..moveTo(tip.dx, tip.dy)
+          ..lineTo((tip - u * head + n * head * 0.6).dx, (tip - u * head + n * head * 0.6).dy)
+          ..lineTo((tip - u * head - n * head * 0.6).dx, (tip - u * head - n * head * 0.6).dy)
+          ..close(),
+        Paint()..color = gold,
+      );
+  }
+
+  @override
+  bool shouldRepaint(_EntrancePainter old) =>
+      old.w != w || old.h != h || old.entrance != entrance || old.hasRoad != hasRoad;
 }
 
 /// A road without art: its cell, filled flat, with the lit near edge every
