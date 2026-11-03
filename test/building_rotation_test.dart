@@ -64,7 +64,7 @@ void main() {
     // now faces the map's lower-left edge.
     const hx = 8, hy = 10;
     final turned = defRotated('small_house', 1)!;
-    final e = entranceFor(turned.artId, turned.gridW, turned.gridH)!;
+    final e = entrancesFor(turned.artId, turned.gridW, turned.gridH)!.single;
     final (rx, ry) = entranceRoadCell(e, hx, hy);
     final hall = _b('hall', 'castle', 0, 0);
     final hut = _b('hut', 'small_house', hx, hy, rotation: 1);
@@ -72,7 +72,7 @@ void main() {
     // the row of the road cell to it.
     expect((rx, ry), (8, 12));
     final roads = [
-      for (var y = 9; y <= ry; y++) _b('a$y', 'road', 10, y),
+      for (var y = 4; y <= ry; y++) _b('a$y', 'road', 10, y),
       for (var x = rx; x < 10; x++) _b('b$x', 'road', x, ry),
     ];
     expect(
@@ -81,7 +81,7 @@ void main() {
       reason: 'road cell ($rx,$ry)',
     );
     // The UNturned entrance's road cell no longer connects it.
-    final e0 = kBuildingEntrance['small_house']!;
+    final e0 = kBuildingEntrance['small_house']!.single;
     final (ox, oy) = entranceRoadCell(e0, hx, hy);
     final wrong = [
       for (var y = 9; y <= oy; y++) _b('w$y', 'road', ox, y),

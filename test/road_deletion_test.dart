@@ -39,13 +39,12 @@ void main() {
   test('a hut only shelters anyone while a road reaches the hall', () {
     // The hall is 10x10 at (0,0), so it fills x 0..9 and y 0..9. The hut
     // stands below it at (8,10); its ENTRANCE (user 2026-11-03) is its
-    // east side's southern cell, so the road has to reach (10,11) — a short
-    // run down from (10,9), which touches the hall's edge.
+    // east side's southern cell, so the road has to reach (10,11) — a run
+    // down the hall's side from its east gate.
     final hall = _b('hall', 'castle', 0, 0);
+    // (from the hall's east gate at (10,4), where the network starts)
     final roads = [
-      _b('road1', 'road', 10, 9),
-      _b('road2', 'road', 10, 10),
-      _b('road3', 'road', 10, 11),
+      for (var y = 4; y <= 11; y++) _b('road${y - 3}', 'road', 10, y),
     ];
     final hut = _b('hut1', 'small_house', 8, 10);
 

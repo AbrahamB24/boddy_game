@@ -51,7 +51,9 @@ List<PlacedBuilding> _connectedLayout() {
   final hallDef = kBuildingDefs.values.firstWhere((d) => d.isMainBuilding);
   final roadDef = kBuildingDefs.values.firstWhere((d) => d.isRoad);
   const hx = 10, hy = 10;
-  final rx = hx + hallDef.gridW, ry = hy;
+  // in front of the hall's EAST GATE, four cells down its side (the road
+  // network starts at the gates, user 2026-11-03)
+  final rx = hx + hallDef.gridW, ry = hy + 4;
   return [
     _placed('hall', hallDef.id, gridX: hx, gridY: hy),
     _placed('road', roadDef.id, gridX: rx, gridY: ry),

@@ -259,7 +259,11 @@ def main():
                                 if o.type == 'MESH' and 'anim' not in o.keys()])
     K.lighting()
     samples = min(args.samples, 24) if args.preview else args.samples
-    K.setup_render(samples, RENDER_SCALE, mod.W, mod.H)
+    # the picture's MINIMUM height, in widths (it always grows to hold the
+    # model): a wide, low building like the Castle would otherwise carry a
+    # tall band of empty pixels
+    headroom = getattr(mod, 'HEADROOM', 1.25)
+    K.setup_render(samples, RENDER_SCALE, mod.W, mod.H, headroom=headroom)
     box = rb.frame.art_box
     chim = getattr(mod, 'CHIMNEY', None)
     anchor = chimney_anchor(chim) if chim else None
@@ -281,6 +285,8 @@ def main():
     model_dart = os.path.join(ROOT, 'lib', 'features', 'settlement', 'data',
                               'building_model.dart')
     ent = getattr(mod, 'ENTRANCE', None)
+    # one entrance (face, k) or several [(face, k), ...] — the Castle's gates
+    ents = [] if ent is None else ([ent] if isinstance(ent[0], str) else list(ent))
     turns = range(4) if getattr(mod, 'ROTATE', True) else range(1)
 
     # ── every quarter turn (user 2026-11-03: "Gebäude um 90° drehen") ──
@@ -298,7 +304,7 @@ def main():
                 if o.type == 'CAMERA' or (o.type == 'LIGHT' and o.data.type == 'SUN'):
                     bpy.data.objects.remove(o)
             K.lighting(azimuth=az)
-            rb.frame(mod.W, mod.H, RENDER_SCALE, 1.25, az)
+            rb.frame(mod.W, mod.H, RENDER_SCALE, headroom, az)
             box = rb.frame.art_box
             anchor = chimney_anchor(chim) if chim else None
         w, h = (mod.H, mod.W) if r % 2 else (mod.W, mod.H)
@@ -307,13 +313,13 @@ def main():
         base_png, layers = ap_.render_layers(art, groups, glow, tmp, samples)
         spec = ap_.pack(art, png, base_png, layers,
                         os.path.join(ROOT, 'assets', 'images', 'buildings'),
-                        lambda iw: min(SHIP_MAX_W, round(iw * SHIP_DENSITY)),
+                        lambda iw: min(getattr(mod, 'SHIP_MAX_W', SHIP_MAX_W),
+                                       round(iw * SHIP_DENSITY)),
                         WEBP_QUALITY)
         ap_.write_anim(model_dart, art, spec)
-        ap_.write_entrance(
-            model_dart, art,
-            fw_kit.entrance_grid(*fw_kit.entrance_turned(mod.W, mod.H, *ent, r))
-            if ent else None)
+        ap_.write_entrance(model_dart, art, [
+            fw_kit.entrance_grid(*fw_kit.entrance_turned(mod.W, mod.H, *e, r))
+            for e in ents])
         # the footprint this picture was made for: the app ignores the
         # entrance and the moving parts while a def says otherwise
         ap_._set_map_entry(model_dart, 'kModelFootprint', art,

@@ -49,8 +49,10 @@ void main() {
     final hall = kBuildingDefs.values.firstWhere((d) => d.isMainBuilding);
     return [
       at('hall', hall.id, 10, 10),
-      at('road', 'road', 10 + hall.gridW, 10),
-      at('b', _hutId, 10 + hall.gridW + 1, 10),
+      // in front of the hall's EAST GATE (user 2026-11-03: the road
+      // network starts at the gates), four cells down its side
+      at('road', 'road', 10 + hall.gridW, 14),
+      at('b', _hutId, 10 + hall.gridW + 1, 14),
     ];
   }
 

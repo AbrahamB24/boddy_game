@@ -437,9 +437,9 @@ def rim_light(toward, strength=2.0):
     return s
 
 
-def setup_render(samples, scale, w, h, grade=True):
+def setup_render(samples, scale, w, h, grade=True, headroom=1.25):
     scene = bpy.context.scene
-    rb.frame(w, h, scale, 1.25, 0.0)
+    rb.frame(w, h, scale, headroom, 0.0)
     scene.render.engine = 'CYCLES'
     cy = scene.cycles
     cy.device = 'CPU'

@@ -41,7 +41,8 @@ void main() {
 
   group('kBuildingEntrance', () {
     test('every entrance is a footprint cell on the edge, facing out', () {
-      for (final MapEntry(key: id, value: e) in kBuildingEntrance.entries) {
+      for (final MapEntry(key: id, value: es) in kBuildingEntrance.entries) {
+        for (final e in es) {
         final maybe = _artDef(id);
         expect(maybe, isNotNull, reason: '$id has an entrance but no def');
         final def = maybe!;
@@ -55,11 +56,12 @@ void main() {
           isTrue,
           reason: '$id: the road cell would lie INSIDE the building',
         );
+        }
       }
     });
 
     test('only a road in front of the entrance connects the building', () {
-      final e = kBuildingEntrance['small_house'];
+      final e = kBuildingEntrance['small_house']?.single;
       expect(e, isNotNull);
       // The 10x10 hall at (0,0); the house below it at (8,10). Its road
       // cell, then a run up the hall's east side to touch the hall.
@@ -68,7 +70,7 @@ void main() {
       final hall = _b('hall', 'castle', 0, 0);
       final hut = _b('hut', 'small_house', hx, hy);
       final toEntrance = [
-        for (var y = 9; y <= ry; y++) _b('r$y', 'road', rx, y),
+        for (var y = 4; y <= ry; y++) _b('r$y', 'road', rx, y),
       ];
       expect(
         GameEngine.connectedBuildingIds([hall, hut, ...toEntrance]),
@@ -82,6 +84,37 @@ void main() {
       expect(
         GameEngine.connectedBuildingIds([hall, hut, ...pastTheBack]),
         isNot(contains('hut')),
+      );
+    });
+  });
+
+  group('the Castle\'s gates (user 2026-11-03: "mehrere Tore")', () {
+    test('it has a gate on every side, the south one where the intro '
+        'lays its road', () {
+      final gates = kBuildingEntrance['castle']!;
+      expect(gates, hasLength(4));
+      expect({for (final (_, _, dx, dy) in gates) (dx, dy)},
+          {(0, 1), (1, 0), (0, -1), (-1, 0)});
+      final hall = kFallbackBuildingDefs['castle']!;
+      expect(
+        gates.map((e) => entranceRoadCell(e, 0, 0)),
+        contains((hall.gridW ~/ 2, hall.gridH)),
+        reason: 'kTutorialRoadX/Y is the Castle\'s x + w/2, just below it',
+      );
+    });
+
+    test('the road network starts in front of a gate, not anywhere on the '
+        'wall', () {
+      final hall = _b('hall', 'castle', 0, 0);
+      // A Large House (no model of its own yet: any-side rule) beside a
+      // single road cell below the Castle's south wall.
+      final atGate = [_b('r', 'road', 5, 10), _b('h', 'large_house', 6, 10)];
+      expect(GameEngine.connectedBuildingIds([hall, ...atGate]), contains('h'));
+      final atWall = [_b('r', 'road', 2, 10), _b('h', 'large_house', 3, 10)];
+      expect(
+        GameEngine.connectedBuildingIds([hall, ...atWall]),
+        isNot(contains('h')),
+        reason: 'a road against the wall is not at a gate',
       );
     });
   });
@@ -102,16 +135,16 @@ void main() {
         ..['grid_h'] = 3;
       final def = BuildingDef.fromDefRow(row);
       expect((def.gridW, def.gridH), kModelFootprint['small_house']);
-      expect(entranceFor(def.id, def.gridW, def.gridH), isNotNull);
+      expect(entrancesFor(def.id, def.gridW, def.gridH), isNotNull);
       expect(animFor(def.id, def.gridW, def.gridH), isNotNull);
     });
 
     test('a database row with an old footprint gets neither entrance nor '
         'moving parts', () {
       // The live Small House row was still 3x3 on 2026-11-03.
-      expect(entranceFor('small_house', 3, 3), isNull);
+      expect(entrancesFor('small_house', 3, 3), isNull);
       expect(animFor('small_house', 3, 3), isNull);
-      expect(entranceFor('small_house', 2, 2), isNotNull);
+      expect(entrancesFor('small_house', 2, 2), isNotNull);
     });
   });
 

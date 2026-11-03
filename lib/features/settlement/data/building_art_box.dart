@@ -18,7 +18,7 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'building_plot': (0.92696, 0.50000, 0.02225),
   'builder_camp': (1.00000, 0.50000, 0.16458),
   'caravanserai': (0.96933, 0.48466, 0.00000),
-  'castle': (1.00000, 0.50000, 0.00000),
+  'castle': (0.95481, 0.50039, 0.02059),
   'church': (1.00000, 0.50000, 0.00250),
   'gold_vault': (0.96024, 0.51988, 0.00000),
   'hatchery': (0.93699, 0.50221, 0.03703),

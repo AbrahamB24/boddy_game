@@ -489,7 +489,7 @@ class SettlementMapState extends State<SettlementMap>
         CreaturesController().battleReadyCreatures,
       );
     }
-    final run = show && _walkers.walkers.isNotEmpty;
+    final run = show && _walkers.active;
     if (run && !_walkTicker.isActive) {
       _walkLast = Duration.zero;
       _walkTicker.start();
@@ -1396,7 +1396,7 @@ class SettlementMapState extends State<SettlementMap>
   }
 
   Widget _walkerView(RoadWalker w) => RoadWalkerView(
-    key: ValueKey('walker:${w.creature.id}'),
+    key: ValueKey('walker:${w.serial}'),
     walker: w,
     walkers: _walkers,
   );
@@ -1903,7 +1903,9 @@ class SettlementMapState extends State<SettlementMap>
           // beim Bauen speziell markiert sein und betrifft immer eine ganze
           // Kachel"). Over, not under: the picture covers most of its own
           // footprint, and a mark you cannot see while aiming is no mark.
-          if (entranceFor(def.artId, def.gridW, def.gridH) case final e?)
+          // Every one of them — the Castle has a gate on each side.
+          if (entrancesFor(def.artId, def.gridW, def.gridH) case final es?)
+            for (final e in es)
             Positioned.fill(
               child: IgnorePointer(
                 child: CustomPaint(

@@ -102,9 +102,14 @@ def main():
         for b in boxes:
             for o, ob in bb:
                 ov = overlap(b, ob)
-                worst = max(worst, min(ov))
+                if min(ov) > worst:
+                    worst, what = min(ov), o
         if worst > V:
-            print(f'  {p:22s} reaches {worst / V:4.1f} voxels into the house')
+
+            lo, hi = bounds(what)
+            print(f'  {p:22s} reaches {worst / V:4.1f} voxels into the house'
+                  f' ({what.data.materials[0].name} at x {lo[0]:+.2f}..{hi[0]:+.2f}'
+                  f' y {lo[1]:+.2f}..{hi[1]:+.2f})')
 
     print('== PROP IN PROP')
     keys = sorted(pb)

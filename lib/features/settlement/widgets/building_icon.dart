@@ -105,9 +105,11 @@ class BuildingIcon extends StatelessWidget {
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
     // x2, not x1.25: the map now zooms in to 2.5 (kMaxMapZoom, user
     // 2026-11-03), and a picture decoded for zoom 1 went soft right away.
-    // Capped at 960, the width the art SHIPS at — more would only upsample.
+    // Capped at 2048, the widest any art SHIPS at (the Castle, user
+    // 2026-11-03 — 20 tile-widths across; everything else ships at <= 960
+    // and never asks for more than its own width at these sizes).
     final want = (logicalWidth * (dpr > 3 ? 3 : dpr) * 2).ceil();
-    return want < 96 ? 96 : (want > 960 ? 960 : want);
+    return want < 96 ? 96 : (want > 2048 ? 2048 : want);
   }
 
   /// Exactly the provider this widget resolves for [defId] at [logicalWidth]

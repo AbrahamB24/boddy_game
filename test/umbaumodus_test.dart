@@ -56,12 +56,10 @@ PlacedBuilding _b(
 
 /// The road that connects a Small House at (8,10) below the 10x10 hall: its
 /// ENTRANCE (user 2026-11-03) is the east side's southern cell, so the road
-/// runs from (10,9) — touching the hall's edge — down to (10,11), in front
-/// of that cell.
+/// runs from the hall's EAST GATE at (10,4) — where the road network starts —
+/// down to (10,11), in front of that cell.
 List<PlacedBuilding> _entranceRoads() => [
-  _b('road1', 'road', 10, 9),
-  _b('road2', 'road', 10, 10),
-  _b('road3', 'road', 10, 11),
+  for (var y = 4; y <= 11; y++) _b('road${y - 3}', 'road', 10, y),
 ];
 
 void main() {

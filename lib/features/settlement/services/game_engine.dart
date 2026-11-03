@@ -89,6 +89,13 @@ class GameEngine {
   // gated by this check themselves; they ARE the network.
   static int _cellKey(int x, int y) => y * kGridCols + x;
 
+  /// [_cellKey] of a cell, or null when it lies off the map.
+  static int? _cellOf((int, int) c) {
+    final (x, y) = c;
+    if (x < 0 || y < 0 || x >= kGridCols || y >= kGridRows) return null;
+    return _cellKey(x, y);
+  }
+
   static Iterable<int> _borderCells(int x, int y, int w, int h) sync* {
     for (int i = 0; i < w; i++) {
       if (y - 1 >= 0) yield _cellKey(x + i, y - 1);
@@ -119,15 +126,22 @@ class GameEngine {
     if (mainHall == null) return {};
     final mainDef = placedDefOf(mainHall)!;
 
-    // Flood-fill the road network starting from roads touching the Main Hall.
+    // Flood-fill the road network starting from the Main Hall. A Castle
+    // with GATES (user 2026-11-03: "mehrere Tore") starts it only at the road
+    // cells in front of them; one without keeps the old rule, any road
+    // touching its edge.
     final reachableRoads = <int>{};
     final frontier = <int>[];
-    for (final c in _borderCells(
-      mainHall.gridX,
-      mainHall.gridY,
-      mainDef.gridW,
-      mainDef.gridH,
-    )) {
+    final gates = entrancesFor(mainDef.artId, mainDef.gridW, mainDef.gridH);
+    final seeds = gates == null
+        ? _borderCells(mainHall.gridX, mainHall.gridY, mainDef.gridW, mainDef.gridH)
+        : [
+            for (final e in gates)
+              if (_cellOf(entranceRoadCell(e, mainHall.gridX, mainHall.gridY))
+                  case final c?)
+                c,
+          ];
+    for (final c in seeds) {
       if (roadCells.contains(c) && reachableRoads.add(c)) frontier.add(c);
     }
     for (int i = 0; i < frontier.length; i++) {
@@ -169,16 +183,14 @@ class GameEngine {
       // is connected only by a road on the cell in front of it; a road
       // along any other side is just a road going past. Buildings not yet
       // rebuilt with an entrance keep the old any-side rule.
-      final entrance = entranceFor(def.artId, def.gridW, def.gridH);
+      final entrances = entrancesFor(def.artId, def.gridW, def.gridH);
       final bool touches;
-      if (entrance != null) {
-        final (rx, ry) = entranceRoadCell(entrance, b.gridX, b.gridY);
-        touches =
-            rx >= 0 &&
-            ry >= 0 &&
-            rx < kGridCols &&
-            ry < kGridRows &&
-            reachableRoads.contains(_cellKey(rx, ry));
+      if (entrances != null) {
+        // Any one of them: a building with two doors needs one road.
+        touches = entrances.any((e) {
+          final c = _cellOf(entranceRoadCell(e, b.gridX, b.gridY));
+          return c != null && reachableRoads.contains(c);
+        });
       } else {
         touches = _borderCells(
           b.gridX,

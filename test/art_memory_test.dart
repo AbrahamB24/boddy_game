@@ -59,12 +59,23 @@ import 'package:boddygame/features/settlement/data/building_art.dart';
   return null;
 }
 
+/// The Castle ships wider (user 2026-11-03): it spans 20 tile-widths where a
+/// house spans 4, and at 960 px it would be half as sharp as everything
+/// around it. One building, placed once.
+const _wide = {'castle'};
+int _maxW(String id) => _wide.contains(id) ? 2048 : 960;
+int _maxBytes(String id) => _wide.contains(id) ? 16 << 20 : 5 << 20;
+
+/// A turned picture (`<id>_r1`..`_r3`) is not decoded alongside its
+/// building's other turns: a building stands one way at a time.
+bool _isTurn(String id) => RegExp(r'_r[1-3]$').hasMatch(id);
+
 void main() {
   group('bundled art fits in the texture budget', () {
     test('nothing ships wider than pack_art caps it', () {
       for (final id in kBundledBuildingArt) {
         final s = _webpSize(File(buildingAsset(id)!));
-        expect(s!.w, lessThanOrEqualTo(960),
+        expect(s!.w, lessThanOrEqualTo(_maxW(id)),
             reason: '$id ships at ${s.w} px; tool/pack_art.py -w 960 is what '
                 'keeps the map inside the image cache');
       }
@@ -84,6 +95,7 @@ void main() {
       var bytes = 0;
       final worst = <String, int>{};
       for (final id in kBundledBuildingArt) {
+        if (_isTurn(id)) continue;
         final s = _webpSize(File(buildingAsset(id)!));
         if (s == null) continue;
         final b = s.w * s.h * 4;
@@ -111,7 +123,7 @@ void main() {
         if (s == null) continue;
         // 5, not 4 MB (user 2026-09-06's 640→960 bump) — the widest current
         // picture is ~4.3 MB at 960 px wide.
-        expect(s.w * s.h * 4, lessThan(5 * 1024 * 1024),
+        expect(s.w * s.h * 4, lessThan(_maxBytes(id)),
             reason: '$id is ${s.w}x${s.h}');
       }
     });

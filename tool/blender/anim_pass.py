@@ -289,7 +289,11 @@ def write_anim(path, bid, spec):
     print('ANIM', bid, len(spec['layers']), 'layers')
 
 
-def write_entrance(path, bid, ent):
-    entry = None if ent is None else f"  '{bid}': ({ent[0]}, {ent[1]}, {ent[2]}, {ent[3]}),"
+def write_entrance(path, bid, ents):
+    """ents: a list of (cx, cy, dx, dy) — every door, every gate."""
+    entry = None if not ents else (
+        f"  '{bid}': [" + ', '.join(f'({e[0]}, {e[1]}, {e[2]}, {e[3]})' for e in ents)
+        + '],')
+    ents = ents or None
     _set_map_entry(path, 'kBuildingEntrance', bid, entry)
-    print('ENTRANCE', bid, ent)
+    print('ENTRANCE', bid, ents)

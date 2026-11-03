@@ -102,16 +102,16 @@ typedef BuildingEntrance = (int cx, int cy, int dx, int dy);
 (int, int) entranceRoadCell(BuildingEntrance e, int gx, int gy) =>
     (gx + e.$1 + e.$3, gy + e.$2 + e.$4);
 
-/// The entrance of building [id] — but only while the def's footprint is the
+/// The entrances of building [id] — but only while the def's footprint is the
 /// one the model was built for. The defs come from the DATABASE, and a row
 /// that still carries an old footprint (the live Small House was 3x3 while
 /// its new model is 2x2, 2026-11-03) would put the entrance in the middle of
 /// the building; until its migration has run it keeps the old any-side rule.
-BuildingEntrance? entranceFor(String id, int gridW, int gridH) =>
+List<BuildingEntrance>? entrancesFor(String id, int gridW, int gridH) =>
     _modelFits(id, gridW, gridH) ? kBuildingEntrance[id] : null;
 
 /// The moving parts of [id], under the same footprint guard as
-/// [entranceFor] — the layers are cut to the model's own picture.
+/// [entrancesFor] — the layers are cut to the model's own picture.
 BuildingAnimSpec? animFor(String id, int gridW, int gridH) =>
     _modelFits(id, gridW, gridH) ? kBuildingAnim[id] : null;
 
@@ -132,17 +132,22 @@ const Map<String, (int, int)> kModelFootprint = {
   'hatchery_r1': (3, 4),
   'hatchery_r2': (4, 3),
   'hatchery_r3': (3, 4),
+  'castle': (10, 10),
 };
 
-const Map<String, BuildingEntrance> kBuildingEntrance = {
-  'small_house': (1, 1, 1, 0),
-  'small_house_r1': (0, 1, 0, 1),
-  'small_house_r2': (0, 0, -1, 0),
-  'small_house_r3': (1, 0, 0, -1),
-  'hatchery': (2, 2, 0, 1),
-  'hatchery_r1': (0, 2, -1, 0),
-  'hatchery_r2': (1, 0, 0, -1),
-  'hatchery_r3': (2, 1, 1, 0),
+/// A building's entrances — usually one; the Castle has a gate on every side
+/// (user 2026-11-03), and for the Castle they are where the road network
+/// STARTS (GameEngine.connectedBuildingIds).
+const Map<String, List<BuildingEntrance>> kBuildingEntrance = {
+  'small_house': [(1, 1, 1, 0)],
+  'small_house_r1': [(0, 1, 0, 1)],
+  'small_house_r2': [(0, 0, -1, 0)],
+  'small_house_r3': [(1, 0, 0, -1)],
+  'hatchery': [(2, 2, 0, 1)],
+  'hatchery_r1': [(0, 2, -1, 0)],
+  'hatchery_r2': [(1, 0, 0, -1)],
+  'hatchery_r3': [(2, 1, 1, 0)],
+  'castle': [(5, 9, 0, 1), (9, 4, 1, 0), (4, 0, 0, -1), (0, 5, -1, 0)],
 };
 
 const Map<String, BuildingAnimSpec> kBuildingAnim = {
@@ -154,4 +159,5 @@ const Map<String, BuildingAnimSpec> kBuildingAnim = {
   'hatchery_r1': BuildingAnimSpec(1.19833, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 36, 34, 0.33724, 0.85824, 0.03849, 0.03073, 0.35704, 0.87875, 0.25, 3.1, 1.98), BuildingAnimLayer(AnimKind.sway, 0, 36, 38, 34, 0.73473, 0.67877, 0.04017, 0.03003, 0.75459, 0.69792, 0.25, 3.1, 1.18), BuildingAnimLayer(AnimKind.sway, 0, 72, 37, 29, 0.20921, 0.78631, 0.03933, 0.02584, 0.22854, 0.80301, 0.25, 3.1, 1.65), BuildingAnimLayer(AnimKind.sway, 0, 103, 54, 49, 0.55146, 0.88268, 0.05774, 0.04399, 0.58058, 0.91428, 0.25, 3.4, 4.32), BuildingAnimLayer(AnimKind.sway, 0, 154, 63, 36, 0.48536, 0.9176, 0.06695, 0.03212, 0.52035, 0.93942, 0.25, 3.4, 3.44), BuildingAnimLayer(AnimKind.sway, 0, 192, 63, 75, 0.82092, 0.73603, 0.06695, 0.06704, 0.85231, 0.7875, 0.06, 4.4, 5.98), BuildingAnimLayer(AnimKind.sway, 0, 269, 60, 61, 0.88954, 0.70251, 0.06444, 0.05447, 0.92861, 0.74673, 0.06, 4.4, 0.78), BuildingAnimLayer(AnimKind.glow, 0, 332, 663, 342, 0.16318, 0.58101, 0.70962, 0.30517, 0.5, 0.5, 0.45, 6, 4.52)]),
   'hatchery_r2': BuildingAnimSpec(1.19079, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 41, 34, 0.34393, 0.72734, 0.04435, 0.03022, 0.36793, 0.74742, 0.25, 3.1, 1.18), BuildingAnimLayer(AnimKind.sway, 0, 36, 45, 40, 0.75314, 0.77442, 0.04854, 0.03584, 0.77626, 0.80498, 0.4, 1.5, 2), BuildingAnimLayer(AnimKind.sway, 0, 78, 27, 41, 0.75314, 0.7189, 0.02845, 0.03725, 0.76822, 0.75214, 0.4, 1.85, 2.04), BuildingAnimLayer(AnimKind.sway, 0, 121, 27, 43, 0.79414, 0.80394, 0.02929, 0.03865, 0.80839, 0.83871, 0.4, 2.2, 2.08), BuildingAnimLayer(AnimKind.sway, 0, 166, 49, 43, 0.90293, 0.78988, 0.05188, 0.03865, 0.93691, 0.81398, 0.25, 3.4, 4.64), BuildingAnimLayer(AnimKind.sway, 0, 211, 37, 39, 0.69791, 0.68658, 0.03933, 0.03514, 0.70262, 0.71785, 0.25, 3.4, 4.7), BuildingAnimLayer(AnimKind.sway, 0, 252, 74, 27, 0.83013, 0.76388, 0.0795, 0.0246, 0.87265, 0.78699, 0.25, 3.4, 3.48), BuildingAnimLayer(AnimKind.sway, 0, 281, 64, 46, 0.1523, 0.78426, 0.06862, 0.04146, 0.1805, 0.81341, 0.25, 3.4, 4.32), BuildingAnimLayer(AnimKind.sway, 0, 329, 46, 48, 0.09874, 0.75896, 0.04937, 0.04287, 0.12025, 0.78812, 0.25, 3.4, 3.44), BuildingAnimLayer(AnimKind.bob, 0, 379, 7, 6, 0.69791, 0.6929, 0.00753, 0.00562, 0.68522, 0.70381, 0.008, 3.6, 0.62), BuildingAnimLayer(AnimKind.bob, 0, 387, 10, 11, 0.71548, 0.70836, 0.01088, 0.00984, 0.68522, 0.70381, 0.008, 4.9, 0.68), BuildingAnimLayer(AnimKind.sway, 0, 400, 69, 73, 0.44351, 0.87351, 0.07364, 0.06535, 0.4844, 0.92753, 0.06, 4.4, 5.98), BuildingAnimLayer(AnimKind.sway, 0, 475, 47, 66, 0.5523, 0.91005, 0.05021, 0.05903, 0.58213, 0.95957, 0.06, 4.4, 0.78), BuildingAnimLayer(AnimKind.glow, 0, 543, 566, 250, 0.10126, 0.59663, 0.60586, 0.22417, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.glow, 0, 795, 11, 25, 0.69958, 0.71609, 0.01172, 0.02249, 0.5, 0.5, 0.6, 3.2, 1.2)]),
   'hatchery_r3': BuildingAnimSpec(1.20084, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 40, 35, 0.38577, 0.65226, 0.04268, 0.03136, 0.40735, 0.67266, 0.25, 3.1, 2.78), BuildingAnimLayer(AnimKind.sway, 0, 37, 33, 31, 0.72636, 0.72683, 0.03515, 0.02787, 0.74475, 0.74579, 0.25, 3.1, 2.27), BuildingAnimLayer(AnimKind.sway, 0, 70, 33, 33, 0.58075, 0.6885, 0.03515, 0.02927, 0.59881, 0.70844, 0.25, 3.1, 1.89), BuildingAnimLayer(AnimKind.sway, 0, 105, 29, 43, 0.42343, 0.86272, 0.03096, 0.03833, 0.43948, 0.89644, 0.4, 1.5, 2), BuildingAnimLayer(AnimKind.sway, 0, 150, 48, 36, 0.54059, 0.86481, 0.05105, 0.03206, 0.56534, 0.89309, 0.4, 1.85, 2.04), BuildingAnimLayer(AnimKind.sway, 0, 188, 48, 38, 0.33305, 0.88084, 0.05105, 0.03345, 0.35915, 0.90981, 0.4, 2.2, 2.08), BuildingAnimLayer(AnimKind.sway, 0, 228, 59, 41, 0.3841, 0.93519, 0.0636, 0.03624, 0.41806, 0.96333, 0.25, 3.4, 4.64), BuildingAnimLayer(AnimKind.sway, 0, 271, 58, 38, 0.62678, 0.84739, 0.06192, 0.03345, 0.64701, 0.86577, 0.25, 3.4, 4.7), BuildingAnimLayer(AnimKind.sway, 0, 311, 38, 57, 0.4569, 0.90174, 0.04017, 0.05087, 0.48232, 0.93657, 0.25, 3.4, 3.48), BuildingAnimLayer(AnimKind.sway, 0, 370, 34, 49, 0.68201, 0.70174, 0.03598, 0.0439, 0.69923, 0.70318, 0.16, 3, 4.46), BuildingAnimLayer(AnimKind.bob, 0, 421, 45, 45, 0.51464, 0.77352, 0.04854, 0.03972, 0.54927, 0.8039, 0.008, 3.6, 0.62), BuildingAnimLayer(AnimKind.bob, 0, 468, 58, 83, 0.51883, 0.76237, 0.06192, 0.07387, 0.54927, 0.8039, 0.008, 4.9, 0.68), BuildingAnimLayer(AnimKind.sway, 0, 553, 25, 62, 0.11213, 0.72892, 0.02678, 0.05505, 0.1476, 0.7749, 0.06, 4.4, 5.98), BuildingAnimLayer(AnimKind.sway, 0, 617, 60, 69, 0.04603, 0.76167, 0.06444, 0.06132, 0.07128, 0.8156, 0.06, 4.4, 0.78), BuildingAnimLayer(AnimKind.sway, 0, 688, 122, 70, 0.39498, 0.7338, 0.13054, 0.06202, 0.45354, 0.76353, 0.3, 2.1, 4.87), BuildingAnimLayer(AnimKind.glow, 0, 760, 637, 168, 0.1272, 0.59233, 0.68117, 0.14983, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 930, 72, 49, 0.76653, 0.67875, 0.07699, 0.04321, 0.5, 0.5, 0.7, 1, 4.49), BuildingAnimLayer(AnimKind.glow, 0, 981, 49, 59, 0.52301, 0.7993, 0.05272, 0.05296, 0.5, 0.5, 0.6, 3.2, 1.2)]),
+  'castle': BuildingAnimSpec(0.93972, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 22, 24, 0.5285, 0.72277, 0.01074, 0.01238, 0.5348, 0.7315, 0.25, 3.4, 3.01), BuildingAnimLayer(AnimKind.sway, 0, 26, 21, 14, 0.53148, 0.70848, 0.01015, 0.0073, 0.5346, 0.71638, 0.25, 3.4, 3.16), BuildingAnimLayer(AnimKind.sway, 0, 42, 20, 26, 0.5094, 0.69419, 0.00955, 0.01334, 0.51435, 0.70577, 0.25, 3.4, 3.28), BuildingAnimLayer(AnimKind.sway, 0, 70, 16, 21, 0.47956, 0.69705, 0.00776, 0.01111, 0.48593, 0.70588, 0.25, 3.4, 3.13), BuildingAnimLayer(AnimKind.sway, 0, 93, 18, 22, 0.46225, 0.7088, 0.00865, 0.01143, 0.46598, 0.71665, 0.25, 3.4, 3.35), BuildingAnimLayer(AnimKind.sway, 0, 117, 20, 21, 0.46285, 0.72213, 0.00955, 0.0108, 0.46619, 0.73177, 0.25, 3.4, 3.5), BuildingAnimLayer(AnimKind.sway, 0, 140, 32, 23, 0.41033, 0.58114, 0.01552, 0.01207, 0.41828, 0.58875, 0.25, 3.1, 1.19), BuildingAnimLayer(AnimKind.sway, 0, 165, 31, 24, 0.5291, 0.58463, 0.01522, 0.0127, 0.53656, 0.59288, 0.25, 3.1, 0.96), BuildingAnimLayer(AnimKind.sway, 0, 191, 32, 28, 0.59803, 0.54652, 0.01552, 0.01429, 0.60578, 0.55605, 0.25, 3.1, 6.03), BuildingAnimLayer(AnimKind.sway, 0, 221, 39, 109, 0.18084, 0.69736, 0.0191, 0.05684, 0.19056, 0.70146, 0.12, 3, 4.59), BuildingAnimLayer(AnimKind.sway, 0, 332, 39, 109, 0.40555, 0.81677, 0.0188, 0.05684, 0.41494, 0.82085, 0.12, 3, 4.67), BuildingAnimLayer(AnimKind.sway, 0, 443, 39, 109, 0.60937, 0.7993, 0.0191, 0.05653, 0.61927, 0.80307, 0.12, 3, 4.66), BuildingAnimLayer(AnimKind.sway, 0, 554, 40, 109, 0.83378, 0.6799, 0.0194, 0.05653, 0.84365, 0.68368, 0.12, 3, 4.74), BuildingAnimLayer(AnimKind.sway, 0, 665, 54, 102, 0.49985, 0.56304, 0.02626, 0.05303, 0.51233, 0.56865, 0.25, 2.6, 2.07), BuildingAnimLayer(AnimKind.sway, 0, 769, 41, 81, 0.72904, 0.30803, 0.01999, 0.04192, 0.73814, 0.31167, 0.3, 2.4, 0.28), BuildingAnimLayer(AnimKind.sway, 0, 852, 67, 51, 0.25664, 0.65672, 0.03253, 0.02636, 0.27124, 0.67835, 0.06, 4.4, 0.36), BuildingAnimLayer(AnimKind.sway, 0, 905, 55, 57, 0.58281, 0.68117, 0.02686, 0.02985, 0.59587, 0.70376, 0.06, 4.4, 6.27), BuildingAnimLayer(AnimKind.sway, 0, 964, 28, 55, 0.49925, 0.66751, 0.01343, 0.02858, 0.50565, 0.67083, 0.35, 2.2, 2.85), BuildingAnimLayer(AnimKind.sway, 0, 1021, 26, 55, 0.90093, 0.4484, 0.01283, 0.02858, 0.90666, 0.45187, 0.35, 2.2, 2.93), BuildingAnimLayer(AnimKind.sway, 0, 1078, 26, 55, 0.48821, 0.235, 0.01253, 0.02858, 0.49514, 0.2385, 0.35, 2.2, 3.01), BuildingAnimLayer(AnimKind.sway, 0, 1135, 28, 55, 0.08714, 0.45411, 0.01343, 0.02858, 0.09412, 0.45746, 0.35, 2.2, 3.09), BuildingAnimLayer(AnimKind.glow, 0, 1192, 1120, 548, 0.22889, 0.48523, 0.547, 0.28453, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 1742, 1017, 518, 0.27604, 0.55383, 0.49657, 0.26897, 0.5, 0.5, 0.7, 1, 4.49)]),
 };
