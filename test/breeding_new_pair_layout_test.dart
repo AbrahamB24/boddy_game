@@ -13,8 +13,9 @@ import 'package:boddygame/features/common/widgets/recess_bar.dart';
 // "New Pair" with both parents chosen (user 2026-09-29: "New Pair kann nicht
 // mehr gelesen werden, da alles viel zu klein ist"). The panel used to stack
 // the tiles ABOVE a 14-row table, which forced a scale-to-fit step down to
-// under half size on the app's real 932×430 screen. Now the tiles sit beside
-// a two-column, 7-row table instead — this pins that it renders at a legible
+// under half size on the app's real 932×430 screen. Now (2026-11-03, concept
+// 1 "Breite Waage") the tiles stand at the left and right edge with the
+// 14-row table between them — this pins that it renders at a legible
 // size, not shrunk, and every row still fits (no horizontal overflow either).
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -132,12 +133,15 @@ void main() {
       expect(t.takeException(), isNull);
       final geneValue = find.text('38');
       expect(geneValue, findsWidgets);
-      // FoE.value(size: 12) renders a 12 px font at a ~16 px line height —
-      // this is that exact height, i.e. NOT scaled down at the app's own
-      // landscape size.
+      // Concept 1 "Breite Waage" (2026-11-03): the gene values are 16 px
+      // and nothing is scaled at the app's own landscape size — the old
+      // panel rendered them at 12 px or less.
+      expect(t.getSize(geneValue.first).height, greaterThanOrEqualTo(15));
+      // The matings live in a chip in the foot row now, not a column.
+      expect(find.text('No pair mating'), findsOneWidget);
       expect(
-        t.getSize(geneValue.first).height,
-        moreOrLessEquals(16, epsilon: 1),
+        find.ancestor(of: geneValue.first, matching: find.byType(FittedBox)),
+        findsNothing,
       );
     },
   );
