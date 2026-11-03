@@ -617,3 +617,22 @@ def flower_patch(M, cx, cy, n, cols, seed, rx=0.18, ry=0.12):
     with anim(f'patch{cx:+.2f}{cy:+.2f}', 'sway', pivot=(cx, cy, G),
               amp=0.25, period=3.4):
         _flower_patch(M, cx, cy, n, cols, seed, rx, ry)
+
+
+def entrance_turned(W, H, face, k, r):
+    """The entrance after r quarter turns CLOCKWISE on the map: returns
+    (W', H', face', k') for entrance_grid. Turning clockwise seen from above
+    maps (x, y) -> (y, -x) and swaps the footprint's sides on odd turns."""
+    x, y = entrance_point(W, H, face, k)
+    w, h = W, H
+    for _ in range(r % 4):
+        x, y = y, -x
+        w, h = h, w
+    eps = 1e-6
+    if abs(y + h / 2) < eps:
+        return w, h, 's', int(math.floor(x + w / 2))
+    if abs(y - h / 2) < eps:
+        return w, h, 'n', int(math.floor(x + w / 2))
+    if abs(x - w / 2) < eps:
+        return w, h, 'e', int(math.floor(y + h / 2))
+    return w, h, 'w', int(math.floor(y + h / 2))

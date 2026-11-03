@@ -275,29 +275,52 @@ def main():
         write_chimney(args.id, anchor)
         return
     import anim_pass as ap_
-    png = os.path.join(ROOT, 'docs', 'renders', f'{args.id}.png')
-    K.render(png)
     tmp = os.path.join(HERE, '_out', 'layers')
     os.makedirs(tmp, exist_ok=True)
     glow = getattr(mod, 'GLOW', ap_.GLOW_LAYERS)
-    base_png, layers = ap_.render_layers(args.id, groups, glow, tmp, samples)
-    spec = ap_.pack(args.id, png, base_png, layers,
-                    os.path.join(ROOT, 'assets', 'images', 'buildings'),
-                    lambda iw: min(SHIP_MAX_W, round(iw * SHIP_DENSITY)),
-                    WEBP_QUALITY)
     model_dart = os.path.join(ROOT, 'lib', 'features', 'settlement', 'data',
                               'building_model.dart')
-    ap_.write_anim(model_dart, args.id, spec)
     ent = getattr(mod, 'ENTRANCE', None)
-    ap_.write_entrance(model_dart, args.id,
-                       fw_kit.entrance_grid(mod.W, mod.H, *ent) if ent else None)
-    # the footprint this model was made for: the app ignores the entrance
-    # and the moving parts while a database row still says otherwise
-    ap_._set_map_entry(model_dart, 'kModelFootprint', args.id,
-                       f"  '{args.id}': ({mod.W}, {mod.H}),")
-    write_art_box(args.id, box)
-    write_chimney(args.id, anchor)
-    register_bundled(args.id)
+    turns = range(4) if getattr(mod, 'ROTATE', True) else range(1)
+
+    # ── every quarter turn (user 2026-11-03: "Gebäude um 90° drehen") ──
+    # Turn r is the building turned r x 90 degrees CLOCKWISE on the map. The
+    # model stays put and the CAMERA (and the sun with it, so the light on
+    # screen does not change) orbits +90 per turn — which is the same picture,
+    # and keeps everything projected through the camera right by itself: the
+    # art box, the chimney's smoke anchor, every moving layer's pivot. Only
+    # the entrance is grid arithmetic (fw_kit.entrance_turned).
+    for r in turns:
+        art = args.id if r == 0 else f'{args.id}_r{r}'
+        az = 90.0 * r
+        if r:
+            for o in list(bpy.data.objects):
+                if o.type == 'CAMERA' or (o.type == 'LIGHT' and o.data.type == 'SUN'):
+                    bpy.data.objects.remove(o)
+            K.lighting(azimuth=az)
+            rb.frame(mod.W, mod.H, RENDER_SCALE, 1.25, az)
+            box = rb.frame.art_box
+            anchor = chimney_anchor(chim) if chim else None
+        w, h = (mod.H, mod.W) if r % 2 else (mod.W, mod.H)
+        png = os.path.join(ROOT, 'docs', 'renders', f'{art}.png')
+        K.render(png)
+        base_png, layers = ap_.render_layers(art, groups, glow, tmp, samples)
+        spec = ap_.pack(art, png, base_png, layers,
+                        os.path.join(ROOT, 'assets', 'images', 'buildings'),
+                        lambda iw: min(SHIP_MAX_W, round(iw * SHIP_DENSITY)),
+                        WEBP_QUALITY)
+        ap_.write_anim(model_dart, art, spec)
+        ap_.write_entrance(
+            model_dart, art,
+            fw_kit.entrance_grid(*fw_kit.entrance_turned(mod.W, mod.H, *ent, r))
+            if ent else None)
+        # the footprint this picture was made for: the app ignores the
+        # entrance and the moving parts while a def says otherwise
+        ap_._set_map_entry(model_dart, 'kModelFootprint', art,
+                           f"  '{art}': ({w}, {h}),")
+        write_art_box(art, box)
+        write_chimney(art, anchor)
+        register_bundled(art)
 
 
 if __name__ == '__main__':

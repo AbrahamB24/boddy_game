@@ -229,7 +229,12 @@ class SettlementService {
     }
   }
 
-  Future<void> moveBuilding(String buildingId, int newX, int newY) async {
+  Future<void> moveBuilding(
+    String buildingId,
+    int newX,
+    int newY, {
+    int rotation = 0,
+  }) async {
     await supabase
         .from('placed_buildings')
         .update({
@@ -242,6 +247,23 @@ class SettlementService {
           'is_stored': false,
         })
         .eq('id', buildingId);
+    await setBuildingRotation(buildingId, rotation);
+  }
+
+  /// A building's quarter turns (user 2026-11-03), written on its own and
+  /// guarded: until migration 0061 has added the column, Postgrest rejects
+  /// any write naming it — and a turn is the one thing worth losing then, not
+  /// the move or the placement it came with. An unturned building writes
+  /// nothing at all when the column is missing.
+  Future<void> setBuildingRotation(String buildingId, int rotation) async {
+    try {
+      await supabase
+          .from('placed_buildings')
+          .update({'rotation': rotation})
+          .eq('id', buildingId);
+    } catch (e) {
+      if (!isMissingSchema(e)) rethrow;
+    }
   }
 
   Future<void> setBuildingPaused(String buildingId, bool paused) async {
@@ -273,6 +295,7 @@ class SettlementService {
     required int x,
     required int y,
     bool isQueued = false,
+    int rotation = 0,
   }) async {
     final def = kBuildingDefs[typeId]!;
     final row = await supabase
@@ -289,7 +312,8 @@ class SettlementService {
         })
         .select()
         .single();
-    return PlacedBuilding.fromMap(row);
+    if (rotation != 0) await setBuildingRotation(row['id'] as String, rotation);
+    return PlacedBuilding.fromMap(row).copyWith(rotation: rotation);
   }
 
   // ── Reset ─────────────────────────────────────────────────

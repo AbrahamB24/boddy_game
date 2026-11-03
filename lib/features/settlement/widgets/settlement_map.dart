@@ -137,6 +137,12 @@ class SettlementMapState extends State<SettlementMap>
   // get at it. Here the only thing that swallows gestures is the ghost's own
   // box, which is exactly what "beside it I can scroll" means.
   String? _aimType; // the ghost's building type — null when no session
+  /// The ghost's quarter turns (user 2026-11-03: "Gebäude um 90° drehen").
+  int _aimRotation = 0;
+
+  /// The aimed building's def, turned the way the ghost is.
+  BuildingDef? _aimDefOf(String? type) =>
+      type == null ? null : defRotated(type, _aimRotation);
   String? _aimMoveId; // set when the ghost IS a building already on the map
   int? _aimX, _aimY; // the cell the ghost's north-west corner sits on
 
@@ -277,7 +283,7 @@ class SettlementMapState extends State<SettlementMap>
     double topInset = 0,
     double bottomInset = 0,
   }) {
-    final def = kBuildingDefs[b.buildingTypeId];
+    final def = placedDefOf(b);
     if (def == null) return;
     final bounds = _artRect(def, b.gridX, b.gridY);
     _focusPoint(
@@ -540,6 +546,8 @@ class SettlementMapState extends State<SettlementMap>
       _dropChainState();
       _aimType = typeId;
       _aimMoveId = moveId;
+      // A building being moved keeps the way it faces until turned.
+      _aimRotation = b?.rotation ?? 0;
       _aimX = fromStorage ? null : b?.gridX;
       _aimY = fromStorage ? null : b?.gridY;
     });
@@ -587,7 +595,7 @@ class SettlementMapState extends State<SettlementMap>
     var gx = (col - def.gridW ~/ 2).clamp(0, kGridCols - def.gridW);
     var gy = (row - def.gridH ~/ 2).clamp(0, kGridRows - def.gridH);
     (gx, gy) = widget.ctrl.snapPlacement(def.id, gx, gy);
-    if (!widget.ctrl.isPlacementValid(def.id, gx, gy)) {
+    if (!widget.ctrl.isPlacementValid(def.id, gx, gy, rotation: def.rotation)) {
       // The middle of the view can be locked ground or somebody's wall. Opening
       // on a red outline reads as a refusal rather than an invitation, so fall
       // back to a spot the game WOULD accept and take the camera there —
@@ -614,6 +622,7 @@ class SettlementMapState extends State<SettlementMap>
     setState(() {
       _aimType = null;
       _aimMoveId = null;
+      _aimRotation = 0;
       _aimX = null;
       _aimY = null;
     });
@@ -634,8 +643,8 @@ class SettlementMapState extends State<SettlementMap>
     if (type == null || x == null || y == null) return;
     final moveId = _aimMoveId;
     final err = moveId == null
-        ? await widget.ctrl.placeBuilding(type, x, y)
-        : await widget.ctrl.moveBuilding(moveId, x, y);
+        ? await widget.ctrl.placeBuilding(type, x, y, rotation: _aimRotation)
+        : await widget.ctrl.moveBuilding(moveId, x, y, rotation: _aimRotation);
     if (!mounted) return;
     if (err != null) {
       // STAYS OPEN. The spot is the only thing wrong, and dropping the session
@@ -715,7 +724,7 @@ class SettlementMapState extends State<SettlementMap>
     if (_chainErase) {
       final hit = _hitTest(nx, ny);
       if (hit == null ||
-          !(kBuildingDefs[hit.buildingTypeId]?.isRoad ?? false)) {
+          !(placedDefOf(hit)?.isRoad ?? false)) {
         Feel.deny();
         return;
       }
@@ -801,7 +810,7 @@ class SettlementMapState extends State<SettlementMap>
   void _moveGhostTo(Offset local) {
     if (_tutorialPlacementLocked) return;
     final type = _aimType;
-    final def = type == null ? null : kBuildingDefs[type];
+    final def = _aimDefOf(type);
     if (def == null) return;
     final (col, row) = _cellAt(local);
     var gx = (col - _grabDx).clamp(0, kGridCols - def.gridW);
@@ -817,7 +826,7 @@ class SettlementMapState extends State<SettlementMap>
   void _ghostDragStart(Offset globalPosition) {
     if (_tutorialPlacementLocked) return;
     final type = _aimType;
-    final def = type == null ? null : kBuildingDefs[type];
+    final def = _aimDefOf(type);
     if (def == null || _aimX == null || _aimY == null) return;
     final local = _mapLocal(globalPosition);
     final (col, row) = _cellAt(local);
@@ -1007,7 +1016,7 @@ class SettlementMapState extends State<SettlementMap>
     if (_aiming) {
       // A tap on open ground is a long drag in one go — the arrows are for
       // nudging, the drag for aiming, and this for crossing the map.
-      final def = kBuildingDefs[_aimType!];
+      final def = _aimDefOf(_aimType);
       if (def == null) return;
       var gx = (col - def.gridW ~/ 2).clamp(0, kGridCols - def.gridW);
       var gy = (row - def.gridH ~/ 2).clamp(0, kGridRows - def.gridH);
@@ -1029,7 +1038,7 @@ class SettlementMapState extends State<SettlementMap>
     }
     // A road has no detail screen (user 2026-09-22) — it's ground, not a
     // building with stats/upgrades to show.
-    if (hit != null && !(kBuildingDefs[hit.buildingTypeId]?.isRoad ?? false)) {
+    if (hit != null && !(placedDefOf(hit)?.isRoad ?? false)) {
       _showDetail(hit);
     }
   }
@@ -1044,7 +1053,7 @@ class SettlementMapState extends State<SettlementMap>
     final hit = _hitTest(col, row);
     if (hit == null) return;
     // Build plots are permanent — no move (see settlement_controller).
-    if (kBuildingDefs[hit.buildingTypeId]?.isBuildPlot ?? false) return;
+    if (placedDefOf(hit)?.isBuildPlot ?? false) return;
     // Open the PERSISTENT move mode with this building already in hand (user
     // 2026-07-20) — it stays up until Done, so you can rearrange several in a
     // row.
@@ -1188,7 +1197,7 @@ class SettlementMapState extends State<SettlementMap>
   // ── Hit test ─────────────────────────────────────────────
   PlacedBuilding? _hitTest(int col, int row) {
     for (final b in widget.ctrl.buildings) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       // A finished Building Plot has already vanished visually (see
       // _BuildingTile) — it must stop catching taps too, or "empty" ground
@@ -1263,12 +1272,12 @@ class SettlementMapState extends State<SettlementMap>
         // A STORED building (Umbaumodus tray) isn't standing anywhere — it
         // paints in neither layer.
         if (!b.isStored &&
-            (kBuildingDefs[b.buildingTypeId]?.isRoad ?? false) == roads)
+            (placedDefOf(b)?.isRoad ?? false) == roads)
           b,
     ];
     out.sort((a, b) {
-      final ad = kBuildingDefs[a.buildingTypeId];
-      final bd = kBuildingDefs[b.buildingTypeId];
+      final ad = placedDefOf(a);
+      final bd = placedDefOf(b);
       return isoDrawOrder(
         a.gridX,
         a.gridY,
@@ -1322,7 +1331,7 @@ class SettlementMapState extends State<SettlementMap>
       });
     var wi = 0;
     for (final b in _sortedForPainting(roads: roads)) {
-      final d = kBuildingDefs[b.buildingTypeId];
+      final d = placedDefOf(b);
       while (wi < queue.length) {
         final (wx, wy) = queue[wi].drawCell;
         if (isoDrawOrder(
@@ -1406,7 +1415,7 @@ class SettlementMapState extends State<SettlementMap>
     final ghostBox = _artRect(ghostDef, gx, gy);
     final out = <String>{};
     for (final b in widget.ctrl.buildings) {
-      final d = kBuildingDefs[b.buildingTypeId];
+      final d = placedDefOf(b);
       if (d == null || d.isRoad || d.isBuildPlot || b.isStored) continue;
       if (b.id == _aimMoveId) continue;
       // In front of the ghost, not behind it — anything behind is already
@@ -1451,7 +1460,7 @@ class SettlementMapState extends State<SettlementMap>
     // The diamond's bounding box — wider and flatter than the grid it holds.
     final mapW = isoCanvasSize.width;
     final mapH = isoCanvasSize.height;
-    final ghostDef = _aimType == null ? null : kBuildingDefs[_aimType!];
+    final ghostDef = _aimDefOf(_aimType);
     final gx = _aimX, gy = _aimY;
     final showGhost = ghostDef != null && gx != null && gy != null;
     final faded = showGhost
@@ -1653,7 +1662,7 @@ class SettlementMapState extends State<SettlementMap>
   /// [_fadedBehindGhost]. It is not a state the building is in; it is a state
   /// the CAMERA is in, and it lasts exactly as long as the placement.
   Widget _buildingTile(PlacedBuilding b, {bool faded = false}) {
-    final def = kBuildingDefs[b.buildingTypeId];
+    final def = placedDefOf(b);
     if (def == null) return const SizedBox.shrink();
     // Everything a tile looks like, other than the building itself, folded
     // into one int. `PlacedBuilding` is immutable (every change is a copyWith
@@ -1815,12 +1824,13 @@ class SettlementMapState extends State<SettlementMap>
   }
 
   Widget _ghost(String typeId, int gx, int gy) {
-    final def = kBuildingDefs[typeId]!;
+    final def = _aimDefOf(typeId)!;
     final free = widget.ctrl.isPlacementValid(
       typeId,
       gx,
       gy,
       excludeId: _aimMoveId,
+      rotation: _aimRotation,
     );
     final iso = isoBounds(gx, gy, def.gridW, def.gridH);
     return Positioned(
@@ -1882,7 +1892,7 @@ class SettlementMapState extends State<SettlementMap>
                   bottom: local.height - art.bottom,
                   child: BuildingIcon(
                     imageUrl: def.imageUrl,
-                    defId: def.id,
+                    defId: def.artId,
                     width: art.width,
                     anchorBottomOverflowTop: true,
                   ),
@@ -1893,7 +1903,7 @@ class SettlementMapState extends State<SettlementMap>
           // beim Bauen speziell markiert sein und betrifft immer eine ganze
           // Kachel"). Over, not under: the picture covers most of its own
           // footprint, and a mark you cannot see while aiming is no mark.
-          if (entranceFor(typeId, def.gridW, def.gridH) case final e?)
+          if (entranceFor(def.artId, def.gridW, def.gridH) case final e?)
             Positioned.fill(
               child: IgnorePointer(
                 child: CustomPaint(
@@ -2099,6 +2109,7 @@ class SettlementMapState extends State<SettlementMap>
     VoidCallback? onCancel,
     String cancelLabel = 'Cancel',
     VoidCallback? onDelete,
+    VoidCallback? onRotate,
     double gap = 14,
   }) {
     final view = _viewport ?? const Size(400, 800);
@@ -2219,6 +2230,14 @@ class SettlementMapState extends State<SettlementMap>
                     ),
                   ),
                   const SizedBox(width: 8),
+                  if (onRotate != null) ...[
+                    _tagButton(
+                      icon: Icons.rotate_90_degrees_cw_rounded,
+                      label: 'Rotate',
+                      onTap: onRotate,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   if (onDelete != null) ...[
                     _tagButton(
                       icon: Icons.delete_outline_rounded,
@@ -2261,6 +2280,7 @@ class SettlementMapState extends State<SettlementMap>
       gx,
       gy,
       excludeId: _aimMoveId,
+      rotation: def.rotation,
     );
     // On top of another building has no words: the footprint is red already.
     if (problem != null) return (text: problem.label, ok: false);
@@ -2342,8 +2362,25 @@ class SettlementMapState extends State<SettlementMap>
         onOk: status.ok ? _confirmAim : null,
         onCancel: _tutorialPlacementLocked ? null : _cancelAim,
         onDelete: canDelete ? _deleteAimed : null,
+        onRotate: def.canRotate && !_tutorialPlacementLocked ? _rotateAim : null,
       ),
     ];
+  }
+
+  /// A quarter turn clockwise (user 2026-11-03). The ghost keeps its spot;
+  /// where the turned footprint would hang off the map it slides back on.
+  void _rotateAim() {
+    final type = _aimType;
+    if (type == null) return;
+    Feel.tap();
+    setState(() {
+      _aimRotation = (_aimRotation + 1) % 4;
+      final def = _aimDefOf(type);
+      if (def != null && _aimX != null && _aimY != null) {
+        _aimX = _aimX!.clamp(0, kGridCols - def.gridW);
+        _aimY = _aimY!.clamp(0, kGridRows - def.gridH);
+      }
+    });
   }
 
   /// While erasing, an arrow toward empty ground or a non-road building has
@@ -2357,7 +2394,7 @@ class SettlementMapState extends State<SettlementMap>
     if (nx < 0 || ny < 0 || nx >= kGridCols || ny >= kGridRows) return false;
     if (!_chainErase) return true;
     final hit = _hitTest(nx, ny);
-    return hit != null && (kBuildingDefs[hit.buildingTypeId]?.isRoad ?? false);
+    return hit != null && (placedDefOf(hit)?.isRoad ?? false);
   }
 
   /// The chain's arrows: bigger than the aiming ones ("dann werden die Pfeile
@@ -2611,10 +2648,10 @@ class _BuildingTile extends StatelessWidget {
   /// parts (see [AnimatedBuildingArt]), the still render otherwise. A site
   /// under construction stays still — nobody hangs washing on a scaffold.
   Widget _livingArt(double width, bool done) {
-    final spec = animFor(def.id, def.gridW, def.gridH);
-    if (done && spec != null && buildingAsset(def.id) != null) {
+    final spec = animFor(def.artId, def.gridW, def.gridH);
+    if (done && spec != null && buildingAsset(def.artId) != null) {
       return AnimatedBuildingArt(
-        defId: def.id,
+        defId: def.artId,
         spec: spec,
         width: width,
         phaseSeed: building.id.hashCode,
@@ -2622,7 +2659,7 @@ class _BuildingTile extends StatelessWidget {
     }
     return BuildingIcon(
       imageUrl: def.imageUrl,
-      defId: def.id,
+      defId: def.artId,
       width: width,
       anchorBottomOverflowTop: true,
       dimmed: !done,
@@ -2688,7 +2725,7 @@ class _BuildingTile extends StatelessWidget {
     // that ship with one would still draw the decorative placeholder box on a
     // database that has never had an upload, which is every fresh install.
     final hasImage =
-        buildingAsset(def.id) != null ||
+        buildingAsset(def.artId) != null ||
         (def.imageUrl != null && def.imageUrl!.isNotEmpty);
 
     // The PNG is shown completely bare — no border, no background,
@@ -2730,7 +2767,7 @@ class _BuildingTile extends StatelessWidget {
               bottom: bounds.height - art.bottom,
               child: BuildingGroundShadow(
                 imageUrl: def.imageUrl,
-                defId: def.id,
+                defId: def.artId,
                 width: art.width,
                 dimmed: !done,
               ),
@@ -2748,7 +2785,7 @@ class _BuildingTile extends StatelessWidget {
                     colorFilter: kPausedFilter,
                     child: BuildingIcon(
                       imageUrl: def.imageUrl,
-                      defId: def.id,
+                      defId: def.artId,
                       width: art.width,
                       anchorBottomOverflowTop: true,
                       dimmed: !done,
@@ -2873,7 +2910,7 @@ class _LifeOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chimney = kChimneyAnchor[def.id];
+    final chimney = kChimneyAnchor[def.artId];
     final local = isoLocalBounds(def.gridW, def.gridH);
     final box = artBoxOf(def);
     final art = artPlacement(
@@ -2915,7 +2952,7 @@ class _SleepOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final anchor = kChimneyAnchor[def.id] ?? (0.58, 0.16);
+    final anchor = kChimneyAnchor[def.artId] ?? (0.58, 0.16);
     final local = isoLocalBounds(def.gridW, def.gridH);
     final box = artBoxOf(def);
     final art = artPlacement(

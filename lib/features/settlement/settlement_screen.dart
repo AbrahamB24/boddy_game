@@ -230,13 +230,24 @@ class _SettlementScreenState extends State<SettlementScreen>
     // vorladen, damit im Anschluss alles flüssig läuft") — a placed building
     // on uploaded art used to pop in a moment after the map appeared, and
     // its ground shadow (measured from the picture) a moment after that.
-    final mapIds = <String>{
+    // Keyed by the PICTURE (artId): a building that stands turned on this
+    // map (user 2026-11-03) is drawn from its turned render, so that is
+    // the one to warm.
+    final mapDefs = <String, BuildingDef>{};
+    for (final id in {
       ...kBundledBuildingArt,
       for (final b in _ctrl.buildings) b.buildingTypeId,
-    };
-    for (final id in mapIds) {
-      final def = kBuildingDefs[id];
-      if (def == null || def.isRoad) continue;
+    }) {
+      final d = kBuildingDefs[id];
+      if (d != null) mapDefs[d.artId] = d;
+    }
+    for (final b in _ctrl.buildings) {
+      final d = placedDefOf(b);
+      if (d != null) mapDefs[d.artId] = d;
+    }
+    for (final def in mapDefs.values) {
+      if (def.isRoad) continue;
+      final id = def.artId;
       // The same number settlement_map's _BuildingTile passes as `width`.
       final box = artBoxOf(def);
       final artWidth = artPlacement(

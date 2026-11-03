@@ -52,7 +52,7 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
     final buildableRegion = GameEngine.buildableRegionCells(widget.buildings);
     final roadCells = {
       for (final b in widget.buildings)
-        if (kBuildingDefs[b.buildingTypeId]?.isRoad ?? false)
+        if (placedDefOf(b)?.isRoad ?? false)
           roadCellKey(b.gridX, b.gridY),
     };
 
@@ -60,8 +60,8 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
     // standing anywhere — a visitor must never see it at its stale spot.
     final tiles = [for (final b in widget.buildings) if (!b.isStored) b]
       ..sort((a, b) {
-        final da = kBuildingDefs[a.buildingTypeId];
-        final db = kBuildingDefs[b.buildingTypeId];
+        final da = placedDefOf(a);
+        final db = placedDefOf(b);
         if (da == null || db == null) return 0;
         return isoDrawOrder(
           a.gridX,
@@ -123,7 +123,7 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
     if (!isoContains(local)) return;
     final (gx, gy) = screenToGrid(local);
     for (final b in widget.buildings.reversed) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null || def.isRoad || def.isBuildPlot || b.isStored) continue;
       if (gx >= b.gridX &&
           gx < b.gridX + def.gridW &&
@@ -136,7 +136,7 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
   }
 
   Widget _tile(PlacedBuilding b, Set<int> roadCells) {
-    final def = kBuildingDefs[b.buildingTypeId];
+    final def = placedDefOf(b);
     if (def == null) return const SizedBox.shrink();
     final iso = isoBounds(b.gridX, b.gridY, def.gridW, def.gridH);
     return Positioned(
@@ -184,7 +184,7 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
           bottom: bounds.height - art.bottom,
           child: BuildingGroundShadow(
             imageUrl: def.imageUrl,
-            defId: def.id,
+            defId: def.artId,
             width: art.width,
             dimmed: !b.isComplete,
           ),
@@ -195,7 +195,7 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
           bottom: bounds.height - art.bottom,
           child: BuildingIcon(
             imageUrl: def.imageUrl,
-            defId: def.id,
+            defId: def.artId,
             width: art.width,
             anchorBottomOverflowTop: true,
             dimmed: !b.isComplete,

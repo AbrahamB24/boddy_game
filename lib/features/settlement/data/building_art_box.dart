@@ -39,4 +39,10 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'thinker_circle': (1.00000, 0.50000, 0.00000),
   'trading_post': (0.98542, 0.50000, 0.00000),
   'training_grounds': (1.00000, 0.50000, 0.00000),
+  'small_house_r1': (0.96854, 0.50999, 0.02991),
+  'small_house_r2': (0.96854, 0.50999, 0.01992),
+  'small_house_r3': (0.96854, 0.49001, 0.01992),
+  'hatchery_r1': (0.93699, 0.51767, 0.02709),
+  'hatchery_r2': (0.93699, 0.49779, 0.01936),
+  'hatchery_r3': (0.93699, 0.48233, 0.02930),
 };

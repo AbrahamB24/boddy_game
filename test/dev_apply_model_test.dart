@@ -97,6 +97,10 @@ void main() {
     // The bulk button walks kBundledBuildingArt; a missing fallback or a
     // missing box would make it skip a building silently.
     for (final id in kBundledBuildingArt) {
+      // A turned picture (`<id>_r1`..`_r3`, user 2026-11-03) is not a
+      // building of its own: the button skips it, its building is applied
+      // through the unturned id.
+      if (RegExp(r'_r[1-3]$').hasMatch(id)) continue;
       expect(kFallbackBuildingDefs[id], isNotNull, reason: '$id has no def');
       expect(kBundledArtBox[id], isNotNull, reason: '$id has no measured box');
     }

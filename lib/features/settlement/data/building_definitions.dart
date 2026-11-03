@@ -6,6 +6,7 @@ import '../../../core/tuning/game_tuning.dart';
 import '../../creatures/models/creature_enums.dart' show CreatureStat;
 import 'building_effects.dart';
 import 'building_model.dart' show kModelFootprint;
+import '../models/placed_building.dart' show PlacedBuilding;
 import '../../creatures/models/path_node.dart' show pathBuildingUnlockBattle;
 import 'goods_definitions.dart';
 
@@ -1022,6 +1023,13 @@ class BuildingDef {
   // fields above; everything else the dev-mode editor writes lands here.
   final List<BuildingEffect> effects;
 
+  /// Quarter turns this def is turned by (user 2026-11-03: "Gebäude um 90°
+  /// drehen"). Always 0 for a def from the roster; a placed building that is
+  /// turned reads its def through [placedDefOf], which hands back
+  /// [rotated] — the same building with the footprint's sides swapped on an
+  /// odd turn and its pictures taken from the matching side ([artId]).
+  final int rotation;
+
   const BuildingDef({
     required this.id,
     required this.name,
@@ -1052,6 +1060,7 @@ class BuildingDef {
     this.timeFactor = 1.6,
     this.costPerEra = const {},
     this.effects = const [],
+    this.rotation = 0,
   });
 
   /// The same building with the numbers the RENDERER measured — footprint and
@@ -1141,6 +1150,55 @@ class BuildingDef {
     costPerEra: costPerEra,
     effects: e.effects,
   );
+
+  /// The id its PICTURES are keyed by: `<id>` unturned, `<id>_r1` .. `_r3`
+  /// turned — art box, chimney, moving parts, entrance and the asset files
+  /// all follow it (tool/blender/make_building.py renders every turn).
+  String get artId => rotation == 0 ? id : '${id}_r$rotation';
+
+  /// Whether this building can be turned: only a rebuilt model has the other
+  /// three sides rendered.
+  bool get canRotate => kModelFootprint.containsKey('${id}_r1');
+
+  /// This building turned by [quarterTurns] (clockwise on the map). An odd
+  /// turn swaps [gridW] and [gridH]; nothing else about it changes.
+  BuildingDef rotated(int quarterTurns) {
+    final r = quarterTurns % 4;
+    if (r == rotation) return this;
+    final odd = (r - rotation).isOdd;
+    return BuildingDef(
+      id: id,
+      name: name,
+      imageUrl: imageUrl,
+      artBaseWidth: artBaseWidth,
+      artAnchorX: artAnchorX,
+      artLift: artLift,
+      color: color,
+      gridW: odd ? gridH : gridW,
+      gridH: odd ? gridW : gridH,
+      resourceCost: resourceCost,
+      constructionHours: constructionHours,
+      eraIds: eraIds,
+      isMainBuilding: isMainBuilding,
+      isUnique: isUnique,
+      isRoad: isRoad,
+      isBuildPlot: isBuildPlot,
+      requiredTechId: requiredTechId,
+      population: population,
+      workshops: workshops,
+      buildSpeedBonus: buildSpeedBonus,
+      populationBonus: populationBonus,
+      queueSlotsBonus: queueSlotsBonus,
+      maxCount: maxCount,
+      category: category,
+      maxLevelPerEra: maxLevelPerEra,
+      costFactor: costFactor,
+      timeFactor: timeFactor,
+      costPerEra: costPerEra,
+      effects: effects,
+      rotation: r,
+    );
+  }
 
   double get constructionSeconds => constructionHours * 3600;
 
@@ -2456,7 +2514,13 @@ const Map<String, (double, double)> kChimneyAnchor = {
   'church': (0.127, 0.726),
   'refinery_e2': (0.231, 0.732),
   'small_house': (0.555, 0.134),
+  'small_house_r1': (0.696, 0.235),
+  'small_house_r2': (0.445, 0.291),
+  'small_house_r3': (0.304, 0.191),
   'hatchery': (0.548, 0.371),
+  'hatchery_r1': (0.657, 0.452),
+  'hatchery_r2': (0.452, 0.496),
+  'hatchery_r3': (0.343, 0.414),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {
@@ -2568,3 +2632,28 @@ List<BuildingDef> availableBuildings(int currentRegion, int battlesCleared) {
       )
       .toList();
 }
+
+// ── Turned buildings (user 2026-11-03: "Gebäude um 90° drehen") ────────────
+
+final Map<(String, int), (BuildingDef, BuildingDef)> _turnedCache = {};
+
+/// [typeId]'s def turned by [quarterTurns] — the live def itself when not
+/// turned (or when the building cannot turn: an old picture has one side).
+/// Cached against the live def's identity, so a roster reload is picked up.
+BuildingDef? defRotated(String typeId, int quarterTurns) {
+  final base = kBuildingDefs[typeId];
+  final r = quarterTurns % 4;
+  if (base == null || r == 0 || !base.canRotate) return base;
+  final hit = _turnedCache[(typeId, r)];
+  if (hit != null && identical(hit.$1, base)) return hit.$2;
+  final turned = base.rotated(r);
+  _turnedCache[(typeId, r)] = (base, turned);
+  return turned;
+}
+
+/// The def of a PLACED building, turned the way it stands on the map. Every
+/// question about where a building is — its footprint, its picture, its
+/// entrance — goes through this; questions about what it DOES are the same
+/// either way.
+BuildingDef? placedDefOf(PlacedBuilding b) =>
+    defRotated(b.buildingTypeId, b.rotation);

@@ -46,12 +46,21 @@ Map<String, (int, int)> _presets() {
   return out;
 }
 
+/// The def a PICTURE id belongs to: `<id>` itself, or `<id>_r1`..`_r3` — the
+/// same building turned (user 2026-11-03).
+BuildingDef? _artDef(String artId) {
+  final m = RegExp(r'^(.*)_r([1-3])$').firstMatch(artId);
+  return m == null
+      ? kFallbackBuildingDefs[artId]
+      : kFallbackBuildingDefs[m[1]]?.rotated(int.parse(m[2]!));
+}
+
 void main() {
   group('bundled building art', () {
     test('every bundled id is a building in the roster', () {
       for (final id in kBundledBuildingArt) {
         expect(
-          kFallbackBuildingDefs.containsKey(id),
+          _artDef(id) != null,
           isTrue,
           reason: '$id has a picture but no def — the art is unreachable',
         );
@@ -136,6 +145,9 @@ void main() {
 
     test('every bundled building has a preset', () {
       for (final id in kBundledBuildingArt) {
+        // A rebuilt (Fachwerk) building is rendered by make_building.py,
+        // which records its footprint in kModelFootprint instead.
+        if (kModelFootprint.containsKey(id)) continue;
         expect(
           presets.containsKey(id),
           isTrue,
@@ -146,8 +158,8 @@ void main() {
 
     test('the preset footprint is the def footprint', () {
       for (final id in kBundledBuildingArt) {
-        final def = kFallbackBuildingDefs[id]!;
-        final preset = presets[id];
+        final def = _artDef(id)!;
+        final preset = kModelFootprint[id] ?? presets[id];
         if (preset == null) continue; // reported by the test above
         expect(
           preset,

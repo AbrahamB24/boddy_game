@@ -104,7 +104,7 @@ class GameEngine {
     final roadCells = <int>{};
     PlacedBuilding? mainHall;
     for (final b in buildings) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null || !b.isComplete) continue;
       if (def.isRoad) {
         // A road waiting in the Umbaumodus tray is not lying anywhere — its
@@ -117,7 +117,7 @@ class GameEngine {
       }
     }
     if (mainHall == null) return {};
-    final mainDef = kBuildingDefs[mainHall.buildingTypeId]!;
+    final mainDef = placedDefOf(mainHall)!;
 
     // Flood-fill the road network starting from roads touching the Main Hall.
     final reachableRoads = <int>{};
@@ -145,7 +145,7 @@ class GameEngine {
 
     final connected = <String>{mainHall.id};
     for (final b in buildings) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       // A STORED building (Umbaumodus tray, user 2026-09-22) isn't standing
       // anywhere — skipping it here is the one change that pauses its
       // housing/production, the same way an unconnected building's already
@@ -169,7 +169,7 @@ class GameEngine {
       // is connected only by a road on the cell in front of it; a road
       // along any other side is just a road going past. Buildings not yet
       // rebuilt with an entrance keep the old any-side rule.
-      final entrance = entranceFor(b.buildingTypeId, def.gridW, def.gridH);
+      final entrance = entranceFor(def.artId, def.gridW, def.gridH);
       final bool touches;
       if (entrance != null) {
         final (rx, ry) = entranceRoadCell(entrance, b.gridX, b.gridY);
@@ -202,7 +202,7 @@ class GameEngine {
     final connected = connectedBuildingIds(buildings);
     double total = 0;
     for (final b in buildings.where((b) => functional(b, connected))) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def != null) {
         total += def.buildSpeedBonus * buildingYieldFactor(b.level);
       }
@@ -223,7 +223,7 @@ class GameEngine {
     final connected = connectedBuildingIds(buildings);
     int total = 0;
     for (final b in buildings.where((b) => functional(b, connected))) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       total += (def.queueSlotsBonus * buildingYieldFactor(b.level)).floor();
       total += def.queueSlotsAt(b.level, eraOrder: eraOrder);
@@ -242,7 +242,7 @@ class GameEngine {
     final connected = connectedBuildingIds(buildings);
     int total = 0;
     for (final b in buildings.where((b) => functional(b, connected))) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       total += def.buildSlotsAt(b.level, eraOrder: eraOrder);
     }
@@ -278,7 +278,7 @@ class GameEngine {
     }
     for (final b in buildings) {
       if (!b.isComplete) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null || !def.isBuildPlot) continue;
       for (int dx = 0; dx < def.gridW; dx++) {
         for (int dy = 0; dy < def.gridH; dy++) {
@@ -378,7 +378,7 @@ class GameEngine {
     double woodBonusPct = 0, stoneBonusPct = 0;
     double buildingsBuildSpeedBonus = 0;
     for (final b in buildings.where((b) => functional(b, connected))) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       buildingsBuildSpeedBonus += def.buildSpeedBonus;
     }
@@ -557,7 +557,7 @@ class GameEngine {
     double cap = 0;
     double bonusTotal = 0;
     for (final b in buildings.where((b) => functional(b, connected))) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       // Level scales both a building's own housing and any % bonus it grants.
       final f = buildingYieldFactor(b.level);
@@ -585,7 +585,7 @@ class GameEngine {
     );
     double bonusTotal = 0;
     for (final b in functionalBuildings) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def != null) {
         bonusTotal += def.populationBonus * buildingYieldFactor(b.level);
       }
@@ -594,7 +594,7 @@ class GameEngine {
     final totals = <String, double>{};
     final counts = <String, int>{};
     for (final b in functionalBuildings) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       final baseCap = def.hasEffect('housing', eraOrder)
           ? def.effectAt('housing', '', eraOrder, level: b.level)

@@ -243,7 +243,7 @@ class SettlementController extends ChangeNotifier {
   Set<DailyTaskKind> get _impossibleDailyTasks {
     bool has(bool Function(BuildingDef def) test) => buildings.any((b) {
       if (!b.isComplete) return false;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       return def != null && test(def);
     });
     final era = dungeonMaxStage;
@@ -542,7 +542,7 @@ class SettlementController extends ChangeNotifier {
           }
           final def = placed == null
               ? null
-              : kBuildingDefs[placed.buildingTypeId];
+              : placedDefOf(placed);
           final valid = def != null && def.workshops.any((w) => w.stat == stat);
           if (!valid) {
             await assignCreatureToWorkshop(c.id, null, null);
@@ -658,7 +658,7 @@ class SettlementController extends ChangeNotifier {
     double carry = 0, travel = 0, goods = 0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       carry += def.effectAt('expedition', 'carry', era, level: b.level);
       travel += def.effectAt('expedition', 'travel', era, level: b.level);
@@ -690,7 +690,7 @@ class SettlementController extends ChangeNotifier {
     int total = 0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       final e = def.effectEntry(type, '', era);
       if (e == null) continue;
@@ -766,7 +766,7 @@ class SettlementController extends ChangeNotifier {
     var anyBuildingStoresIt = false;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       // No `storage` effect for this resource → this building does not hold it,
       // so neither its ceiling nor its staff has anything to say about it.
@@ -818,7 +818,7 @@ class SettlementController extends ChangeNotifier {
     final out = <(PlacedBuilding, BuildingDef, double)>[];
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       if (def.effectEntry('storage', resource, era) == null) continue;
       final room =
@@ -859,7 +859,7 @@ class SettlementController extends ChangeNotifier {
     double carry = 0, travel = 0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       carry += def.effectAt('caravan', 'carry', era, level: b.level);
       travel += def.effectAt('caravan', 'travel', era, level: b.level);
@@ -895,7 +895,7 @@ class SettlementController extends ChangeNotifier {
     double total = 0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       final e = def.effectEntry('heal', target, era);
       if (e != null) total += e.value * e.levelScaleExplicit(b.level);
@@ -922,7 +922,7 @@ class SettlementController extends ChangeNotifier {
     var authored = false;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null || !def.hasEffect('healSlots', era)) continue;
       authored = true;
       // A hut with nobody stationed contributes NOTHING (user 2026-08-24):
@@ -953,7 +953,7 @@ class SettlementController extends ChangeNotifier {
     var authored = false;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null || !def.hasEffect('craftSlots', era)) continue;
       authored = true;
       total += def.effectAt('craftSlots', '', era, level: b.level).round();
@@ -971,7 +971,7 @@ class SettlementController extends ChangeNotifier {
     var authored = false;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null || !def.hasEffect('craftQueue', era)) continue;
       authored = true;
       total += def.effectAt('craftQueue', '', era, level: b.level).round();
@@ -1009,7 +1009,7 @@ class SettlementController extends ChangeNotifier {
     var authored = false;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null || !def.hasEffect('healQueue', era)) continue;
       authored = true;
       total += def.healQueueAt(b.level, eraOrder: era);
@@ -1031,7 +1031,7 @@ class SettlementController extends ChangeNotifier {
     var authored = false;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null || !def.hasEffect('trainSlots', era)) continue;
       authored = true;
       total += def.trainSlotsAt(b.level, eraOrder: era);
@@ -1048,7 +1048,7 @@ class SettlementController extends ChangeNotifier {
     var authored = false;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null || !def.hasEffect('trainQueue', era)) continue;
       authored = true;
       total += def.trainQueueAt(b.level, eraOrder: era);
@@ -1068,7 +1068,7 @@ class SettlementController extends ChangeNotifier {
     var percent = 0.0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       percent += def.tradePercentAt(b.level, eraOrder: era);
     }
@@ -1264,7 +1264,7 @@ class SettlementController extends ChangeNotifier {
   /// [storageCapacity], which only asks for resources this building authors a
   /// `storage` effect for.
   double storageRoomPosted(PlacedBuilding b, String resource) {
-    final def = kBuildingDefs[b.buildingTypeId];
+    final def = placedDefOf(b);
     if (def == null || def.workshops.isEmpty) return 0;
     // A store's post amplifies what that store HOLDS. Without this the fallback
     // dial would happily make room for a good the building has no shelf for —
@@ -1297,7 +1297,7 @@ class SettlementController extends ChangeNotifier {
       // the pause real everywhere at once: hourlyRates, the tick, the refinery
       // burn and the breakdown all read this one map.
       if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def != null && def.workshops.isNotEmpty) {
         workshops[b.id] = (b: b, def: def);
       }
@@ -1352,7 +1352,7 @@ class SettlementController extends ChangeNotifier {
     final era = dungeonMaxStage;
     for (final b in buildings) {
       if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       // A stationed LEGENDARY multiplies this building's worker-free production
       // by a fixed factor per creature, regardless of its stats (user
@@ -1462,7 +1462,7 @@ class SettlementController extends ChangeNotifier {
     _refreshDerived();
     return _roadCache ??= {
       for (final b in buildings)
-        if (kBuildingDefs[b.buildingTypeId]?.isRoad ?? false)
+        if (placedDefOf(b)?.isRoad ?? false)
           roadCellKey(b.gridX, b.gridY),
     };
   }
@@ -1507,8 +1507,15 @@ class SettlementController extends ChangeNotifier {
     return (snap(x, def.gridW, kGridCols), snap(y, def.gridH, kGridRows));
   }
 
-  bool isPlacementValid(String typeId, int x, int y, {String? excludeId}) {
-    final def = kBuildingDefs[typeId];
+  bool isPlacementValid(
+    String typeId,
+    int x,
+    int y, {
+    String? excludeId,
+    int rotation = 0,
+  }) {
+    // Turned: its footprint's sides swap on an odd turn (user 2026-11-03).
+    final def = defRotated(typeId, rotation);
     if (def == null) return false;
     (x, y) = snapPlacement(typeId, x, y);
     if (!_isAreaFreeImpl(x, y, def.gridW, def.gridH, excludeId: excludeId)) {
@@ -1554,11 +1561,14 @@ class SettlementController extends ChangeNotifier {
     int x,
     int y, {
     String? excludeId,
+    int rotation = 0,
   }) {
-    final def = kBuildingDefs[typeId];
+    final def = defRotated(typeId, rotation);
     if (def == null) return PlacementProblem.unknown;
     (x, y) = snapPlacement(typeId, x, y);
-    if (isPlacementValid(typeId, x, y, excludeId: excludeId)) return null;
+    if (isPlacementValid(typeId, x, y, excludeId: excludeId, rotation: rotation)) {
+      return null;
+    }
     if (x < 0 ||
         y < 0 ||
         x + def.gridW > kGridCols ||
@@ -1567,7 +1577,7 @@ class SettlementController extends ChangeNotifier {
     }
     for (final b in buildings) {
       if (b.id == excludeId) continue;
-      final other = kBuildingDefs[b.buildingTypeId];
+      final other = placedDefOf(b);
       // Building Plots mark territory, not structures — see [_isAreaFreeImpl].
       if (other == null || other.isBuildPlot) continue;
       if (x < b.gridX + other.gridW &&
@@ -1698,7 +1708,7 @@ class SettlementController extends ChangeNotifier {
     double total = 0;
     for (final b in buildings) {
       if (!b.isComplete || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       // Flat historically; an authored per-effect factor scales it per level.
       final e = def.effectEntry('resource', target, era);
@@ -1764,7 +1774,7 @@ class SettlementController extends ChangeNotifier {
         reportDailyProgress(DailyTaskKind.finishBuildings);
         GameEventLog().add(
           GameEventKind.building,
-          '${kBuildingDefs[b.buildingTypeId]?.name ?? b.buildingTypeId} '
+          '${placedDefOf(b)?.name ?? b.buildingTypeId} '
           'is finished',
           // Timestamp to the real finish, not to screen-open — a load-time
           // catch-up folds offline hours into one tick.
@@ -2154,7 +2164,7 @@ class SettlementController extends ChangeNotifier {
       }
     }
     if (placed == null) return 'Building not found';
-    final def = kBuildingDefs[placed.buildingTypeId];
+    final def = placedDefOf(placed);
     if (def == null) return 'Unknown building type';
     if (!placed.isComplete || !connectedBuildingIds.contains(buildingId)) {
       return 'Building must be complete and connected to a road';
@@ -2230,14 +2240,14 @@ class SettlementController extends ChangeNotifier {
     if (def.isBuildPlot) return null;
     PlacedBuilding? hall;
     for (final b in buildings) {
-      if (kBuildingDefs[b.buildingTypeId]?.isMainBuilding ?? false) hall = b;
+      if (placedDefOf(b)?.isMainBuilding ?? false) hall = b;
     }
     final cx = hall == null
         ? kGridCols / 2
-        : hall.gridX + (kBuildingDefs[hall.buildingTypeId]?.gridW ?? 1) / 2;
+        : hall.gridX + (placedDefOf(hall)?.gridW ?? 1) / 2;
     final cy = hall == null
         ? kGridRows / 2
-        : hall.gridY + (kBuildingDefs[hall.buildingTypeId]?.gridH ?? 1) / 2;
+        : hall.gridY + (placedDefOf(hall)?.gridH ?? 1) / 2;
     final region = buildableRegion;
     final cells = <(int, int, double)>[];
     for (final cell in region) {
@@ -2254,9 +2264,14 @@ class SettlementController extends ChangeNotifier {
     return null;
   }
 
-  Future<String?> placeBuilding(String typeId, int x, int y) async {
+  Future<String?> placeBuilding(
+    String typeId,
+    int x,
+    int y, {
+    int rotation = 0,
+  }) async {
     if (settlement == null || resources == null) return 'Not loaded';
-    final def = kBuildingDefs[typeId];
+    final def = defRotated(typeId, rotation);
     if (def == null) return 'Unknown building';
     // Authoritative 5×5 snap for plots — the map ghost snaps too, this makes
     // sure a non-snapped (x,y) can never slip in.
@@ -2362,6 +2377,7 @@ class SettlementController extends ChangeNotifier {
       x: x,
       y: y,
       isQueued: shouldQueue,
+      rotation: def.rotation,
     );
     buildings = [...buildings, placed];
     _buildingsDirty = true;
@@ -2408,7 +2424,7 @@ class SettlementController extends ChangeNotifier {
     final idx = buildings.indexWhere((b) => b.id == buildingId);
     if (idx < 0) return 'Building not found';
     final b = buildings[idx];
-    final def = kBuildingDefs[b.buildingTypeId];
+    final def = placedDefOf(b);
     if (def == null) return 'Unknown building type';
     if (!isUpgradable(def)) return 'This building cannot be upgraded';
     if (!b.isComplete) return 'Finish building it first';
@@ -2484,13 +2500,13 @@ class SettlementController extends ChangeNotifier {
     // Build plots are permanent (user decision 2026-07-17): claiming
     // territory is a one-way move — you can't un-expand. The map hides the
     // delete button for plots too, this is the authoritative backstop.
-    if (kBuildingDefs[buildings[idx].buildingTypeId]?.isBuildPlot ?? false) {
+    if (placedDefOf(buildings[idx])?.isBuildPlot ?? false) {
       return 'Building Plots are permanent and cannot be removed.';
     }
     // The Castle is the settlement (user 2026-07-22). The map already
     // hides its delete button, but that was the ONLY thing preventing it —
     // this is the authoritative backstop, same pattern as the plots above.
-    if (kBuildingDefs[buildings[idx].buildingTypeId]?.isMainBuilding ?? false) {
+    if (placedDefOf(buildings[idx])?.isMainBuilding ?? false) {
       return 'The Castle is the heart of the settlement — it cannot '
           'be demolished.';
     }
@@ -2507,7 +2523,7 @@ class SettlementController extends ChangeNotifier {
     // stop you DESTROYING housing you need; a road destroys nothing, it only
     // disconnects, and you're mid-edit and about to reconnect it.
     final isRoad =
-        kBuildingDefs[buildings[idx].buildingTypeId]?.isRoad ?? false;
+        placedDefOf(buildings[idx])?.isRoad ?? false;
     if (!isRoad) {
       final remainingCapacity = resources == null
           ? 0
@@ -2552,11 +2568,20 @@ class SettlementController extends ChangeNotifier {
     }
   }
 
-  Future<String?> moveBuilding(String buildingId, int newX, int newY) async {
+  Future<String?> moveBuilding(
+    String buildingId,
+    int newX,
+    int newY, {
+    int? rotation,
+  }) async {
     final idx = buildings.indexWhere((b) => b.id == buildingId);
     if (idx < 0) return 'Building not found';
     final b = buildings[idx];
-    final def = kBuildingDefs[b.buildingTypeId];
+    // Optionally turned on the way (user 2026-11-03): the new footprint is
+    // the one that has to fit.
+    final def = rotation == null
+        ? placedDefOf(b)
+        : defRotated(b.buildingTypeId, rotation);
     if (def == null) return 'Unknown building type';
     // Permanent — same reasoning as deleteBuilding.
     if (def.isBuildPlot) return 'Building Plots cannot be moved.';
@@ -2593,7 +2618,12 @@ class SettlementController extends ChangeNotifier {
           // storage is the same call as moving one already on the map, it
           // just also clears the flag that made it invisible and non-
           // blocking. A no-op for a building that was never stored.
-          existing.copyWith(gridX: newX, gridY: newY, isStored: false)
+          existing.copyWith(
+            gridX: newX,
+            gridY: newY,
+            isStored: false,
+            rotation: def.rotation,
+          )
         else
           existing,
     ];
@@ -2607,7 +2637,7 @@ class SettlementController extends ChangeNotifier {
     }
 
     notifyListeners();
-    await _svc.moveBuilding(buildingId, newX, newY);
+    await _svc.moveBuilding(buildingId, newX, newY, rotation: def.rotation);
     return null;
   }
 
@@ -2628,7 +2658,8 @@ class SettlementController extends ChangeNotifier {
   /// nothing left to revert — either every recalled building has a new home
   /// ([moveBuilding] clears its entry the instant that makes the tray
   /// empty) or [cancelRecall] just put everything back.
-  final Map<String, (int, int)> _recallOrigin = {};
+  /// (x, y, quarter turns) — a turn made during the visit undoes too.
+  final Map<String, (int, int, int)> _recallOrigin = {};
 
   /// True once there is something [cancelRecall] would actually undo —
   /// closing Umbaumodus while this is true is what triggers it (user
@@ -2660,7 +2691,7 @@ class SettlementController extends ChangeNotifier {
     final out = <PlacedBuilding>[];
     for (final b in buildings) {
       if (b.isStored) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null || def.isMainBuilding || def.isBuildPlot || def.isRoad) {
         continue;
       }
@@ -2675,7 +2706,7 @@ class SettlementController extends ChangeNotifier {
     final out = <PlacedBuilding>[];
     for (final b in buildings) {
       if (b.isStored) continue;
-      if (kBuildingDefs[b.buildingTypeId]?.isRoad ?? false) out.add(b);
+      if (placedDefOf(b)?.isRoad ?? false) out.add(b);
     }
     return out;
   }
@@ -2709,7 +2740,7 @@ class SettlementController extends ChangeNotifier {
     // from — a second "Alle zurücknehmen" press must not overwrite that
     // with a spot it only reached because this same rearrange put it there.
     for (final b in targets) {
-      _recallOrigin.putIfAbsent(b.id, () => (b.gridX, b.gridY));
+      _recallOrigin.putIfAbsent(b.id, () => (b.gridX, b.gridY, b.rotation));
     }
     _buildingsDirty = true;
     buildings = [
@@ -2728,7 +2759,7 @@ class SettlementController extends ChangeNotifier {
   /// touched building stood before this visit picked it up at all.
   Future<void> cancelRecall() async {
     if (_recallOrigin.isEmpty) return;
-    final origin = Map<String, (int, int)>.from(_recallOrigin);
+    final origin = Map<String, (int, int, int)>.from(_recallOrigin);
     _recallOrigin.clear();
     final reverted = <PlacedBuilding>[];
     final next = <PlacedBuilding>[];
@@ -2738,7 +2769,12 @@ class SettlementController extends ChangeNotifier {
         next.add(b);
         continue;
       }
-      final back = b.copyWith(gridX: spot.$1, gridY: spot.$2, isStored: false);
+      final back = b.copyWith(
+        gridX: spot.$1,
+        gridY: spot.$2,
+        isStored: false,
+        rotation: spot.$3,
+      );
       reverted.add(back);
       next.add(back);
     }
@@ -2746,6 +2782,9 @@ class SettlementController extends ChangeNotifier {
     buildings = next;
     notifyListeners();
     await _svc.saveBuildings(reverted);
+    for (final b in reverted) {
+      await _svc.setBuildingRotation(b.id, b.rotation);
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────
@@ -2754,7 +2793,7 @@ class SettlementController extends ChangeNotifier {
     if (x < 0 || y < 0 || x + w > kGridCols || y + h > kGridRows) return false;
     for (final b in buildings) {
       if (b.id == excludeId) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       // Building Plots mark territory, not structures — they never block
       // other buildings from later occupying the same ground. A STORED
       // building (Umbaumodus tray, user 2026-09-22) isn't standing anywhere
@@ -2858,7 +2897,7 @@ class SettlementController extends ChangeNotifier {
     final era = dungeonMaxStage;
     final out = <(PlacedBuilding, BuildingDef, double)>[];
     for (final b in buildings) {
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       // A building mid-UPGRADE makes nothing until it finishes — shown at
       // 0/h rather than silently vanishing from the list (user 2026-09-22:
@@ -2914,7 +2953,7 @@ class SettlementController extends ChangeNotifier {
     final counts = <String, int>{};
     for (final b in buildings) {
       if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
-      final def = kBuildingDefs[b.buildingTypeId];
+      final def = placedDefOf(b);
       if (def == null) continue;
       final out = _buildingOutput(
         b,
@@ -3073,7 +3112,7 @@ class SettlementController extends ChangeNotifier {
     // The hall's level IS the region reached — unique + permanent, so it's
     // exempt from the normal upgrade flow and the successor model alike.
     final hallIdx = buildings.indexWhere(
-      (b) => kBuildingDefs[b.buildingTypeId]?.isMainBuilding ?? false,
+      (b) => placedDefOf(b)?.isMainBuilding ?? false,
     );
     if (hallIdx >= 0 && buildings[hallIdx].level < next) {
       buildings = [
@@ -3297,7 +3336,7 @@ class SettlementController extends ChangeNotifier {
     reportDailyProgress(DailyTaskKind.finishBuildings);
     GameEventLog().add(
       GameEventKind.building,
-      '${kBuildingDefs[b.buildingTypeId]?.name ?? b.buildingTypeId} '
+      '${placedDefOf(b)?.name ?? b.buildingTypeId} '
       'is finished',
       ref: b.id,
     );

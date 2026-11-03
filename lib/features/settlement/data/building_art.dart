@@ -59,6 +59,12 @@ const Set<String> kBundledBuildingArt = {
   'butcher_shop',
   'church',
   'marketplace',
+  'small_house_r1',
+  'small_house_r2',
+  'small_house_r3',
+  'hatchery_r1',
+  'hatchery_r2',
+  'hatchery_r3',
 };
 
 /// The three placement numbers to use for [def]: the ones the RENDERER
@@ -76,7 +82,7 @@ const Set<String> kBundledBuildingArt = {
 /// A def's own artBaseWidth/artAnchorX/artLift still apply to everything not
 /// bundled — the Dev Mode upload path is untouched.
 ({double baseWidth, double anchorX, double lift}) artBoxOf(BuildingDef def) {
-  final b = kBundledArtBox[def.id];
+  final b = kBundledArtBox[def.artId];
   return b == null
       ? (
           baseWidth: def.artBaseWidth,

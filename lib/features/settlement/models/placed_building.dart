@@ -33,6 +33,15 @@ class PlacedBuilding {
   /// separate effect-suppression logic needed. See
   /// SettlementController.recallAllBuildings/moveBuilding.
   final bool isStored;
+
+  /// Quarter turns, 0..3 (user 2026-11-03: "Gebäude um 90° drehen"). An odd
+  /// turn swaps the footprint's width and depth; the picture is the model
+  /// rendered from that side (see BuildingDef.rotated / placedDefOf).
+  ///
+  /// NOT in [toMap]: it is written by its own guarded update
+  /// (SettlementService.setBuildingRotation), so a database that has not run
+  /// migration 0061 yet still saves every other field.
+  final int rotation;
   final DateTime placedAt;
 
   const PlacedBuilding({
@@ -48,6 +57,7 @@ class PlacedBuilding {
     this.isQueued = false,
     this.isPaused = false,
     this.isStored = false,
+    this.rotation = 0,
     required this.placedAt,
   });
 
@@ -66,6 +76,7 @@ class PlacedBuilding {
     isQueued: (m['is_queued'] as bool?) ?? false,
     isPaused: (m['is_paused'] as bool?) ?? false,
     isStored: (m['is_stored'] as bool?) ?? false,
+    rotation: ((m['rotation'] as num?)?.toInt() ?? 0) % 4,
     placedAt: DateTime.parse(m['placed_at'] as String),
   );
 
@@ -100,6 +111,7 @@ class PlacedBuilding {
     bool? isQueued,
     bool? isPaused,
     bool? isStored,
+    int? rotation,
     int? level,
   }) => PlacedBuilding(
     id: id,
@@ -116,6 +128,7 @@ class PlacedBuilding {
     isQueued: isQueued ?? this.isQueued,
     isPaused: isPaused ?? this.isPaused,
     isStored: isStored ?? this.isStored,
+    rotation: rotation ?? this.rotation,
     placedAt: placedAt,
   );
 }

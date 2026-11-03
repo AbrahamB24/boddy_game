@@ -11,6 +11,14 @@ import 'package:boddygame/features/settlement/services/game_engine.dart';
 /// ENTRANCE and its moving parts (user 2026-11-03). Both tables are written
 /// by tool/blender/make_building.py; these tests hold them to the rules the
 /// map relies on.
+/// The def a PICTURE id belongs to (`<id>` or a turn `<id>_r1`..`_r3`).
+BuildingDef? _artDef(String artId) {
+  final m = RegExp(r'^(.*)_r([1-3])$').firstMatch(artId);
+  return m == null
+      ? kFallbackBuildingDefs[artId]
+      : kFallbackBuildingDefs[m[1]]?.rotated(int.parse(m[2]!));
+}
+
 PlacedBuilding _b(String id, String type, int x, int y) => PlacedBuilding(
   id: id,
   settlementId: 's',
@@ -34,7 +42,7 @@ void main() {
   group('kBuildingEntrance', () {
     test('every entrance is a footprint cell on the edge, facing out', () {
       for (final MapEntry(key: id, value: e) in kBuildingEntrance.entries) {
-        final maybe = kFallbackBuildingDefs[id];
+        final maybe = _artDef(id);
         expect(maybe, isNotNull, reason: '$id has an entrance but no def');
         final def = maybe!;
         final (cx, cy, dx, dy) = e;
@@ -81,7 +89,7 @@ void main() {
   group('kModelFootprint', () {
     test('every model was made for the footprint the code ships', () {
       for (final MapEntry(key: id, value: f) in kModelFootprint.entries) {
-        final def = kFallbackBuildingDefs[id]!;
+        final def = _artDef(id)!;
         expect((def.gridW, def.gridH), f, reason: id);
       }
     });
