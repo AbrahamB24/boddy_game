@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/cream_kit.dart' show CreamPalette;
 import '../../core/theme/foe_theme.dart';
+import '../../core/ui/feel.dart';
+import '../../core/ui/snack.dart';
 import 'creature_detail_screen.dart';
 import 'models/creature_enums.dart';
 import 'models/creature_instance.dart';
 import 'models/species_def.dart';
 import 'services/creatures_controller.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 /// A look at a starter species BEFORE anything is adopted — pushed from
 /// [CollectionScreen]'s starter picker in place of the old confirm dialog.
@@ -67,47 +70,86 @@ class _StarterPreviewScreenState extends State<StarterPreviewScreen> {
     final created = await _ctrl.adoptStarter(_draft);
     if (!mounted) return;
     if (created == null) {
-      // No pop-up any more (user 2026-08-29: "wirklich alle pop up
-      // nachrichten... löschen") — the button re-enabling (_adopting back to
-      // false) is the signal to try again.
       setState(() => _adopting = false);
+      context.snack(
+        'Could not adopt it — check your connection and try again.',
+        error: true,
+      );
       return;
     }
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => CreatureDetailScreen(creatureId: created.id),
-      ),
-    );
+    // Every other "you got a monster" moment plays this (catching one in
+    // battle, hatching an egg — see FeelEvent.fanfare's own doc: "earned
+    // something bigger"). The very first one of all had none at all (2026-09-30
+    // QA pass) — the single biggest moment in a new player's first minute
+    // landed completely silent.
+    Feel.fanfare();
+    // Straight back to Home, not the new creature's detail screen (user
+    // 2026-09-30, reversing the 2026-08-24 decision this used to follow):
+    // the tutorial's next step lives on Home, and landing on a detail
+    // screen first just adds a detour before the guide card can show.
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
   Widget build(BuildContext context) =>
       CreatureDetailScreen(previewCreature: _draft, footer: _confirmButton());
 
-  Widget _confirmButton() => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: _adopting ? null : _confirm,
-      borderRadius: BorderRadius.circular(FoE.radiusSmall),
-      child: Container(
-        width: double.infinity,
-        constraints: const BoxConstraints(minHeight: FoE.tapTarget),
-        alignment: Alignment.center,
-        // The starter's OWN element colour (user 2026-09-05: "den choose
-        // button in der Farbe des Typs"), not the app's generic accent —
-        // this button is the one place on the screen that's already
-        // committing to a specific starter, so it wears that starter's
-        // colour rather than a neutral one.
-        decoration: BoxDecoration(
-          color: widget.species.element.color,
-          borderRadius: BorderRadius.circular(FoE.radiusSmall),
-        ),
-        child: Text(
-          _adopting ? 'Choosing…' : 'Choose ${_draft.displayName}',
-          textAlign: TextAlign.center,
-          style: FoE.title(size: 13).copyWith(color: CreamPalette.ink),
+  Widget _confirmButton() {
+    // The starter's OWN element colour (user 2026-09-05: "den choose button
+    // in der Farbe des Typs"), not the app's generic accent — but NOT a flat
+    // fill of it any more (user screenshot 2026-09-30: "choose Button fast
+    // nicht sichtbar"): CreatureDetailScreen washes the WHOLE page in that
+    // same element colour, so a flat match painted the button straight into
+    // its own background. A gradient down to a darker shade of the same hue
+    // keeps "wears the starter's colour" while actually reading as a raised
+    // button against the flat wash behind it — value contrast, not a
+    // different colour.
+    final base = widget.species.element.color;
+    final deep = Color.lerp(base, Colors.black, 0.4)!;
+    final light = deep.computeLuminance() > 0.35;
+    final ink = light ? CreamPalette.ink : Colors.white;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _adopting ? null : _confirm,
+        borderRadius: vr(FoE.radiusSmall),
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: FoE.tapTarget),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [base, deep],
+            ),
+            borderRadius: vr(FoE.radiusSmall),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.4),
+              width: 1.5,
+            ),
+            boxShadow: const [
+              BoxShadow(color: Color(0x59000000), offset: Offset(0, 3)),
+            ],
+          ),
+          child: Text(
+            _adopting ? 'Choosing…' : 'Choose ${_draft.displayName}',
+            textAlign: TextAlign.center,
+            style: FoE.title(size: 13).copyWith(
+              color: ink,
+              shadows: light
+                  ? null
+                  : const [
+                      Shadow(
+                        color: Color(0x66000000),
+                        blurRadius: 2,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+            ),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

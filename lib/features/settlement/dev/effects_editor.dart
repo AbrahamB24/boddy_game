@@ -21,6 +21,7 @@ import '../data/goods_definitions.dart';
 import '../data/workshop_role_effects.dart';
 import '../services/trade_center.dart' show kMaxTradeDiscount;
 import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 // Reusable editor for the generic `effects` JSON vocabulary
 // (BuildingDef.fromDefRow/toDefRow — see building_definitions.dart).
@@ -419,7 +420,7 @@ class _EffectRow extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(
+                  icon: const PixelIcon(
                     Icons.delete_outline,
                     color: Colors.redAccent,
                     size: 20,

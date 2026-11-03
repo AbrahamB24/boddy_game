@@ -96,3 +96,18 @@ int goldToSkip(Duration remaining) {
   if (remaining.inSeconds <= 0) return 0;
   return math.max(1, (remaining.inSeconds / kSecondsPerGold).ceil());
 }
+
+/// Assumed walking pace — ~100 steps/min — used ONLY to price a step skip at
+/// the same gold/minute value every other wait already has
+/// ([kSecondsPerGold]); it never gates or paces anything real (user
+/// 2026-10-02: hunts run on real steps, see Expedition.isStepGated).
+const double kAssumedStepsPerSecond = 100 / 60;
+
+/// Gold to skip [remainingSteps] of a hunt. Same shape as [goldToSkip], just
+/// converted through [kAssumedStepsPerSecond] first so a hunt reuses the
+/// exact same gold economy instead of a second, unrelated rate.
+int goldToSkipSteps(int remainingSteps) {
+  if (remainingSteps <= 0) return 0;
+  final equivalent = remainingSteps / kAssumedStepsPerSecond;
+  return goldToSkip(Duration(seconds: equivalent.ceil()));
+}

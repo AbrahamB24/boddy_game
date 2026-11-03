@@ -28,10 +28,10 @@ void main() {
     expect(xpToNextLevel(1), 6); // 6 · L^2.5
     expect(xpToNextLevel(10), (6 * 316.227766).round());
     expect(kTrainingXpPerHour, 250);
-    // Kill XP: 9 · L^1.3, a boss ×3 (the author's config, taken over as the
-    // default on 2026-07-29 — it was 9 · L^2.3 with a ×6 boss).
+    // Kill XP: 9 · L^1.8, a boss ×3 (1.3 from 2026-07-29, raised on
+    // 2026-11-02 — see XpConfig.killExponent).
     expect(kXpBalance.killXp(1).round(), 9);
-    expect(kXpBalance.killXp(10).round(), (9 * 19.9526231).round());
+    expect(kXpBalance.killXp(10).round(), (9 * 63.0957344).round());
     expect(
       kXpBalance.killXp(10, boss: true),
       closeTo(kXpBalance.killXp(10) * 3, 1e-9),
@@ -91,7 +91,11 @@ void main() {
     kXpBalance = const XpConfig(killFactor: 2, killExponent: 1);
     expect(kXpBalance.killXp(10), 20); // 2 × 10
     expect(kXpBalance.killXp(10, boss: true), 60); // ×3 default
-    kXpBalance = const XpConfig(killFactor: 2, killExponent: 1, bossMultiplier: 1);
+    kXpBalance = const XpConfig(
+      killFactor: 2,
+      killExponent: 1,
+      bossMultiplier: 1,
+    );
     expect(kXpBalance.killXp(10, boss: true), 20); // bosses made ordinary
   });
 

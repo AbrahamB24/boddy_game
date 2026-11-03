@@ -10,6 +10,8 @@ import 'models/species_def.dart';
 import 'services/breeding_controller.dart';
 import 'services/creature_power.dart';
 import 'widgets/egg_card.dart';
+import 'widgets/picker_detail_panel.dart';
+import '../../core/theme/voxel_icons.dart';
 
 /// Choosing which egg goes into the Hatchery — A SCREEN OF ITS OWN (user
 /// 2026-07-27: "Das Eimenü soll kein pop up sein, sondern ein eigener screen,
@@ -48,6 +50,10 @@ class _EggPickerScreenState extends State<EggPickerScreen> {
   CreatureStat? _sortStat; // null = the gene TOTAL, the default ranking
   bool _descending = true; // best first
 
+  /// Tapping an egg only PREVIEWS it here (user 2026-10-05, "Konzept 4") —
+  /// the detail panel's own button is what actually picks it.
+  BreedingJob? _preview;
+
   @override
   void dispose() {
     _search.dispose();
@@ -66,55 +72,75 @@ class _EggPickerScreenState extends State<EggPickerScreen> {
           '${_breeding.eggs.length} in the bag',
           style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
         ),
+        // No card of its own any more (user 2026-09-30, "hier und
+        // andernorts sind noch die alten Kästchen vorhanden") —
+        // MenuScaffold is already the one card on screen.
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: creamCard(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(flex: 3, child: _searchPill()),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: _sortPill()),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: _filterPill()),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(flex: 3, child: _searchPill()),
-                    const SizedBox(width: 8),
-                    Expanded(flex: 2, child: _sortPill()),
-                    const SizedBox(width: 8),
-                    Expanded(flex: 2, child: _filterPill()),
+                    _detail(),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: options.isEmpty
+                          ? Text(
+                              _breeding.eggs.isEmpty
+                                  ? 'No eggs in the bag.'
+                                  : 'No egg matches.',
+                              style: FoE.dim(
+                                size: 12,
+                              ).copyWith(color: _inkSoft),
+                            )
+                          // Fixed-width cells (the shared tile size), not a
+                          // max-extent grid that hands a tile any width up to
+                          // its cap.
+                          : SingleChildScrollView(
+                              padding: const EdgeInsets.only(
+                                top: 14,
+                                bottom: 16,
+                              ),
+                              child: Wrap(
+                                spacing: kMonsterTileSpacing,
+                                runSpacing: kMonsterTileSpacing,
+                                children: [
+                                  for (final egg in options)
+                                    SizedBox(
+                                      width: monsterTileWidth(context),
+                                      height: monsterTileHeight(context),
+                                      child: pickerPreviewFrame(
+                                        active: egg.id == _preview?.id,
+                                        child: EggCard(
+                                          job: egg,
+                                          selected:
+                                              egg.id == widget.selectedEggId,
+                                          onTap: () =>
+                                              setState(() => _preview = egg),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: options.isEmpty
-                      ? Text(
-                          _breeding.eggs.isEmpty
-                              ? 'No eggs in the bag.'
-                              : 'No egg matches.',
-                          style: FoE.dim(size: 12).copyWith(color: _inkSoft),
-                        )
-                      // Fixed-width cells (the shared tile size), not a max-extent
-                      // grid that hands a tile any width up to its cap.
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.only(top: 14, bottom: 16),
-                          child: Wrap(
-                            spacing: kMonsterTileSpacing,
-                            runSpacing: kMonsterTileSpacing,
-                            children: [
-                              for (final egg in options)
-                                SizedBox(
-                                  width: monsterTileWidth(context),
-                                  height: monsterTileHeight(context),
-                                  child: EggCard(
-                                    job: egg,
-                                    selected: egg.id == widget.selectedEggId,
-                                    onTap: () => Navigator.pop(context, egg.id),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
@@ -152,6 +178,34 @@ class _EggPickerScreenState extends State<EggPickerScreen> {
           : score(a).compareTo(score(b)),
     );
     return list;
+  }
+
+  /// The left panel: what this egg will hatch into — species, rarity, gene
+  /// power — rather than anything about health or combat, which an egg has
+  /// none of yet.
+  Widget _detail() {
+    final job = _preview;
+    if (job == null) {
+      return const PickerDetailPanel(
+        placeholder: 'Tap an egg to see what it will hatch into.',
+      );
+    }
+    final species = kSpeciesDefs[job.speciesId];
+    final chosen = job.id == widget.selectedEggId;
+    return PickerDetailPanel(
+      artHeight: 90,
+      art: EggGlyph(job: job),
+      title: species?.name ?? job.speciesId,
+      subtitle: job.hasChildGenes ? '⚡ ${genePower(job.childBase)}' : '⚡ ?',
+      rows: [
+        pickerStatRow('Rarity', species?.rarity.label ?? '—'),
+        pickerStatRow('Type', species?.element.label ?? '—'),
+      ],
+      action: pickerChooseButton(
+        label: chosen ? 'Already in the slot' : 'Choose this egg',
+        onTap: chosen ? null : () => Navigator.pop(context, job.id),
+      ),
+    );
   }
 
   // ── The controls ──────────────────────────────────────────────────────
@@ -209,7 +263,7 @@ class _EggPickerScreenState extends State<EggPickerScreen> {
       const MapEntry('', 'Total power'),
       for (final s in CreatureStat.values) MapEntry(s.name, s.label),
     ],
-    trailing: Icon(
+    trailing: PixelIcon(
       _descending ? Icons.arrow_downward : Icons.arrow_upward,
       size: 14,
       color: _accent,

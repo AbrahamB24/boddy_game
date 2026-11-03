@@ -290,7 +290,7 @@ class TypePodium extends StatelessWidget {
     // FLATTER (user 2026-09-21: "die Kugeln sind flacher" — both ranks): the disc is
     // a quarter of its width high, not a third.
     final height = width * 0.24;
-    // A true ellipse: BoxShape.circle would draw a circle of the shorter side,
+    // A true ellipse: BoxShape.rectangle would draw a circle of the shorter side,
     // which on a wide platform is a coin lying in the middle of it.
     final oval = BorderRadius.all(Radius.elliptical(width / 2, height / 2));
     // THE HALF-SPHERE (user 2026-09-21: "die Halbkugel unter der Scheibe … nur

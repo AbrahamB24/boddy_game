@@ -34,7 +34,18 @@ class ActiveEffect {
   /// A positive fraction of "how much": accuracy lost, speed lost, stat gained.
   final double value;
 
-  ActiveEffect({required this.turnsRemaining, required this.value});
+  /// Applied during its holder's OWN turn and not yet carried through an
+  /// opponent's turn. The end-of-turn upkeep skips the countdown once for a
+  /// fresh effect: a self-buff cast this turn used to tick down in the same
+  /// upkeep it was cast in, so a 1-turn Quick Guard/Quick Sprint expired
+  /// before a single enemy acted — it did literally nothing.
+  bool fresh;
+
+  ActiveEffect({
+    required this.turnsRemaining,
+    required this.value,
+    this.fresh = false,
+  });
 }
 
 /// The mutually-exclusive main statuses (only one active at a time).

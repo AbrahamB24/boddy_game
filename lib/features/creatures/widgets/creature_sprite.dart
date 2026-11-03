@@ -2,6 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import 'monster_sheet.dart';
+
 /// How wide to DECODE a creature sprite, in device pixels — the monster art
 /// equivalent of settlement/widgets/building_icon.dart's own _decodeWidth
 /// (same reasoning duplicated rather than shared across features on purpose;
@@ -52,6 +54,37 @@ class CreatureSprite extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A species with baked 3D art draws that instead of the flat PNG (see
+    // [MonsterSheets.forUrl]); it idles when big enough to notice, and holds
+    // still as a thumbnail so a long list does not run a hundred tickers.
+    final baked = MonsterSheets.forUrl(url);
+    if (baked != null) {
+      return LayoutBuilder(
+        builder: (context, c) {
+          final known = <double>[
+            ?width,
+            ?height,
+            if (width == null && c.maxWidth.isFinite) c.maxWidth,
+            if (height == null && c.maxHeight.isFinite) c.maxHeight,
+          ];
+          final side = known.isEmpty
+              ? 120.0
+              : known.reduce((a, b) => a < b ? a : b);
+          return SizedBox(
+            width: width,
+            height: height,
+            child: Align(
+              alignment: alignment,
+              child: MonsterSheetPlayer(
+                set: baked.set,
+                height: side,
+                animate: side >= 96,
+              ),
+            ),
+          );
+        },
+      );
+    }
     // Whichever dimension is known bounds the decode — for BoxFit.contain
     // art the two are close enough that either is a sensible cap, and most
     // callers here only ever pass one of the two anyway.

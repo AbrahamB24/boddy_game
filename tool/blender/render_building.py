@@ -8087,7 +8087,7 @@ PRESETS = {
     # ── The era-I roster, on the footprints the game already gives them ──
     # The name on the left is the building_defs id, so `--preset hut` renders
     # what `hut` will show on the map and the upload has nowhere to go wrong.
-    'small_house': (small_house, 3, 3),
+    'small_house': (small_house, 2, 2),
     'large_house': (large_house, 2, 5),
     'small_wood_camp': (wood_camp, 3, 3),
     # Renamed from small_stone_camp (user 2026-08-23: their own file is now

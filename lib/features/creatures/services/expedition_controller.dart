@@ -143,6 +143,16 @@ class ExpeditionController extends ChangeNotifier {
 
   bool get caravansFull => caravanCount >= maxCaravanSlots;
 
+  /// See [CreaturesController.resetForAccountSwitch] — same bug, same fix:
+  /// without this, switching to a different account in the same running app
+  /// keeps showing the PREVIOUS account's expeditions/spot states.
+  void resetForAccountSwitch() {
+    _loadedOnce = false;
+    expeditions = [];
+    spotStates = {};
+    notifyListeners();
+  }
+
   Future<void> load({bool force = false}) async {
     if (isLoading || (_loadedOnce && !force)) return;
     final userId = _userId;
@@ -240,7 +250,11 @@ class ExpeditionController extends ChangeNotifier {
   /// 100%, from extra steps) shortens it a little instead. Baked in at send
   /// time like the jumpstart scale above it, not re-applied live — a trip
   /// already under way isn't punished for energy dropping after it left.
-  double get _energyTimeScale => 1.0 / SettlementController().energyMultiplier;
+  ///
+  /// NOT ANY MORE (user 2026-09-28: "10h sind nicht wirklich 10h"): a trip takes
+  /// exactly the time it says, whatever the energy. Energy only scales what the
+  /// settlement PRODUCES. Kept as one number (1.0) so the call sites stay put.
+  double get _energyTimeScale => 1.0;
 
   /// Sends a gather expedition. Returns null on success or a user-facing error.
 
@@ -271,7 +285,9 @@ class ExpeditionController extends ChangeNotifier {
   /// Promises a notification for [e]'s arrival. Fire-and-forget — nothing about
   /// sending a party may depend on it.
   void _promiseArrival(Expedition e) {
-    if (!e.type.isTimed) return;
+    // A step-gated hunt has no fixed arrival time to promise — nobody knows
+    // in advance when they'll have walked it out (user 2026-10-02).
+    if (!e.type.isTimed || e.isStepGated) return;
     final (kind, title, body) = switch (e.type) {
       ExpeditionType.trade => (
         NotifyKind.caravan,
@@ -426,19 +442,17 @@ class ExpeditionController extends ChangeNotifier {
       return 'Nothing lives here yet — define species in Dev Mode first.';
     }
 
-    // Scout posts speed the whole hunt (the trip IS mostly travel): the same
-    // travelMult that cuts gather travel scales the capture duration.
-    var duration = captureDuration(
+    // Scout posts used to speed the whole hunt (the trip WAS mostly travel);
+    // now they cut the STEPS it needs instead — same incentive, new unit.
+    // The jumpstart scale still shrinks the tutorial's first hunt down to a
+    // token amount (so the gold-skip teaching beat it's followed by, see
+    // ExpeditionsScreen's 'hunt-skip-gold' spotlight, stays cheap) the exact
+    // same way it used to shrink a duration.
+    final stepsTarget = effectiveHuntSteps(
       option,
-      timeScale:
-          _timeScale * SettlementController().expeditionBonuses.travelMult,
+      timeScale: _timeScale,
+      travelMult: SettlementController().expeditionBonuses.travelMult,
     );
-    // Tutorial: even jumpstart-scaled, a hunt is ~40s of dead waiting — the
-    // guided catch should be playable the moment the player checks Trips.
-    if (SettlementController().introStep.isActive &&
-        duration.inSeconds > kIntroMaxTripSeconds) {
-      duration = const Duration(seconds: kIntroMaxTripSeconds);
-    }
 
     final expedition = Expedition(
       id: '',
@@ -447,11 +461,14 @@ class ExpeditionController extends ChangeNotifier {
       areaId: area.id,
       memberIds: members.map((c) => c.id).toList(),
       startedAt: DateTime.now(),
-      duration: duration,
+      // No wall clock any more — see Expedition.isStepGated.
+      duration: Duration.zero,
       payload: {
         'speciesIds': rolled,
         'level': captureTargetLevel(area),
         'done': 0,
+        'stepsTarget': stepsTarget,
+        'stepsWalked': 0,
       },
     );
 
@@ -557,7 +574,7 @@ class ExpeditionController extends ChangeNotifier {
     } catch (e) {
       // Put the cargo back — it left the storehouse a moment ago and the trip
       // it was loaded onto does not exist.
-      await settlement.grantResources({from: amountFrom});
+      await settlement.grantResources({from: amountFrom}, refund: true);
       return 'Failed to send the caravan: $e';
     }
   }
@@ -667,7 +684,18 @@ class ExpeditionController extends ChangeNotifier {
   /// both pay out on their own, offline included. Capture expeditions never
   /// auto-resolve: their encounter is played by hand and simply waits
   /// (occupying its slot) until the player opens it.
-  Future<void> _resolveDue() async {
+  ///
+  /// SERIALISED: the Trips and Market screens poll [collectFinished] every
+  /// second while a trip is ready, and a payout awaits the resource write
+  /// before [_finishTrip] removes the trip from [expeditions]. On a slow
+  /// connection the next poll found the SAME trip still listed and paid it
+  /// out again. A second caller now just joins the run in flight.
+  Future<void> _resolveDue() =>
+      _resolving ??= _resolveDueOnce().whenComplete(() => _resolving = null);
+
+  Future<void>? _resolving;
+
+  Future<void> _resolveDueOnce() async {
     final now = DateTime.now();
     final due = expeditions
         .where(
@@ -756,7 +784,9 @@ class ExpeditionController extends ChangeNotifier {
       final from = e.payload['from'] as String?;
       final amount = (e.payload['amountFrom'] as num?)?.toDouble() ?? 0;
       if (from != null && amount > 0) {
-        await SettlementController().grantResources({from: amount});
+        await SettlementController().grantResources({
+          from: amount,
+        }, refund: true);
       }
     }
     expeditions.removeWhere((x) => x.id == e.id);
@@ -772,23 +802,77 @@ class ExpeditionController extends ChangeNotifier {
   /// Dev-mode shortcut: finish a running expedition immediately, then resolve.
   Future<void> devFinishNow(Expedition e) async {
     try {
-      await _svc.finishNow(e.id);
+      if (e.isStepGated) {
+        await _finishStepsNow(e);
+      } else {
+        await _svc.finishNow(e.id);
+      }
     } catch (err) {
       debugPrint('[ExpeditionController] devFinishNow failed: $err');
     }
     await load(force: true);
   }
 
+  // ── Steps: advancing hunts (user 2026-10-02) ─────────────────
+  /// Credits real steps to EVERY active hunt at once — like Pokémon GO's egg
+  /// incubators, one walk advances every hunt in flight, not just one.
+  /// Called by StepTrackerService on each flushed batch; a no-op with
+  /// nothing out. Persists directly rather than going through [load] (a
+  /// pedometer tick is too frequent for a full reload) and does NOT wait on
+  /// the network before updating the in-memory list, so the Trips screen's
+  /// progress bars move immediately even if the write is still in flight.
+  Future<void> creditSteps(int delta) async {
+    if (delta <= 0) return;
+    final now = DateTime.now();
+    final due = <Expedition>[];
+    for (var i = 0; i < expeditions.length; i++) {
+      final e = expeditions[i];
+      if (e.type != ExpeditionType.capture ||
+          e.state != ExpeditionState.active ||
+          e.isFinished(now)) {
+        continue;
+      }
+      final updated = e.copyWith(
+        payload: {...e.payload, 'stepsWalked': e.stepsWalked + delta},
+      );
+      expeditions[i] = updated;
+      due.add(updated);
+    }
+    if (due.isEmpty) return;
+    notifyListeners();
+    for (final e in due) {
+      try {
+        await _svc.update(e);
+      } catch (err) {
+        debugPrint('[ExpeditionController] creditSteps persist failed: $err');
+      }
+    }
+    _syncLocks();
+    await _resolveDue();
+    notifyListeners();
+  }
+
+  /// Jumps [e]'s step progress straight to its target — the step-gated
+  /// equivalent of [ExpeditionService.finishNow], which only rewrites the
+  /// time fields a step-gated hunt no longer reads.
+  Future<void> _finishStepsNow(Expedition e) => _svc.update(
+    e.copyWith(payload: {...e.payload, 'stepsWalked': e.stepsTarget}),
+  );
+
   // ── Gold: bring a trip home now ─────────────────────────────
-  /// Gold to end [e]'s travel immediately. 0 once it's already back.
-  int goldSkipCost(Expedition e) =>
-      goldToSkip(e.endsAt.difference(DateTime.now()));
+  /// Gold to end [e]'s travel immediately. 0 once it's already back. A
+  /// step-gated hunt prices its remaining STEPS instead ([goldToSkipSteps])
+  /// — same gold/minute value as every other wait, just converted through
+  /// an assumed walking pace.
+  int goldSkipCost(Expedition e) => e.isStepGated
+      ? goldToSkipSteps(e.stepsRemaining)
+      : goldToSkip(e.endsAt.difference(DateTime.now()));
 
   /// Pays gold to bring [e] home now. Returns null on success or a
   /// user-facing error.
   ///
   /// Note this only ends the TRAVEL. A capture hunt still has to be played by
-  /// hand afterwards — gold buys time, never a result.
+  /// hand afterwards — gold buys time (or steps), never a result.
   Future<String?> skipWithGold(Expedition e) async {
     final cost = goldSkipCost(e);
     if (cost <= 0) return 'It is already back.';
@@ -797,9 +881,16 @@ class ExpeditionController extends ChangeNotifier {
       return 'Not enough gold (need $cost, have ${settlement.gold.toInt()}).';
     }
     try {
-      await _svc.finishNow(e.id);
+      if (e.isStepGated) {
+        await _finishStepsNow(e);
+      } else {
+        await _svc.finishNow(e.id);
+      }
     } catch (err) {
       debugPrint('[ExpeditionController] skipWithGold failed: $err');
+      // The trip did not move, so neither may the gold: it was already
+      // spent above and used to be lost with the failed write.
+      await settlement.grantResources({'gold': cost.toDouble()}, refund: true);
       return 'Could not reach the expedition — try again.';
     }
     await load(force: true);

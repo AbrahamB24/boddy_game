@@ -8,6 +8,7 @@ import 'data/goods_definitions.dart';
 import 'data/resource_icons.dart';
 import 'resource_detail_screen.dart';
 import 'settlement_controller.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 /// ALL RESOURCES AT ONE GLANCE — "Epochen-Regale" (user 2026-09-22): one shelf per
 /// era, its resources on it as tiles (glyph, stock, rate per hour, a bar of how
@@ -26,6 +27,25 @@ class ResourcesScreen extends StatefulWidget {
 
   @override
   State<ResourcesScreen> createState() => _ResourcesScreenState();
+}
+
+/// The eras that get a shelf, each with its resources' ids: Gold first (it
+/// belongs to no era — user 2026-09-22), then every era the settlement has
+/// reached, plus any later one it already holds something of (a refinery's
+/// first output can come early). Shared by [ResourcesScreen] and the
+/// header's own resources dropdown (settlement_screen.dart), so "what's
+/// currently unlocked" can never drift between the two.
+List<({int? era, List<String> ids})> unlockedResourceShelves(
+  SettlementController ctrl,
+) {
+  double amount(String id) => ctrl.resources?.amountOf(id) ?? 0;
+  final current = ctrl.dungeonMaxStage;
+  return [
+    (era: null, ids: const ['gold']),
+    for (var r = 1; r <= kMaxRegionOrder; r++)
+      if (r <= current || resourceIdsOfRegion(r).any((id) => amount(id) > 0))
+        (era: r, ids: resourceIdsOfRegion(r)),
+  ];
 }
 
 /// "I", "II", … — the eras' own numerals.
@@ -48,18 +68,12 @@ String romanNumeral(int n) {
 class _ResourcesScreenState extends State<ResourcesScreen> {
   final _ctrl = SettlementController();
 
-  double _amount(String id) => _ctrl.resources?.amountOf(id) ?? 0;
-
-  /// The eras that get a shelf, each with its resources' ids.
-  List<({int? era, List<String> ids})> _shelves() {
-    final current = _ctrl.dungeonMaxStage;
-    return [
-      (era: null, ids: const ['gold']),
-      for (var r = 1; r <= kMaxRegionOrder; r++)
-        if (r <= current || resourceIdsOfRegion(r).any((id) => _amount(id) > 0))
-          (era: r, ids: resourceIdsOfRegion(r)),
-    ];
-  }
+  /// The eras that get a shelf, each with its resources' ids — shared with
+  /// the header's own resources dropdown (`settlement_screen.dart`
+  /// `_resourcesDropdown`, 2026-09-30), which shows the same "only what is
+  /// currently unlocked" set inline instead of navigating here.
+  List<({int? era, List<String> ids})> _shelves() =>
+      unlockedResourceShelves(_ctrl);
 
   // The chrome is built once and only the numbers listen (the same rule the
   // resource pages follow): [_ctrl] ticks every few seconds, and rebuilding the
@@ -79,22 +93,22 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
         );
       },
     ),
-    child: creamCard(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
-      child: AnimatedBuilder(
-        animation: _ctrl,
-        builder: (context, _) {
-          final shelves = _shelves();
-          final current = _ctrl.dungeonMaxStage;
-          final rates = _ctrl.hourlyRates;
-          return ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              for (final s in shelves) _shelf(s.era, s.ids, current, rates),
-            ],
-          );
-        },
-      ),
+    // No card of its own any more (user 2026-09-30, "hier und andernorts
+    // sind noch die alten Kästchen vorhanden") — MenuScaffold is already
+    // the one card on screen.
+    child: AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final shelves = _shelves();
+        final current = _ctrl.dungeonMaxStage;
+        final rates = _ctrl.hourlyRates;
+        return ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            for (final s in shelves) _shelf(s.era, s.ids, current, rates),
+          ],
+        );
+      },
     ),
   );
 
@@ -142,7 +156,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
                         height: 7,
                         decoration: const BoxDecoration(
                           color: CreamPalette.gold,
-                          shape: BoxShape.circle,
+                          shape: BoxShape.rectangle,
                         ),
                       ),
                     ],
@@ -176,9 +190,26 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
 
   /// One resource on the shelf. A full store has a red rim; one with nothing in
   /// it and nothing coming is dimmed.
-  Widget _tile(String id, double rate) {
-    final amount = _amount(id);
-    final cap = _ctrl.storageCapacity(id);
+  Widget _tile(String id, double rate) => ResourceTile(id: id, rate: rate);
+}
+
+/// One resource, as a pressable tile — a glyph, its stock, its hourly rate,
+/// and (when it has a ceiling) a bar of how full the store is. A full store
+/// has a red rim; one with nothing in it and nothing coming is dimmed. Tap
+/// opens its [ResourceDetailScreen]. Pulled out of [ResourcesScreen]'s own
+/// shelf (2026-09-30) so the header's resources dropdown can show the exact
+/// same tile instead of a copy that could drift out of sync with it.
+class ResourceTile extends StatelessWidget {
+  final String id;
+  final double rate;
+
+  const ResourceTile({super.key, required this.id, required this.rate});
+
+  @override
+  Widget build(BuildContext context) {
+    final ctrl = SettlementController();
+    final amount = ctrl.resources?.amountOf(id) ?? 0;
+    final cap = ctrl.storageCapacity(id);
     final full = cap > 0 && amount >= cap;
     final empty = amount < 1 && rate <= 0;
     final frac = cap > 0 ? (amount / cap).clamp(0.0, 1.0) : 0.0;
@@ -221,7 +252,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
                   ),
                   const Spacer(),
                   Text(
-                    _rate(rate),
+                    _rateText(rate),
                     style: FoE.dim(
                       size: 10.5,
                     ).copyWith(color: rateColor, fontWeight: FontWeight.w700),
@@ -231,7 +262,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
               if (cap > 0) ...[
                 const SizedBox(height: 4),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: vr(3),
                   child: SizedBox(
                     height: 6,
                     child: Stack(
@@ -262,7 +293,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   }
 
   /// "+39.8", "−6", "–" — the hourly rate without its unit (the tile is small).
-  static String _rate(double r) => r == 0
+  static String _rateText(double r) => r == 0
       ? '–'
       : '${r > 0 ? '+' : '−'}${r.abs().toStringAsFixed(r.abs() >= 10 ? 0 : 1)}';
 }

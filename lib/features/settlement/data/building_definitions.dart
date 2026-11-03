@@ -645,6 +645,20 @@ double get kBuildPointsForHalfTime =>
 double buildTimeCut(double points) =>
     points <= 0 ? 0 : points / (points + kBuildPointsForHalfTime);
 
+/// [points] as the player actually cares about them: how much build time they
+/// take off ("−23 % time"), not the abstract points behind it (user
+/// 2026-09-28: "+n Points bringt dem User nichts, er will sehen, wie viel
+/// Zeitreduktion die Monster bringen"). One decimal below 10 %, where a whole
+/// number would round a single monster's share to nothing.
+String buildPointsLabel(double points) {
+  final pct = buildTimeCut(points) * 100;
+  if (pct <= 0) return '0 % time';
+  final text = pct >= 10
+      ? pct.round().toString()
+      : pct.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '');
+  return '−$text % time';
+}
+
 /// How many build-seconds one real second of work is worth at [points] — the
 /// inverse of what's left of the authored time. 1.0 (authored time) at zero
 /// points; each point adds a flat 1/[kBuildPointsForHalfTime] on top, which is
@@ -707,6 +721,41 @@ int get kMainHallStartY =>
 /// getOrCreate, which runs BEFORE GameDefsController().load().
 BuildingDef get _mainHallDef =>
     kBuildingDefs['castle'] ?? kFallbackBuildingDefs['castle']!;
+
+/// Live def when loaded, bundled fallback before that — same reasoning as
+/// [_mainHallDef].
+BuildingDef get _healingHutDef =>
+    kBuildingDefs['healing_hut'] ?? kFallbackBuildingDefs['healing_hut']!;
+
+// ── Tutorial's own fixed spot for the Healing Hut + its road ──────────────
+// One road cell then the hut, stacked directly off the Castle's SOUTH edge —
+// in FRONT of it, from the camera's own point of view — both locked to the
+// SAME cell for every account (user 2026-09-30: "gib die Position für das
+// Healing hut vor, so dass ich immer genau am gleichen Ort bauen muss und es
+// auch nicht schieben kann" / the same ask for the road; user 2026-10-01:
+// "eine andere Position beim ersten Platzieren finden, dass das Healing Hut
+// vor dem Castle ist" — the NORTH spot this used to be put the hut BEHIND
+// the Castle on screen, since +y runs further from the viewer than the
+// Castle's own near corner; see iso_grid.dart's projection comment).
+//
+// SOUTH, not east: the Castle is 10×10 inside a 20×20 starting plot, so it
+// clears only (20-10)/2 = 5 cells on every side — enough room for the
+// Healing Hut's 4-tall footprint plus the road's own cell (5 exactly) only
+// on the sides that measure the Castle's SHORT way. East measures the
+// Castle's own width, so "one road cell, then the hut" put the hut's far
+// edge one cell past the plot's own boundary — unbuildable ground the
+// first version of this shipped with (user 2026-09-30 screenshot: "wird
+// aktuell ausserhalb des Landes angezeigt und kann daher nicht gebaut
+// werden"). South has exactly the clearance both footprints need, not a
+// cell more (same as north, since the Castle sits centred in the plot), so
+// nothing here is safe to change without re-deriving it from the actual
+// footprints again — never reintroduce a literal offset.
+int get kTutorialRoadX =>
+    kMainHallStartX + _mainHallDef.gridW ~/ 2;
+int get kTutorialRoadY => kMainHallStartY + _mainHallDef.gridH;
+int get kTutorialHealingHutX =>
+    kTutorialRoadX - _healingHutDef.gridW ~/ 2;
+int get kTutorialHealingHutY => kTutorialRoadY + 1;
 
 // ── Building effect (dev-mode authorable, per era) ─────────
 // The rich, per-era effect palette that lives in the `effects` jsonb alongside
@@ -1824,9 +1873,13 @@ List<BuildingDef> _buildRoster() {
     final habitat = _habitatNames;
     final houseSpecs = era == 1
         ? [
-            // The small house carries a fungus, a den, a nest and a bowl;
-            // two cells square left it a dark lump with no yard (2026-08-09).
-            ('small_house', _named(era, habitat.$1), 3, 3, 0.7, cap),
+            // Was 3x3 (2026-08-09: "two cells square left it a dark lump
+            // with no yard"). Put back to 2x2 (user 2026-09-29, as part of
+            // rescaling every building's doors/windows/torches to the
+            // Castle's own proportions) — the model itself was rescaled to
+            // fit, along with its door, so it no longer needs the extra
+            // cell to read.
+            ('small_house', _named(era, habitat.$1), 2, 2, 0.7, cap),
             ('large_house', _named(era, habitat.$2), 2, 5, 1.1, cap + 5),
           ]
         : [
@@ -2390,7 +2443,9 @@ const Map<String, (double, double)> kChimneyAnchor = {
   // taller than 1.25x its own width, so its beacon projects to a NEGATIVE
   // anchorY — correct, not a bug: Clip.none all the way up this Stack lets
   // the smoke paint above the box exactly where the beacon really is.
-  'small_house': (0.769, 0.380),
+  // Recomputed 2026-09-29 for the 2x2 footprint (was 3x3) after the
+  // door/torch/window normalization pass.
+  'small_house': (0.769, 0.370),
   'large_house': (0.302, 0.559),
   'small_wood_camp': (0.575, 0.376),
   'thinker_circle': (0.498, 0.334),

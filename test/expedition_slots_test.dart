@@ -27,7 +27,10 @@ void main() {
     test('each point of huntOptions opens the next variant in order', () {
       expect(maxHuntOptionCount(1), 2);
       expect(maxHuntOptionCount(2), 3);
-      expect(maxHuntOptionCount(5), kCaptureHuntOptions.length);
+      expect(
+        maxHuntOptionCount(kCaptureHuntOptions.length - 1),
+        kCaptureHuntOptions.length,
+      );
     });
   });
 
@@ -88,7 +91,7 @@ void main() {
     });
   });
 
-  // A hunt that has LANDED but whose encounter is unplayed stops occupying a
+  // A trip that has LANDED but whose encounter is unplayed stops occupying a
   // travel slot and stops locking its party (user 2026-07-27: "wenn eine
   // expedition beendet ist / bsp fangen und diese schon zurueck ist, aber ich
   // das minispiel noch nicht gemacht habe, soll der slot fuer die karawana
@@ -96,13 +99,16 @@ void main() {
   //
   // The controller needs a database to run, so what is pinned here is the
   // predicate both `travelling` and `_syncLocks` are built on: the moment a
-  // trip counts as home.
+  // trip counts as home. Built as a GATHER trip, not capture — capture moved
+  // off this wall-clock predicate entirely onto real steps (user 2026-10-02,
+  // see Expedition.isStepGated and capture_test.dart's own step-gating
+  // group), so it's gather/trade this now actually exercises.
   group('a landed trip is not out any more', () {
     Expedition trip({required Duration ago, required Duration length}) =>
         Expedition(
           id: 'e',
           userId: 'u',
-          type: ExpeditionType.capture,
+          type: ExpeditionType.gather,
           areaId: 'a',
           memberIds: const ['m1', 'm2'],
           startedAt: DateTime.now().subtract(ago),

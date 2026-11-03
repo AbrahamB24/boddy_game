@@ -4,13 +4,19 @@ import '../../../core/theme/cream_kit.dart' show pushMenu;
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/feel.dart';
 import '../../creatures/collection_screen.dart';
+import '../../creatures/creature_detail_screen.dart';
 import '../../creatures/expeditions_screen.dart';
 import '../../creatures/hatchery_screen.dart';
+import '../../creatures/services/creatures_controller.dart';
 import '../../settlement/crafting_screen.dart';
+import '../../settlement/settlement_controller.dart';
+import '../../settlement/sheets/building_detail_dialog.dart';
 import '../../settlement/widgets/parchment_sheet.dart';
 import '../widgets/parchment_page.dart';
 import 'game_events.dart';
-import '../../../core/ui/pressable.dart';
+import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 /// The bell: how many things happened that you haven't looked at, and what.
 ///
@@ -27,14 +33,14 @@ class NotificationButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: open,
-        borderRadius: BorderRadius.circular(FoE.radiusSmall),
+        borderRadius: vr(FoE.radiusSmall),
         child: SizedBox(
           width: FoE.tapTarget,
           height: FoE.tapTarget,
           child: Stack(
             alignment: Alignment.center,
             children: [
-              Icon(
+              PixelIcon(
                 unread > 0
                     ? Icons.notifications_active_rounded
                     : Icons.notifications_none_rounded,
@@ -131,6 +137,72 @@ void showEventSheet(BuildContext context) {
   showDialog<void>(context: context, builder: (_) => const _EventSheet());
 }
 
+/// WHERE tapping [e] leads — so the feed is a set of doors, not a set of
+/// receipts (user 2026-07-30), and each door opens the THING the event is about
+/// (user 2026-09-28: a finished building opens that building, a level-up opens
+/// that monster). Null when there is nowhere to go.
+///
+/// Every line here used to be a dead `Container`: "Hunt over" told you and then
+/// left you to close the sheet and find the Scout Post yourself.
+void Function(BuildContext context)? _eventTarget(GameEvent e) {
+  final ref = e.ref;
+  switch (e.kind) {
+    case GameEventKind.building:
+      if (ref == null) return null;
+      final ctrl = SettlementController();
+      final b = ctrl.buildings.where((b) => b.id == ref).firstOrNull;
+      // A building that was deleted since has nothing left to open.
+      if (b == null) return null;
+      return (context) => showBuildingDetailDialog(context, ctrl, b);
+    case GameEventKind.levelUp || GameEventKind.caught:
+      if (ref != null &&
+          CreaturesController().creatures.any((c) => c.id == ref)) {
+        return (context) => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => CreatureDetailScreen(creatureId: ref)),
+        );
+      }
+      // No monster behind it (or it is gone): the collection is where they all
+      // are, and it is the screen that shows what changed.
+      return (context) => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CollectionScreen()),
+      );
+    // A menu screen (the expeditions hub) is laid over the map; every other
+    // destination is still a full page.
+    case GameEventKind.expedition:
+      return (context) => pushMenu(context, const ExpeditionsScreen());
+    case GameEventKind.breeding:
+      return (context) => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const HatcheryScreen()),
+      );
+    case GameEventKind.craft:
+      return (context) => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CraftingScreen()),
+      );
+    case GameEventKind.research:
+      return null;
+  }
+}
+
+/// Whether tapping [e] goes anywhere — what decides a row's chevron.
+bool gameEventHasDestination(GameEvent e) => _eventTarget(e) != null;
+
+/// Opens what [e] is about. Closes the dialog it was tapped in first: coming
+/// back from the screen to a list you have already acted on is a step nobody
+/// wants. Shared by the bell and the welcome-back digest.
+void openGameEvent(BuildContext context, GameEvent e) {
+  final target = _eventTarget(e);
+  if (target == null) return;
+  Feel.tap();
+  final nav = Navigator.of(context);
+  nav.pop();
+  // The navigator's own context outlives the dialog that was just closed.
+  target(nav.context);
+}
+
 class _EventSheet extends StatefulWidget {
   const _EventSheet();
 
@@ -160,16 +232,7 @@ class _EventSheetState extends State<_EventSheet> {
 
   @override
   Widget build(BuildContext context) => ParchmentDialog(
-    title: 'What happened',
-    trailing: _log.events.isEmpty
-        ? null
-        : TextButton(
-            onPressed: () => setState(_log.clear),
-            child: Text(
-              'Clear',
-              style: FoE.dim(size: 11).copyWith(color: ParchmentSheet.accent),
-            ),
-          ),
+    title: 'Welcome back',
     child: _log.events.isEmpty
         ? Center(
             child: Padding(
@@ -194,24 +257,8 @@ class _EventSheetState extends State<_EventSheet> {
           ),
   );
 
-  /// WHERE an event happened — so the feed is a set of doors, not a set of
-  /// receipts (user 2026-07-30).
-  ///
-  /// Every line here used to be a dead `Container`: "Hunt over" told you and then
-  /// left you to close the sheet and find the Scout Post yourself. Null for the
-  /// kinds with nowhere specific to go.
-  static Widget? _destinationOf(GameEventKind kind) => switch (kind) {
-    GameEventKind.expedition => const ExpeditionsScreen(),
-    GameEventKind.breeding => const HatcheryScreen(),
-    GameEventKind.craft => const CraftingScreen(),
-    // A level-up or a catch is about a monster — the collection is where they
-    // all are, and it is the screen that shows what changed.
-    GameEventKind.levelUp || GameEventKind.caught => const CollectionScreen(),
-    GameEventKind.building || GameEventKind.research => null,
-  };
-
   Widget _row(BuildContext context, GameEvent e) {
-    final destination = _destinationOf(e.kind);
+    final destination = gameEventHasDestination(e);
     final body = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -231,9 +278,9 @@ class _EventSheetState extends State<_EventSheet> {
         // The chevron is the whole affordance — without it a tappable row and a
         // dead one look identical, which is worse than none of them being
         // tappable.
-        if (destination != null) ...[
+        if (destination) ...[
           const SizedBox(width: 2),
-          Icon(
+          PixelIcon(
             Icons.chevron_right_rounded,
             size: 16,
             color: ParchmentSheet.inkFaint,
@@ -241,7 +288,7 @@ class _EventSheetState extends State<_EventSheet> {
         ],
       ],
     );
-    if (destination == null) {
+    if (!destination) {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: ParchmentSheet.card,
@@ -250,22 +297,7 @@ class _EventSheetState extends State<_EventSheet> {
     }
     return Pressable(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
-        Feel.tap();
-        // Closes the feed first: coming back from the screen to a sheet you have
-        // already acted on is a step nobody wants.
-        Navigator.pop(context);
-        // A menu screen (the expeditions hub) is laid over the map; every other
-        // destination is still a full page.
-        if (destination is ExpeditionsScreen) {
-          pushMenu(context, destination);
-        } else {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => destination),
-          );
-        }
-      },
+      onTap: () => openGameEvent(context, e),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: ParchmentSheet.card,

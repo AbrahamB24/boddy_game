@@ -10,6 +10,7 @@ import '../creatures/services/creature_defs_controller.dart';
 import '../creatures/services/creatures_controller.dart';
 import '../creatures/services/combat_tuning.dart';
 import '../creatures/services/expedition_controller.dart';
+import '../creatures/services/battle_stars.dart';
 import '../creatures/services/overworld_path.dart';
 import '../creatures/services/survival_run.dart' show goldRewardForFloors;
 import '../common/events/game_events.dart';
@@ -169,6 +170,33 @@ class SettlementController extends ChangeNotifier {
   /// "only the controller writes state" split [advanceBattlesCleared] uses.
   int survivalBestFloor = 0;
 
+  /// The best stars (1–3) the player has earned in each campaign battle, by
+  /// battle number (user 2026-09-28). Only ever raised — a poor rematch never
+  /// takes a star away. Persisted (profiles.battle_stars, migration 0058). Set
+  /// by [recordBattleStars].
+  Map<int, int> battleStars = {};
+
+  /// The best stars in [battle], 0 when it has none yet.
+  int starsFor(int battle) => battleStars[battle] ?? 0;
+
+  /// Every star earned so far.
+  int get totalStars => battleStars.values.fold(0, (a, b) => a + b);
+
+  /// Banks the result of a won battle. Returns the gold paid as the ONE-TIME
+  /// bonus for stars reached for the first time (see [firstTimeStarGold]); 0 for
+  /// a rematch that did not beat the best. Nothing here can lower a record.
+  Future<int> recordBattleStars(int battle, int stars) async {
+    final before = starsFor(battle);
+    if (stars <= before) return 0;
+    battleStars = {...battleStars, battle: stars};
+    final gold = firstTimeStarGold(before, stars);
+    if (gold > 0) await grantResources({'gold': gold.toDouble()});
+    _progressDirty = true;
+    notifyListeners();
+    await _persist();
+    return gold;
+  }
+
   /// Max party the player may currently field — for standing teams and
   /// expedition groups (things not tied to one specific battle node). It's the
   /// size allowed for the NEXT battle on the line: clear 5 battles and battle 6
@@ -199,9 +227,32 @@ class SettlementController extends ChangeNotifier {
   void _rolloverDailyTasks(DateTime now) {
     if (dailyTasks.dateKey != dateKeyFor(now)) {
       // The streak and the date of the last chest carry over; the tasks do not.
-      dailyTasks = rollDailyTasks(now, carry: dailyTasks);
+      dailyTasks = rollDailyTasks(
+        now,
+        carry: dailyTasks,
+        exclude: _impossibleDailyTasks,
+      );
       _saveDailyTasks();
     }
+  }
+
+  /// Daily-task kinds this settlement cannot make progress on today — the
+  /// building that makes them possible is not standing (complete) yet. Fed to
+  /// [rollDailyTasks] so a fresh account is never dealt "Hatch an egg" with
+  /// no Hatchery, which forfeited the day's chest and broke the streak.
+  Set<DailyTaskKind> get _impossibleDailyTasks {
+    bool has(bool Function(BuildingDef def) test) => buildings.any((b) {
+      if (!b.isComplete) return false;
+      final def = kBuildingDefs[b.buildingTypeId];
+      return def != null && test(def);
+    });
+    final era = dungeonMaxStage;
+    return {
+      if (!has((d) => d.id == kHatcheryBuildingId)) DailyTaskKind.hatchEggs,
+      if (!has((d) => d.id == kHealingHutBuildingId))
+        DailyTaskKind.healMonsters,
+      if (!has((d) => d.hasEffect('craftSlots', era))) DailyTaskKind.craftItems,
+    };
   }
 
   void _saveDailyTasks() {
@@ -290,6 +341,7 @@ class SettlementController extends ChangeNotifier {
       final buildingsF = _svc.loadBuildings(sid);
       final profileF = _svc.loadProfile(userId);
       final isDevF = _svc.loadIsDev(userId);
+      final starsF = _svc.loadBattleStars(userId);
       final introF = _svc.loadIntroStep(userId);
       // Dev-mode building/tech defs — RLS requires an authenticated user, so
       // these load here (post-login) rather than in main.dart. Bundled
@@ -338,6 +390,7 @@ class SettlementController extends ChangeNotifier {
       expansionsUnlocked = profile['expansions_unlocked'] ?? 0;
       battlesCleared = profile['battles_cleared'] ?? 0;
       survivalBestFloor = profile['survival_best_floor'] ?? 0;
+      battleStars = await starsF;
       introStep = IntroStep.fromIndex(await introF);
       // Tutorial master switch: coerce to done in memory WITHOUT persisting,
       // so re-enabling kIntroEnabled resumes the account where the DB says.
@@ -506,7 +559,15 @@ class SettlementController extends ChangeNotifier {
         // the streak lives on either way.
         dailyTasks = restored.dateKey == dateKeyFor(now)
             ? restored
-            : rollDailyTasks(now, carry: restored);
+            : rollDailyTasks(
+                now,
+                carry: restored,
+                exclude: _impossibleDailyTasks,
+              );
+      } else {
+        // First load ever: the field's own initial roll happened before any
+        // building was known, so it could not filter. Roll again now.
+        dailyTasks = rollDailyTasks(now, exclude: _impossibleDailyTasks);
       }
 
       // 10s, not 5 (2026-09-12, chasing Chrome-debug responsiveness) — every
@@ -1708,6 +1769,7 @@ class SettlementController extends ChangeNotifier {
           // Timestamp to the real finish, not to screen-open — a load-time
           // catch-up folds offline hours into one tick.
           at: result.completedAt[b.id],
+          ref: b.id,
         );
         // Tutorial build steps advance on COMPLETION, not on placement — the
         // guard inside advanceIntro ignores buildings that aren't the
@@ -1722,12 +1784,17 @@ class SettlementController extends ChangeNotifier {
     // _applyTick is sync (it runs on the 5s ticker and on the load path), and
     // a level-up is reported through the event log rather than a return value.
     unawaited(
-      CreaturesController()
-          .accruePassiveXp(result.effectiveHours)
-          .then(
-            (messages) =>
-                GameEventLog().addAll(GameEventKind.levelUp, messages),
-          ),
+      CreaturesController().accruePassiveXp(result.effectiveHours).then((
+        levelUps,
+      ) {
+        for (final l in levelUps) {
+          GameEventLog().add(
+            GameEventKind.levelUp,
+            l.message,
+            ref: l.creatureId,
+          );
+        }
+      }),
     );
 
     // Finished treatments. Resolved here rather than on a timer of their own:
@@ -1736,7 +1803,7 @@ class SettlementController extends ChangeNotifier {
     // NOT energy-gated — a monster mends whether or not you walked today.
     unawaited(CreaturesController().resolveFinishedHeals());
 
-    _accrueCrafting(result.effectiveHours);
+    _accrueCrafting(result.realHours);
     _promoteQueuedBuildings();
   }
 
@@ -1994,6 +2061,7 @@ class SettlementController extends ChangeNotifier {
           _svc.saveDungeonMaxStage(userId, dungeonMaxStage),
           _svc.saveExpansionsUnlocked(userId, expansionsUnlocked),
           _svc.saveSurvivalBestFloor(userId, survivalBestFloor),
+          _svc.saveBattleStars(userId, battleStars),
         ],
       ]);
       _buildingsDirty = false;
@@ -2017,6 +2085,16 @@ class SettlementController extends ChangeNotifier {
   }
 
   // ── Actions ───────────────────────────────────────────────
+  /// Dev cheat: the pool straight to its ceiling, same "auffüllen" pattern
+  /// as the gold/wood/stone action beside it.
+  Future<void> devFillEnergy() async {
+    if (energy == null) return;
+    _applyTick(DateTime.now().toUtc());
+    energy = energy!.copyWith(energyPct: kEnergyMaxPercent);
+    notifyListeners();
+    await _persist();
+  }
+
   Future<void> addSteps(int steps) async {
     if (energy == null) return;
     _applyTick(DateTime.now().toUtc());
@@ -2025,6 +2103,12 @@ class SettlementController extends ChangeNotifier {
     if (steps > 0) reportDailyProgress(DailyTaskKind.walkSteps, steps);
     // NB: step logging removed — the `step_logs` table was append-only and
     // never read anywhere, so it only ever grew and ate Supabase storage.
+    // Hunts run on real steps too (user 2026-10-02) — crediting them HERE,
+    // the one place both StepTrackerService and the Dev Mode "Add steps"
+    // shortcut funnel through, means every caller of addSteps advances a
+    // hunt the same way, instead of only the hardware pedometer path doing
+    // it (see ExpeditionController.creditSteps's own doc).
+    if (steps > 0) unawaited(ExpeditionController().creditSteps(steps));
     notifyListeners();
     // Persist BOTH energy and the resources _applyTick just credited — saving
     // energy alone advanced the clock while dropping that tick's production.
@@ -2774,9 +2858,19 @@ class SettlementController extends ChangeNotifier {
     final era = dungeonMaxStage;
     final out = <(PlacedBuilding, BuildingDef, double)>[];
     for (final b in buildings) {
-      if (!b.isComplete) continue;
       final def = kBuildingDefs[b.buildingTypeId];
       if (def == null) continue;
+      // A building mid-UPGRADE makes nothing until it finishes — shown at
+      // 0/h rather than silently vanishing from the list (user 2026-09-22:
+      // "Gebäude, welche gerade upgegraded werden, sollen ... mit 0/h
+      // angezeigt werden ... im Bau genau wie pausiert"). `level > 1` is
+      // what marks an upgrade in progress rather than a first-time build,
+      // which never had output to miss in the first place.
+      if (!b.isComplete && b.level > 1) {
+        if (_canMake(def, resourceId)) out.add((b, def, 0.0));
+        continue;
+      }
+      if (!b.isComplete) continue;
       // A PAUSED building stays on the list, making nothing (user 2026-09-22:
       // "auch die Gebäude anzeigen, welche pausiert sind und mit 0/h"): it is the
       // first thing to look at when a rate is lower than expected. Only ones that
@@ -2916,10 +3010,27 @@ class SettlementController extends ChangeNotifier {
 
   /// Credits dungeon-space loot. Rewards are granted immediately per cleared
   /// space, so a failed run keeps everything earned (decided design).
-  Future<void> grantResources(Map<String, double> amounts) async {
+  ///
+  /// The ceiling only limits what THIS grant adds ([withProductionCapped]).
+  /// It used to `capped()` the whole store, which also deleted any legal
+  /// overflow a redeemed resource pack had left above the ceiling — any daily
+  /// reward or homecoming trip, in any resource, silently trimmed a pack the
+  /// player had paid for.
+  ///
+  /// [refund] returns something the player paid a moment ago (a failed
+  /// send, a recalled caravan, a gold skip that could not reach the server):
+  /// it goes back in full, ceiling or not — a store that filled up in the
+  /// meantime must not swallow the player's own goods.
+  Future<void> grantResources(
+    Map<String, double> amounts, {
+    bool refund = false,
+  }) async {
     final res = resources;
     if (res == null) return;
-    resources = res.grant(amounts).capped(storageCaps);
+    final granted = res.grant(amounts);
+    resources = refund
+        ? granted
+        : res.withProductionCapped(granted, storageCaps);
     notifyListeners();
     try {
       await _svc.saveResources(resources!);
@@ -3026,8 +3137,13 @@ class SettlementController extends ChangeNotifier {
   /// per floor, since the reward is "only at the end, scaled by how far you
   /// got" by design.
   Future<void> recordSurvivalRun(int floorsCleared) async {
+    // Priced against the record BEFORE this run raises it — only new floors
+    // pay the full rate (see goldRewardForFloors).
+    final gold = goldRewardForFloors(
+      floorsCleared,
+      previousBest: survivalBestFloor,
+    );
     if (floorsCleared > survivalBestFloor) survivalBestFloor = floorsCleared;
-    final gold = goldRewardForFloors(floorsCleared);
     if (gold > 0) await grantResources({'gold': gold});
     _progressDirty = true;
     notifyListeners();
@@ -3091,7 +3207,12 @@ class SettlementController extends ChangeNotifier {
     if (earned <= 0) return '${def.name} can\'t be sold.';
     final next = removeItem(s.items, itemId);
     if (next == null) return 'You have none left';
-    resources = res.grant({'gold': earned.toDouble()}).capped(storageCaps);
+    // Same ceiling rule as grantResources: only what is ADDED is limited,
+    // a redeemed pack's overflow elsewhere is never trimmed.
+    resources = res.withProductionCapped(
+      res.grant({'gold': earned.toDouble()}),
+      storageCaps,
+    );
     settlement = s.copyWith(items: next);
     notifyListeners();
     await _persist();
@@ -3170,6 +3291,16 @@ class SettlementController extends ChangeNotifier {
     // asking to build the thing that was just finished (user 2026-09-06).
     final introBuildStep = kIntroBuildSteps[b.buildingTypeId];
     if (introBuildStep != null) unawaited(advanceIntro(introBuildStep));
+    // The same two side effects the tick's completion sweep has — a
+    // gold-finished building used to count for nothing towards the daily
+    // "Finish buildings" goal and never appeared in the event feed.
+    reportDailyProgress(DailyTaskKind.finishBuildings);
+    GameEventLog().add(
+      GameEventKind.building,
+      '${kBuildingDefs[b.buildingTypeId]?.name ?? b.buildingTypeId} '
+      'is finished',
+      ref: b.id,
+    );
     notifyListeners();
     await _persist();
     return null;

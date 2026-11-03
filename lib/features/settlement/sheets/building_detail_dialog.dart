@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/theme/cream_kit.dart';
+import '../../../core/theme/fachwerk.dart';
+import '../../../core/ui/snack.dart';
 import '../../../core/ui/duration_format.dart';
 import '../../../core/ui/number_format.dart';
 import '../../../core/ui/scroll_cue.dart';
@@ -52,6 +54,8 @@ import '../widgets/building_icon.dart';
 import '../widgets/building_life.dart' show kPausedFilter;
 import 'building_upgrade_sheet.dart';
 import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 // Training battle vs. 1-3 random wild creatures near the team's level.
 // Lives at the Training Grounds (user decision 2026-07-17, moved off the
@@ -59,10 +63,13 @@ import '../../../core/ui/pressable.dart';
 Future<void> _startTrainingBattle(BuildContext context) async {
   final creatures = CreaturesController();
   final team = creatures.battleTeam();
-  // No pop-up any more (user 2026-08-29: "wirklich alle pop up
-  // nachrichten... löschen") — tapping Training with nobody battle-ready
-  // just does nothing.
-  if (team.isEmpty) return;
+  if (team.isEmpty) {
+    context.snack(
+      'Nobody is ready to fight — heal your monsters first.',
+      error: true,
+    );
+    return;
+  }
   final species = kSpeciesDefs.values.toList();
   if (species.isEmpty) return;
   final rng = math.Random();
@@ -137,9 +144,25 @@ Future<void> showBuildingDetailDialog(
         // (see SettlementController.setAssignment), so the NEXT rebuild after
         // a successful assignment already sees a different step and stops
         // restricting anything.
-        final oneLitControl =
+        final healerStep =
             ctrl.introStep == IntroStep.assignHealer &&
             liveB.buildingTypeId == kHealingHutBuildingId;
+        // The very next step (user 2026-09-30: "soll ich direkt wieder auf
+        // den Healing Hut Detailscreen kommen. Dort kommt ein kurzer Text,
+        // dass das Healing Hut nun funktioniert") — same one-lit-control
+        // treatment, but the PRIMARY ACTION button is the lit target now,
+        // not the (already-filled) crew slot.
+        final healStep =
+            ctrl.introStep == IntroStep.healStarter &&
+            liveB.buildingTypeId == kHealingHutBuildingId;
+        // Right after placing the Healing Hut (user 2026-10-01: "Bild 1 noch
+        // ein Text hinzufügen, dass Gold den Bau beschleunigt und ich den
+        // Bau nun sofort beenden soll") — the buy-out button is the one lit
+        // control while this building is still under construction.
+        final buildStep =
+            ctrl.introStep == IntroStep.buildHealingHut &&
+            liveB.buildingTypeId == kHealingHutBuildingId;
+        final oneLitControl = healerStep || healStep || buildStep;
         Widget lockable(Widget child) => IgnorePointer(
           ignoring: oneLitControl,
           child: Opacity(opacity: oneLitControl ? 0.35 : 1, child: child),
@@ -148,7 +171,14 @@ Future<void> showBuildingDetailDialog(
         // The Effects/Crew row is the one thing that must NOT change size from
         // building to building (user 2026-09-19), so its height comes from the
         // screen, not from what is inside.
-        final middleH = (size.height - _kDialogChrome).clamp(160.0, 260.0);
+        final middleH = (size.height - _kDialogChrome - _kArtRise).clamp(
+          160.0,
+          260.0,
+        );
+        // A building nobody can work in has no Crew to show (user 2026-09-28:
+        // "Castle … Crew gibt es nicht"): its Effects take the whole row instead
+        // of sharing it with a card that only says "nobody works here".
+        final hasCrew = def.workshops.isNotEmpty;
         final panels = liveB.isComplete
             ? _buildPanels(
                 context,
@@ -156,19 +186,37 @@ Future<void> showBuildingDetailDialog(
                 liveB,
                 def,
                 functional,
-                spotlightSlot: oneLitControl,
+                spotlightSlot: healerStep,
+                // The crew seat a tutorial-tap just filled must stay FILLED
+                // (user 2026-10-01: "da man ansonsten das Monster wieder vom
+                // Posten lösen könnte") — a tap on it opens the swap picker,
+                // which can remove the very worker healStarter is about to
+                // test healing. Scoped to healStep, not oneLitControl as a
+                // whole: assignHealer's own empty seat must stay tappable,
+                // it IS that step's lit control.
+                lockAssignedSeats: healStep,
               )
             : null;
+        final rawActions = _primaryActions(
+          ctrl,
+          context,
+          liveB,
+          def,
+          functional,
+          onMap: onMap,
+        );
+        // healStep leaves the primary action (Healing) bright and tappable
+        // instead of dimming it like [lockable] dims everything else — it
+        // IS the one lit control for this step, not something this step
+        // locks away.
         final actions = [
-          for (final a in _primaryActions(
-            ctrl,
-            context,
-            liveB,
-            def,
-            functional,
-            onMap: onMap,
-          ))
-            lockable(a),
+          for (var i = 0; i < rawActions.length; i++)
+            healStep && i == 0
+                ? KeyedSubtree(
+                    key: IntroSpotlightAnchors.of('healing-hut-heal-action'),
+                    child: rawActions[i],
+                  )
+                : lockable(rawActions[i]),
         ];
         // PAUSE, a round button in the hero (user 2026-08-27). Only for
         // buildings that actually RUN something: pausing a house or a store
@@ -227,12 +275,18 @@ Future<void> showBuildingDetailDialog(
                             // one thing to read here.
                             deep: CreamPalette.goldDeep,
                             child: Text(
-                              'A building only works once it has a '
-                              'worker posted to it — this Healing '
-                              'Hut heals nobody until someone is '
-                              'stationed there. Tap the + under '
-                              'Crew and post a monster to its '
-                              'medicine role.',
+                              healStep
+                                  // user 2026-09-30: "ein kurzer Text, dass
+                                  // das Healing Hut nun funktioniert und ich
+                                  // nun mein Monster heilen soll".
+                                  ? 'The Healing Hut is up and running — '
+                                        'tap Healing and treat your monster.'
+                                  : 'A building only works once it has a '
+                                        'worker posted to it — this Healing '
+                                        'Hut heals nobody until someone is '
+                                        'stationed there. Tap the + under '
+                                        'Crew and post a monster to its '
+                                        'medicine role.',
                               style: FoE.label(
                                 size: 11,
                               ).copyWith(color: kBoxInk),
@@ -240,63 +294,131 @@ Future<void> showBuildingDetailDialog(
                           ),
                           const SizedBox(height: 10),
                         ],
-                        _heroCard(
-                          ctrl,
-                          liveB,
-                          def,
-                          functional,
-                          actions: actions,
-                          pause: pause,
-                        ),
-                        const SizedBox(height: 10),
-                        if (panels == null)
-                          // Under construction: the countdown replaces both
-                          // cards — nothing is produced and nobody works yet.
-                          sectionCard(
-                            title: 'Under construction',
-                            icon: Icons.construction,
-                            child: _BuildCountdown(
-                              ctrl: ctrl,
-                              buildingId: liveB.id,
-                            ),
-                          )
-                        else
-                          // NOT dimmed during assignHealer's one-lit-control
-                          // window: its empty "+" tile is the lit control.
-                          SizedBox(
-                            height: middleH,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(
-                                  flex: 5,
-                                  child: sectionCard(
-                                    title: 'Effects',
-                                    icon: Icons.bolt,
-                                    expand: true,
-                                    child: _EffectsBody(items: panels.effects),
+                        // ONE card for hero + content now (user 2026-09-29:
+                        // "überall ist noch der Header abgetrennt, dieser
+                        // soll aber auch in den gleichen Kasten. Resp. diese
+                        // Kasten gibt es nicht mehr" — the hero is chrome-like
+                        // but the rule turned out to mean EVERY header, not
+                        // just MenuScaffold's). A hairline marks the hero off
+                        // from what's below; Effects and Crew, when both
+                        // show, stay just a plain [vHairline] apart from
+                        // each other — both facets of "what this building
+                        // does", never a zone each.
+                        pageCard(
+                          // Fachwerk (2026-11-02): the timber frame of a
+                          // main surface. No roof course here — the
+                          // building's own art rises over the top edge.
+                          framed: true,
+                          // ZERO padding on the shared card: the hero's art
+                          // rises past its own top edge into the exact room
+                          // [_kArtRise] reserves above it (user 2026-09-28,
+                          // "das Gebäudeasset geht oben aus dem Bildschirm
+                          // hinaus") — that budget is tuned against this
+                          // Column's total height matching what it was
+                          // BEFORE hero and content shared one card (a bare
+                          // 80 + 10 + middleH + …), so no padding here and a
+                          // hairline no taller than the 10px gap it replaces.
+                          padding: EdgeInsets.zero,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _heroCard(
+                                ctrl,
+                                liveB,
+                                def,
+                                functional,
+                                actions: actions,
+                                pause: pause,
+                              ),
+                              // 4.5+1+4.5 = 10px, exactly the gap this
+                              // replaces — see the padding note above.
+                              hairline(gap: 4.5),
+                              if (panels == null)
+                                // Under construction: the countdown replaces
+                                // both cards — nothing is produced and
+                                // nobody works yet.
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      sectionLabel(
+                                        'Under construction',
+                                        icon: Icons.construction,
+                                      ),
+                                      const SizedBox(height: 10),
+                                      _BuildCountdown(
+                                        ctrl: ctrl,
+                                        buildingId: liveB.id,
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                // NOT dimmed during assignHealer's
+                                // one-lit-control window: its empty "+" tile
+                                // is the lit control.
+                                SizedBox(
+                                  height: middleH,
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Expanded(
+                                        flex: 5,
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            sectionLabel(
+                                              'Effects',
+                                              icon: Icons.bolt,
+                                            ),
+                                            const SizedBox(height: 10),
+                                            Expanded(
+                                              child: _EffectsBody(
+                                                items: panels.effects,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (hasCrew) ...[
+                                        vHairline(),
+                                        Expanded(
+                                          flex: 7,
+                                          child: _crewBody(
+                                            panels,
+                                            def,
+                                            functional,
+                                            notes == null
+                                                ? null
+                                                : lockable(notes),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  flex: 7,
-                                  child: _crewCard(
-                                    panels,
-                                    def,
-                                    functional,
-                                    notes == null ? null : lockable(notes),
-                                  ),
-                                ),
-                              ],
-                            ),
+                            ],
                           ),
+                        ),
                         // The bar slot: Upgrade for a finished building, the
                         // buy-out for one still under construction.
                         if (!liveB.isComplete) ...[
                           const SizedBox(height: 10),
                           creamCard(
                             padding: const EdgeInsets.all(8),
-                            child: _skipBuildButton(context, liveB),
+                            child: buildStep
+                                ? KeyedSubtree(
+                                    key: IntroSpotlightAnchors.of(
+                                      'healing-hut-skip-build',
+                                    ),
+                                    child: _skipBuildButton(context, liveB),
+                                  )
+                                : _skipBuildButton(context, liveB),
                           ),
                         ] else if (upgradeBar != null) ...[
                           const SizedBox(height: 10),
@@ -309,10 +431,20 @@ Future<void> showBuildingDetailDialog(
                 // No ✕ (user 2026-07-22) — tapping outside the dialog closes it.
                 // Guided tutorial: the one lit control (user 2026-09-06) —
                 // see [oneLitControl]/[lockable] above for what it dims.
-                if (oneLitControl)
+                if (healerStep)
                   const IntroSpotlightOverlay(
                     anchorName: 'healing-hut-assign-slot',
                     hint: 'Tap the + to post a monster here',
+                  ),
+                if (buildStep)
+                  const IntroSpotlightOverlay(
+                    anchorName: 'healing-hut-skip-build',
+                    hint: 'Gold speeds up construction — finish it now.',
+                  ),
+                if (healStep)
+                  const IntroSpotlightOverlay(
+                    anchorName: 'healing-hut-heal-action',
+                    hint: 'Tap Healing to treat your monster.',
                   ),
               ],
             ),
@@ -330,6 +462,12 @@ Future<void> showBuildingDetailDialog(
 const double _kHeroH = 80;
 const double _kBarH = 52;
 const double _kDialogChrome = 24 + 18 + _kHeroH + _kBarH + 10 + 10 + 4;
+
+/// How far the art may rise above the hero card's top edge (user 2026-09-28:
+/// "das Gebäudeasset geht oben aus dem Bildschirm hinaus"). The art is scaled
+/// down to fit its slot plus this much, and the dialog keeps this much room
+/// free above the hero, so even the tallest picture stays on screen.
+const double _kArtRise = 56;
 
 // ── Detail dialog pieces ─────────────────────────────────
 /// The masthead: art rising out of the card's top edge, name, level / footprint
@@ -362,74 +500,65 @@ Widget _heroCard(
       : xpRate > 0
       ? ('${xpRate.toStringAsFixed(0)} XP/h', kBoxInk)
       : null;
-  return creamCard(
-    child: SizedBox(
-      height: _kHeroH,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Bottom-anchored in a short slot so the taller art rises past the
-          // card's top edge (user 2026-07-22).
-          // Paused: the art loses its colour, like on the map (user 2026-09-22).
-          Positioned(
-            left: 12,
-            top: 8,
-            child: b.isComplete && b.isPaused
-                ? ColorFiltered(
-                    colorFilter: kPausedFilter,
-                    child: _artPanel(def),
-                  )
-                : _artPanel(def),
-          ),
-          Positioned(
-            left: 156,
-            right: 12,
-            top: 0,
-            bottom: 0,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        def.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: FoE.title(size: 18).copyWith(color: kBoxInk),
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          // The hall shows its level too (user 2026-07-25): it
-                          // gains a level with every era.
-                          if (ctrl.isUpgradable(def) || def.isMainBuilding)
-                            _pill('Lv ${b.level}'),
-                          _pill(
-                            '${def.gridW}×${def.gridH}',
-                            icon: Icons.grid_on,
-                          ),
-                          // The pause, as a pill of its own beside level and
-                          // size — the rest of the dialog says it in words.
-                          if (b.isComplete && b.isPaused)
-                            _pill('⏸️ Paused', color: CreamPalette.warn),
-                          if (status != null)
-                            _pill(status.$1, color: status.$2),
-                        ],
-                      ),
-                    ],
-                  ),
+  return SizedBox(
+    height: _kHeroH,
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Bottom-anchored in a short slot so the taller art rises past the
+        // card's top edge (user 2026-07-22).
+        // Paused: the art loses its colour, like on the map (user 2026-09-22).
+        Positioned(
+          left: 12,
+          top: 8,
+          child: b.isComplete && b.isPaused
+              ? ColorFiltered(colorFilter: kPausedFilter, child: _artPanel(def))
+              : _artPanel(def),
+        ),
+        Positioned(
+          left: 156,
+          right: 12,
+          top: 0,
+          bottom: 0,
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      def.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: FoE.title(size: 18).copyWith(color: kBoxInk),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        // The hall shows its level too (user 2026-07-25): it
+                        // gains a level with every era.
+                        if (ctrl.isUpgradable(def) || def.isMainBuilding)
+                          _pill('Lv ${b.level}'),
+                        _pill('${def.gridW}×${def.gridH}', icon: Icons.grid_on),
+                        // The pause, as a pill of its own beside level and
+                        // size — the rest of the dialog says it in words.
+                        if (b.isComplete && b.isPaused)
+                          _pill('⏸️ Paused', color: CreamPalette.warn),
+                        if (status != null) _pill(status.$1, color: status.$2),
+                      ],
+                    ),
+                  ],
                 ),
-                for (final a in actions) ...[const SizedBox(width: 8), a],
-                if (pause != null) ...[const SizedBox(width: 8), pause],
-              ],
-            ),
+              ),
+              for (final a in actions) ...[const SizedBox(width: 8), a],
+              if (pause != null) ...[const SizedBox(width: 8), pause],
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     ),
   );
 }
@@ -440,13 +569,13 @@ Widget _pill(String text, {IconData? icon, Color? color}) => Container(
   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
   decoration: BoxDecoration(
     color: CreamPalette.tan.withValues(alpha: 0.18),
-    borderRadius: BorderRadius.circular(9),
+    borderRadius: vr(9),
   ),
   child: Row(
     mainAxisSize: MainAxisSize.min,
     children: [
       if (icon != null) ...[
-        Icon(icon, size: 10, color: kBoxInkSoft),
+        PixelIcon(icon, size: 10, color: kBoxInkSoft),
         const SizedBox(width: 3),
       ],
       Text(
@@ -466,19 +595,29 @@ Widget _circleBtn(IconData icon, VoidCallback onTap, {double size = 32}) =>
         width: size,
         height: size,
         decoration: BoxDecoration(
-          color: CreamPalette.gold,
-          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            center: const Alignment(-0.35, -0.5),
+            colors: [
+              Color.lerp(CreamPalette.gold, Colors.white, 0.35)!,
+              CreamPalette.gold,
+            ],
+          ),
+          shape: BoxShape.rectangle,
+          // Timber ring, like the kit's close button (Fachwerk).
+          border: Border.all(color: Fachwerk.timber, width: 2),
           boxShadow: [
             BoxShadow(color: CreamPalette.goldDeep, offset: const Offset(0, 2)),
           ],
         ),
-        child: Icon(icon, size: size * 0.55, color: CreamPalette.ink),
+        child: PixelIcon(icon, size: size * 0.55, color: CreamPalette.ink),
       ),
     );
 
-/// The Crew card: every post's seats as scaling tiles, plus the notes that
-/// belong to a staffed building.
-Widget _crewCard(_Panels p, BuildingDef def, bool functional, Widget? notes) {
+/// The Crew half of the merged Effects/Crew page card: every post's seats as
+/// scaling tiles, plus the notes that belong to a staffed building. No card
+/// of its own any more — [sectionLabel] and the shared [pageCard] give it its
+/// surface (see the call site).
+Widget _crewBody(_Panels p, BuildingDef def, bool functional, Widget? notes) {
   final slots = p.posts.fold<int>(0, (s, g) => s + g.slots);
   final staffed = p.posts.fold<int>(0, (s, g) => s + g.workers);
   Widget empty(String text) => Center(
@@ -488,28 +627,38 @@ Widget _crewCard(_Panels p, BuildingDef def, bool functional, Widget? notes) {
       style: FoE.dim(size: 11).copyWith(color: kBoxInkFaint),
     ),
   );
-  return sectionCard(
-    title: 'Crew',
-    icon: Icons.groups,
-    trailing: def.workshops.isEmpty || !functional
-        ? null
-        : Text(
-            '$staffed/$slots',
-            style: FoE.value(size: 12).copyWith(color: kBoxInk),
-          ),
-    expand: true,
-    child: def.workshops.isEmpty
-        ? empty('Nobody works in this building.')
-        : !functional
-        ? empty('Connect to a road to staff this workshop.')
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: _CrewGrid(groups: p.posts)),
-              if (notes != null)
-                Padding(padding: const EdgeInsets.only(top: 4), child: notes),
-            ],
-          ),
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      sectionLabel(
+        'Crew',
+        icon: Icons.groups,
+        trailing: def.workshops.isEmpty || !functional
+            ? null
+            : Text(
+                '$staffed/$slots',
+                style: FoE.value(size: 12).copyWith(color: kBoxInk),
+              ),
+      ),
+      const SizedBox(height: 10),
+      Expanded(
+        child: def.workshops.isEmpty
+            ? empty('Nobody works in this building.')
+            : !functional
+            ? empty('Connect to a road to staff this workshop.')
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _CrewGrid(groups: p.posts)),
+                  if (notes != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: notes,
+                    ),
+                ],
+              ),
+      ),
+    ],
   );
 }
 
@@ -685,7 +834,7 @@ Widget _primaryActionButton(String label, VoidCallback onTap) => Pressable(
           style: FoE.title(size: 14).copyWith(color: goldButtonInk()),
         ),
         const SizedBox(width: 2),
-        Icon(
+        PixelIcon(
           Icons.chevron_right,
           size: 20,
           color: goldButtonInk().withValues(alpha: 0.85),
@@ -716,11 +865,20 @@ Widget _artPanel(BuildingDef def) => SizedBox(
         bottom: 0,
         // Standing on its cast shadow — the same look as the build-menu
         // card (user 2026-07-23), one definition in ShadowedBuildingIcon.
-        child: Center(
-          child: ShadowedBuildingIcon(
-            imageUrl: def.imageUrl,
-            defId: def.id,
-            width: 128,
+        //
+        // Tall art is SCALED DOWN into the room the dialog keeps free above the
+        // hero ([_kArtRise]); a picture 1.2× as tall as wide just fits, and the
+        // scout post (2.2×) shrinks instead of leaving the screen.
+        child: SizedBox(
+          height: 64 + _kArtRise,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.bottomCenter,
+            child: ShadowedBuildingIcon(
+              imageUrl: def.imageUrl,
+              defId: def.id,
+              width: 128,
+            ),
           ),
         ),
       ),
@@ -775,7 +933,11 @@ class _EffItem {
   /// For a block that WRAPS (the storage chips): its height depends on the width
   /// it is given, so it asks for the full width and says how tall that makes it.
   final double Function(double width)? hAt;
-  const _EffItem(this.w, this.h, {this.hAt});
+  const _EffItem(this.w, this.h, {this.hAt, this.heading = false});
+
+  /// Starts a new SECTION (Production, Storage, Housing …) — what a wide card
+  /// lays out as side-by-side columns instead of one long list.
+  final bool heading;
 
   bool get wide => hAt != null;
   double heightAt(double width) => hAt?.call(width) ?? h;
@@ -823,13 +985,21 @@ _Panels _buildPanels(
   /// The tutorial's one lit control: the first empty seat carries the
   /// spotlight anchor.
   bool spotlightSlot = false,
+
+  /// True while an already-filled seat must not be tappable at all — see the
+  /// call site's own doc comment.
+  bool lockAssignedSeats = false,
 }) {
   final creaturesCtrl = CreaturesController();
   // Same math workshopPower uses, scoped to one building: level yield.
   final f = buildingYieldFactor(b.level);
   final effects = <_EffItem>[];
-  void put(Widget w, double h, {double Function(double width)? hAt}) =>
-      effects.add(_EffItem(w, h, hAt: hAt));
+  void put(
+    Widget w,
+    double h, {
+    double Function(double width)? hAt,
+    bool heading = false,
+  }) => effects.add(_EffItem(w, h, hAt: hAt, heading: heading));
 
   /// The height of a headline row with [lines] value lines.
   double lineH(int lines) => 5.0 + 16.0 * lines;
@@ -850,7 +1020,7 @@ _Panels _buildPanels(
   List<String> amounts(Map<String, double> m) => [
     for (final e in m.entries)
       if (e.value > 0)
-        '${e.key == WorkshopRole.kConstruction ? '+${e.value.toStringAsFixed(0)} points' : '+${e.value.toStringAsFixed(1)}/h'} '
+        '${e.key == WorkshopRole.kConstruction ? buildPointsLabel(e.value) : '+${e.value.toStringAsFixed(1)}/h'} '
             '${_resEmoji(e.key)}',
   ];
 
@@ -972,8 +1142,10 @@ _Panels _buildPanels(
   // or a house never gets one, and neither does a building that HAS the effect
   // but makes nothing at this level (user 2026-08-27) — "offline" still shows:
   // that is real information about an effect the building DOES have.
+  var productionHeadingShown = false;
   if (hasProduction && (base.isNotEmpty || !functional)) {
-    put(heading('Production'), 19);
+    productionHeadingShown = true;
+    put(heading('Production'), 19, heading: true);
     // Highest producer first (user 2026-09-01), not authoring order.
     final keys =
         (base.isNotEmpty ? base.keys : def.effectKeys('production')).toList()
@@ -986,7 +1158,7 @@ _Panels _buildPanels(
           [
             functional
                 ? (key == WorkshopRole.kConstruction
-                      ? '+${v.toStringAsFixed(0)} points'
+                      ? buildPointsLabel(v)
                       : '+${v.toStringAsFixed(1)}/h')
                 : 'offline',
           ],
@@ -999,10 +1171,43 @@ _Panels _buildPanels(
       );
     }
   }
+  // ── WORKSHOP-DRIVEN production, stated as a rate (user 2026-09-29:
+  // "production pro Statpoint muss bei Effects stehen, da dies der
+  // Haupteffekt des Gebäudes ist") ──
+  // A plain resource role has no authored baseline `production` effect of
+  // its own — the era camps, the shops, every worker-only producer — so
+  // without this, EFFECTS said nothing at all about the building's actual
+  // job; the rate lived only as a caption on the Crew card below. Read at
+  // THIS level, through the same role.mult × levelScale the Crew card's own
+  // per-worker figures use.
+  final workshopRows = [
+    for (final role in def.workshops)
+      if (!role.isCombined &&
+          role.resource != WorkshopRole.kTraining &&
+          role.resource != WorkshopRole.kLegendaryBoost &&
+          role.resource != WorkshopRole.kStorageRoom &&
+          !workshopRoleFeedsSystem(role.resource))
+        MapEntry(role.resource, role.mult * role.levelScale(b.level)),
+  ];
+  if (functional && workshopRows.isNotEmpty) {
+    if (!productionHeadingShown) put(heading('Production'), 19, heading: true);
+    for (final e in workshopRows) {
+      put(
+        headline(
+          '${_resLabel(e.key)} Production',
+          ['${_num(e.value)} per Statpoint'],
+          icons: [_resEmoji(e.key)],
+          labelColor: kBoxInk,
+          indent: 12,
+        ),
+        lineH(1),
+      );
+    }
+  }
   // ── What it can HOLD ──
   // One heading, then the resource and the bare number (user 2026-07-30).
   if (storageKeys.isNotEmpty) {
-    put(heading(buildingEffectLabel('storage')), 19);
+    put(heading(buildingEffectLabel('storage')), 19, heading: true);
     // The staff's room is part of the ceiling this store actually has (user
     // 2026-07-30), so it is part of the number on the row — with the split
     // spelled out, because one of the two halves is a decision you can make
@@ -1064,6 +1269,8 @@ _Panels _buildPanels(
         indent: 12,
       ),
       lineH(1),
+      // Its own section on a wide card (Production | Storage | Housing).
+      heading: true,
     );
   }
 
@@ -1121,6 +1328,18 @@ _Panels _buildPanels(
     // A legendary-boost slot: a stationed legendary multiplies the building's
     // production by (1 + mult), regardless of its stats (user 2026-07-24).
     final boost = role.resource == WorkshopRole.kLegendaryBoost;
+    // WHAT posting a worker here actually buys — said in plain words, not
+    // just left for the tile's own bare glyph+number to imply (user
+    // 2026-09-29: "Die per Worker Effekte der Gebäude sollten angegeben
+    // werden, so dass der User sofort sieht, was damit gemeint ist"). It used
+    // to exist ONLY for a combined post (Scout Post, Caravanserai) — every
+    // single-purpose post (the overwhelming majority: Healing Hut, Trading
+    // Post, Breeding Hut, Hatchery, Builder Camp, a plain production camp…)
+    // had no caption at all UNLESS the building happened to have a SECOND
+    // workshop role too (then [several] shows the role's stat name as a
+    // header) — so a Healing Hut's tiles read as a bare "−6 % 🩹" with
+    // nothing on the card saying that is healing TIME.
+    //
     // A COMBINED post feeds several systems at once, and its name can only be
     // the trip as a whole ("Expedition", "Caravan"). Parts dialled to zero are
     // left out: they do nothing.
@@ -1133,6 +1352,24 @@ _Panels _buildPanels(
                 '${workshopRoleName(p.value) ?? p.value}',
       ];
       if (parts.isNotEmpty) improves = 'Improves ${parts.join(' · ')}';
+    } else if (training) {
+      improves = '🏋️ Trains for XP — produces nothing here';
+    } else if (boost) {
+      improves = '⭐ Boosts the WHOLE building\'s output';
+    } else if (role.resource == WorkshopRole.kStorageRoom) {
+      improves = '🏚 Adds room in this store';
+    } else if (workshopRoleFeedsSystem(role.resource)) {
+      final name = workshopRoleName(role.resource) ?? role.resource;
+      improves = 'Improves ${workshopRoleEmoji(role.resource)} $name';
+    } else {
+      // The EXACT rate, not just the resource's name (user 2026-09-29: "Wood
+      // Production per Statpoint  1.1. So sieht man genau, was wirklich
+      // produziert wird") — the number every worker tile below is computed
+      // from: stat × this = the tile's own "+N/h" figure, at THIS level.
+      final perPoint = role.mult * role.levelScale(b.level);
+      improves =
+          '${resourceName(role.resource)} Production per Statpoint   '
+          '${_num(perPoint)}';
     }
     final free = (slotCap - assigned.length).clamp(0, 1 << 20);
     groups.add(
@@ -1151,8 +1388,10 @@ _Panels _buildPanels(
               boost,
               storageKeys,
               u: u,
-              onTap: () =>
-                  _openAssignPicker(context, ctrl, b, role, swapId: c.id),
+              onTap: lockAssignedSeats
+                  ? null
+                  : () =>
+                        _openAssignPicker(context, ctrl, b, role, swapId: c.id),
             ),
           for (var i = 0; i < free; i++)
             (u) => _emptyWorkerTile(
@@ -1198,13 +1437,14 @@ _Panels _buildPanels(
 
   // Energy scales every rate here the SAME way GameEngine.hourlyRates scales
   // the header's own numbers (user 2026-09-14), so the two never disagree.
+  //
+  // Only what is PRODUCED: build points and the system roles' time cuts run in
+  // real time (user 2026-09-28: "10h sind nicht wirklich 10h").
   final energyRate = ctrl.energyMultiplier;
   if (energyRate != 1.0) {
     for (final k in total.keys.toList()) {
+      if (k == WorkshopRole.kConstruction) continue;
       total[k] = total[k]! * energyRate;
-    }
-    for (final k in systemPower.keys.toList()) {
-      systemPower[k] = systemPower[k]! * energyRate;
     }
   }
 
@@ -1241,17 +1481,39 @@ _Panels _buildPanels(
     ];
     // THE TOP BAR AND THIS CARD MUST AGREE (user 2026-07-30): low energy shows
     // up as a reduced (not zeroed) Total.
+    // An EMPTY energy pool stops everything, and then every figure above is 0 —
+    // which read as a bare "—" (user 2026-09-28: the Builder Camp's Effects were
+    // "-" with a monster posted). Say WHY instead.
+    // Only PRODUCTION (and passive XP) depends on energy — build points and the
+    // system roles' cuts run in real time — so a builder or a breeder is never
+    // "halted" by an empty pool.
+    final noEnergy = ctrl.energyMultiplier <= 0;
+    final crewWorking =
+        total.keys.any((k) => k != WorkshopRole.kConstruction) || trainees > 0;
     final halted =
-        functional && parts.isNotEmpty && (b.isPaused || starved.isNotEmpty);
+        functional &&
+        (parts.isNotEmpty || (noEnergy && crewWorking)) &&
+        (b.isPaused || starved.isNotEmpty || (noEnergy && crewWorking));
     final haltReason = b.isPaused
         ? '0/h · paused'
-        : '0/h · no ${starved.map(_resLabel).join(' / ')}';
+        : starved.isNotEmpty
+        ? '0/h · no ${starved.map(_resLabel).join(' / ')}'
+        : '0/h · no energy';
+    // A builder's whole point is the build time it takes off, so that line is
+    // ALWAYS there — "0 % time" with nobody posted, never a dash.
+    final isBuilder = def.workshops.any(
+      (w) => w.resource == WorkshopRole.kConstruction,
+    );
     final values = !functional
         ? const ['offline']
         : halted
         ? [haltReason]
         : parts.isEmpty
-        ? const ['—']
+        ? [
+            isBuilder
+                ? '${buildPointsLabel(0)} ${_resEmoji(WorkshopRole.kConstruction)}'
+                : '—',
+          ]
         : parts;
     put(const SizedBox(height: 6), 6);
     put(
@@ -1260,7 +1522,7 @@ _Panels _buildPanels(
         values,
         color: !functional || halted
             ? FoE.danger
-            : parts.isEmpty
+            : parts.isEmpty && !isBuilder
             ? kBoxInkFaint
             : kBoxInk,
       ),
@@ -1350,6 +1612,50 @@ class _EffectsBody extends StatelessWidget {
         return _cue(column(items), one > c.maxHeight);
       }
 
+      // A WIDE card (a building with no Crew beside it — the Castle, a house)
+      // lays its SECTIONS side by side, Production | Storage | Housing, so the
+      // whole card reads at a glance without scrolling (user 2026-09-28: "Castle
+      // effects neu gestalten, so dass alles gut sichtbar ist, ohne zu scrollen").
+      if (w >= 520) {
+        final sections = <List<_EffItem>>[];
+        for (final i in items) {
+          if (i.heading || sections.isEmpty) sections.add([]);
+          sections.last.add(i);
+        }
+        if (sections.length >= 2) {
+          final cols = math.min(3, sections.length);
+          final colW = (w - _gap * (cols - 1)) / cols;
+          final heights = [for (final s in sections) sumAt(s, colW)];
+          final target = heights.fold(0.0, (a, b) => a + b) / cols;
+          final columns = <List<_EffItem>>[[]];
+          var acc = 0.0;
+          for (var i = 0; i < sections.length; i++) {
+            if (columns.last.isNotEmpty &&
+                columns.length < cols &&
+                acc + heights[i] / 2 > target) {
+              columns.add([]);
+              acc = 0;
+            }
+            columns.last.addAll(sections[i]);
+            acc += heights[i];
+          }
+          final tallest = columns
+              .map((l) => sumAt(l, colW))
+              .reduce((a, b) => math.max(a, b));
+          if (tallest * 1.08 + 2 <= c.maxHeight) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var k = 0; k < columns.length; k++) ...[
+                  if (k > 0) const SizedBox(width: _gap),
+                  Expanded(child: column(columns[k])),
+                ],
+              ],
+            );
+          }
+        }
+      }
+
       // Two columns: consecutive plain rows are split in half side by side; a
       // wrapping block breaks the run and spans the full width.
       final colW = (w - _gap) / 2;
@@ -1402,7 +1708,10 @@ class _EffectsBody extends StatelessWidget {
         children: segments,
       );
       // Whichever layout is shorter; if it still does not fit, it scrolls.
-      if (twoH <= one) return _cue(body, twoH * 1.02 > c.maxHeight);
+      // The same margin the single column gets, plus a little (the Castle's
+      // full-width Effects overflowed by 4 px at a 2 % margin: the row
+      // estimates run about 5 % short of what the text really needs).
+      if (twoH <= one) return _cue(body, twoH * 1.08 + 2 > c.maxHeight);
       return _cue(column(items), true);
     },
   );
@@ -1447,7 +1756,7 @@ class _StorageTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7),
       decoration: BoxDecoration(
         color: kBoxInk.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: vr(8),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1680,7 +1989,7 @@ _WorkerReadout _workerReadout(
           : training
           ? '+${kTrainingXpPerHour.toStringAsFixed(0)} XP/h'
           : construction
-          ? '+${contrib.toStringAsFixed(0)} points 🔨'
+          ? '${buildPointsLabel(contrib)} 🔨'
           // A system role's contribution is a cut or a bonus, not an hourly
           // amount — and it is only meaningful TOGETHER with its colleagues'
           // (the cut is soft-capped over the summed power), so the row shows
@@ -1724,7 +2033,7 @@ Widget _workerTile(
   bool boost,
   List<String> storageKeys, {
   required double u,
-  required VoidCallback onTap,
+  required VoidCallback? onTap,
 }) {
   final r = _workerReadout(c, role, level, training, boost, storageKeys);
   final absent = r.absence != null;
@@ -1788,7 +2097,7 @@ Widget _emptyWorkerTile({
                 width: plus,
                 height: plus,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+                  shape: BoxShape.rectangle,
                   color: CreamPalette.gold,
                   boxShadow: [
                     BoxShadow(
@@ -1797,7 +2106,7 @@ Widget _emptyWorkerTile({
                     ),
                   ],
                 ),
-                child: Icon(
+                child: PixelIcon(
                   Icons.add,
                   size: plus * 0.7,
                   color: CreamPalette.ink,
@@ -1824,11 +2133,19 @@ Widget _skipBuildButton(BuildContext context, PlacedBuilding b) {
         ? '🪙 Finish now · $cost'
         : '🪙 $cost (you have ${ctrl.gold.toInt()})',
     () async {
-      if (!canPay) return;
+      if (!canPay) {
+        context.snack(
+          'Not enough gold — you need 🪙 $cost, you have 🪙 ${ctrl.gold.toInt()}.',
+          error: true,
+        );
+        return;
+      }
+      // The dialog's own context dies with the pop below — the root one
+      // outlives it, so a refusal can still be shown.
+      final root = Navigator.of(context, rootNavigator: true).context;
       Navigator.pop(context);
-      // No pop-up on failure any more (user 2026-08-29: "wirklich alle pop
-      // up nachrichten... löschen").
-      await ctrl.skipBuildWithGold(b);
+      final err = await ctrl.skipBuildWithGold(b);
+      if (err != null && root.mounted) root.snack(err, error: true);
     },
   );
 }
@@ -1918,7 +2235,14 @@ Widget _upgradeBar(
   final atMax = b.level >= maxBuildingLevelFor(def, ctrl.dungeonMaxStage);
   final target = b.level + 1;
   final stock = ctrl.resources?.asMap ?? {};
-  final afford = !atMax && def.canAffordAt(target, stock);
+  // Same slot check upgradeBuilding makes before it charges anything (user
+  // 2026-09-22: "wenn ich nicht bauen kann, weil kein Bauarbeiter, queue
+  // verfügbar ist, muss dies angezeigt werden. Auch bei upgrade") — shown up
+  // front, like the cost, rather than only after a tap silently does nothing.
+  final queueFull =
+      ctrl.activeConstructionCount >= ctrl.maxBuildSlots &&
+      ctrl.queuedConstructionCount >= ctrl.maxQueueSlots;
+  final afford = !atMax && !queueFull && def.canAffordAt(target, stock);
 
   // The EFFECTIVE outputs this level vs the next (user 2026-07-24: show the
   // concrete numbers, not a % increase). Housing rides the '__housing' key.
@@ -1930,7 +2254,7 @@ Widget _upgradeBar(
     if (k == kHousingOutputKey) return val.round().toString();
     // Passive construction is points, like a builder's stat (2026-07-26).
     if (k == WorkshopRole.kConstruction) {
-      return '${val.toStringAsFixed(0)} points';
+      return buildPointsLabel(val);
     }
     return '${val.toStringAsFixed(1)}/h';
   }
@@ -1965,7 +2289,7 @@ Widget _upgradeBar(
         end: Alignment.bottomCenter,
         colors: [CreamPalette.tileTop, CreamPalette.tileBottom],
       ),
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: vr(9),
       boxShadow: [
         BoxShadow(color: CreamPalette.tanShadow, offset: const Offset(0, 2)),
       ],
@@ -1989,6 +2313,12 @@ Widget _upgradeBar(
                 ? Text(
                     'Maximum level reached.',
                     style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+                  )
+                : queueFull
+                ? Text(
+                    'Build queue is full (${ctrl.maxBuildSlots} active + '
+                    '${ctrl.maxQueueSlots} queued) — free a slot first.',
+                    style: FoE.dim(size: 11).copyWith(color: FoE.danger),
                   )
                 // A level that moves nothing says so, rather than leaving a
                 // bare button that reads as a rendering fault.
@@ -2062,10 +2392,10 @@ Future<void> _doUpgrade(
 ) async {
   final err = await ctrl.upgradeBuilding(buildingId);
   if (!context.mounted) return;
-  // No pop-up on failure any more (user 2026-08-29: "wirklich alle pop up
-  // nachrichten... löschen") — the dialog just stays open.
   if (err == null) {
     Navigator.pop(context); // close dialog; the building is now rebuilding
+  } else {
+    context.snack(err, error: true);
   }
 }
 

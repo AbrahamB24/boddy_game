@@ -56,3 +56,15 @@ docs/renders/*.glb
 # The all-buildings scene: output, and it is rebuilt in one command
 docs/renders/*.blend
 docs/renders/*.blend1
+
+# Local Netlify folder
+.netlify
+
+# photoreal pipeline: CC0 textures re-fetched by tool/blender/fetch_textures.py; scratch renders
+tool/blender/textures/
+tool/blender/_out/
+
+docs/renders/monsters/*/_frames/
+
+# monster pipeline intermediates (shipped webps live in assets/images/monsters)
+docs/renders/monsters/*/*.png

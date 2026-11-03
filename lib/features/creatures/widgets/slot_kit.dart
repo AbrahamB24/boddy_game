@@ -4,7 +4,9 @@ import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../../common/widgets/recess_bar.dart';
-import '../../social/widgets/social_kit.dart';
+import '../../social/widgets/social_kit.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 /// THE SLOT FAMILY (user 2026-09-20, "Variante 2, Slot-Karten"): the Healing Hut,
 /// the Combat School and the Hatchery are one page with different nouns — a
@@ -21,7 +23,14 @@ import '../../social/widgets/social_kit.dart';
 /// incubator with an egg.
 class SlotCard extends StatelessWidget {
   static const double width = 196;
-  static const double height = 106;
+  // Was 106 — that left the Column inside EXACTLY zero px of slack (avatar 50
+  // + gap 9 + bar 10 + time row ~20 = 89, the padded height to the pixel).
+  // Real-device font metrics are never that exact: a font whose glyph a
+  // character falls back for (user 2026-09-29's own run: "Could not find a
+  // set of Noto fonts to display all missing characters") renders a hair
+  // taller, and the Column overflowed by 8 px. A little headroom, not a
+  // hairline fit.
+  static const double height = 114;
 
   final Widget avatar;
   final String name;
@@ -151,12 +160,12 @@ class FreeSlotCard extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: CreamPalette.gold.withValues(alpha: 0.16),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: vr(12),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.add, size: 24, color: CreamPalette.goldDeep),
+              const PixelIcon(Icons.add, size: 24, color: CreamPalette.goldDeep),
               const SizedBox(height: 2),
               Text(
                 label,
@@ -243,7 +252,7 @@ class SlotChip extends StatelessWidget {
           ),
           if (onRemove != null) ...[
             const SizedBox(width: 5),
-            Icon(Icons.close, size: 12, color: kBoxInkFaint),
+            PixelIcon(Icons.close, size: 12, color: kBoxInkFaint),
           ],
         ],
       ),
@@ -386,13 +395,19 @@ class SlotFamilyLayout extends StatelessWidget {
 
   static const double lineWidth = 250;
 
+  // Places (what's filled right now) and Waiting (the pool to fill them
+  // from) ARE different Gebiete (user 2026-09-30, "hier und andernorts
+  // sind noch die alten Kästchen vorhanden" — the "Trennlinien und Zonen
+  // gemischt" rule, app-wide), so Places gets a [zoneBox] of its own; no
+  // card of either's own any more — every screen that builds this already
+  // stands on MenuScaffold's own single card.
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 10),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        creamCard(
+        zoneBox(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,48 +447,30 @@ class SlotFamilyLayout extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Expanded(
-          child: creamCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
-                  child: Row(
-                    children: [
-                      Text(
-                        tilesTitle.toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.9,
-                          color: kBoxAccent,
-                        ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              sectionLabel(tilesTitle, trailing: tilesTrailing),
+              const SizedBox(height: 10),
+              Expanded(
+                child: tiles.isEmpty
+                    ? Center(child: whenNoTiles ?? const SizedBox.shrink())
+                    : GridView.builder(
+                        padding: EdgeInsets.zero,
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 150,
+                              mainAxisExtent: 146,
+                              mainAxisSpacing: 8,
+                              crossAxisSpacing: 8,
+                            ),
+                        itemCount: tiles.length,
+                        itemBuilder: (_, i) => tiles[i],
                       ),
-                      const Spacer(),
-                      ?tilesTrailing,
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: tiles.isEmpty
-                      ? Center(child: whenNoTiles ?? const SizedBox.shrink())
-                      : GridView.builder(
-                          padding: const EdgeInsets.fromLTRB(14, 2, 14, 12),
-                          gridDelegate:
-                              const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 150,
-                                mainAxisExtent: 146,
-                                mainAxisSpacing: 8,
-                                crossAxisSpacing: 8,
-                              ),
-                          itemCount: tiles.length,
-                          itemBuilder: (_, i) => tiles[i],
-                        ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ],

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/tuning/game_tuning.dart';
@@ -14,9 +16,12 @@ import '../../../core/tuning/game_tuning.dart';
 //               fighters weaken the target. Idle/timed, optional intervention.
 //   • battle  — fight/boss node, played actively via the CTB battle engine.
 //
-// gather/capture resolve on a real-time timer (offline-capable, like breeding);
-// battle opens the interactive battle screen instead. This model is the shared
-// record for all three — type-specific inputs/outputs live in [payload].
+// gather/trade resolve on a real-time timer (offline-capable, like breeding);
+// capture resolves on REAL STEPS instead (user 2026-10-02 — see
+// [isStepGated]/[stepsTarget]/[stepsWalked]), credited by
+// StepTrackerService → ExpeditionController.creditSteps; battle opens the
+// interactive battle screen. This model is the shared record for all four —
+// type-specific inputs/outputs live in [payload].
 // ── Slots ───────────────────────────────────────────────────
 // How many timed expeditions can run at once WITHOUT any building — ZERO since
 // 2026-07-29 (user: "ohne scout post darf keine expedition möglich sein, d.h
@@ -129,23 +134,52 @@ class Expedition {
   });
 
   /// Wall-clock time the timer completes (== startedAt for untimed battles).
+  /// Meaningless for a step-gated capture hunt — [duration] is stored as
+  /// zero for those (see [isStepGated]); use [stepsRemaining] instead.
   DateTime get endsAt => startedAt.add(duration);
 
-  /// Time left until the timer elapses (never negative).
+  /// A capture hunt runs on real steps, not a wall clock (user 2026-10-02).
+  /// Every OTHER type keeps the original timer.
+  bool get isStepGated => type == ExpeditionType.capture;
+
+  /// The steps this hunt needs, fixed at send time (see
+  /// capture_math.dart's effectiveHuntSteps) — never re-derived from
+  /// kCaptureHuntOptions, so a later balance change never retroactively
+  /// moves an in-flight trip's goal.
+  int get stepsTarget => (payload['stepsTarget'] as num?)?.toInt() ?? 0;
+
+  /// Real steps credited so far — see ExpeditionController.creditSteps.
+  /// Persisted in the same free-form payload [captureFindsDone] already
+  /// uses, so no schema change was needed to add this.
+  int get stepsWalked => (payload['stepsWalked'] as num?)?.toInt() ?? 0;
+
+  /// Steps still owed (never negative).
+  int get stepsRemaining => math.max(0, stepsTarget - stepsWalked);
+
+  /// Time left until the timer elapses (never negative). Always zero for a
+  /// step-gated hunt — callers must branch on [isStepGated] and show
+  /// [stepsRemaining] instead; there is no ETA to give.
   Duration remaining(DateTime now) {
+    if (isStepGated) return Duration.zero;
     final left = endsAt.difference(now);
     return left.isNegative ? Duration.zero : left;
   }
 
-  /// 0.0 → 1.0 timer progress (1.0 for zero-duration expeditions).
+  /// 0.0 → 1.0 progress — steps walked / needed for a hunt, the timer
+  /// elsewhere (1.0 for zero-duration expeditions).
   double progress(DateTime now) {
+    if (isStepGated) {
+      if (stepsTarget <= 0) return 1.0;
+      return (stepsWalked / stepsTarget).clamp(0.0, 1.0);
+    }
     final total = duration.inMilliseconds;
     if (total <= 0) return 1.0;
     final done = now.difference(startedAt).inMilliseconds;
     return (done / total).clamp(0.0, 1.0);
   }
 
-  bool isFinished(DateTime now) => !now.isBefore(endsAt);
+  bool isFinished(DateTime now) =>
+      isStepGated ? stepsWalked >= stepsTarget : !now.isBefore(endsAt);
 
   /// A timed expedition whose timer has elapsed but whose rewards haven't been
   /// granted yet — the signal for the controller to resolve it.

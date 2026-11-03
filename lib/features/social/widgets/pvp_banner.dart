@@ -10,6 +10,7 @@ import '../services/pvp_notifier.dart';
 import '../services/pvp_service.dart';
 import '../social_screen.dart';
 import 'social_kit.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
 
 /// Where a banner's main button goes: into the lobby (loading the match
 /// fresh — what the banner saw may be minutes old), or to the PvP list for a
@@ -164,7 +165,7 @@ class _Banner extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 460),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: vr(14),
             gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,

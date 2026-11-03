@@ -11,7 +11,9 @@ import '../data/goods_definitions.dart' show kGoodsDefs;
 import '../data/resource_icons.dart';
 import '../data/workshop_role_effects.dart';
 import '../settlement_controller.dart';
-import '../widgets/building_icon.dart';
+import '../widgets/building_icon.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 /// Whether [def] can be built right now, and if not, why — ONE answer for the
 /// build strip's cards and for the preview dialog's Build button, so the two can
@@ -140,41 +142,63 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
         width: (size.width - 28).clamp(320.0, 660.0),
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(0, 4, 0, 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _hero(context, status, stock),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: middleH,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: sectionCard(
-                        title: 'Effects',
-                        icon: Icons.bolt,
-                        expand: true,
-                        trailing: maxLevel > 1 ? _levelStepper(maxLevel) : null,
-                        child: _effects(era),
+          // ONE card for the whole dialog now, hero included (user
+          // 2026-09-29: "überall ist noch der Header abgetrennt, dieser
+          // soll aber auch in den gleichen Kasten. Resp. diese Kasten gibt
+          // es nicht mehr" — the hero is chrome-like, but the rule turned
+          // out to mean EVERY header, not just MenuScaffold's). A hairline
+          // marks it off from Effects/Crew below; those two stay just a
+          // plain [vHairline] apart from each other, being both facets of
+          // "what this building does".
+          child: pageCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _hero(context, status, stock),
+                hairline(),
+                SizedBox(
+                  height: middleH,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            sectionLabel(
+                              'Effects',
+                              icon: Icons.bolt,
+                              trailing: maxLevel > 1
+                                  ? _levelStepper(maxLevel)
+                                  : null,
+                            ),
+                            const SizedBox(height: 10),
+                            Expanded(child: _effects(era)),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 5,
-                      child: sectionCard(
-                        title: 'Crew',
-                        icon: Icons.groups_2_outlined,
-                        expand: true,
-                        child: _crew(),
+                      vHairline(),
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            sectionLabel(
+                              'Crew',
+                              icon: Icons.groups_2_outlined,
+                            ),
+                            const SizedBox(height: 10),
+                            Expanded(child: _crew()),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -189,7 +213,7 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
     BuildContext context,
     BuildStatus status,
     Map<String, double> stock,
-  ) => creamCard(
+  ) => Padding(
     padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
     child: SizedBox(
       height: _kHeroH - 16,
@@ -252,12 +276,12 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
       color: CreamPalette.tan.withValues(alpha: 0.18),
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: vr(9),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: kBoxInkSoft),
+        PixelIcon(icon, size: 12, color: kBoxInkSoft),
         const SizedBox(width: 4),
         Text(
           text,
@@ -370,7 +394,7 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
         width: 26,
         height: 26,
         decoration: raisedTile(radius: 9),
-        child: Icon(icon, size: 18, color: on ? kBoxInk : kBoxInkFaint),
+        child: PixelIcon(icon, size: 18, color: on ? kBoxInk : kBoxInkFaint),
       ),
     );
     return Row(
@@ -413,7 +437,10 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
       final v = def.effectAt('production', key, era, level: _level);
       add(
         'Production · ${_resLabel(key)}',
-        '${formatBuildingEffect('production', key, v)} ${_resEmoji(key)}',
+        // Build points read as the time they take off, for the player.
+        key == WorkshopRole.kConstruction
+            ? '${buildPointsLabel(v)} ${_resEmoji(key)}'
+            : '${formatBuildingEffect('production', key, v)} ${_resEmoji(key)}',
         faint: v == 0,
       );
     }
@@ -530,10 +557,11 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
         lines.add(('${_resLabel(res)} per 10 points', label));
       } else {
         final v = role.contribution((_) => 1, _level)[res] ?? 0;
-        final unit = res == WorkshopRole.kConstruction ? ' points' : '/h';
         lines.add((
           '${_resLabel(res)} per point',
-          '+${_num(v)}$unit ${_resEmoji(res)}',
+          res == WorkshopRole.kConstruction
+              ? buildPointsLabel(v)
+              : '+${_num(v)}/h ${_resEmoji(res)}',
         ));
       }
     }

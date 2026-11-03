@@ -20,11 +20,13 @@ import 'models/species_def.dart';
 import 'services/breeding_controller.dart';
 import 'services/breeding_cost.dart';
 import 'services/creatures_controller.dart';
-import 'services/creature_power.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/gene_bar_toggle.dart';
+import 'widgets/picker_detail_panel.dart';
 import '../common/widgets/recess_bar.dart';
-import '../../core/ui/pressable.dart';
+import '../../core/ui/pressable.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 // The Breeding Hut: MATING, and nothing after it (user 2026-07-26 — "Eggs
 // müssen nicht angezeigt werden … und die Hatchery auch nicht, da dies ein
@@ -48,16 +50,16 @@ class _BreedingPaneState extends State<BreedingPane> {
   // The build menu, the building dialog, the worker sheet and the upgrade
   // preview all share one surface; this page was the last dark screen among
   // them, and it is reached from the same building.
-  static const Color _ink = CreamPalette.ink;
-  static final Color _inkSoft = CreamPalette.ink.withValues(alpha: 0.78);
+  static const Color _ink = kBoxInk;
+  static final Color _inkSoft = kBoxInk.withValues(alpha: 0.78);
   static const Color _accent = CreamPalette.accent;
 
   /// The page and the picker sheet are both the kit's cream now, so one ink
   /// serves both; these are the names the page's own text used while it sat on a
   /// dark ground.
-  static const Color _pageInk = CreamPalette.ink;
-  static final Color _pageInkSoft = CreamPalette.ink.withValues(alpha: 0.78);
-  static final Color _pageInkFaint = CreamPalette.ink.withValues(alpha: 0.5);
+  static const Color _pageInk = kBoxInk;
+  static final Color _pageInkSoft = kBoxInk.withValues(alpha: 0.78);
+  static final Color _pageInkFaint = kBoxInk.withValues(alpha: 0.5);
 
   /// This page is cream, so its pills are.
   static final PillPalette _pills = PillPalette.cream;
@@ -80,6 +82,18 @@ class _BreedingPaneState extends State<BreedingPane> {
 
   /// Which gene the comparison bars are drawn from — see [GeneBarToggle].
   bool _barsShowGrowth = false;
+
+  /// Which level every figure on the page is worked out at (user 2026-09-28: "auf
+  /// lvl1 und level max umschalten … dann wechselt auch die Energieanzeige") —
+  /// the current level, level 1 (the genes, what a child starts from) or the
+  /// maximum.
+  int _refIndex = 0; // 0 = now, 1 = level 1, 2 = the maximum
+  /// The level to work out at; null = each monster's own (Now).
+  int? get _refLevel => switch (_refIndex) {
+    1 => 1,
+    2 => kCreatureMaxLevel,
+    _ => null,
+  };
 
   @override
   void initState() {
@@ -192,6 +206,12 @@ class _BreedingPaneState extends State<BreedingPane> {
   // The BREEDING half of the merged Breeding & Hatchery page (user 2026-09-20:
   // "hatchery und breeding sollten zusammen sein wie worker und population").
   // The page's own frame — title, tabs, close — lives in HatcheryScreen.
+  //
+  // Mating (a running queue) and New pair (an action panel) ARE different
+  // Gebiete (user 2026-09-29, "Trennlinien und Zonen gemischt", app-wide), so
+  // Mating gets a [zoneBox] of its own — its edge is separation enough on its
+  // own. (HatcheryScreen's MenuScaffold is the one card now — no [pageCard]
+  // here, or this would nest a card inside its card.)
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([_breeding, _creatures]),
@@ -205,34 +225,67 @@ class _BreedingPaneState extends State<BreedingPane> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            flex: 5,
-            child: sectionCard(
-              title: 'Mating',
-              icon: Icons.favorite,
-              expand: true,
-              child: _breeding.matingJobs.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No pair mating.',
-                        style: FoE.dim(size: 12).copyWith(color: _pageInkFaint),
-                      ),
-                    )
-                  : ListView(
-                      padding: EdgeInsets.zero,
-                      children: [
-                        for (final job in _breeding.matingJobs) _jobCard(job),
-                      ],
-                    ),
+            // Narrower (user 2026-09-29: "Mating kann schmaler werden, dafür
+            // mehr Platz für New Pair") — was 5 of 12, now 3 of 12.
+            flex: 3,
+            child: zoneBox(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  sectionLabel('Mating', icon: Icons.favorite),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: _breeding.matingJobs.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No pair mating.',
+                              style: FoE.dim(
+                                size: 12,
+                              ).copyWith(color: _pageInkFaint),
+                            ),
+                          )
+                        : ListView(
+                            padding: EdgeInsets.zero,
+                            children: [
+                              for (final job in _breeding.matingJobs)
+                                _jobCard(job),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
-            flex: 7,
-            child: sectionCard(
-              title: 'New pair',
-              icon: Icons.add_circle_outline,
-              expand: true,
-              child: SingleChildScrollView(child: _newPairPanel()),
+            flex: 9,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                sectionLabel('New pair', icon: Icons.add_circle_outline),
+                const SizedBox(height: 10),
+                // ONE PAGE, never a scrollbar (user 2026-09-28: "idealerweise
+                // alles auf einer Seite darstellen, ohne scrollen zu müssen")
+                // — the panel (two tiles, all 14 genes, the Breed button, the
+                // time line) is laid out at its natural size and then scaled
+                // down as a WHOLE to whatever height is actually left, exactly
+                // the technique the victory page uses. At the app's normal
+                // landscape height nothing shrinks at all; only a cramped
+                // window ever pays for it.
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, c) => FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        width: c.maxWidth,
+                        child: _newPairPanel(),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -257,10 +310,10 @@ class _BreedingPaneState extends State<BreedingPane> {
             width: 46,
             height: 46,
             child: species?.stageAt(0).imageUrl == null
-                ? Icon(Icons.pets, color: _accent, size: 26)
+                ? PixelIcon(Icons.pets, color: _accent, size: 26)
                 : CreatureSprite(
                     url: species!.stageAt(0).imageUrl!,
-                    fallback: Icon(Icons.pets, color: _accent, size: 26),
+                    fallback: PixelIcon(Icons.pets, color: _accent, size: 26),
                   ),
           ),
           const SizedBox(width: 10),
@@ -307,7 +360,7 @@ class _BreedingPaneState extends State<BreedingPane> {
         label: 'Speed up (item)',
         button: true,
         child: IconButton(
-          icon: Icon(Icons.bolt, color: _accent, size: 18),
+          icon: PixelIcon(Icons.bolt, color: _accent, size: 18),
           onPressed: _busy ? null : () => _useAccelerator(job),
         ),
       ),
@@ -315,7 +368,7 @@ class _BreedingPaneState extends State<BreedingPane> {
       label: 'Cancel',
       button: true,
       child: IconButton(
-        icon: const Icon(Icons.close, color: CreamPalette.warn, size: 18),
+        icon: const PixelIcon(Icons.close, color: CreamPalette.warn, size: 18),
         onPressed: () => _breeding.cancel(job),
       ),
     ),
@@ -367,97 +420,159 @@ class _BreedingPaneState extends State<BreedingPane> {
       );
     }
 
-    // No frame around it (user 2026-07-27): the two tiles, the table and the
-    // button are already one block, and a recess around them only competed
-    // with the tiles' own shapes.
-    return Column(
+    // TILES BESIDE THE TABLE, not above it (user 2026-09-29: "New Pair kann
+    // nicht mehr gelesen werden, da alles viel zu klein ist" — stacked, the
+    // panel's natural height was ~670 px against a card with maybe 280 to
+    // give it, so the scale-to-fit step from the previous pass had to shrink
+    // everything to under half size, past reading). Both parents at their
+    // full Monsters-grid size in their own narrow column on the left; the
+    // table, the button and the time line run down a second column beside
+    // them instead of under them — the two tiles' own height (≈360 px, two
+    // stacked) now runs in PARALLEL with the table's instead of adding to
+    // it, which is most of the saving. [_geneTable] itself is two columns of
+    // 7 stats now, not one of 14, for the rest.
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // The two slots ARE the picker (user 2026-07-26). The species
         // dropdown is gone: you choose a monster, and its species narrows the
         // other slot — the order you actually think in.
-        //
-        // Each tile CENTRED in its own half (user 2026-09-06: "die Monster
-        // in der Breite so zentriert sein, dass sie über ihren Werten
-        // stehen") — [_geneTable] below splits the same width into an A
-        // half and a B half (numbers + bar each side of the centre label),
-        // so a tile sitting at a fixed [kMonsterTileSpacing] gap from its
-        // neighbour, bunched toward the left, no longer stood over the
-        // column of values it actually names. Two equal Expanded halves put
-        // each tile's centre roughly where its own numbers+bar cluster
-        // reads below it.
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        SizedBox(
+          width: 104,
+          child: Column(
+            children: [
+              _parentSlot(first: true, c: a),
+              const SizedBox(height: 10),
+              _parentSlot(first: false, c: b),
+            ],
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (a != null && b != null) _geneTable(a, b),
+              // NO BUTTON WITH BOTH SLOTS EMPTY (user 2026-07-27: "pick both
+              // parents kann gelöscht werden") — the same rule the Hatchery's
+              // panel follows. A greyed button reading "Pick both parents"
+              // was an action offered for a thing not chosen yet, saying what
+              // the two empty tiles beside it already say. From the first
+              // parent on it comes back, because then it names what is still
+              // MISSING rather than restating the invitation.
+              if (a != null || b != null) ...[
+                if (a != null && b != null) const SizedBox(height: 14),
+                // The price lives INSIDE the button, built exactly like
+                // Upgrade (user 2026-07-27): the same parchment face, the
+                // label on top, the cost and the duration on the sub-line —
+                // red when the store cannot cover it. The price is part of
+                // the offer, not a caption above it.
+                Pressable(
+                  onTap: canStart ? _start : null,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: goldButton(active: canStart),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // A greyed button that repeats its own label says it
+                        // is off but not WHY. Name the missing half instead.
+                        Text(
+                          a == null || b == null
+                              ? 'Pick the partner'
+                              // "Breed" (user 2026-07-27) — one word, like
+                              // Hatch on the Hatchery's button.
+                              : 'Breed',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: goldButtonInk(active: canStart),
+                          ),
+                        ),
+                        if (cost.isNotEmpty && species != null) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            '${breedCostLabel(cost)}   '
+                            '⏱ ${_hoursText(_matingHours(species))}',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: affordable
+                                  ? goldButtonInk(active: canStart)
+                                  : CreamPalette.warn,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                // THE REAL TIME, under the button (user 2026-09-28: "zeige
+                // unten die effektive Zeit mit den Abzügen durch die Monster
+                // bereits eingerechnet") — the base for this rarity, what the
+                // breeders posted in the hut take off, and what is left.
+                // Energy plays no part: it runs on the clock.
+                if (species != null) ...[
+                  const SizedBox(height: 8),
+                  _timeLine(species),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// "Mating time  12 h → 8 h 30 min  (−29 % from your breeders)".
+  Widget _timeLine(SpeciesDef species) {
+    final base = kSpeciesBalance.of(species.rarity).breedHours;
+    final eff = _matingHours(species);
+    final cut = base <= 0 ? 0.0 : (1 - eff / base).clamp(0.0, 1.0);
+    final saved = cut >= 0.005;
+    return Center(
+      child: Text.rich(
+        TextSpan(
+          style: FoE.dim(size: 11).copyWith(color: _pageInkSoft),
           children: [
-            Expanded(
-              child: Center(child: _parentSlot(first: true, c: a)),
+            const TextSpan(text: 'Mating time  '),
+            if (saved) ...[
+              TextSpan(
+                text: _hoursText(base),
+                style: const TextStyle(decoration: TextDecoration.lineThrough),
+              ),
+              const TextSpan(text: '  →  '),
+            ],
+            TextSpan(
+              text: _hoursText(eff),
+              style: FoE.value(size: 13).copyWith(color: _pageInk),
             ),
-            Expanded(
-              child: Center(child: _parentSlot(first: false, c: b)),
+            TextSpan(
+              text: saved
+                  ? '   −${(cut * 100).round()} % from your breeders'
+                  : '   no breeders posted',
+              style: TextStyle(
+                color: saved ? CreamPalette.better : _pageInkFaint,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
         ),
-        if (a != null && b != null) ...[
-          const SizedBox(height: 14),
-          _geneTable(a, b),
-        ],
-        // NO BUTTON WITH BOTH SLOTS EMPTY (user 2026-07-27: "pick both parents
-        // kann gelöscht werden") — the same rule the Hatchery's panel follows.
-        // A greyed button reading "Pick both parents" was an action offered for
-        // a thing not chosen yet, saying what the two empty cards above it
-        // already say. From the first parent on it comes back, because then it
-        // names what is still MISSING rather than restating the invitation.
-        if (a != null || b != null) ...[
-          const SizedBox(height: 14),
-          // The price lives INSIDE the button, built exactly like Upgrade (user
-          // 2026-07-27): the same parchment face, the label on top, the cost
-          // and the duration on the sub-line — red when the store cannot cover
-          // it. The price is part of the offer, not a caption above it.
-          Pressable(
-            onTap: canStart ? _start : null,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: goldButton(active: canStart),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // A greyed button that repeats its own label says it is off
-                  // but not WHY. Name the missing half instead.
-                  Text(
-                    a == null || b == null
-                        ? 'Pick the partner'
-                        // "Breed" (user 2026-07-27) — one word, like Hatch on
-                        // the Hatchery's button.
-                        : 'Breed',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: goldButtonInk(active: canStart),
-                    ),
-                  ),
-                  if (cost.isNotEmpty && species != null) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      '${breedCostLabel(cost)}   '
-                      '⏱ ${_matingHours(species).round()}h',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: affordable
-                            ? goldButtonInk(active: canStart)
-                            : CreamPalette.warn,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ],
+        textAlign: TextAlign.center,
+      ),
     );
+  }
+
+  /// 12 → "12 h", 8.5 → "8 h 30 min", 0.4 → "24 min".
+  static String _hoursText(double hours) {
+    final totalMin = (hours * 60).round();
+    if (totalMin <= 0) return '0 min';
+    final h = totalMin ~/ 60, m = totalMin % 60;
+    if (h == 0) return '$m min';
+    if (m == 0) return '$h h';
+    return '$h h $m min';
   }
 
   /// One parent slot: the MONSTER TILE from the Monsters screen (user
@@ -497,7 +612,7 @@ class _BreedingPaneState extends State<BreedingPane> {
               // genes, not on its wounds. The current power stays in the foot;
               // the level-1 one (its genes) hangs from the tile as a flag.
               showHp: false,
-              extras: [TileValue('At Lv 1', levelOnePower(c))],
+              atLevel: _refLevel,
             ),
     ),
   );
@@ -526,6 +641,16 @@ class _BreedingPaneState extends State<BreedingPane> {
     child: Row(
       children: [
         const Spacer(),
+        // WHICH LEVEL the numbers (and each tile's ⚡) are worked out at …
+        LevelRefToggle(
+          index: _refIndex,
+          onChanged: (i) => setState(() => _refIndex = i),
+          ink: _pageInk,
+          inkFaint: _pageInkFaint,
+          accent: CreamPalette.accent,
+        ),
+        const SizedBox(width: 12),
+        // … and WHICH gene the bars draw.
         GeneBarToggle(
           showGrowth: _barsShowGrowth,
           onChanged: (v) => setState(() => _barsShowGrowth = v),
@@ -599,8 +724,14 @@ class _BreedingPaneState extends State<BreedingPane> {
     //
     // WHICH gene follows the header switch (user 2026-07-27) — and so does the
     // scale, or a growth of +3 would be a hairline against a base of 80.
-    final aGenes = _barsShowGrowth ? a.statSlope : a.statBase;
-    final bGenes = _barsShowGrowth ? b.statSlope : b.statBase;
+    // The VALUE bars follow the level switch (Lv 1 or Max); growth is per level
+    // whichever level is chosen.
+    Map<CreatureStat, double> atRef(CreatureInstance c) => {
+      for (final s in CreatureStat.values)
+        s: c.statValueAtLevel(s, _refLevel ?? c.level).toDouble(),
+    };
+    final aGenes = _barsShowGrowth ? a.statSlope : atRef(a);
+    final bGenes = _barsShowGrowth ? b.statSlope : atRef(b);
     final maxVal = CreatureStat.values.fold<double>(0.001, (m, s) {
       final av = aGenes[s] ?? 0;
       final bv = bGenes[s] ?? 0;
@@ -627,8 +758,8 @@ class _BreedingPaneState extends State<BreedingPane> {
     );
 
     Widget row(CreatureStat stat) {
-      final av = (a.statBase[stat] ?? 0).round();
-      final bv = (b.statBase[stat] ?? 0).round();
+      final av = a.statValueAtLevel(stat, _refLevel ?? a.level);
+      final bv = b.statValueAtLevel(stat, _refLevel ?? b.level);
       final ag = a.statSlope[stat] ?? 0;
       final bg = b.statSlope[stat] ?? 0;
       final aWins = av > bv;
@@ -691,10 +822,18 @@ class _BreedingPaneState extends State<BreedingPane> {
 
     return Column(
       children: [
-        // No heading (user 2026-07-27): the two parent tiles above it already
+        // No heading (user 2026-07-27): the two parent tiles beside it already
         // say what the table is. The columns caption THEMSELVES instead — "lvl
         // 1" over the value and the detail screen's own level-up icon over the
         // growth, so the two figures are named where they stand.
+        //
+        // ONE column of 14, not two of 7 (tried 2026-09-29, reverted the same
+        // day): each row's fixed chrome — two value cells, a label, both bars'
+        // own padding — is ~206 px wide on its own; splitting the ~500 px table
+        // area in half left each side ~184 px, LESS than the fixed part alone,
+        // so the row overflowed before the bars even got a share. The tiles
+        // moving beside the table (below) is what actually paid for this
+        // panel; the table stays full width.
         _geneHeaderRow(),
         for (final stat in CreatureStat.values) row(stat),
         const SizedBox(height: 8),
@@ -705,7 +844,7 @@ class _BreedingPaneState extends State<BreedingPane> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: CreamPalette.tan.withValues(alpha: 0.16),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: vr(10),
           ),
           child: Text(
             'Every single stat has a ${(favored * 100).round()} % chance to '
@@ -730,6 +869,9 @@ class _BreedingPaneState extends State<BreedingPane> {
     String? filterSpeciesId; // null = every species you can breed
     CreatureStat? sortStat; // null = by total genes, the old ranking
     var descending = true; // best first
+    // Tapping a candidate only PREVIEWS it here (user 2026-10-05, "Konzept
+    // 4") — the detail panel's own button is what actually picks it.
+    CreatureInstance? preview;
     final picked = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -752,7 +894,7 @@ class _BreedingPaneState extends State<BreedingPane> {
                 end: Alignment.bottomCenter,
                 colors: [CreamPalette.paperTop, CreamPalette.paperBottom],
               ),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: vr(16),
               border: Border.all(
                 color: CreamPalette.tan.withValues(alpha: 0.6),
               ),
@@ -804,45 +946,93 @@ class _BreedingPaneState extends State<BreedingPane> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      Flexible(
-                        child: options.isEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 18,
-                                ),
-                                child: Text(
-                                  filterSpeciesId == null
-                                      ? 'Nobody available.'
-                                      : 'None of those available.',
-                                  style: FoE.dim(
-                                    size: 12,
-                                  ).copyWith(color: _inkSoft),
-                                ),
-                              )
-                            // The SAME tiles as the Monsters screen (user
-                            // 2026-07-27), three to a row — so choosing a parent
-                            // looks like browsing the collection, not filling a
-                            // form field. Through [monsterTileGrid] now (user
-                            // 2026-08-31: "genau gleich gross sein wie die
-                            // Kacheln beim Monstersscreen"), not this sheet's
-                            // own copy of the sizing maths — a `GridView`
-                            // sizing columns off this dialog's own width had
-                            // drifted from the Monsters screen's.
-                            : SingleChildScrollView(
-                                padding: const EdgeInsets.only(
-                                  top: 6,
-                                  bottom: 6,
-                                ),
-                                child: monsterTileGrid([
-                                  for (final c in options)
-                                    _candidateTile(
-                                      c,
-                                      c.id == chosenId,
-                                      sortStat,
-                                      ctx,
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            PickerDetailPanel(
+                              placeholder:
+                                  'Tap a monster to see its genes.',
+                              art: preview == null
+                                  ? null
+                                  : CreatureCard(
+                                      creature: preview!,
+                                      showHp: false,
+                                      atLevel: _refLevel,
                                     ),
-                                ]),
-                              ),
+                              title: preview?.displayName,
+                              subtitle: preview == null
+                                  ? null
+                                  : '${preview!.gender.symbol} · Lv ${preview!.level}',
+                              rows: preview == null
+                                  ? const []
+                                  : [
+                                      pickerStatRow(
+                                        'Genes',
+                                        '⚡ ${_geneScore(preview!).round()}',
+                                      ),
+                                      pickerStatRow(
+                                        'Type',
+                                        preview!.species?.element.label ??
+                                            '—',
+                                      ),
+                                    ],
+                              action: preview == null
+                                  ? null
+                                  : pickerChooseButton(
+                                      label: preview!.id == chosenId
+                                          ? 'Already chosen'
+                                          : 'Choose this parent',
+                                      onTap: preview!.id == chosenId
+                                          ? null
+                                          : () =>
+                                              Navigator.pop(ctx, preview!.id),
+                                    ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: options.isEmpty
+                                  ? Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 18,
+                                      ),
+                                      child: Text(
+                                        filterSpeciesId == null
+                                            ? 'Nobody available.'
+                                            : 'None of those available.',
+                                        style: FoE.dim(
+                                          size: 12,
+                                        ).copyWith(color: _inkSoft),
+                                      ),
+                                    )
+                                  // The SAME tiles as the Monsters screen (user
+                                  // 2026-07-27), three to a row — so choosing a
+                                  // parent looks like browsing the collection,
+                                  // not filling a form field. Through
+                                  // [monsterTileGrid] now (user 2026-08-31:
+                                  // "genau gleich gross sein wie die Kacheln
+                                  // beim Monstersscreen"), not this sheet's own
+                                  // copy of the sizing maths.
+                                  : SingleChildScrollView(
+                                      padding: const EdgeInsets.only(
+                                        top: 6,
+                                        bottom: 6,
+                                      ),
+                                      child: monsterTileGrid([
+                                        for (final c in options)
+                                          _candidateTile(
+                                            c,
+                                            c.id == chosenId,
+                                            c.id == preview?.id,
+                                            sortStat,
+                                            (p) =>
+                                                setSheet(() => preview = p),
+                                          ),
+                                      ]),
+                                    ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -962,7 +1152,7 @@ class _BreedingPaneState extends State<BreedingPane> {
       const MapEntry('', 'Total genes'),
       for (final s in CreatureStat.values) MapEntry(s.name, s.label),
     ],
-    trailing: Icon(
+    trailing: PixelIcon(
       descending ? Icons.arrow_downward : Icons.arrow_upward,
       size: 14,
       color: _accent,
@@ -972,66 +1162,72 @@ class _BreedingPaneState extends State<BreedingPane> {
   );
 
   /// One candidate: the Monsters-screen tile, plus the figure the list is
-  /// currently ordered by and whether it is the one already in the slot.
+  /// currently ordered by and whether it is the one already in the slot. A
+  /// tap only PREVIEWS it via [onPreview] now — [_pickParent]'s detail panel
+  /// is what actually chooses it.
   Widget _candidateTile(
     CreatureInstance c,
     bool selected,
+    bool previewed,
     CreatureStat? sortStat,
-    BuildContext ctx,
+    ValueChanged<CreatureInstance> onPreview,
   ) => Pressable(
     behavior: HitTestBehavior.opaque,
-    onTap: () => Navigator.pop(ctx, c.id),
-    child: Column(
-      children: [
-        Expanded(
-          // LayoutBuilder OUTSIDE the Stack: the badges are placed off the
-          // tile's own pop-out reserve (17 % of its height), and Positioned
-          // only works as a direct child of the Stack.
-          child: LayoutBuilder(
-            builder: (context, box) {
-              final artTop = box.maxHeight * 0.17;
-              return Stack(
-                children: [
-                  Positioned.fill(
-                    child: CreatureCard(
-                      creature: c,
-                      showHp: false,
-                      extras: [TileValue('At Lv 1', levelOnePower(c))],
-                    ),
-                  ),
-                  // No separate gene badge any more: the tile's own ⚡ now
-                  // carries the level-1 power, which IS the gene total
-                  // this list is ranked by — printing it twice said the
-                  // same thing in two different words.
-                  if (selected)
-                    Positioned(
-                      top: artTop + 6,
-                      left: 8,
-                      child: const Icon(
-                        Icons.check_circle,
-                        size: 18,
-                        color: CreamPalette.better,
+    onTap: () => onPreview(c),
+    child: pickerPreviewFrame(
+      active: previewed,
+      child: Column(
+        children: [
+          Expanded(
+            // LayoutBuilder OUTSIDE the Stack: the badges are placed off the
+            // tile's own pop-out reserve (17 % of its height), and Positioned
+            // only works as a direct child of the Stack.
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final artTop = box.maxHeight * 0.17;
+                return Stack(
+                  children: [
+                    Positioned.fill(
+                      child: CreatureCard(
+                        creature: c,
+                        showHp: false,
+                        atLevel: _refLevel,
                       ),
                     ),
-                ],
-              );
-            },
+                    // No separate gene badge any more: the tile's own ⚡ now
+                    // carries the level-1 power, which IS the gene total
+                    // this list is ranked by — printing it twice said the
+                    // same thing in two different words.
+                    if (selected)
+                      Positioned(
+                        top: artTop + 6,
+                        left: 8,
+                        child: const PixelIcon(
+                          Icons.check_circle,
+                          size: 18,
+                          color: CreamPalette.better,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
           ),
-        ),
-        // Only the figure the list is SORTED by (user 2026-07-27). The line
-        // used to fall back to the Breeding gene, which decides nothing
-        // about which parent to pick — the tile's own ⚡ at level 1 already
-        // says everything the default order is based on.
-        if (sortStat != null) ...[
-          const SizedBox(height: 2),
-          Text(
-            '${sortStat.label} ${(c.statBase[sortStat] ?? 0).round()}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: FoE.dim(size: 10).copyWith(color: _inkSoft),
-          ),
+          // Only the figure the list is SORTED by (user 2026-07-27). The line
+          // used to fall back to the Breeding gene, which decides nothing
+          // about which parent to pick — the tile's own ⚡ at level 1 already
+          // says everything the default order is based on.
+          if (sortStat != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              '${sortStat.label} ${(c.statBase[sortStat] ?? 0).round()}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: FoE.dim(size: 10).copyWith(color: _inkSoft),
+            ),
+          ],
         ],
-      ],
+      ),
     ),
   );
 }

@@ -80,12 +80,14 @@ void main() {
       expect(buildingYieldFactor(1), 1.0);
       expect(buildingYieldFactor(2), 1.5);
       expect(buildingYieldFactor(5), 3.0);
-      expect(kBuildPointsForHalfTime, 100);
-      expect(buildTimeCut(100), closeTo(0.5, 1e-9));
-      expect(kBreedingK, 60);
-      expect(breedingTimeCut(60), closeTo(0.5, 1e-9));
+      // Raised 2026-09-28 (a lone stat-114 monster was already −66 % breeding
+      // / on its way there in construction): see the dials' own comments.
+      expect(kBuildPointsForHalfTime, 140);
+      expect(buildTimeCut(140), closeTo(0.5, 1e-9));
+      expect(kBreedingK, 260);
+      expect(breedingTimeCut(260), closeTo(0.5, 1e-9));
       expect(kEnergyFullSteps, 5000);
-      expect(kEnergyFloorMultiplier, closeTo(0.25, 1e-9));
+      expect(kEnergyFloorMultiplier, closeTo(0.0, 1e-9));
       expect(kEnergyBoostPerThousandSteps, closeTo(0.05, 1e-9));
       expect(kEnergyMaxBoost, closeTo(0.25, 1e-9));
       expect(kMaxTradeDiscount, 0.6);

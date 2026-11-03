@@ -5,6 +5,7 @@ import '../../../core/theme/foe_theme.dart';
 import '../models/combatant.dart';
 import '../models/creature_enums.dart';
 import '../models/creature_instance.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
 
 /// THE VERSUS PAGE (user 2026-09-20, "Variante 8, Karten-Duell", with the power
 /// comparison bar of "Variante 2" wherever the other side's power is known).
@@ -73,7 +74,7 @@ class VsBadge extends StatelessWidget {
     alignment: Alignment.center,
     decoration: BoxDecoration(
       color: CreamPalette.gold,
-      shape: BoxShape.circle,
+      shape: BoxShape.rectangle,
       boxShadow: const [
         BoxShadow(color: CreamPalette.goldDeep, offset: Offset(0, 3)),
       ],
@@ -150,7 +151,7 @@ class PowerVersusBar extends StatelessWidget {
                 clipBehavior: Clip.none,
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: vr(6),
                     child: SizedBox(
                       height: 12,
                       child: Row(
@@ -261,26 +262,26 @@ class VersusStage extends StatelessWidget {
     this.middle,
   });
 
+  // No card of its own any more (user 2026-09-30, "hier und andernorts
+  // sind noch die alten Kästchen vorhanden") — every screen that builds
+  // this already stands on MenuScaffold's own single card.
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: creamCard(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-      child: Column(
-        children: [
-          if (enemy != null) ...[
-            Expanded(child: enemy!),
-            if (middle != null) middle!,
-          ],
-          Expanded(child: mine),
-          Container(
-            height: 1,
-            color: CreamPalette.tan.withValues(alpha: 0.4),
-            margin: const EdgeInsets.only(top: 4, bottom: 6),
-          ),
-          SizedBox(height: 40, child: actions),
+    padding: const EdgeInsets.fromLTRB(6, 0, 6, 10),
+    child: Column(
+      children: [
+        if (enemy != null) ...[
+          Expanded(child: enemy!),
+          if (middle != null) middle!,
         ],
-      ),
+        Expanded(child: mine),
+        Container(
+          height: 1,
+          color: CreamPalette.tan.withValues(alpha: 0.4),
+          margin: const EdgeInsets.only(top: 4, bottom: 6),
+        ),
+        SizedBox(height: 40, child: actions),
+      ],
     ),
   );
 }

@@ -14,6 +14,8 @@ import '../social/social_actions.dart' show confirmDialog;
 import '../social/widgets/social_kit.dart';
 import 'data/building_definitions.dart';
 import 'settlement_controller.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 /// The player's page (user 2026-09-19, "Variante 2, Spielerkarte"): on the left
 /// a PLAYER CARD — avatar, @username, e-mail, "Edit username" and four figures
@@ -85,21 +87,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
               decoration: BoxDecoration(
                 color: CreamPalette.tan.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: vr(9),
               ),
               child: Text(
                 '@$_username',
                 style: FoE.value(size: 11).copyWith(color: kBoxInk),
               ),
             ),
+      // Identity/stats and Settings ARE different Gebiete (user 2026-09-29,
+      // "Trennlinien und Zonen gemischt", app-wide), so the player card gets
+      // a [zoneBox] of its own; its edge is separation enough beside the
+      // settings list, which already sections itself. (MenuScaffold is the
+      // one card now — no [pageCard] here.)
       child: Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(width: 330, child: creamCard(child: _playerCard())),
-            const SizedBox(width: 10),
-            Expanded(child: creamCard(child: _settings(isDev))),
+            SizedBox(
+              width: 330,
+              child: zoneBox(padding: EdgeInsets.zero, child: _playerCard()),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: _settings(isDev)),
           ],
         ),
       ),
@@ -163,7 +173,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
       decoration: BoxDecoration(
         color: CreamPalette.tan.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: vr(12),
       ),
       child: Column(
         children: [
@@ -279,7 +289,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     onTap: () => onChanged(!value),
     child: Row(
       children: [
-        Icon(icon, size: 20, color: kBoxAccent),
+        PixelIcon(icon, size: 20, color: kBoxAccent),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -317,7 +327,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     onTap: onTap,
     child: Row(
       children: [
-        Icon(icon, size: 19, color: danger ? CreamPalette.warn : kBoxAccent),
+        PixelIcon(icon, size: 19, color: danger ? CreamPalette.warn : kBoxAccent),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -552,7 +562,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     padding: const EdgeInsets.symmetric(horizontal: 12),
     decoration: BoxDecoration(
       color: CreamPalette.tan.withValues(alpha: 0.18),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: vr(12),
     ),
     child: TextField(
       controller: ctrl,
@@ -614,7 +624,7 @@ class _Switch extends StatelessWidget {
       color: value
           ? CreamPalette.gold
           : CreamPalette.tan.withValues(alpha: 0.22),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: vr(12),
       boxShadow: value
           ? const [
               BoxShadow(color: CreamPalette.goldDeep, offset: Offset(0, 2)),
@@ -625,7 +635,7 @@ class _Switch extends StatelessWidget {
       width: 17,
       height: 17,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        shape: BoxShape.rectangle,
         color: value ? CreamPalette.ink : CreamPalette.tan,
       ),
     ),

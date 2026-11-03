@@ -19,15 +19,15 @@ void main() {
     final a = propsOfPlanForTest(planTerrainForTest(region));
     final b = propsOfPlanForTest(planTerrainForTest(region));
     expect(a.length, greaterThan(0));
-    expect(a.length % 7, 0);
+    expect(a.length % 8, 0);
     expect(a, orderedEquals(b));
   });
 
   test('no tree stands on the buildable region', () {
     final props = propsOfPlanForTest(planTerrainForTest(region));
-    const conifer = 6, broadleaf = 7;
+    const conifer = 5, broadleaf = 6;
     var trees = 0;
-    for (var o = 0; o < props.length; o += 7) {
+    for (var o = 0; o < props.length; o += 8) {
       final kind = props[o].toInt();
       if (kind != conifer && kind != broadleaf) continue;
       trees++;

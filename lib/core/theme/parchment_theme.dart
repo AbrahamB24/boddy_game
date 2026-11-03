@@ -6,6 +6,7 @@ import '../../features/common/widgets/parchment_page.dart';
 import 'cream_kit.dart' show CreamPalette, kBoxInk, kBoxInkSoft;
 import 'foe_theme.dart';
 import 'strategy_theme.dart';
+import 'voxel_kit.dart';
 
 /// THE APP'S ONE THEME (user 2026-07-27: "dieser look gefällt mir, übertrage
 /// dies bitte auf die gesamte app … D.h Buttons, Dropdown menüs etc. ebenfalls
@@ -31,6 +32,15 @@ import 'strategy_theme.dart';
 /// 2026-07-31 needed no edit here beyond the brightness flags: "the ink" became
 /// cream and "the page" became graphite in one place (scroll_paper.dart), and
 /// this theme kept asking for the same things.
+/// A button overlay for a touch screen: a tint while PRESSED, nothing for hover
+/// or focus (a phone has neither, and a browser test session must not show one).
+WidgetStateProperty<Color?> touchOnly(Color base) =>
+    WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.pressed)
+          ? base.withValues(alpha: 0.14)
+          : Colors.transparent,
+    );
+
 ThemeData buildParchmentTheme() {
   const ink = kParchmentInk;
   final inkSoft = ink.withValues(alpha: 0.72);
@@ -41,7 +51,7 @@ ThemeData buildParchmentTheme() {
   // bevel, so its corners are taken right down instead — a 10-px round next to a
   // cut card is the one shape that would give the whole thing away.
   OutlineInputBorder border(Color c, [double w = 1]) => OutlineInputBorder(
-    borderRadius: BorderRadius.circular(2),
+    borderRadius: vr(2),
     borderSide: BorderSide(color: c, width: w),
   );
 
@@ -53,6 +63,8 @@ ThemeData buildParchmentTheme() {
     // scrollbar, the ripple. Leaving it `light` while the palette went dark is
     // exactly how you end up with a black caret on a graphite field.
     brightness: Brightness.dark,
+    // The pixel face for every Text that names no family of its own.
+    fontFamily: Voxel.font,
     // The wood ground, not the old navy page (user 2026-09-20: "der blaue
     // Hintergrund ist oft noch zu sehen und schimmert durch") — whatever a
     // screen leaves uncovered (edges, a transition, a translucent layer) now
@@ -74,6 +86,11 @@ ThemeData buildParchmentTheme() {
     splashFactory: InkSparkle.splashFactory,
     splashColor: ink.withValues(alpha: 0.10),
     highlightColor: ink.withValues(alpha: 0.06),
+    // NO hover or focus tint anywhere (user 2026-09-28: "Hovereffekte braucht es
+    // nicht, da es für Smartphones programmiert wird"). InkWell reads these two;
+    // the Material buttons below carry the same rule in their own overlay.
+    hoverColor: Colors.transparent,
+    focusColor: Colors.transparent,
     dividerColor: ink.withValues(alpha: 0.18),
     iconTheme: const IconThemeData(color: ink),
 
@@ -107,21 +124,21 @@ ThemeData buildParchmentTheme() {
       surfaceTintColor: Colors.transparent,
       titleTextStyle: FoE.title(size: 15).copyWith(color: kBoxInk),
       contentTextStyle: FoE.label(size: 13).copyWith(color: kBoxInkSoft),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: const VoxelShape(notch: 3),
     ),
     popupMenuTheme: PopupMenuThemeData(
       color: Strategy.cream,
       surfaceTintColor: Colors.transparent,
       elevation: 8,
       textStyle: FoE.label(size: 12).copyWith(color: kBoxInk),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: const VoxelShape(notch: 2),
     ),
     menuTheme: MenuThemeData(
       style: MenuStyle(
         backgroundColor: const WidgetStatePropertyAll(Strategy.cream),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          const VoxelShape(notch: 2),
         ),
       ),
     ),
@@ -200,14 +217,14 @@ ThemeData buildParchmentTheme() {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         textStyle: FoE.label(size: 13),
         shape: FoE.facet(radius: 12),
-      ),
+      ).copyWith(overlayColor: touchOnly(kParchmentLight)),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: accent,
         textStyle: FoE.label(size: 13),
         shape: FoE.facet(radius: 10),
-      ),
+      ).copyWith(overlayColor: touchOnly(accent)),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
@@ -215,7 +232,7 @@ ThemeData buildParchmentTheme() {
         side: BorderSide(color: accent.withValues(alpha: 0.55)),
         textStyle: FoE.label(size: 13),
         shape: FoE.facet(radius: 12),
-      ),
+      ).copyWith(overlayColor: touchOnly(accent)),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: kActionGreen,

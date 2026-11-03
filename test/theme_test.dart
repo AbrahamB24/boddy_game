@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:boddygame/core/theme/foe_theme.dart';
+import 'package:boddygame/core/theme/voxel_kit.dart';
 import 'package:boddygame/core/ui/phone_frame.dart';
 
 void main() {
@@ -22,8 +23,7 @@ void main() {
     // shadows were never the problem. What did not survive was the chamfer at
     // panel scale: on a monster it is one facet among dozens, on a full-width
     // card it is two long diagonals repeated down the screen.
-    RoundedRectangleBorder shapeOf(ShapeDecoration d) =>
-        d.shape as RoundedRectangleBorder;
+    VoxelShape shapeOf(ShapeDecoration d) => d.shape as VoxelShape;
 
     test('panels and buttons are flat — no decorative shadow', () {
       expect(FoE.panel().shadows, anyOf(isNull, isEmpty));
@@ -32,13 +32,13 @@ void main() {
       expect(FoE.btn(active: true).shadows, anyOf(isNull, isEmpty));
     });
 
-    test('every corner is a CURVE, not a cut', () {
+    test('every corner is a BLOCK step (voxel, 2026-11-03)', () {
       // One shape for the whole app, whichever shape that is. The value of
       // pinning it has never been the bevel — it is that a single screen
       // cannot quietly pick a different corner from everything around it.
-      expect(FoE.panel().shape, isA<RoundedRectangleBorder>());
-      expect(FoE.btn().shape, isA<RoundedRectangleBorder>());
-      expect(FoE.facet(), isA<RoundedRectangleBorder>());
+      expect(FoE.panel().shape, isA<VoxelShape>());
+      expect(FoE.btn().shape, isA<VoxelShape>());
+      expect(FoE.facet(), isA<VoxelShape>());
     });
 
     test('a panel is ONE tone — a gradient cannot be flat shading', () {
@@ -57,9 +57,10 @@ void main() {
       }
     });
 
-    test('panel() honours the radius it is given', () {
-      final r = shapeOf(FoE.panel(radius: 18)).borderRadius as BorderRadius;
-      expect(r.topLeft.x, 18);
+    test('panel() maps the radius it is given to whole block steps', () {
+      expect(shapeOf(FoE.panel(radius: 18)).notch, 3);
+      expect(shapeOf(FoE.panel(radius: 10)).notch, 2);
+      expect(shapeOf(FoE.panel(radius: 4)).notch, 1);
     });
 
     test('the curve is generous, and the default is the shared token', () {
@@ -68,8 +69,7 @@ void main() {
       // numbers over would have read as square rather than as soft.
       expect(FoE.radius, greaterThanOrEqualTo(14));
       expect(FoE.radiusSmall, lessThan(FoE.radius));
-      final r = shapeOf(FoE.panel()).borderRadius as BorderRadius;
-      expect(r.topLeft.x, FoE.radius);
+      expect(shapeOf(FoE.panel()).notch, 3);
     });
 
     test('touch targets are thumb-sized', () {

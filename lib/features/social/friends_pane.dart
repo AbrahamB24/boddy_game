@@ -6,6 +6,8 @@ import 'models/friend.dart';
 import 'social_actions.dart';
 import 'social_controller.dart';
 import 'widgets/social_kit.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 /// Where friends are made and unmade: search a username and add, answer the
 /// requests you received, and the full friend list with every verb (chat,
@@ -111,11 +113,11 @@ class _FriendsPaneState extends State<FriendsPane> {
     padding: const EdgeInsets.symmetric(horizontal: 12),
     decoration: BoxDecoration(
       color: CreamPalette.tan.withValues(alpha: 0.18),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: vr(12),
     ),
     child: Row(
       children: [
-        Icon(Icons.search, size: 16, color: kBoxInkFaint),
+        PixelIcon(Icons.search, size: 16, color: kBoxInkFaint),
         const SizedBox(width: 8),
         Expanded(
           child: TextField(
@@ -169,7 +171,7 @@ class _FriendsPaneState extends State<FriendsPane> {
   Widget _tag(String text) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: vr(8),
       border: Border.all(color: CreamPalette.tan.withValues(alpha: 0.55)),
     ),
     child: Text(text, style: FoE.dim(size: 10).copyWith(color: kBoxInkFaint)),

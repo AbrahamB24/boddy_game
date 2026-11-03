@@ -41,6 +41,14 @@ void main() {
       expect(buildSpeedFromPoints(1e6).isFinite, isTrue);
     });
 
+    test('a single strong builder (user 2026-09-28: stat 114) is dramatic, '
+        'not near-instant', () {
+      // Builder Camp's role mult is 0.5, so a stat-114 monster makes 57
+      // points — the case the K dial got raised for alongside breeding's.
+      expect(buildTimeCut(114 * 0.5), lessThan(0.35));
+      expect(buildTimeCut(114 * 0.5 * 10), lessThan(0.85));
+    });
+
     test('buildPointsForCut inverts the curve', () {
       for (final cut in [0.25, 0.5, 0.8, 0.95]) {
         expect(buildTimeCut(buildPointsForCut(cut)!), closeTo(cut, 1e-9));

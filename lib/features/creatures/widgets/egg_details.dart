@@ -14,6 +14,7 @@ import '../services/creatures_controller.dart';
 import 'gene_bar_toggle.dart';
 import '../../common/widgets/parchment_kit.dart';
 import '../../common/widgets/recess_bar.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 /// WHAT IS INSIDE AN EGG — the two blocks that answer it, shared by the
 /// Hatchery's slot panel and the bag's egg screen (user 2026-07-27: the bag's
@@ -198,7 +199,7 @@ class _ParentCard extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, size: 16, color: _kAccent),
+          const PixelIcon(Icons.chevron_right, size: 16, color: _kAccent),
         ],
       ),
     );

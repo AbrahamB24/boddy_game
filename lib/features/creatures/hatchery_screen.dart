@@ -23,7 +23,8 @@ import 'services/breeding_controller.dart';
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/egg_card.dart';
-import 'widgets/slot_kit.dart';
+import 'widgets/slot_kit.dart';
+import '../../core/theme/voxel_icons.dart';
 
 /// The two halves of the page (user 2026-09-20: "hatchery und breeding sollten
 /// zusammen sein wie worker und population"): making an egg, and incubating it.
@@ -76,66 +77,89 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
     listenable: _breeding,
     builder: (context, _) => MenuScaffold(
       title: 'Breeding & Hatchery',
-      trailing: _tabs(),
-      child: _tab == NurseryTab.breeding
-          ? const BreedingPane()
-          : HatcheryPane(selectedEggId: widget.selectedEggId),
+      // The switch used to be two small buttons squeezed into the title bar's
+      // trailing corner, each naming its OWN building in a font too small to
+      // read as the real way between two screens (user 2026-09-28: "Buttons
+      // müssen schöner und besser platziert werden … Titel hat jeweils nur das
+      // eine oder andere Gebäude als Name"). Now it is the first thing in the
+      // body: two full-width, equal segments, each its building's own name.
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _tabSwitcher(),
+          const SizedBox(height: 10),
+          Expanded(
+            child: _tab == NurseryTab.breeding
+                ? const BreedingPane()
+                : HatcheryPane(selectedEggId: widget.selectedEggId),
+          ),
+        ],
+      ),
     ),
   );
 
-  Widget _tabs() {
+  Widget _tabSwitcher() {
     final ready = _breeding.hatchingJobs.where((j) => j.isHatchable).length;
-    Widget tab(NurseryTab t, String title, String sub) {
+    Widget seg(NurseryTab t, String emoji, String name, String sub) {
       final on = _tab == t;
-      return Pressable(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _tab = t),
-        child: Container(
-          height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          alignment: Alignment.center,
-          decoration: on ? goldButton() : raisedTile(radius: 11),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: kBoxInk,
+      return Expanded(
+        child: Pressable(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _tab = t),
+          child: Container(
+            height: 46,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: on ? goldButton() : raisedTile(radius: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 19)),
+                const SizedBox(width: 8),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: kBoxInk,
+                      ),
+                    ),
+                    Text(
+                      sub,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: kBoxInkSoft,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                sub,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: kBoxInkSoft,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
     }
 
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        tab(
+        seg(
           NurseryTab.breeding,
-          'Breeding',
-          '${_breeding.matingJobs.length}/${_breeding.breedingSlots}',
+          '💞',
+          'Breeding Hut',
+          '${_breeding.matingJobs.length}/${_breeding.breedingSlots} mating',
         ),
-        const SizedBox(width: 6),
-        tab(
+        const SizedBox(width: 10),
+        seg(
           NurseryTab.hatchery,
+          '🥚',
           'Hatchery',
           ready > 0
               ? '$ready ready'
-              : '${_breeding.hatchingJobs.length}/${_breeding.hatcherySlots}',
+              : '${_breeding.hatchingJobs.length}/${_breeding.hatcherySlots} incubating',
         ),
       ],
     );
@@ -415,11 +439,14 @@ class _HatcheryPaneState extends State<HatcheryPane> {
       barColor: species?.element.color,
       ready: ready,
       time: ready ? 'ready' : _fmt(job.remaining),
+      // A full settlement used to answer the tap with a bare buzz — the
+      // message that explained it was a silenced snack. Say it on the button
+      // instead, the way the egg tiles below already do.
       action: ready
           ? SlotPill(
-              'Hatch',
-              gold: true,
-              onTap: _busy ? null : () => _hatch(job),
+              _creatures.housingFull ? 'House full' : 'Hatch',
+              gold: !_creatures.housingFull,
+              onTap: _busy || _creatures.housingFull ? null : () => _hatch(job),
             )
           : Row(
               mainAxisSize: MainAxisSize.min,
@@ -458,7 +485,7 @@ class _HatcheryPaneState extends State<HatcheryPane> {
             height: 24,
             margin: const EdgeInsets.only(left: 4),
             decoration: raisedTile(radius: 9),
-            child: Icon(icon, size: 14, color: kBoxInk),
+            child: PixelIcon(icon, size: 14, color: kBoxInk),
           ),
         ),
       );
@@ -483,10 +510,12 @@ class _HatcheryPaneState extends State<HatcheryPane> {
       // there is more than one, so it never doubles up with a card's own button.
       if (ready.length > 1)
         SocialGoldButton(
-          'Hatch all ${ready.length}',
+          _creatures.housingFull
+              ? 'Settlement full'
+              : 'Hatch all ${ready.length}',
           height: 30,
           fontSize: 12,
-          onTap: _busy ? null : _hatchAll,
+          onTap: _busy || _creatures.housingFull ? null : _hatchAll,
         ),
     ],
   );

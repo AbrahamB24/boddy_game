@@ -142,8 +142,8 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
 
   Future<void> _endRun() async {
     final cleared = _floorsCleared;
-    final gold = goldRewardForFloors(cleared);
     final prevBest = SettlementController().survivalBestFloor;
+    final gold = goldRewardForFloors(cleared, previousBest: prevBest);
     await SettlementController().recordSurvivalRun(cleared);
     if (!mounted) return;
     setState(() {
@@ -174,13 +174,17 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
   /// go on, or retreat and bank what the run has earned.
   Widget _betweenFloorsView() {
     final next = _floor + 1;
+    // The team's health and the decision panel ARE different Gebiete (user
+    // 2026-09-29, "Trennlinien und Zonen gemischt", app-wide), so the
+    // decision side gets a [zoneBox] of its own. (MenuScaffold is the one
+    // card now — no [pageCard] here.)
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: creamCard(
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -210,10 +214,10 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 14),
           SizedBox(
             width: 282,
-            child: creamCard(
+            child: zoneBox(
               padding: const EdgeInsets.all(16),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -332,7 +336,11 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
   Widget _resultsView() => Center(
     child: SizedBox(
       width: 380,
-      child: creamCard(
+      // A zone, not a card of its own (user 2026-09-29, "diese Kasten gibt
+      // es nicht mehr") — MenuScaffold is already the one card on screen;
+      // stacking another cream card inside it would just be the same
+      // boxes-within-boxes look one level down.
+      child: zoneBox(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -10,7 +11,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../data/building_definitions.dart' show kGridCols, kGridRows;
 import '../data/iso_grid.dart';
 import '../data/water_cells.dart' show kWaterRuns;
-import 'building_icon.dart' show castShadowImage;
+import 'building_icon.dart'
+    show castShadowImage, kShadowTint, kShadowOpacity;
 
 /// The settlement map's ground (user 2026-09-07: "der Background muss
 /// wirklich noch deutlich überarbeitet werden... genau gleich aufgelöst
@@ -31,9 +33,10 @@ import 'building_icon.dart' show castShadowImage;
 ///    copy of that coastline that had no such guarantee), and
 ///  * trees, wildflowers and stones grouped into GROVES/PATCHES/OUTCROPS,
 ///    not scattered independently at uniform random — a real landscape grows
-///    in clumps (a stand of trees, a flower patch, a rock outcrop), and dirt
-///    is bare ground trodden under a grove's canopy, not a free-floating
-///    decal — see [_TerrainPainter._scatterProps].
+///    in clumps (a stand of trees, a flower patch, a rock outcrop) — see
+///    [_TerrainPainter._scatterProps]. (Dirt patches under the groves were
+///    tried and then removed again, user 2026-09-29: "entferne bitte alle
+///    dirt patches".)
 class TerrainLayer extends StatefulWidget {
   /// Cells the player can currently build on (the starting plot plus every
   /// finished Building Plot's footprint — the settlement controller's own
@@ -63,6 +66,17 @@ class TerrainLayer extends StatefulWidget {
   static Future<void> preload(Set<int> buildableRegion) => _TerrainData.load(
     buildableRegion,
   ).then<void>((_) {}, onError: (Object _) {});
+
+  /// The seam levelling the ground tile goes through (see [_TerrainData
+  /// ._levelled]), reachable so a test can hand it a picture.
+  /// Test hook: paint every prop on its own (the pre-2026-11-03 path) instead
+  /// of through the batched sprite sheets, so a test can compare the two.
+  @visibleForTesting
+  static bool debugDrawOneByOne = false;
+
+  @visibleForTesting
+  static Future<ui.Image> levelTile(ui.Image image) =>
+      _TerrainData._levelled(image);
 }
 
 class _TerrainLayerState extends State<TerrainLayer> {
@@ -123,12 +137,11 @@ const int _kStone = 0,
     _kStoneBoulder = 2,
     _kHeather = 3,
     _kGorse = 4,
-    _kDirt = 5,
-    _kConifer = 6,
-    _kBroadleaf = 7,
-    _kDriftwood = 8,
-    _kShell = 9,
-    _kGrass = 10;
+    _kConifer = 5,
+    _kBroadleaf = 6,
+    _kDriftwood = 7,
+    _kShell = 8,
+    _kGrass = 9;
 
 /// The props that STAND, and so cast a shadow on the ground (user 2026-09-22:
 /// "den Schatten jetzt auch auf den Rest der Map"): trees and stones. Flat
@@ -142,6 +155,19 @@ const Set<int> _kShadowCasters = {
   _kBroadleaf,
 };
 
+/// How deep each caster's shadow lies on the ground, as a fraction of its
+/// picture's width (see `castShadowMask`'s `groundDepth`). Without it a tree's
+/// shadow is a hair-thin strip. A crown covers a patch, so trees get a wide,
+/// SHALLOW ellipse (0.14 — 0.22 read too round); stones are compact, so theirs
+/// is smaller and hugs the rock.
+const Map<int, double> _kShadowDepth = {
+  _kConifer: 0.14,
+  _kBroadleaf: 0.14,
+  _kStone: 0.08,
+  _kStoneFlat: 0.08,
+  _kStoneBoulder: 0.08,
+};
+
 const List<String> _kAssets = [
   'assets/images/terrain/prop_stone.webp', // _kStone
   // Two more rock silhouettes (user 2026-09-14: "Die Steine bitte in
@@ -151,7 +177,6 @@ const List<String> _kAssets = [
   'assets/images/terrain/prop_stone_boulder.webp',
   'assets/images/terrain/prop_wildflower_heather.webp',
   'assets/images/terrain/prop_wildflower_gorse.webp',
-  'assets/images/terrain/prop_dirt_patch.webp',
   'assets/images/terrain/prop_tree_conifer.webp',
   'assets/images/terrain/prop_tree_broadleaf.webp',
   // Beach-only detail (user 2026-09-14: "der Strand soll noch Holz und
@@ -175,7 +200,32 @@ class _TerrainData {
   /// the picture's own pixel grid — see [castShadowImage].
   final List<ui.Image?> shadows;
 
-  _TerrainData(this.region, this.images, this.plan, {this.shadows = const []});
+  /// The props, their shadows and the grass wash packed for batched drawing
+  /// (see [_TerrainSheets]). Null only if building them failed — the painter
+  /// then falls back to drawing every prop on its own.
+  final _TerrainSheets? sheets;
+
+  _TerrainData(
+    this.region,
+    this.images,
+    this.plan, {
+    this.shadows = const [],
+    this.sheets,
+  });
+
+  /// Every prop as one sprite-sheet draw: an [RSTransform] and a source rect
+  /// per prop, in the plan's own depth order. Worked out once per plan.
+  late final (Float32List, Float32List)? propBatch = sheets?.propBatch(
+    plan.props,
+    images,
+  );
+
+  /// The same for every standing prop's shadow.
+  late final (Float32List, Float32List)? shadowBatch = sheets?.shadowBatch(
+    plan.props,
+    images,
+    shadows,
+  );
 
   // The two shore meshes, built on first paint and kept.
   late final ui.Vertices beachMesh = ui.Vertices.raw(
@@ -193,6 +243,7 @@ class _TerrainData {
   static final List<(Set<int>, Future<_TerrainData>)> _pending = [];
   static Future<List<ui.Image?>>? _imagesFuture;
   static Future<List<ui.Image?>>? _shadowsFuture;
+  static Future<_TerrainSheets>? _sheetsFuture;
 
   static _TerrainData? cached(Set<int> region) {
     for (final d in _cache) {
@@ -227,7 +278,19 @@ class _TerrainData {
       _PlanRequest(region.toList(growable: false), available),
     );
     final shadows = await (_shadowsFuture ??= _loadShadows(images));
-    final data = _TerrainData(region, images, plan, shadows: shadows);
+    _TerrainSheets? sheets;
+    try {
+      sheets = await (_sheetsFuture ??= _TerrainSheets.build(images, shadows));
+    } catch (_) {
+      _sheetsFuture = null;
+    }
+    final data = _TerrainData(
+      region,
+      images,
+      plan,
+      shadows: shadows,
+      sheets: sheets,
+    );
     _cache.insert(0, data);
     if (_cache.length > 3) _cache.removeLast();
     return data;
@@ -238,7 +301,10 @@ class _TerrainData {
       Future.wait([
         for (var k = 0; k < images.length; k++)
           if (_kShadowCasters.contains(k) && images[k] != null)
-            castShadowImage(images[k]!)
+            castShadowImage(
+              images[k]!,
+              groundDepth: _kShadowDepth[k] ?? 0,
+            )
           else
             Future<ui.Image?>.value(null),
       ]);
@@ -252,10 +318,277 @@ class _TerrainData {
       final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
       final frame = await codec.getNextFrame();
       codec.dispose();
+      // The ground tile is levelled so its repeat leaves no seam (see below).
+      if (asset == _kAssets[_kGrass]) return await _levelled(frame.image);
       return frame.image;
     } catch (_) {
       return null;
     }
+  }
+
+  /// The grass tile with every ROW and COLUMN brought to the same average
+  /// brightness (user 2026-09-28: "die Rasenstruktur ist nicht die genau
+  /// gleiche"). The swatch repeats across the whole map, and its outermost rows
+  /// are about two levels darker than its middle — invisible on one tile, but
+  /// repeated every 512 px it is a faint dark line across the lawn, "besonders
+  /// unten". Each line's gain is capped at ±4 %, so only a seam is removed and
+  /// the grass's own texture is left alone. Falls back to the picture as it is.
+  static Future<ui.Image> _levelled(ui.Image image) async {
+    try {
+      final w = image.width, h = image.height;
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (data == null) return image;
+      final px = data.buffer.asUint8List();
+      // Mean over R, G and B of one row / one column.
+      double mean(bool row, int i) {
+        var s = 0.0;
+        final n = row ? w : h;
+        for (var j = 0; j < n; j++) {
+          final o = (row ? i * w + j : j * w + i) * 4;
+          s += px[o] + px[o + 1] + px[o + 2];
+        }
+        return s / (n * 3);
+      }
+
+      final rows = [for (var y = 0; y < h; y++) mean(true, y)];
+      final cols = [for (var x = 0; x < w; x++) mean(false, x)];
+      final target = rows.fold(0.0, (a, b) => a + b) / h;
+      double gain(double m) => (target / m).clamp(0.96, 1.04);
+      final rg = [for (final m in rows) gain(m)];
+      final cg = [for (final m in cols) gain(m)];
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final o = (y * w + x) * 4;
+          final k = rg[y] * cg[x];
+          for (var c = 0; c < 3; c++) {
+            px[o + c] = (px[o + c] * k).round().clamp(0, 255);
+          }
+        }
+      }
+      final done = Completer<ui.Image>();
+      ui.decodeImageFromPixels(px, w, h, ui.PixelFormat.rgba8888, done.complete);
+      return await done.future;
+    } catch (_) {
+      return image;
+    }
+  }
+}
+
+/// The terrain's detail packed for BATCHED drawing (user 2026-11-03: "mache
+/// alles, aber wirklich alles, damit die Performance besser läuft").
+///
+/// The forest alone is thousands of trees, and each one used to be its own
+/// `drawImageRect` — plus a second one for its shadow, and a save/scale/
+/// restore around every mirrored one. The map replays that picture on every
+/// frame of a pan or a pinch (web has no raster cache at all, and a native
+/// one misses whenever the zoom changes), so the GPU was handed ~20 000 draw
+/// ops per frame for scenery that never moves. Now:
+///
+///  * [props] — every prop picture, upright AND mirrored, on one sheet, so the
+///    whole forest is ONE `drawRawAtlas` call;
+///  * [shadows] — every shadow mask, upright and mirrored, already tinted with
+///    the building shadow's own colour and opacity, so all shadows are one
+///    more call;
+///  * [wash] — the grass's soft colour wash (thousands of large radial
+///    gradients, see [_TerrainPainter.paintGrassWash]) rendered ONCE at an
+///    eighth of the canvas's size. It is nothing but blurry blobs hundreds of
+///    pixels across, so stretched back up with a smooth filter it is the same
+///    picture, at the cost of a single image draw instead of ~2 000
+///    full-overdraw gradient fills.
+///
+/// Built once for the life of the app; only the per-plan transforms
+/// ([propBatch], [shadowBatch]) depend on the region.
+class _TerrainSheets {
+  final ui.Image props;
+  final List<Rect?> propSlots;
+  final ui.Image? shadows;
+  final List<Rect?> shadowSlots;
+  final ui.Image wash;
+
+  _TerrainSheets._(
+    this.props,
+    this.propSlots,
+    this.shadows,
+    this.shadowSlots,
+    this.wash,
+  );
+
+  /// The wash is baked at this fraction of the canvas's size.
+  static const double washScale = 1 / 8;
+
+  /// Transparent margin around each picture on a sheet. Wide on purpose: the
+  /// map shows a tree at a twentieth of its picture's size when zoomed out,
+  /// and the coarse mip levels the GPU samples there average across this many
+  /// texels — a narrow gap would let a neighbour's edge bleed in.
+  static const double _pad = 32;
+  static const double _maxSheetWidth = 2048;
+
+  static Future<_TerrainSheets> build(
+    List<ui.Image?> images,
+    List<ui.Image?> shadows,
+  ) async {
+    final props = await _sheet(images, kinds: _kGrass, paint: Paint());
+    final shadowSheet = shadows.any((s) => s != null)
+        ? await _sheet(
+            shadows,
+            kinds: math.min(_kGrass, shadows.length),
+            paint: Paint()
+              ..colorFilter = ColorFilter.mode(
+                kShadowTint.withValues(alpha: kShadowOpacity),
+                BlendMode.srcIn,
+              ),
+          )
+        : null;
+    final wash = await _bakeWash();
+    return _TerrainSheets._(
+      props.$1,
+      props.$2,
+      shadowSheet?.$1,
+      shadowSheet?.$2 ?? const [],
+      wash,
+    );
+  }
+
+  /// Shelf-packs pictures `0..kinds-1` of [pictures], each upright then
+  /// mirrored (slot `kind * 2 + flip`), onto one sheet.
+  static Future<(ui.Image, List<Rect?>)> _sheet(
+    List<ui.Image?> pictures, {
+    required int kinds,
+    required Paint paint,
+  }) async {
+    final slots = List<Rect?>.filled(kinds * 2, null);
+    var x = _pad, y = _pad, rowH = 0.0, sheetW = 0.0;
+    for (var k = 0; k < kinds; k++) {
+      final p = k < pictures.length ? pictures[k] : null;
+      if (p == null) continue;
+      final w = p.width.toDouble(), h = p.height.toDouble();
+      for (var flip = 0; flip < 2; flip++) {
+        if (x + w + _pad > _maxSheetWidth && x > _pad) {
+          x = _pad;
+          y += rowH + _pad;
+          rowH = 0;
+        }
+        slots[k * 2 + flip] = Rect.fromLTWH(x, y, w, h);
+        x += w + _pad;
+        sheetW = math.max(sheetW, x);
+        rowH = math.max(rowH, h);
+      }
+    }
+    final sheetH = y + rowH + _pad;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    for (var k = 0; k < kinds; k++) {
+      final p = k < pictures.length ? pictures[k] : null;
+      if (p == null) continue;
+      final up = slots[k * 2]!, mirrored = slots[k * 2 + 1]!;
+      canvas.drawImage(p, up.topLeft, paint);
+      canvas.save();
+      canvas.translate(mirrored.right, mirrored.top);
+      canvas.scale(-1, 1);
+      canvas.drawImage(p, Offset.zero, paint);
+      canvas.restore();
+    }
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(
+      math.max(1, sheetW.ceil()),
+      math.max(1, sheetH.ceil()),
+    );
+    picture.dispose();
+    return (image, slots);
+  }
+
+  static Future<ui.Image> _bakeWash() async {
+    final size = isoCanvasSize;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.scale(washScale);
+    _TerrainPainter.paintGrassWash(canvas, size);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(
+      (size.width * washScale).ceil(),
+      (size.height * washScale).ceil(),
+    );
+    picture.dispose();
+    return image;
+  }
+
+  /// One [RSTransform] + source rect per drawable prop — exactly the rect
+  /// the one-by-one painter used to draw it into (foot-anchored, mirrored
+  /// about the foot, a rotated one turned about its own centre).
+  (Float32List, Float32List) propBatch(
+    Float64List props,
+    List<ui.Image?> images,
+  ) {
+    final xf = <double>[];
+    final src = <double>[];
+    for (var o = 0; o < props.length; o += _propStride) {
+      final kind = props[o].toInt();
+      final image = kind < images.length ? images[kind] : null;
+      final flip = props[o + 7] == 0 ? 0 : 1;
+      final slot = kind * 2 + flip < propSlots.length
+          ? propSlots[kind * 2 + flip]
+          : null;
+      if (image == null || slot == null) continue;
+      final destW = kIsoTileW * props[o + 3];
+      final scale = destW / image.width;
+      final destH = image.height * scale;
+      final foot = gridToScreen(
+        props[o + 1] + 0.5 + props[o + 4],
+        props[o + 2] + 0.5 + props[o + 5],
+      );
+      final rotation = props[o + 6];
+      final RSTransform t;
+      if (rotation == 0) {
+        t = RSTransform(scale, 0, foot.dx - destW / 2, foot.dy - destH);
+      } else {
+        t = RSTransform.fromComponents(
+          rotation: rotation,
+          scale: scale,
+          anchorX: image.width / 2,
+          anchorY: image.height / 2,
+          translateX: foot.dx,
+          translateY: foot.dy - destH / 2,
+        );
+      }
+      xf.addAll([t.scos, t.ssin, t.tx, t.ty]);
+      src.addAll([slot.left, slot.top, slot.right, slot.bottom]);
+    }
+    return (Float32List.fromList(xf), Float32List.fromList(src));
+  }
+
+  /// The shadows' counterpart of [propBatch] — same placement as the old
+  /// `_paintShadows`: the mask shares the picture's top-left and scale, and a
+  /// mirrored prop throws a mirrored shadow about the same foot.
+  (Float32List, Float32List) shadowBatch(
+    Float64List props,
+    List<ui.Image?> images,
+    List<ui.Image?> masks,
+  ) {
+    final xf = <double>[];
+    final src = <double>[];
+    for (var o = 0; o < props.length; o += _propStride) {
+      final kind = props[o].toInt();
+      if (kind >= masks.length || props[o + 6] != 0) continue;
+      final mask = masks[kind];
+      final image = images[kind];
+      final flip = props[o + 7] == 0 ? 0 : 1;
+      final slot = kind * 2 + flip < shadowSlots.length
+          ? shadowSlots[kind * 2 + flip]
+          : null;
+      if (mask == null || image == null || slot == null) continue;
+      final destW = kIsoTileW * props[o + 3];
+      final unit = destW / image.width;
+      final foot = gridToScreen(
+        props[o + 1] + 0.5 + props[o + 4],
+        props[o + 2] + 0.5 + props[o + 5],
+      );
+      var left = foot.dx - destW / 2;
+      if (flip == 1) left = 2 * foot.dx - left - mask.width * unit;
+      final top = foot.dy - image.height * unit;
+      xf.addAll([unit, 0, left, top]);
+      src.addAll([slot.left, slot.top, slot.right, slot.bottom]);
+    }
+    return (Float32List.fromList(xf), Float32List.fromList(src));
   }
 }
 
@@ -276,7 +609,7 @@ class _TerrainPlan {
   final Int32List waterColors;
 
   /// Depth-sorted props, [_propStride] doubles each: kind, gx, gy,
-  /// widthInTiles, offX, offY, rotation.
+  /// widthInTiles, offX, offY, rotation, flip.
   final Float64List props;
 
   const _TerrainPlan({
@@ -288,7 +621,25 @@ class _TerrainPlan {
   });
 }
 
-const int _propStride = 7;
+const int _propStride = 8;
+
+/// FNV-1a, exactly like tool/blender/terrain.py's own `_hash01` — not because
+/// the two ever need to agree on any SPECIFIC position (Dart picks its own
+/// scatter, independently of whatever terrain.py last rolled), just because
+/// it is a known-good, dependency-free way to turn a seed string into a
+/// repeatable 0..1 float. Top-level (not a [_TerrainPlanner] method) so the
+/// PAINTER can reuse it too — dirt's per-patch shade and its grass tufts are
+/// derived straight from the prop's own (gx, gy) rather than threaded through
+/// the plan as extra numbers (user 2026-09-29: "der Dreck hat unterschiedliche
+/// Farbtöne").
+double _hash01(String s) {
+  var h = 0x811c9dc5;
+  for (final c in s.codeUnits) {
+    h = (h ^ c) & 0xFFFFFFFF;
+    h = (h * 0x01000193) & 0xFFFFFFFF;
+  }
+  return h / 0xFFFFFFFF;
+}
 
 _TerrainPlan _planTerrain(_PlanRequest request) =>
     _TerrainPlanner(Set<int>.of(request.region), request.available).plan();
@@ -314,17 +665,24 @@ class _PropPlacement {
   final double widthInTiles;
 
   /// Sub-tile drift from the cell's centre, in tile units (0 = dead centre).
-  /// Every OTHER scatter already lands off-centre by construction — a
-  /// cluster's own random angle+radius — so this defaults to 0 for them.
-  /// [_beachDebris] is the one caller that places one item per cell on a
-  /// fixed grid and needs this to avoid looking planted (user 2026-09-14:
-  /// "nicht so mechanisch wie jetzt").
+  /// [_clusterScatter] derives this from the instance's own continuous
+  /// scatter position (its angle+radius almost never lands on a whole grid
+  /// cell) and [_beachDebris] draws it fresh per cell — both so nothing snaps
+  /// onto a visible grid (user 2026-09-14: "nicht so mechanisch wie jetzt";
+  /// 2026-09-29, the same complaint about stones: "viel zu uniform und
+  /// gleichmässig verteilt"). Defaults to 0 for the few callers that place
+  /// exactly one thing per centre and want it there.
   final double offX;
   final double offY;
 
   /// Rotation in radians, purely cosmetic — real driftwood/pebbles never lie
   /// at the same angle twice.
   final double rotation;
+
+  /// Mirrored left-right about its own foot — free shape variety from a
+  /// single sprite (user 2026-09-29: trees "in unterschiedlichen Grössen und
+  /// Formen", and there are only two tree pictures to draw from).
+  final bool flip;
 
   const _PropPlacement(
     this.kind,
@@ -334,6 +692,7 @@ class _PropPlacement {
     this.offX = 0,
     this.offY = 0,
     this.rotation = 0,
+    this.flip = false,
   });
 }
 
@@ -351,7 +710,6 @@ class _TerrainPlanner {
   final int? stoneBoulderProp;
   final int? wildflowerHeatherProp;
   final int? wildflowerGorseProp;
-  final int? dirtProp;
   final int? treeConiferProp;
   final int? treeBroadleafProp;
   final int? driftwoodProp;
@@ -363,7 +721,6 @@ class _TerrainPlanner {
       stoneBoulderProp = _has(available, _kStoneBoulder),
       wildflowerHeatherProp = _has(available, _kHeather),
       wildflowerGorseProp = _has(available, _kGorse),
-      dirtProp = _has(available, _kDirt),
       treeConiferProp = _has(available, _kConifer),
       treeBroadleafProp = _has(available, _kBroadleaf),
       driftwoodProp = _has(available, _kDriftwood),
@@ -397,6 +754,7 @@ class _TerrainPlanner {
       props[o + 4] = p.offX;
       props[o + 5] = p.offY;
       props[o + 6] = p.rotation;
+      props[o + 7] = p.flip ? 1.0 : 0.0;
     }
     return _TerrainPlan(
       beachPositions: beach.$1,
@@ -513,8 +871,24 @@ class _TerrainPlanner {
   // must not. Only ever consulted OUTSIDE the real grid (see [_isWater]):
   // inside it, [kWaterRuns] stays the one authority, so gameplay
   // buildability can never disagree with what gets painted.
-  static double _coastAt(double gy) =>
-      12.0 + 5.0 * math.sin(gy * 0.085) + 2.6 * math.sin(gy * 0.031 + 1.1);
+  /// [gy] is clamped to just past the real grid's own rows before it ever
+  /// reaches the sine: this is meant as a SHORT continuation of the coast
+  /// right at the real grid's north/south edge, not a function to be
+  /// evaluated anywhere. The canvas's own corners (see [_inPicture]) push
+  /// [gy] out to roughly ±100 at the diamond's top and bottom tips — far
+  /// outside that intended range — and being periodic, the raw sine there
+  /// cycles back through "land" every ~74 cells, which painted as a row of
+  /// stray grass teeth poking up through open sea (user 2026-10-01: "ich
+  /// sehe oben bei der Map den Übergang von Wasser und grün, dies sollte so
+  /// nicht sein"). Clamping holds the coastline at its edge-of-grid value
+  /// for every cell beyond that, so the sea reads as one continuous sheet
+  /// all the way to the canvas corner instead of repeating itself.
+  static double _coastAt(double gy) {
+    final clamped = gy.clamp(-20.0, kGridRows + 20.0);
+    return 12.0 +
+        5.0 * math.sin(clamped * 0.085) +
+        2.6 * math.sin(clamped * 0.031 + 1.1);
+  }
 
   static const int _riverSpineN = 760;
   static (double, double, double) _riverSpineAt(double t) {
@@ -744,7 +1118,7 @@ class _TerrainPlanner {
     return !_shoreBands().beach.contains(_cellKey(gx, gy));
   }
 
-  /// [buildableRegion] dilated by two rings, real cells only. Flowers and
+  /// [buildableRegion] dilated by four rings, real cells only. Flowers and
   /// stones hug the ground and never poke past their own tile, so
   /// [_isLegal] alone is enough for them — but a tree sprite rises several
   /// tile-heights above its foot, tall enough to visually reach into a
@@ -758,13 +1132,19 @@ class _TerrainPlanner {
   /// den Gebäuden sein"). This buffer keeps trees far enough back that
   /// their canopies don't reach the building in the first place — it
   /// narrows the problem, it doesn't fix the underlying layering.
+  ///
+  /// Widened from two rings to four (user 2026-09-29, spotting a tree
+  /// clipped against the hatchery: "clipping Fehler von Baum und Hatchery")
+  /// when trees themselves grew to up to 2.4 tiles wide — two rings was
+  /// tuned for the old fixed 1.1-tile tree and a canopy roughly twice that
+  /// size needs roughly twice the setback.
   Set<int>? _treeClearanceCache;
   Set<int> get _treeClearance {
     final cached = _treeClearanceCache;
     if (cached != null) return cached;
     final all = Set<int>.from(buildableRegion);
     var frontier = buildableRegion;
-    for (var ring = 0; ring < 2; ring++) {
+    for (var ring = 0; ring < 4; ring++) {
       final next = <int>{};
       for (final k in frontier) {
         final gx = k % kGridCols, gy = k ~/ kGridCols;
@@ -786,19 +1166,6 @@ class _TerrainPlanner {
         _treeClearance.contains(gy * kGridCols + gx));
   }
 
-  /// FNV-1a, exactly like tool/blender/terrain.py's own `_hash01` — not
-  /// because the two ever need to agree on any SPECIFIC position (Dart
-  /// picks its own scatter, independently of whatever terrain.py last
-  /// rolled), just because it is a known-good, dependency-free way to turn
-  /// a seed string into a repeatable 0..1 float.
-  double _hash01(String s) {
-    var h = 0x811c9dc5;
-    for (final c in s.codeUnits) {
-      h = (h ^ c) & 0xFFFFFFFF;
-      h = (h * 0x01000193) & 0xFFFFFFFF;
-    }
-    return h / 0xFFFFFFFF;
-  }
 
   /// Picks [count] cluster centres on GRASS cells only (not water). A real
   /// landscape grows in clumps — a stand of trees, a flower patch, a rock
@@ -831,6 +1198,11 @@ class _TerrainPlanner {
     // Formen"). Defaults to no variation — every other caller is unaffected.
     double? widthMax,
     bool Function(int gx, int gy)? legal,
+    // Half the instances mirrored left-right — free shape variety out of a
+    // single sprite (user 2026-09-29). Off by default: flipping a rock or a
+    // flower is invisible (both read symmetric at this size), so only a
+    // caller with something worth mirroring turns it on.
+    bool mirror = false,
   }) {
     if (images.isEmpty) return const [];
     final isLegal = legal ?? _isLegal;
@@ -843,8 +1215,18 @@ class _TerrainPlanner {
       for (var i = 0; i < n; i++) {
         final a = _hash01('$seed a$c-$i') * 2 * math.pi;
         final r = _hash01('$seed r$c-$i') * radius;
-        final gx = (ccx + math.cos(a) * r).round();
-        final gy = (ccy + math.sin(a) * r).round();
+        // The prop's TRUE continuous position — legality is still checked on
+        // the grid cell it falls in (props stay off buildable land, water,
+        // …), but the leftover fraction becomes its sub-tile drift instead
+        // of being thrown away. Every instance used to snap dead-centre onto
+        // its cell, which at this density reads as a planted grid rather
+        // than a stand of trees or a scatter of stones (user 2026-09-29: "die
+        // Steine sind viel zu uniform und gleichmässig verteilt" — the same
+        // fix [_beachDebris] already got for driftwood/pebbles, 2026-09-14).
+        final fx = ccx + math.cos(a) * r;
+        final fy = ccy + math.sin(a) * r;
+        final gx = fx.round();
+        final gy = fy.round();
         if (!isLegal(gx, gy)) continue;
         final imgIdx = (_hash01('$seed i$c-$i') * images.length).floor().clamp(
           0,
@@ -853,32 +1235,17 @@ class _TerrainPlanner {
         final w = wMax > widthInTiles
             ? widthInTiles + _hash01('$seed w$c-$i') * (wMax - widthInTiles)
             : widthInTiles;
-        out.add(_PropPlacement(images[imgIdx], gx, gy, w));
-      }
-    }
-    return out;
-  }
-
-  /// A patch of bare, trodden ground close to each grove's own centre — the
-  /// dirt a stand of trees casts underneath it, not a free-floating decal
-  /// out in the open grass.
-  List<_PropPlacement> _dirtNearGroves(
-    List<(int, int)> groveCenters, {
-    bool Function(int gx, int gy)? legal,
-  }) {
-    final dirt = dirtProp;
-    if (dirt == null) return const [];
-    final isLegal = legal ?? _isLegal;
-    final out = <_PropPlacement>[];
-    for (var c = 0; c < groveCenters.length; c++) {
-      final (ccx, ccy) = groveCenters[c];
-      for (var i = 0; i < 2; i++) {
-        final a = _hash01('terrain_dirt a$c-$i') * 2 * math.pi;
-        final r = _hash01('terrain_dirt r$c-$i') * 2.2;
-        final gx = (ccx + math.cos(a) * r).round();
-        final gy = (ccy + math.sin(a) * r).round();
-        if (!isLegal(gx, gy)) continue;
-        out.add(_PropPlacement(dirt, gx, gy, 1.0));
+        out.add(
+          _PropPlacement(
+            images[imgIdx],
+            gx,
+            gy,
+            w,
+            offX: fx - gx,
+            offY: fy - gy,
+            flip: mirror && _hash01('$seed flip$c-$i') < 0.5,
+          ),
+        );
       }
     }
     return out;
@@ -928,7 +1295,15 @@ class _TerrainPlanner {
     String seed,
     List<(int, int, double)> clearings,
   ) {
-    const spacing = 3.1;
+    // Widened alongside the per-grove count (user 2026-09-29, three rounds
+    // of "weniger Bäume"): thinning only the CLUMPS while leaving the same
+    // number of clumps everywhere eventually just makes each one look
+    // sparse rather than the wood as a whole feeling less dense. Still ONE
+    // spacing for the real grid and the off-map padding alike — see the
+    // doc comment above on why that matters.
+    // 3.6 → 4.2 (user 2026-11-03: "etwas weniger Bäume") — together with
+    // the per-grove count below, about a third fewer trees overall.
+    const spacing = 4.2;
     final out = <(int, int)>[];
     var i = 0;
     for (var fy = _extY0.toDouble(); fy < _extY1; fy += spacing) {
@@ -1014,7 +1389,10 @@ class _TerrainPlanner {
         final idx = (_hash01('beachStoneI$gx,$gy') * stones.length)
             .floor()
             .clamp(0, stones.length - 1);
-        final w = 0.26 + _hash01('beachStoneW$gx,$gy') * 0.34;
+        // Widened (user 2026-09-29: "auch das Holz am Strand" — the same
+        // "too uniform" complaint applied to every stray pebble): a strand
+        // has both gravel-sized chips and a genuine rock washed up on it.
+        final w = 0.2 + _hash01('beachStoneW$gx,$gy') * 0.55;
         out.add(
           _PropPlacement(
             stones[idx],
@@ -1027,7 +1405,7 @@ class _TerrainPlanner {
           ),
         );
       } else if (roll < 0.14 && wood != null) {
-        final w = 0.5 + _hash01('beachWoodW$gx,$gy') * 0.25;
+        final w = 0.35 + _hash01('beachWoodW$gx,$gy') * 0.55;
         out.add(
           _PropPlacement(
             wood,
@@ -1076,15 +1454,25 @@ class _TerrainPlanner {
         _clusterScatter(
           centers: forestCenters,
           seed: 'terrain_forest_trees',
-          perClusterMin: 7,
-          perClusterMax: 12,
+          // Fewer still per grove (user 2026-09-29, a third pass: "du kannst
+          // noch mehr Bäume löschen") — was 7-12, then 5-9, then 4-7, then
+          // 3-5 (user 2026-11-03: "etwas weniger Bäume").
+          perClusterMin: 3,
+          perClusterMax: 4,
           radius: 2.7,
           images: [conifer, conifer, conifer, broadleaf],
-          widthInTiles: 1.1,
+          // Bigger, and a real size RANGE (user 2026-09-29: "die Bäume sind
+          // im Verhältnis zu den Gebäuden noch zu klein... auch in
+          // unterschiedlichen Grössen und Formen darstellen") — 1.1 read as a
+          // shrub next to a two-storey building's own art. A young tree at
+          // the low end of the range and an old one at the high end read as
+          // different specimens, not one sprite copy-pasted everywhere.
+          widthInTiles: 1.5,
+          widthMax: 2.4,
           legal: _isTreeLegal,
+          mirror: true,
         ),
       );
-      placements.addAll(_dirtNearGroves(forestCenters, legal: _isTreeLegal));
     }
 
     placements.addAll(_clearingDecor(clearings));
@@ -1110,18 +1498,27 @@ class _TerrainPlanner {
     // Rock outcrops: a smaller, sparser clumping — a few stones together,
     // not a field of gravel. Every rendered shape (small/flat/boulder) is
     // in play, at a genuine size range, not one shape rescaled.
+    //
+    // Count AND size both widened (user 2026-09-29: "die Steine sind viel zu
+    // uniform und gleichmässig verteilt"): 2-5 stones of near-identical size
+    // at every one of 32 evenly-seeded centres reads as a catalogue, not a
+    // landscape. Some outcrops are now a single boulder, others a proper
+    // scree of seven, and a stone within one can be a third the size of its
+    // neighbour — the sub-tile drift [_clusterScatter] now also applies
+    // keeps them from lining up even within a cluster.
     final stones = _stoneVariants;
     if (stones.isNotEmpty) {
       placements.addAll(
         _clusterScatter(
           centers: _clusterCenters('terrain_outcrop', 32),
           seed: 'terrain_stone',
-          perClusterMin: 2,
-          perClusterMax: 5,
-          radius: 1.8,
+          perClusterMin: 1,
+          perClusterMax: 7,
+          radius: 2.1,
           images: stones,
-          widthInTiles: 0.4,
-          widthMax: 0.85,
+          widthInTiles: 0.3,
+          widthMax: 1.15,
+          mirror: true,
         ),
       );
     }
@@ -1156,9 +1553,184 @@ class _TerrainPainter extends CustomPainter {
     );
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
 
+    final sheets = data.sheets;
+    final propBatch = data.propBatch;
+    final shadowBatch = data.shadowBatch;
+    if (!TerrainLayer.debugDrawOneByOne &&
+        sheets != null &&
+        propBatch != null &&
+        shadowBatch != null) {
+      // The batched path — see [_TerrainSheets]. Same picture, ~6 draw ops.
+      final wash = sheets.wash;
+      canvas.drawImageRect(
+        wash,
+        Rect.fromLTWH(0, 0, wash.width.toDouble(), wash.height.toDouble()),
+        Offset.zero & isoCanvasSize,
+        Paint()..filterQuality = FilterQuality.medium,
+      );
+      paintShore(canvas);
+      final shadowSheet = sheets.shadows;
+      if (shadowSheet != null && shadowBatch.$1.isNotEmpty) {
+        canvas.drawRawAtlas(
+          shadowSheet,
+          shadowBatch.$1,
+          shadowBatch.$2,
+          null,
+          null,
+          null,
+          Paint()..filterQuality = FilterQuality.low,
+        );
+      }
+      if (propBatch.$1.isNotEmpty) {
+        canvas.drawRawAtlas(
+          sheets.props,
+          propBatch.$1,
+          propBatch.$2,
+          null,
+          null,
+          null,
+          Paint()..filterQuality = FilterQuality.medium,
+        );
+      }
+      return;
+    }
+
+    paintGrassWash(canvas, size);
     paintShore(canvas);
     _paintShadows(canvas);
     _paintProps(canvas);
+  }
+
+  /// The grass's soft colour wash, both layers. Drawn live only on the
+  /// fallback path; normally baked once into [_TerrainSheets.wash].
+  static void paintGrassWash(Canvas canvas, Size size) {
+    // TWO layers, coarse then fine (user 2026-09-29, after the first pass
+    // still read as flat: "Das Gras hat mir noch zu wenig Tiefe... auch
+    // etwas grössere Bereiche in dunkleren oder helleren Grün- und
+    // Brauntönen gestalten, damit es auch herausgezoomt wirkt"). The coarse
+    // one is what a zoomed-OUT view actually sees — whole meadow-sized
+    // zones running lighter or darker — the fine one is the close-up
+    // mottling from the first pass, kept for when the camera is in close.
+    // Toned down again (user 2026-09-29: "die Kanten sind besser geworden,
+    // aber noch immer schwach sichtbar") — lower alpha both layers, and
+    // denser overlap (spacing shrunk further below each layer's own radius)
+    // so any one blob's contribution to a given pixel is smaller still.
+    _paintGrassBlobs(
+      canvas,
+      size,
+      seed: 'grassregion',
+      spacing: 1300,
+      jitterFactor: 1.5,
+      minRadius: 900,
+      maxRadius: 1300,
+      minAlpha: 0.025,
+      maxAlpha: 0.05,
+      blobsMin: 2,
+      blobsMax: 3,
+    );
+    _paintGrassBlobs(
+      canvas,
+      size,
+      seed: 'grassblob',
+      spacing: 340,
+      jitterFactor: 1.5,
+      minRadius: 200,
+      maxRadius: 380,
+      minAlpha: 0.012,
+      maxAlpha: 0.03,
+      blobsMin: 3,
+      blobsMax: 4,
+    );
+  }
+
+  /// The greens and browns every grass blob (coarse region or fine mottle)
+  /// is drawn from — see [_paintGrassBlobs].
+  static const List<Color> _kGrassTones = [
+    Color(0xFF5E7F38), // shaded green
+    Color(0xFF8FAE5C), // sunlit green
+    Color(0xFFB9CC7E), // pale yellow-green
+    Color(0xFF8A7A46), // dry olive
+    Color(0xFF6E5A34), // damp brown
+  ];
+
+  /// A blob's alpha across its own radius, as (position, fraction-of-peak)
+  /// pairs approximating an ease-out curve rather than a straight line down
+  /// to zero. A plain two-stop gradient (peak → transparent) is still an
+  /// EDGE in disguise: its alpha keeps falling at a constant rate right up
+  /// to the boundary and then stops dead at exactly zero — a discontinuity
+  /// in the SLOPE, not the colour, which is precisely what a Mach band is
+  /// (the eye exaggerates contrast at a slope change, not just at a colour
+  /// change) — and at the size these blobs are drawn, a large circle's
+  /// boundary is close to straight within any one screenful, which is
+  /// exactly the "Kante" the user kept finding lowering alpha alone never
+  /// removed (user 2026-09-29, after two rounds of "weniger Alpha" still:
+  /// "Kante ist noch da"). Tapering the LAST stretch gradually instead of
+  /// dropping straight to 0 removes that slope-jump, not just the colour.
+  static const List<double> _kFalloffStops = [0, 0.55, 0.75, 0.9, 1.0];
+  static const List<double> _kFalloff = [1.0, 0.7, 0.4, 0.15, 0.0];
+
+  /// A soft wash of extra greens and browns over the flat tiled swatch —
+  /// which repeats bit-for-bit everywhere, and reads as flat and lifeless
+  /// next to the buildings' own hand-shaded art without it (user 2026-09-29:
+  /// "die Textur des Grases anpassen, damit es noch mehr Leben gibt"). Called
+  /// once per SCALE (see [paint]) with a different [seed] each time, so the
+  /// two layers' random draws never line up and repeat the same pattern
+  /// twice at two sizes.
+  ///
+  /// Each blob is a RADIAL GRADIENT easing out to transparent (see
+  /// [_kFalloff]) — not a flat-filled circle softened with [MaskFilter.blur]
+  /// (the first cut at this): a blurred hard-edged disc still has a
+  /// perceptible rim once its colour is strong enough to notice at all, and
+  /// at the spacing this used, that rim repeated as an actual grid of
+  /// visible circles (user 2026-09-29: "ich sehe Kreise im Rasen, solche
+  /// Muster sollten nicht sichtbar sein"). Neighbours also overlap heavily
+  /// (spacing well under the blob's own radius) so no single one is ever
+  /// isolated enough to read as a shape.
+  static void _paintGrassBlobs(
+    Canvas canvas,
+    Size size, {
+    required String seed,
+    required double spacing,
+    required double jitterFactor,
+    required double minRadius,
+    required double maxRadius,
+    required double minAlpha,
+    required double maxAlpha,
+    required int blobsMin,
+    required int blobsMax,
+  }) {
+    var i = 0;
+    for (var y = -spacing; y < size.height + spacing; y += spacing) {
+      for (var x = -spacing; x < size.width + spacing; x += spacing) {
+        final span = blobsMax - blobsMin + 1;
+        final n = blobsMin + (_hash01('$seed n$i') * span).floor();
+        for (var k = 0; k < n; k++) {
+          final jx = (_hash01('$seed x$i,$k') - 0.5) * spacing * jitterFactor;
+          final jy = (_hash01('$seed y$i,$k') - 0.5) * spacing * jitterFactor;
+          final r =
+              minRadius + _hash01('$seed r$i,$k') * (maxRadius - minRadius);
+          final tone = _kGrassTones[(_hash01('$seed c$i,$k') *
+                  _kGrassTones.length)
+              .floor()
+              .clamp(0, _kGrassTones.length - 1)];
+          final alpha =
+              minAlpha + _hash01('$seed a$i,$k') * (maxAlpha - minAlpha);
+          final center = Offset(x + jx, y + jy);
+          canvas.drawCircle(
+            center,
+            r,
+            Paint()
+              ..shader = ui.Gradient.radial(
+                center,
+                r,
+                [for (final f in _kFalloff) tone.withValues(alpha: alpha * f)],
+                _kFalloffStops,
+              ),
+          );
+        }
+        i++;
+      }
+    }
   }
 
   /// The beach, banded smoothly from sand at the waterline to fully
@@ -1199,7 +1771,16 @@ class _TerrainPainter extends CustomPainter {
     final shadows = data.shadows;
     if (shadows.isEmpty) return;
     final props = data.plan.props;
-    final paint = Paint()..filterQuality = FilterQuality.low;
+    // Tinted HERE, at paint time, with the exact same colour+opacity a
+    // building's own shadow uses (`BuildingGroundShadow._ShadowPainter`) —
+    // [castShadowImage] now hands back a plain alpha mask, not a pre-baked
+    // colour, so the two can never drift apart again (user 2026-09-29).
+    final paint = Paint()
+      ..filterQuality = FilterQuality.low
+      ..colorFilter = ColorFilter.mode(
+        kShadowTint.withValues(alpha: kShadowOpacity),
+        BlendMode.srcIn,
+      );
     for (var o = 0; o < props.length; o += _propStride) {
       final kind = props[o].toInt();
       if (kind >= shadows.length) continue;
@@ -1213,17 +1794,30 @@ class _TerrainPainter extends CustomPainter {
         props[o + 1] + 0.5 + props[o + 4],
         props[o + 2] + 0.5 + props[o + 5],
       );
-      canvas.drawImageRect(
-        mask,
-        Rect.fromLTWH(0, 0, mask.width.toDouble(), mask.height.toDouble()),
-        Rect.fromLTWH(
-          foot.dx - destW / 2,
-          foot.dy - image.height * unit,
-          mask.width * unit,
-          mask.height * unit,
-        ),
-        paint,
+      final dest = Rect.fromLTWH(
+        foot.dx - destW / 2,
+        foot.dy - image.height * unit,
+        mask.width * unit,
+        mask.height * unit,
       );
+      final src = Rect.fromLTWH(
+        0,
+        0,
+        mask.width.toDouble(),
+        mask.height.toDouble(),
+      );
+      // A mirrored tree throws a mirrored shadow too, or the ground patch
+      // would lean the wrong way relative to the crown standing over it.
+      if (props[o + 7] == 0) {
+        canvas.drawImageRect(mask, src, dest, paint);
+      } else {
+        canvas.save();
+        canvas.translate(foot.dx, 0);
+        canvas.scale(-1, 1);
+        canvas.translate(-foot.dx, 0);
+        canvas.drawImageRect(mask, src, dest, paint);
+        canvas.restore();
+      }
     }
   }
 
@@ -1236,7 +1830,8 @@ class _TerrainPainter extends CustomPainter {
     final props = data.plan.props;
     final paint = Paint()..filterQuality = FilterQuality.medium;
     for (var o = 0; o < props.length; o += _propStride) {
-      final image = data.images[props[o].toInt()];
+      final kind = props[o].toInt();
+      final image = data.images[kind];
       if (image == null) continue;
       final gx = props[o + 1], gy = props[o + 2];
       final destW = kIsoTileW * props[o + 3];
@@ -1259,7 +1854,18 @@ class _TerrainPainter extends CustomPainter {
           destW,
           destH,
         );
-        canvas.drawImageRect(image, srcRect, rect, paint);
+        if (props[o + 7] == 0) {
+          canvas.drawImageRect(image, srcRect, rect, paint);
+        } else {
+          // Mirrored about the foot, not the picture's own centre — the
+          // trunk stays planted on the same spot it was scattered at.
+          canvas.save();
+          canvas.translate(foot.dx, 0);
+          canvas.scale(-1, 1);
+          canvas.translate(-foot.dx, 0);
+          canvas.drawImageRect(image, srcRect, rect, paint);
+          canvas.restore();
+        }
         continue;
       }
       final center = Offset(foot.dx, foot.dy - destH / 2);

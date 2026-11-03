@@ -239,9 +239,11 @@ double qteSeconds(SpeciesDef species, {int round = 0}) {
 int qteHitsRequired(CreatureRarity rarity) =>
     kSpeciesBalance.of(rarity).catchHits.clamp(1, 99);
 
-// ── Hunt variants (user design 2026-07-17) ──────────────────
-// Six fixed-duration hunts. Duration is FIXED per variant (not derived from a
-// base × multiplier anymore) — the trip length still never leaks the hidden
+// ── Hunt variants (user design 2026-07-17; switched from a wall clock to
+// REAL STEPS 2026-10-02 — "ich möchte nur noch diese Hunts und nicht mehr
+// auf Zeit") ──────────────────────────────────────────────────
+// Five fixed-step hunts. The step count is FIXED per variant (not derived
+// from a base × multiplier) — the trip length still never leaks the hidden
 // finds' rarity because it's the same for everyone who picks that variant.
 //
 // Gating is by campaign progress, not by roster size (see _unlockedOptions in
@@ -251,27 +253,30 @@ int qteHitsRequired(CreatureRarity rarity) =>
 class CaptureHuntOption {
   final String id;
 
-  /// Fixed trip length in seconds.
-  final int seconds;
+  /// Real steps (StepTrackerService) this hunt needs — see
+  /// Expedition.stepsTarget/stepsWalked for how a trip actually tracks
+  /// this, and ExpeditionController.creditSteps for how steps reach it.
+  final int steps;
 
   /// How many monsters the hunt brings home. Each is a wild fielded in ONE
   /// continuous battle, not a separate fight per find (2026-09-11 — see the
   /// ladder's own comment).
   final int finds;
 
-  /// Short human label for the duration ("10 min", "24 h").
+  /// Short human label for the step count ("500 Schritte", "10.000 Schritte").
   final String label;
 
   const CaptureHuntOption({
     required this.id,
-    required this.seconds,
+    required this.steps,
     required this.finds,
     required this.label,
   });
 }
 
-// ── The hunt ladder (user 2026-07-30, revised 2026-09-11) ──────────────────
-// A hunt's TEAM now follows the same growing cap Gather already uses
+// ── The hunt ladder (user 2026-07-30, revised 2026-09-11, moved to real
+// steps 2026-10-02) ──────────────────────────────────────────
+// A hunt's TEAM still follows the same growing cap Gather already uses
 // (CreaturesController.teamSizeCap) rather than a fixed count tied to the
 // variant — see the launch sheet's own _groupCap. That reverses the
 // 2026-07-30 "every hunt sends exactly one monster" rule, but for a
@@ -287,18 +292,24 @@ class CaptureHuntOption {
 // more than one hunter is now a real, useful choice again, not a
 // requirement.
 //
-// The only thing a longer hunt costs is TIME, and the only thing it buys is
-// finds: 1 · 2 · 3 · 5 · 8 · 12 (the last four are the user's own numbers).
-// Growth is steep but sub-linear against the clock — 24 h returns 12 finds
-// where 24 ten-minute hunts would return 24 — so sitting on a long hunt is a
-// convenience, never the efficient play.
+// The only thing a longer hunt costs is EFFORT (real steps, or gold to skip
+// them — see ExpeditionController.goldSkipCost), and the only thing it buys
+// is finds: 1 · 2 · 3 · 5 · 8. Growth is steep but sub-linear against the
+// step count — 10.000 steps returns 8 finds where 20× 500-step hunts would
+// return 20 — so sitting on a long hunt is a convenience, never the
+// efficient play (same invariant the old time ladder had, just measured in
+// steps now).
 const List<CaptureHuntOption> kCaptureHuntOptions = [
-  CaptureHuntOption(id: 'h10m', seconds: 600, finds: 1, label: '10 min'),
-  CaptureHuntOption(id: 'h30m', seconds: 1800, finds: 2, label: '30 min'),
-  CaptureHuntOption(id: 'h60m', seconds: 3600, finds: 3, label: '60 min'),
-  CaptureHuntOption(id: 'h4h', seconds: 14400, finds: 5, label: '4 h'),
-  CaptureHuntOption(id: 'h8h', seconds: 28800, finds: 8, label: '8 h'),
-  CaptureHuntOption(id: 'h24h', seconds: 86400, finds: 12, label: '24 h'),
+  CaptureHuntOption(id: 'h500', steps: 500, finds: 1, label: '500 Schritte'),
+  CaptureHuntOption(id: 'h1000', steps: 1000, finds: 2, label: '1.000 Schritte'),
+  CaptureHuntOption(id: 'h2000', steps: 2000, finds: 3, label: '2.000 Schritte'),
+  CaptureHuntOption(id: 'h5000', steps: 5000, finds: 5, label: '5.000 Schritte'),
+  CaptureHuntOption(
+    id: 'h10000',
+    steps: 10000,
+    finds: 8,
+    label: '10.000 Schritte',
+  ),
 ];
 
 // kMaxHunters and huntOptionForHunters were DELETED on 2026-07-30. Both were
@@ -307,10 +318,118 @@ const List<CaptureHuntOption> kCaptureHuntOptions = [
 // have answered "the 10-minute hunt" for every possible input, silently. The
 // variant is chosen by the player, and `_option` is what carries it.
 
-/// Trip duration for a hunt variant. [timeScale] shortens the whole trip —
-/// 1.0 is the balanced default; the tutorial's jumpstart passes
-/// kJumpstartTimeScale. Kept as a function (not a raw field read) so the
-/// tutorial scaling stays in one place and the fixed seconds are never
-/// rewritten for it.
-Duration captureDuration(CaptureHuntOption option, {double timeScale = 1.0}) =>
-    Duration(seconds: (option.seconds * timeScale).round());
+/// A hunt's real step target after the Scout Post's travel bonus and the
+/// tutorial's jumpstart scale — both previously shrank [captureDuration]
+/// (now deleted); they shrink the step count the same way instead, down to
+/// a floor of 1 so a hunt is never free. Applied ONCE at send time (see
+/// ExpeditionController.startCapture) and stored on the trip itself, so a
+/// later Scout Post upgrade never retroactively shortens a hunt already
+/// under way.
+int effectiveHuntSteps(
+  CaptureHuntOption option, {
+  double timeScale = 1.0,
+  double travelMult = 1.0,
+}) {
+  final mult = travelMult <= 0 ? 1.0 : travelMult;
+  return math.max(1, (option.steps * timeScale / mult).round());
+}
+
+// ── The Balkenjagd catch minigame (user 2026-10-01, replacing the ring QTE
+// above for the actual catch moment — the ring's own math is left in place
+// since Dials/kSpeciesBalance still reference it, but battle_screen.dart no
+// longer calls it) ──────────────────────────────────────────
+//
+// Four independent levers, each owning exactly one thing (user's own split):
+//   1. Resteleben (how deep the wild sits below its catch threshold, see
+//      [catchDepth] above) → the wild's SPEED in the bar (deeper = slower).
+//   2. The active catcher's catchRate stat → the catch BAR'S WIDTH.
+//   3. Rarity → the wild's BASE speed/erraticism AND the fixed round length.
+//   4. The thrown item (ItemKind.catchBoost) → ONLY the starting percentage —
+//      see that enum case's own doc for why it's capped well under 50%.
+//
+// The live percentage can only ever climb (no drain) while the bar overlaps
+// the wild, and never drops — a round never "fails early", it always runs
+// its full fixed length, then rolls once against whatever percentage was
+// reached. A miss does not forfeit the wild (see CombatEngine.attemptCatch's
+// own doc) — only the thrown item is spent.
+
+/// The wild's base speed (bar-fraction per second) and how erratically it
+/// re-directs, before the Resteleben multiplier below. Also sets how long one
+/// round runs — longer for rarer finds (more time to accumulate skill
+/// points), but speed grows faster than duration, so it nets out HARDER, not
+/// easier (user 2026-10-01: "mehr Zeit, aber auch mehr Zeit für Fehler").
+const Map<CreatureRarity, double> kBarBaseSpeed = {
+  CreatureRarity.common: 0.24,
+  CreatureRarity.uncommon: 0.29,
+  CreatureRarity.rare: 0.34,
+  CreatureRarity.epic: 0.40,
+  CreatureRarity.legendary: 0.47,
+};
+
+/// Chance per ~16ms frame the wild snaps to a new random direction/target —
+/// the "erratic" half of its movement, on top of the steady bounce.
+const Map<CreatureRarity, double> kBarTurnProb = {
+  CreatureRarity.common: 0.0035,
+  CreatureRarity.uncommon: 0.0048,
+  CreatureRarity.rare: 0.0065,
+  CreatureRarity.epic: 0.0085,
+  CreatureRarity.legendary: 0.0105,
+};
+
+/// Fixed round length per rarity. Doubled 2026-10-04 (user: "sollte das
+/// Fangminispiel länger dauern, doppelt so lange") — [barSkillGainPerSecond]
+/// divides [kBarSkillMax] by this, so the doubled length alone keeps the
+/// same 60-point ceiling reachable, just spread over twice the real time.
+const Map<CreatureRarity, int> kBarDurationMs = {
+  CreatureRarity.common: 9000,
+  CreatureRarity.uncommon: 10400,
+  CreatureRarity.rare: 12000,
+  CreatureRarity.epic: 13600,
+  CreatureRarity.legendary: 15000,
+};
+
+double barBaseSpeed(CreatureRarity r) => kBarBaseSpeed[r] ?? 0.3;
+double barTurnProb(CreatureRarity r) => kBarTurnProb[r] ?? 0.006;
+int barDurationMs(CreatureRarity r) => kBarDurationMs[r] ?? 6000;
+
+/// Resteleben's effect on the wild's speed: reuses [catchDepth] (0 = just
+/// crossed into the catchable band, 1 = HP approaching 0) — fought deeper
+/// below the threshold moves up to 45% slower, down to a floor of 0.55×.
+double barSpeedMul(CreatureRarity rarity, double hpFraction) =>
+    1.0 - catchDepth(rarity, hpFraction) * 0.45;
+
+/// Final wild speed for one Balkenjagd round (bar-fraction/second).
+double barWildSpeed(CreatureRarity rarity, double hpFraction) =>
+    barBaseSpeed(rarity) * barSpeedMul(rarity, hpFraction);
+
+/// The catch bar's width as a fraction of the track, from the active
+/// catcher's catchRate stat — a saturating curve (same shape as the old
+/// ring's [qteWindow] width bonus): 16% at catchRate 0, approaching 38% at
+/// very high catchRate, half the bonus already banked by catchRate 18.
+const double kBarWidthBase = 0.16;
+const double kBarWidthMaxBonus = 0.22;
+const double kBarWidthHalfPoint = 18;
+
+double barWidthFraction(int catchRate) {
+  final rate = catchRate.clamp(0, 1 << 20).toDouble();
+  return kBarWidthBase +
+      kBarWidthMaxBonus * (rate / (rate + kBarWidthHalfPoint));
+}
+
+/// The SAME ceiling for every capture item (see [ItemKind.catchBoost]'s own
+/// doc) — a perfect round adds at most this many percentage points on top of
+/// whatever the thrown item started at. Only the best item (40% start) can
+/// reach a true 100%; cheaper items cap below it even on a flawless run.
+const double kBarSkillMax = 60.0;
+
+/// Skill points earned per second of overlap for a round of [durationMs] —
+/// scaled so holding overlap for the ENTIRE round earns exactly
+/// [kBarSkillMax] points, never more.
+double barSkillGainPerSecond(int durationMs) =>
+    kBarSkillMax / (durationMs / 1000);
+
+/// The live catch percentage: item start + accumulated skill points,
+/// clamped 0–100. Monotonic by construction — callers only ever grow
+/// [skillPoints], never shrink it.
+double barCatchPercent(double itemStart, double skillPoints) =>
+    (itemStart * 100 + skillPoints).clamp(0.0, 100.0);

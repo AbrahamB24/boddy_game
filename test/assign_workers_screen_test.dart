@@ -238,6 +238,9 @@ void main() {
       await tester.tap(find.text('worker'));
       await tester.pumpAndSettle();
       await _tapVisible(tester, find.text('ace'));
+      // Preview-then-confirm (2026-10-05): the row tap only previews ace in
+      // the detail panel; its gold button is what performs the swap.
+      await _tapVisible(tester, find.text('Swap in'));
       // One seat filled, now by ace — and worker is back to being a plain
       // roster row (unposted, so exactly once, not the seat any more).
       expect(find.text('1 / 3'), findsOneWidget);

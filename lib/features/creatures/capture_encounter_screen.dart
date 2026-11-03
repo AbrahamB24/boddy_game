@@ -19,15 +19,18 @@ import 'services/expedition_controller.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/versus_kit.dart';
-import 'widgets/wild_preview.dart';
+import 'widgets/wild_preview.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 // The catch moment (user design, 2026-07-15; QTE moved INTO the battle
-// 2026-07-18; hunts rebuilt as ONE continuous multi-wild battle 2026-09-11):
-// fight the wilds down into their catchable band — the rarer one is, the
-// lower it must go (catchHpThreshold), and killing one forfeits ITS catch,
-// not the fight. Once a wild is in the band the battle's Catch button lights
-// up for it; pressing it plays the ring QTE right there and, hit or miss,
-// the fight goes on (see BattleScreen._catchSucceed/_catchMiss).
+// 2026-07-18; hunts rebuilt as ONE continuous multi-wild battle 2026-09-11;
+// the QTE itself replaced by the Balkenjagd bar-chase 2026-10-01): fight the
+// wilds down into their catchable band — the rarer one is, the lower it
+// must go (catchHpThreshold), and killing one forfeits ITS catch, not the
+// fight. Once a wild is in the band the battle's Catch button lights up for
+// it; pressing it pushes CaptureBarScreen (a separate full-screen momentum
+// minigame, not an in-place overlay any more) and, caught or not, the fight
+// goes on (see BattleScreen._catchSucceed/_catchMiss).
 //
 // A longer hunt still brings back SEVERAL finds (kCaptureHuntOptions) — but
 // they're now ALL fielded together in one battle (CombatEngine's own
@@ -226,35 +229,34 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
     child: _wilds.isEmpty ? _goneView() : _body(),
   );
 
-  /// The encounter as one cream card (user 2026-09-20, laid out like the other
-  /// duel pages): what you found as a FAN of monster cards — a tap on one shows
-  /// it in full — then what to do about it, or how it went.
+  /// The encounter, laid out like the other duel pages: what you found as a
+  /// FAN of monster cards — a tap on one shows it in full — then what to do
+  /// about it, or how it went. No card of its own any more (user 2026-09-30,
+  /// "hier und andernorts sind noch die alten Kästchen vorhanden") —
+  /// MenuScaffold is already the one card on screen.
   Widget _body() => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: creamCard(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-      child: Column(
-        children: [
-          Text(
-            _wilds.length == 1 ? 'A wild encounter!' : 'A wild hunt!',
-            style: FoE.title(size: 17).copyWith(color: kBoxInk),
+    padding: const EdgeInsets.fromLTRB(6, 2, 6, 10),
+    child: Column(
+      children: [
+        Text(
+          _wilds.length == 1 ? 'A wild encounter!' : 'A wild hunt!',
+          style: FoE.title(size: 17).copyWith(color: kBoxInk),
+        ),
+        Text(
+          _wilds.length == 1
+              ? '1 find, Lv $_level'
+              : '${_wilds.length} finds, Lv $_level',
+          style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+        ),
+        Expanded(child: Center(child: _finds())),
+        Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: _footer(),
           ),
-          Text(
-            _wilds.length == 1
-                ? '1 find, Lv $_level'
-                : '${_wilds.length} finds, Lv $_level',
-            style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
-          ),
-          Expanded(child: Center(child: _finds())),
-          Center(
-            heightFactor: 1,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: _footer(),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     ),
   );
 
@@ -309,7 +311,7 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
                 color: CreamPalette.gold,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: vr(6),
                 border: Border.all(color: CreamPalette.goldDeep),
               ),
               child: const Text(
@@ -336,10 +338,11 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
           children: [
             Text(
               'Fight a wild down into its catchable band — without killing '
-              'it! — to light up Catch for it. Rarer finds need more, '
-              'perfect hits in a row; a miss just spends AP and the fight '
-              'goes on, same as attacking. Catch what you want, fight the '
-              'rest down for XP.',
+              'it! — to light up Catch for it. Throwing a cage opens its '
+              'own screen: hold your catch bar over the wild to build your '
+              'chance, then throw. A miss just spends AP and the cage, and '
+              'the fight goes on, same as attacking. Catch what you want, '
+              'fight the rest down for XP.',
               textAlign: TextAlign.center,
               style: FoE.dim(size: 11.5).copyWith(color: kBoxInkSoft),
             ),
@@ -413,7 +416,9 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
   Widget _goneView() => Center(
     child: SizedBox(
       width: 380,
-      child: creamCard(
+      // A zone, not a card of its own — MenuScaffold is already the one
+      // card on screen.
+      child: zoneBox(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,

@@ -1,0 +1,59 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tidelord animations</title>
+<style>
+  body { margin: 0; background: #1d2530; color: #dbe6ef; font: 14px system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+  canvas { display: block; margin: 12px auto; background:
+    repeating-conic-gradient(#2a3441 0 25%, #232c38 0 50%) 0 0 / 24px 24px; border-radius: 8px; }
+  .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 8px 0; }
+  button { background: #2f3d4f; color: inherit; border: 1px solid #44566d; border-radius: 6px; padding: 8px 14px; cursor: pointer; font: inherit; }
+  button.on { background: #4aa5da; color: #0b1d3d; border-color: #4aa5da; }
+  small { display: block; text-align: center; opacity: .7; }
+</style>
+<main>
+  <h1 style="text-align:center;font-size:20px">Tidelord, Stufe 0</h1>
+  <canvas id="c" width="560" height="448" style="max-width:100%"></canvas>
+  <div class="row" id="views"></div>
+  <div class="row" id="anims"></div>
+  <small id="info"></small>
+</main>
+<script>
+const META = {
+  front: {"frame_w":560,"frame_h":448,"cols":8,"anims":{"idle":{"sheet":"front_idle.png","frames":16,"fps":12,"loop":true},"attack":{"sheet":"front_attack.png","frames":14,"fps":16,"loop":false},"hurt":{"sheet":"front_hurt.png","frames":10,"fps":14,"loop":false}}},
+  back:  {"frame_w":560,"frame_h":448,"cols":8,"anims":{"idle":{"sheet":"back_idle.png","frames":16,"fps":12,"loop":true},"attack":{"sheet":"back_attack.png","frames":14,"fps":16,"loop":false},"hurt":{"sheet":"back_hurt.png","frames":10,"fps":14,"loop":false}}}
+};
+const cv = document.getElementById('c'), cx = cv.getContext('2d');
+const imgs = {}; let view = 'front', anim = 'idle', frame = 0, last = 0, acc = 0, hold = 0;
+function img(src) { if (!imgs[src]) { imgs[src] = new Image(); imgs[src].src = src; } return imgs[src]; }
+function mk(id, items, get, set) {
+  const el = document.getElementById(id); el.innerHTML = '';
+  items.forEach(k => { const b = document.createElement('button'); b.textContent = k;
+    b.className = get() === k ? 'on' : ''; b.onclick = () => { set(k); frame = 0; hold = 0; ui(); }; el.appendChild(b); });
+}
+function ui() {
+  mk('views', Object.keys(META), () => view, v => view = v);
+  mk('anims', Object.keys(META[view].anims), () => anim, a => anim = a);
+  const a = META[view].anims[anim];
+  document.getElementById('info').textContent = `${a.frames} Frames, ${a.fps} fps, ${a.loop ? 'Schleife' : 'einmalig, dann Ruhepose'}`;
+}
+function tick(ts) {
+  const m = META[view], a = m.anims[anim], im = img(a.sheet);
+  const dt = ts - last; last = ts; acc += dt;
+  const step = 1000 / a.fps;
+  while (acc >= step) { acc -= step;
+    if (hold > 0) { hold--; if (!hold) { anim = 'idle'; frame = 0; ui(); } continue; }
+    frame++;
+    if (frame >= a.frames) { if (a.loop) frame = 0; else { frame = a.frames - 1; hold = 8; } }
+  }
+  const cur = META[view].anims[anim];
+  cx.clearRect(0, 0, cv.width, cv.height);
+  if (im.complete && img(cur.sheet).complete) {
+    const f = Math.min(frame, cur.frames - 1);
+    cx.drawImage(img(cur.sheet), (f % m.cols) * m.frame_w, Math.floor(f / m.cols) * m.frame_h,
+      m.frame_w, m.frame_h, 0, 0, m.frame_w, m.frame_h);
+  }
+  requestAnimationFrame(tick);
+}
+ui(); requestAnimationFrame(tick);
+</script>

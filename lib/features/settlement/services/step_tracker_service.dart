@@ -138,6 +138,9 @@ class StepTrackerService extends ChangeNotifier {
     final credit = _pending;
     _pending = 0;
     try {
+      // Also advances whatever hunts are out — see
+      // SettlementController.addSteps's own doc on why that lives there
+      // now, not here.
       await SettlementController().addSteps(credit);
       _sessionSteps += credit;
       notifyListeners();

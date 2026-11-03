@@ -43,6 +43,17 @@ android {
     }
 }
 
+// CRASH REPORTING (Firebase Crashlytics). Both plugins need the
+// google-services.json of the Firebase project the crashes should land in. It is
+// not in the repo: download it from the Firebase console (Project settings ▸
+// Your apps ▸ Android, package com.boddy.boddygame) into android/app/. Until it
+// is there the plugins stay off and the app builds and runs as it always did —
+// main.dart then simply finds no Firebase and keeps its normal error handling.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
+}
+
 flutter {
     source = "../.."
 }

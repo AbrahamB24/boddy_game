@@ -4,8 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase/supabase_client.dart';
 import '../../core/theme/cream_kit.dart';
+import '../../core/theme/fachwerk.dart';
 import '../../core/ui/pressable.dart';
 import '../settlement/widgets/building_icon.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 // ── The front door ──────────────────────────────────────────
 // "Variante 1, Karte rechts, im Holz" (user 2026-09-20): the game's name as a
@@ -52,6 +54,8 @@ class AuthShell extends StatelessWidget {
                     width: box.maxWidth >= 720 ? 394 : null,
                     child: creamCard(
                       padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
+                      framed: true,
+                      roof: true,
                       child: child,
                     ),
                   );
@@ -92,46 +96,32 @@ class _Brand extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(30, 10, 30, 17),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF5C3B22), CreamPalette.ink],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [
-              BoxShadow(color: Color(0x6B000000), offset: Offset(0, 3)),
-            ],
-          ),
-          child: Stack(
+        // Fachwerk (2026-11-02): the name hangs as a timber SIGN under a
+        // course of roof tiles, the way the buildings wear them.
+        IntrinsicWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                heading,
-                maxLines: 1,
-                style: const TextStyle(
-                  fontSize: 44,
-                  height: 1.05,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                  color: CreamPalette.paperTop,
-                ),
+              const ClipRRect(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
+                child: RoofTileStrip(height: 14, tileWidth: 16),
               ),
-              Positioned(
-                left: -30,
-                right: -30,
-                bottom: -17,
-                child: Container(
-                  height: 2,
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Color(0x00F5B83A),
-                        CreamPalette.gold,
-                        Color(0x00F5B83A),
-                      ],
-                    ),
+              TimberPlate(
+                radius: 6,
+                padding: const EdgeInsets.fromLTRB(30, 8, 30, 12),
+                child: Text(
+                  heading,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: const TextStyle(
+                    fontSize: 44,
+                    height: 1.05,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                    color: Fachwerk.windowGlow,
+                    shadows: [
+                      Shadow(color: Color(0x99000000), offset: Offset(0, 2)),
+                    ],
                   ),
                 ),
               ),
@@ -219,7 +209,7 @@ class _CreamFieldState extends State<_CreamField> {
         alignment: Alignment.centerLeft,
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: vr(11),
           border: Border.all(
             color: _focus.hasFocus
                 ? CreamPalette.gold
@@ -309,7 +299,7 @@ class _ModeSwitch extends StatelessWidget {
           decoration: on
               ? BoxDecoration(
                   color: CreamPalette.gold,
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: vr(9),
                   boxShadow: const [
                     BoxShadow(
                       color: CreamPalette.goldDeep,
@@ -333,7 +323,7 @@ class _ModeSwitch extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: CreamPalette.tan.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: vr(12),
       ),
       child: Row(
         children: [
@@ -594,6 +584,8 @@ class _ResetDialogState extends State<_ResetDialog> {
       constraints: const BoxConstraints(maxWidth: 340),
       child: creamCard(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        framed: true,
+        roof: true,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

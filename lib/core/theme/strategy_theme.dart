@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../ui/pressable.dart';
 import 'cream_kit.dart' show MenuScaffold;
 import 'foe_theme.dart';
+import 'voxel_kit.dart';
+import 'voxel_icons.dart';
 
 /// The app-wide chunky "strategy HUD" look (2026-09-18 redesign, following
 /// Forge of Empires / Clash of Clans / Rise of Kingdoms: ribbon banners,
@@ -24,14 +26,14 @@ class Strategy {
   /// existing tokens (its own `FoE.gold` is actually a cyan-blue, kept for
   /// historical reasons — see that file's own doc comment); this is a new,
   /// deliberate addition in the same warm family as [FoE.danger]/coral.
-  static const Color gold = Color(0xFFFFC94D);
-  static const Color goldDeep = Color(0xFFDB9A18);
+  static const Color gold = Color(0xFF3FD0D0);
+  static const Color goldDeep = Color(0xFF1C8C8C);
 
   /// The "active/positive" accent. Named `cyan` from the blue theme; since
   /// 2026-09-22 ("Alle blauen Reste im UI ersetzen") it is the kit's gold, and the
   /// name is kept only so no caller changes.
   static const Color cyan = FoE.gold;
-  static const Color cyanDeep = Color(0xFFC98A10);
+  static const Color cyanDeep = Color(0xFF1C8C8C);
 
   /// Danger/alert — [FoE.danger], unchanged.
   static const Color coral = FoE.danger;
@@ -40,8 +42,8 @@ class Strategy {
   /// A locked/disabled fill — distinct from every action colour so a
   /// disabled chunky button reads as "can't", not as a dimmed version of
   /// whatever it would otherwise do.
-  static const Color locked = Color(0xFFB8AA90);
-  static const Color lockedDeep = Color(0xFF938670);
+  static const Color locked = Color(0xFF3B6176);
+  static const Color lockedDeep = Color(0xFF1F3C4C);
 
   /// Card surfaces — [FoE.cream]/[FoE.tan], unchanged (the light card every
   /// resource/creature tile sits on against the navy chrome).
@@ -51,7 +53,7 @@ class Strategy {
   /// The dark navy outline/rim every chunky shape casts its hard shadow in —
   /// deliberately darker than [FoE.bg] itself so the shadow reads as a real
   /// drop rather than a slightly-darker fill.
-  static const Color outline = Color(0xFF1A0F06);
+  static const Color outline = Color(0xFF0E2530);
 }
 
 /// [c], darkened toward black by [amount] — the bevel/shadow colour a fill
@@ -85,16 +87,16 @@ BoxDecoration chunkyDecoration({
   Color? borderColor,
   double shadowOffset = 4,
 }) => BoxDecoration(
-  gradient: LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [strategyLighten(fill, 0.16), fill],
-  ),
-  borderRadius: BorderRadius.circular(radius),
+  // VOXEL (2026-11-03): one flat tone, a two-pixel dark outline, a hard slab of
+  // shadow. No gradient, no round corners.
+  color: fill,
+  borderRadius: vr(radius),
   border: borderWidth > 0
-      ? Border.all(color: borderColor ?? Strategy.outline, width: borderWidth)
+      ? Border.all(color: borderColor ?? Voxel.outline, width: borderWidth)
       : null,
   boxShadow: [
+    // The outline is a spread ring OUTSIDE the box, so it costs no layout.
+    const BoxShadow(color: Voxel.outline, spreadRadius: 2, blurRadius: 0),
     BoxShadow(
       color: deep ?? strategyDarken(fill),
       offset: Offset(0, shadowOffset),
@@ -168,7 +170,7 @@ class ChunkyButton extends StatelessWidget {
                   child: Align(
                     alignment: Alignment.topCenter,
                     child: FractionallySizedBox(
-                      heightFactor: 0.46,
+                      heightFactor: 0.0,
                       widthFactor: 1,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
@@ -223,7 +225,7 @@ class GemBadge extends StatelessWidget {
     height: size,
     alignment: Alignment.center,
     decoration: BoxDecoration(
-      shape: BoxShape.circle,
+      shape: BoxShape.rectangle,
       gradient: RadialGradient(
         center: const Alignment(-0.35, -0.4),
         radius: 0.9,
@@ -262,7 +264,7 @@ class Rivet extends StatelessWidget {
     width: size,
     height: size,
     decoration: BoxDecoration(
-      shape: BoxShape.circle,
+      shape: BoxShape.rectangle,
       gradient: RadialGradient(
         center: const Alignment(-0.4, -0.4),
         colors: [
@@ -426,7 +428,7 @@ class StrategyHeader extends StatelessWidget {
             radius: 12,
             padding: const EdgeInsets.all(6),
             shadowOffset: 3,
-            child: const Icon(
+            child: const PixelIcon(
               Icons.arrow_back_ios_new,
               size: 16,
               color: Colors.white,
@@ -475,7 +477,7 @@ class PillBadge extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
       color: color,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: vr(20),
       border: Border.all(color: Strategy.outline, width: 2),
     ),
     child: Text(
@@ -506,25 +508,15 @@ class ChunkyBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final v = value.isNaN ? 0.0 : value.clamp(0.0, 1.0);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(height / 2),
-      child: Container(
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: v),
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOut,
+      builder: (context, val, _) => VoxelBar(
+        value: val,
+        color: color,
         height: height,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: Strategy.outline, width: 2),
-          borderRadius: BorderRadius.circular(height / 2),
-        ),
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: v),
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOut,
-          builder: (context, val, _) => FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: val,
-            child: DecoratedBox(decoration: BoxDecoration(color: color)),
-          ),
-        ),
+        block: 8,
       ),
     );
   }

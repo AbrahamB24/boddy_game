@@ -25,14 +25,16 @@ import 'models/combatant.dart';
 import 'models/creature_enums.dart';
 import 'models/status_effects.dart';
 import 'models/creature_instance.dart';
-import 'models/species_def.dart';
 import '../social/models/pvp_match.dart';
 import '../social/services/friends_service.dart';
 import '../social/services/pvp_notifier.dart';
 import '../social/services/pvp_service.dart';
 import '../social/widgets/social_kit.dart';
 import 'pvp_lobby_screen.dart';
+import 'capture_bait_picker.dart';
+import 'capture_bar_screen.dart';
 import 'services/battle_rewards.dart';
+import 'services/battle_stars.dart';
 import 'services/capture_math.dart';
 import 'services/combat_engine.dart';
 import 'services/creatures_controller.dart';
@@ -42,7 +44,8 @@ import 'widgets/battle_scene.dart';
 import 'widgets/creature_backdrop.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/creature_family.dart' show SockelAvatar;
-import 'widgets/creature_sprite.dart' show decodeWidthFor;
+import 'widgets/monster_sheet.dart';
+import 'widgets/creature_sprite.dart' show CreatureSprite, decodeWidthFor;
 import 'widgets/type_chart_screen.dart';
 import 'widgets/wild_preview.dart';
 import '../common/widgets/recess_bar.dart';
@@ -50,6 +53,8 @@ import '../common/widgets/parchment_page.dart';
 import '../common/widgets/monster_tile_grid.dart';
 import '../settlement/widgets/building_icon.dart';
 import '../../core/ui/pressable.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 /// Result popped when a capture battle ends — replaces the old single-wild
 /// [CatchSuccess] (2026-09-11): a hunt now fields several wilds in ONE
@@ -153,11 +158,17 @@ class BattleScreen extends StatefulWidget {
   /// [isPvp].
   final PvpMatch? pvpMatch;
 
+  /// The campaign battle this is (user 2026-09-28) — set by the overworld, null
+  /// for a hunt, Survival, training or PvP. Only a numbered campaign fight is
+  /// judged for STARS (see battle_stars.dart) and has its XP scaled by them.
+  final int? battleNumber;
+
   const BattleScreen({
     super.key,
     required this.team,
     required this.enemies,
     this.title = 'Battle',
+    this.battleNumber,
     this.area,
     this.isCapture = false,
     this.guaranteedCatch = false,
@@ -180,6 +191,13 @@ enum _ScriptBeat {
   missedAttack,
   enemyDebuffHit,
   powerAttack,
+  // Between powerAttack's "Not very effective" and banking the turn (user
+  // 2026-09-30: "nach not very effective soll der User oben auf den type
+  // chart klicken... Dann muss der User das Menü wieder schliessen und das
+  // Tutorial geht weiter") — the type-chart key is the one lit control;
+  // closing the chart (however that happens) advances straight to
+  // bankEndTurn.
+  typeChartPrompt,
   bankEndTurn,
   enemyAlmostKill,
   finisher,
@@ -350,6 +368,9 @@ class _BattleScreenState extends State<BattleScreen>
   // Level-ups captured when the fight resolves, shown in the end overlay with
   // their stat gains (user 2026-07-24).
   List<LevelUpResult> _levelUps = const [];
+  // The one-time gold paid for stars reached for the first time (0 on a rematch
+  // that did not beat the record) — shown in the victory card.
+  int _starGold = 0;
   // Tint of the current hit's flash on the reacting sprite — the striking
   // move's element colour, so a super-effective fire hit flashes orange, a
   // basic attack white (user request 2026-07-20).
@@ -378,21 +399,22 @@ class _BattleScreenState extends State<BattleScreen>
   final List<_HealCross> _healCrosses = [];
   int _healCrossSeq = 0;
 
-  // ── Inline catch mini-game (user 2026-07-18) ──────────────
-  late final AnimationController _ring; // shrinking-ring timer
-  final _rng = math.Random();
-  bool _catchOpen = false; // the QTE overlay is up
-  bool _catchResolving = false; // guards double-resolve
-  int _catchHits = 0;
-  int _catchHitsNeeded = 1;
-  bool _catchBetween = false; // brief beat between rounds (ring hidden)
-  bool _catchMissed = false; // tutorial: last tap missed, retrying
-  ({double lo, double hi}) _catchWindow = (lo: 0.3, hi: 0.4);
-  SpeciesDef? _catchSpecies;
+  // ── Catch mini-game (Balkenjagd, user 2026-10-01 — replaces the old
+  // inline ring QTE; see capture_bar_screen.dart) ───────────
+  bool _catchOpen = false; // choosing a bait OR a CaptureBarScreen is pushed
+
+  /// True while the command deck (the right-hand box) has turned into the
+  /// bait list (user 2026-10-04: "soll im Kampfscreen die Rechte Box zum
+  /// Inventar werden") — a full takeover of [_deckBody], not a 4th tab
+  /// beside Attack/Items/Change, since there is nothing to browse back to
+  /// mid-pick. False again the moment a bait is thrown or the pick is
+  /// cancelled; [_catchOpen] stays true a little longer, through the
+  /// pushed minigame itself.
+  bool _choosingBait = false;
 
   /// The wild being attempted and the monster attempting it, captured once
-  /// at [_startCatch] time and reused through miss/succeed — up to 3 wilds
-  /// and 3 hunters can be on the field at once (2026-09-11), so reading
+  /// at [_startCatch] time and reused at resolution — up to 3 wilds and 3
+  /// hunters can be on the field at once (2026-09-11), so reading
   /// [_target]/[_engine.activePlayer] fresh at resolution time would risk
   /// resolving against whichever happens to be selected THEN, not who this
   /// specific attempt was actually against.
@@ -404,6 +426,11 @@ class _BattleScreenState extends State<BattleScreen>
   /// across however many of a hunt's fielded wilds the player catches
   /// before the battle actually ends, and rides home on [HuntBattleResult].
   final List<Combatant> _caught = [];
+
+  /// Guards the auto-pop below from firing twice while outcome stays
+  /// victory across however many rebuilds happen before the route is
+  /// actually gone.
+  bool _autoPoppedCaptureVictory = false;
 
   // ── Guided intro: turn order → AP → actions → HP (user 2026-08-24) ──
   // Only ever set on the tutorial's own first fight — every anchored widget
@@ -436,8 +463,11 @@ class _BattleScreenState extends State<BattleScreen>
     return [
       for (final t in _battleCalloutHintTemplates)
         t ??
+            // Also explains WHY the number grows (user 2026-09-30: "erklären,
+            // dass mehr AP regeneriert werden, wenn die Monster im Level
+            // steigen"), not just what it is right now.
             'AP — every move spends Action Points; you regain $regen per '
-                'turn, up to $cap.',
+                'turn, up to $cap. Level your monsters up for more.',
     ];
   }
 
@@ -519,6 +549,7 @@ class _BattleScreenState extends State<BattleScreen>
         _deckTab == _DeckTab.items ? 'battle-item-use' : 'battle-items-btn',
       _ScriptBeat.missedAttack ||
       _ScriptBeat.powerAttack => 'battle-first-ability',
+      _ScriptBeat.typeChartPrompt => 'battle-typechart-btn',
       _ScriptBeat.bankEndTurn => 'battle-endturn-btn',
       // Bottom-left, the pricier element move (user 2026-09-05: "hier immer
       // die Attacke unten links (4 AP) wählen lassen") — not plain Attack.
@@ -528,13 +559,25 @@ class _BattleScreenState extends State<BattleScreen>
   }
 
   String? get _scriptedBattleHint => switch (_scriptBeat) {
-    _ScriptBeat.tackle => 'Attack!',
+    // Fuller line (user 2026-09-30, was the bare "Attack!"): "Attack: Now
+    // it's time to attack your opponent."
+    _ScriptBeat.tackle => "Now it's time to attack your opponent.",
     _ScriptBeat.healItem => 'That hurt — use your potion to heal up.',
     _ScriptBeat.missedAttack => 'Follow up with your ability.',
     _ScriptBeat.powerAttack => 'Follow up with your ability.',
+    _ScriptBeat.typeChartPrompt =>
+      "Tap the type chart to see what's effective against what.",
+    // Names WHY ending early is sometimes the right call (user 2026-09-30:
+    // "erklären... es manchmal sinnvoll ist, einen Zug frühzeitig zu
+    // beenden, da die verbleibenden AP in die nächste Runde übernommen
+    // werden können und so mächtige Angriffe möglich werden").
     _ScriptBeat.bankEndTurn =>
-      'End Turn without acting — the AP you save carries into next turn.',
-    _ScriptBeat.finisher => 'Finish it!',
+      'Sometimes it pays to end a turn early — the AP you save carries '
+          'into the next one, enough for a bigger attack.',
+    // Names the stakes, not just the command (user 2026-09-30: "der Kampf
+    // ist auf des Messers Schneide und du musst nun alles riskieren").
+    _ScriptBeat.finisher =>
+      "Finish it! The fight is on a knife's edge — risk everything now.",
     _ => null,
   };
 
@@ -768,7 +811,8 @@ class _BattleScreenState extends State<BattleScreen>
   /// programmatic `_engine.endTurn()` calls elsewhere (the catch flow, the
   /// scripted debuff beat), which don't advance the script.
   void _endTurn() {
-    if (_scriptBeat == _ScriptBeat.bankEndTurn) {
+    final wasBankEndTurn = _scriptBeat == _ScriptBeat.bankEndTurn;
+    if (wasBankEndTurn) {
       setState(() => _scriptBeat = _ScriptBeat.enemyAlmostKill);
     }
     // Captured BEFORE endTurn() advances the queue — by the time it
@@ -776,6 +820,21 @@ class _BattleScreenState extends State<BattleScreen>
     final actor = _engine.currentActor;
     _engine.endTurn();
     _relayPvpAction(kind: 'endTurn', actor: actor);
+    // Same reasoning as the tackle/missedAttack cases in [_useAbility]: a
+    // player faster than the enemy can otherwise win the real CTB race for
+    // ITS OWN next turn before the scripted enemyAlmostKill beat ever fires.
+    if (wasBankEndTurn) _forceHandoffToEnemy();
+  }
+
+  /// Snaps the acting combatant to the tutorial's one enemy — the mirror of
+  /// the `forceActing(me)` calls in [_runScriptedEnemyBeat], used after every
+  /// PLAYER beat that the script expects an enemy reply to follow
+  /// immediately. See the tackle case in [_useAbility] for why this is
+  /// needed at all: real speed otherwise still decides who the CTB queue
+  /// hands the next turn to, and the script does not tolerate that.
+  void _forceHandoffToEnemy() {
+    final foe = _engine.activeEnemy;
+    if (foe != null) _engine.forceActing(foe);
   }
 
   /// A one-line concept explainer sitting ON TOP of whatever beat is live —
@@ -787,8 +846,21 @@ class _BattleScreenState extends State<BattleScreen>
   /// exactly so the crit explainer isn't fighting the win screen for the
   /// same pixels.
   String? _scriptInfoHint;
+
+  /// True only for the "Miss" explainer (user 2026-09-30: "Hier musst du
+  /// nicht das eigene Monster highlighten") — every other [_scriptInfoHint]
+  /// anchors to 'battle-hp' purely for lack of a more specific target, but
+  /// at least genuinely followed from something that just happened to an
+  /// HP total (a hit, a debuff, a crit). A miss changes nothing, so a glow
+  /// ring around the player's own monster there implies a connection that
+  /// is not actually there.
+  bool _scriptInfoNoRing = false;
+
   void _dismissScriptInfo() {
-    setState(() => _scriptInfoHint = null);
+    setState(() {
+      _scriptInfoHint = null;
+      _scriptInfoNoRing = false;
+    });
     // An enemy beat may have been waiting on exactly this (see
     // [_scheduleAutoIfNeeded]'s own guard) — nothing else re-triggers it
     // once the hint that blocked it is gone.
@@ -886,16 +958,6 @@ class _BattleScreenState extends State<BattleScreen>
       vsync: this,
       duration: const Duration(milliseconds: 950),
     );
-    // Also no per-frame setState (2026-09-21): the shrinking ring is read
-    // inside an AnimatedBuilder in [_catchOverlay], so only the ring's own
-    // CustomPaint repaints while it closes instead of the whole screen.
-    _ring = AnimationController(vsync: this)
-      ..addStatusListener((s) {
-        // Ring fully shrank with no tap → a miss.
-        if (s == AnimationStatus.completed && _catchOpen && !_catchBetween) {
-          _catchMiss();
-        }
-      });
     // Entry animation (user 2026-07-24): the fighters slide onto the field
     // before the fight begins, so the combat has a proper "Auftritt". The
     // action loop is held until they've arrived.
@@ -907,16 +969,15 @@ class _BattleScreenState extends State<BattleScreen>
     // moment in a battle when the frame budget is already fullest.
     _entry =
         AnimationController(
-            vsync: this,
-            duration: const Duration(milliseconds: 620),
-          )
-          ..addStatusListener((s) {
-            if (s == AnimationStatus.completed && mounted) {
-              setState(() => _entering = false);
-              // Kick the loop now (an enemy may be fastest and act first).
-              _onEngineChanged();
-            }
-          });
+          vsync: this,
+          duration: const Duration(milliseconds: 620),
+        )..addStatusListener((s) {
+          if (s == AnimationStatus.completed && mounted) {
+            setState(() => _entering = false);
+            // Kick the loop now (an enemy may be fastest and act first).
+            _onEngineChanged();
+          }
+        });
     WidgetsBinding.instance.addPostFrameCallback((_) => _entry.forward());
     _idle = AnimationController(
       vsync: this,
@@ -971,7 +1032,6 @@ class _BattleScreenState extends State<BattleScreen>
     _fxReact.dispose();
     _fxStatus.dispose();
     _fxKo.dispose();
-    _ring.dispose();
     _entry.dispose();
     _idle.dispose();
     _engine.removeListener(_onEngineChanged);
@@ -1651,12 +1711,30 @@ class _BattleScreenState extends State<BattleScreen>
     if (_engine.outcome != CombatOutcome.victory || _engine.players.isEmpty) {
       return 0;
     }
-    return (_engine.totalXpReward / _engine.players.length).round();
+    // More stars, more XP (user 2026-09-28) — only in a numbered campaign fight.
+    final bonus = _stars?.xpMultiplier ?? 1.0;
+    return (_engine.totalXpReward / _engine.players.length * bonus).round();
   }
+
+  /// How the fight was judged, once it is won — null for anything that is not a
+  /// numbered campaign battle (and while it is still running).
+  BattleStars? get _stars =>
+      widget.battleNumber == null ||
+          widget.isPvp ||
+          _engine.outcome != CombatOutcome.victory
+      ? null
+      : judgeBattle(won: true, players: _engine.players);
 
   Future<void> _applyOutcome() async {
     if (_outcomeApplied) return;
     _outcomeApplied = true;
+    // The verdict is heard the moment it falls (a win: the fanfare; a loss:
+    // the refusal buzz) — the fight's own music stops with the screen.
+    if (_engine.outcome == CombatOutcome.victory) {
+      Feel.fanfare();
+    } else if (_engine.outcome == CombatOutcome.defeat) {
+      Feel.deny();
+    }
     if (widget.isPvp) {
       await _applyPvpOutcome();
       return;
@@ -1669,11 +1747,25 @@ class _BattleScreenState extends State<BattleScreen>
     // only clearing the CURRENT node on the overworld counts, so the overworld
     // screen advances it explicitly. That keeps re-fights and capture/other
     // battles from over-counting (user 2026-07-24).
+    final stars = _stars;
     final ups = await CreaturesController().applyBattleOutcome(
       _engine.players,
       xpEach: _xpEach,
     );
-    if (mounted) setState(() => _levelUps = ups);
+    // The record, and the one-time gold for stars reached for the first time.
+    var starGold = 0;
+    if (stars != null) {
+      starGold = await SettlementController().recordBattleStars(
+        widget.battleNumber!,
+        stars.count,
+      );
+    }
+    if (mounted) {
+      setState(() {
+        _levelUps = ups;
+        _starGold = starGold;
+      });
+    }
   }
 
   /// PvP's own outcome handling — reports the result and my own rating
@@ -1744,6 +1836,22 @@ class _BattleScreenState extends State<BattleScreen>
       _showError(error);
       return;
     }
+    // Real speed decides turn order everywhere else, but the tutorial's
+    // script assumes strict alternation (user 2026-09-30: "Die
+    // Geschwindigkeit darf keine Rolle spielen... Vineguard hat nun zwei
+    // Züge bevor Infernoclaw am Zug ist"). A starter faster than its
+    // counter-picked opponent otherwise wins the real CTB race for a second
+    // turn before the enemy's scripted reply ever fires — the mirror image
+    // of [_runScriptedEnemyBeat]'s own `forceActing(me)` calls, which guard
+    // the same race in the other direction. MUST run in this same
+    // synchronous stretch, right after the action that just fired
+    // notifyListeners — see `_runScriptedEnemyBeat`'s enemyBigHit case for
+    // why: a later microtask reads `currentActor` before an awaited
+    // continuation would ever get the chance to.
+    if ((_scriptBeat == _ScriptBeat.tackle && ability.id == 'attack') ||
+        _scriptBeat == _ScriptBeat.missedAttack) {
+      _forceHandoffToEnemy();
+    }
     _relayPvpAction(
       kind: ability.id == 'attack' ? 'attack' : 'ability',
       actor: actor,
@@ -1767,10 +1875,13 @@ class _BattleScreenState extends State<BattleScreen>
           _scriptInfoHint =
               'Miss — every attack has a small chance to '
               'miss entirely, no matter how strong it is.';
+          _scriptInfoNoRing = true;
         });
       case _ScriptBeat.powerAttack:
         setState(() {
-          _scriptBeat = _ScriptBeat.bankEndTurn;
+          // typeChartPrompt, not bankEndTurn directly (user 2026-09-30) —
+          // see the type detour documented on that beat's own declaration.
+          _scriptBeat = _ScriptBeat.typeChartPrompt;
           _scriptInfoHint =
               'Not very effective — the wrong type deals '
               'less damage.';
@@ -1890,23 +2001,23 @@ class _BattleScreenState extends State<BattleScreen>
             ],
           ),
           if (_floats.isNotEmpty) _floatsLayer(),
-          if (_catchOpen) _catchOverlay(),
           // Held back while a [_scriptInfoHint] is still showing (user
           // 2026-09-04: the finisher's crit explainer must not fight the win
           // screen for the same pixels) — the real engine has usually
           // already recorded the outcome by this point regardless.
           if (_engine.outcome != null && _scriptInfoHint == null) _endOverlay(),
-          // Undimmed (user 2026-09-03: "ich möchte aber, dass der gesamte
-          // screen erhellt ist, damit ich das Kampfgeschehen verfolgen
-          // kann") — the battle itself is worth watching (HP bars, hit
-          // reactions, floating numbers) even while only one control is
-          // actually pressable; a dark scrim over all of that just hid it.
+          // Dimmed like every other tutorial step now (user 2026-09-30,
+          // reversing the 2026-09-03 decision that used to live here: "bitte
+          // jeweils ganze Seite ausgrauen" / "alles andere ausgrauen...
+          // Dies bei allen Tutorialschritten während des Kampfes machen") —
+          // watching the fight play out mattered less than the rest of the
+          // guided intro's own rule of dimming everything but the one lit
+          // target.
           if (_battleCallout != null)
             IntroSpotlightOverlay(
               anchorName: _battleCalloutAnchors[_battleCallout!],
               hint: _battleCalloutHints[_battleCallout!],
               onScrimTap: _advanceBattleCallout,
-              dim: false,
               // The HP ring is round, so its own glow frame should be too
               // (user 2026-09-04: a facet border around the podium's own
               // circle read as boxing in far more than just the ring).
@@ -1922,8 +2033,23 @@ class _BattleScreenState extends State<BattleScreen>
             IntroSpotlightOverlay(
               anchorName: _scriptedBattleAnchor!,
               hint: _scriptedBattleHint,
-              dim: false,
+              // The type-chart key is round, like the HP ring the four
+              // opening callouts already special-case — a facet border
+              // would box in far more than just the key.
+              circular: _scriptBeat == _ScriptBeat.typeChartPrompt,
             ),
+          // A window with NOTHING to press — the enemy's own scripted turn
+          // (user 2026-09-30: "während den Attacken soll der ganze Screen
+          // frei sein (nicht abgedunkelt) aber ich kann nichts anwählen,
+          // bis der nächste Tutorialschritt kommt"): left undimmed so the
+          // hit actually plays out on a clear screen, but still fully dead
+          // — nothing here is a control this beat authored.
+          if (_isFirstBattleTutorial &&
+              _battleCallout == null &&
+              _scriptBeat != null &&
+              _scriptInfoHint == null &&
+              _scriptedBattleAnchor == null)
+            const IntroBlockOverlay(),
           // The scripted fight's own concept explainers — effectiveness,
           // miss, buffs, "not very effective", crit (user 2026-09-04) — one
           // beat's worth of narration, dismissed by tap like the four
@@ -1934,7 +2060,12 @@ class _BattleScreenState extends State<BattleScreen>
               anchorName: 'battle-hp',
               hint: _scriptInfoHint,
               onScrimTap: _dismissScriptInfo,
-              dim: false,
+              // Miss gets neither (user 2026-09-30: "nur der Text ist
+              // gehighlighted, sonst nichts") — there is nothing relevant to
+              // ring, and darkening the screen for one floating line has
+              // nothing else to justify it either; see [showRing]'s own doc.
+              showRing: !_scriptInfoNoRing,
+              dim: !_scriptInfoNoRing,
             ),
         ],
       ),
@@ -2146,6 +2277,8 @@ class _BattleScreenState extends State<BattleScreen>
         ),
       );
     }
+    // Full takeover — not a tab, nothing to browse back to mid-pick.
+    if (_choosingBait) return _baitPage();
     final forced = _engine.needsPlayerSwitch;
     final actor = _engine.activePlayer;
     if (!forced && actor == null) return const SizedBox.shrink();
@@ -2186,7 +2319,7 @@ class _BattleScreenState extends State<BattleScreen>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 14, color: on ? kBoxInk : kBoxInkSoft),
+                PixelIcon(icon, size: 14, color: on ? kBoxInk : kBoxInkSoft),
                 const SizedBox(width: 4),
                 Text(
                   label,
@@ -2355,7 +2488,7 @@ class _BattleScreenState extends State<BattleScreen>
           height: 8,
           decoration: BoxDecoration(
             color: i < ap ? CreamPalette.gold : Colors.transparent,
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: vr(3),
             border: Border.all(
               color: i < ap ? CreamPalette.goldDeep : CreamPalette.tan,
               width: 1.2,
@@ -2444,31 +2577,19 @@ class _BattleScreenState extends State<BattleScreen>
     Color effColor = kBoxInkFaint;
     if (isDamage && enemy != null && a.element != CreatureElement.neutral) {
       final mult = _effectivenessVsEnemy(a.element);
+      // Short (user 2026-09-28): the verdict and the number, nothing else — a
+      // neutral matchup says nothing at all.
       if (mult > 1.0) {
-        effText = '▲ Super effective vs ${enemy.name}  (×${_fmtMult(mult)})';
+        effText = '▲ Strong (×${_fmtMult(mult)})';
         effColor = CreamPalette.better;
       } else if (mult < 1.0) {
-        effText = '▼ Resisted by ${enemy.name}  (×${_fmtMult(mult)})';
+        effText = '▼ Weak (×${_fmtMult(mult)})';
         effColor = CreamPalette.warn;
-      } else {
-        effText = '– Neutral vs ${enemy.name}';
       }
     }
-    final notes = <String>[
-      if (a.extraHitChance > 0)
-        a.extraHitSameTarget
-            ? 'May hit the SAME target again: 2nd hit '
-                  '${(a.extraHitChance * 100).round()} % chance, 3rd '
-                  '${(a.extraHitChance * a.extraHitChance * 100).round()} %.'
-            : 'May also hit ANOTHER enemy: 2nd hit '
-                  '${(a.extraHitChance * 100).round()} % chance, 3rd '
-                  '${(a.extraHitChance * a.extraHitChance * 100).round()} % — '
-                  'does nothing extra alone.',
-      for (final e in a.effects) describeAbilityEffect(e).join('\n'),
-      if (a.priority > 0) 'Priority +${a.priority} — acts sooner',
-    ];
+    final notes = abilityNotes(a);
     final soft = TextStyle(
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: FontWeight.w600,
       color: kBoxInkSoft,
       height: 1.25,
@@ -2479,7 +2600,7 @@ class _BattleScreenState extends State<BattleScreen>
       padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
       decoration: BoxDecoration(
         color: tint.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: vr(10),
         border: Border.all(color: tint.withValues(alpha: 0.85), width: 1.6),
       ),
       child: Column(
@@ -2512,7 +2633,7 @@ class _BattleScreenState extends State<BattleScreen>
                         ),
                         decoration: BoxDecoration(
                           color: CreamPalette.gold,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: vr(8),
                         ),
                         child: Text(
                           '${_effectiveApCost(a)} AP',
@@ -2542,11 +2663,15 @@ class _BattleScreenState extends State<BattleScreen>
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                  for (final n in notes) Text(n, style: soft),
+                  for (final n in notes)
+                    Text(n, style: soft.copyWith(color: kBoxInk)),
                   if (a.description.isNotEmpty)
                     Text(
-                      a.description,
-                      style: soft.copyWith(color: kBoxInkFaint, fontSize: 10.5),
+                      shortAbilityDescription(a.description),
+                      style: soft.copyWith(
+                        color: kBoxInk,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                 ],
               ),
@@ -2557,7 +2682,7 @@ class _BattleScreenState extends State<BattleScreen>
             padding: const EdgeInsets.only(top: 4),
             child: Row(
               children: [
-                Icon(Icons.info_outline, size: 11, color: kBoxInkFaint),
+                PixelIcon(Icons.info_outline, size: 11, color: kBoxInkFaint),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
@@ -2631,7 +2756,7 @@ class _BattleScreenState extends State<BattleScreen>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 15, color: enabled ? kBoxInk : kBoxInkFaint),
+            PixelIcon(icon, size: 15, color: enabled ? kBoxInk : kBoxInkFaint),
             const SizedBox(width: 6),
             Text(
               label,
@@ -2738,6 +2863,108 @@ class _BattleScreenState extends State<BattleScreen>
       ],
     );
   }
+
+  // ── Bait page (the deck turned into the bag, user 2026-10-04) ──
+
+  Widget _baitPage() {
+    if (widget.guaranteedCatch) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _pageHeading('Choose your bait', 'tutorial — never spent'),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 4),
+              children: [
+                _deckRow(
+                  leading: Text(
+                    practiceBait.emoji,
+                    style: const TextStyle(fontSize: 20),
+                  ),
+                  title: practiceBait.name,
+                  detail: Text(
+                    'Start ${(practiceBait.magnitude * 100).round()}%',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: kBoxInkSoft,
+                    ),
+                  ),
+                  action: 'Throw',
+                  enabled: true,
+                  onTap: () => _chooseBait(practiceBait),
+                ),
+                _baitCancelRow(),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+    return ListenableBuilder(
+      listenable: SettlementController(),
+      builder: (context, _) {
+        final owned = SettlementController().items;
+        final baits = [
+          for (final d in kItemDefs.values)
+            if (d.kind == ItemKind.catchBoost) d,
+        ]..sort((a, b) => a.magnitude.compareTo(b.magnitude));
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _pageHeading('Choose your bait', 'sets your starting chance'),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 4),
+                children: [
+                  for (final d in baits)
+                    _deckRow(
+                      leading: Text(
+                        d.emoji,
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                      title: '${d.name} ×${owned[d.id] ?? 0}',
+                      detail: Text(
+                        'Start ${(d.magnitude * 100).round()}%',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: kBoxInkSoft,
+                        ),
+                      ),
+                      action: 'Throw',
+                      enabled: (owned[d.id] ?? 0) > 0,
+                      onTap: () => _chooseBait(d),
+                    ),
+                  _baitCancelRow(),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _baitCancelRow() => Padding(
+    padding: const EdgeInsets.only(top: 2),
+    child: Pressable(
+      onTap: _cancelBaitChoice,
+      child: Container(
+        height: 30,
+        alignment: Alignment.center,
+        decoration: raisedTile(radius: 10),
+        child: Text(
+          'Cancel',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: kBoxInkSoft,
+          ),
+        ),
+      ),
+    ),
+  );
 
   // ── Change page ───────────────────────────────────────────
 
@@ -2985,94 +3212,84 @@ class _BattleScreenState extends State<BattleScreen>
     return frac <= catchHpThreshold(wild.rarity);
   }
 
-  /// Opens the catch QTE overlay against the currently SELECTED wild (user
-  /// 2026-09-11 — was always "the" lone enemy before hunts fielded several
-  /// at once): the ring sizing (speed + golden band) comes from the wild's
-  /// rarity, how deep it was fought, and the active catcher's catchRate
-  /// (switch your catcher in to widen it). AP for the attempt is spent once
-  /// it resolves (miss or success), not here — see [_resolveCatchAttempt].
+  /// Turns the command deck into the bait list (user 2026-10-04: "soll im
+  /// Kampfscreen die Rechte Box zum Inventar werden und dort wähle ich den
+  /// Köder aus") against the currently SELECTED wild — the wild itself was
+  /// already "the" lone enemy before hunts fielded several at once
+  /// (2026-09-11). Picking a bait there (see [_chooseBait]) is what
+  /// actually spends it and pushes [CaptureBarScreen]; cancelling (see
+  /// [_cancelBaitChoice]) spends nothing at all, as if Catch was never
+  /// pressed.
   void _startCatch() {
     final wild = _target;
     if (wild == null || !_canCatch) return;
     _catchWild = wild;
     _catcher = _engine.activePlayer;
-    final rarity = wild.rarity;
-    final catchRate = _catcher?.stat(CreatureStat.catchRate) ?? 0;
-    final hpFraction = wild.maxHp <= 0 ? 0.0 : wild.hp / wild.maxHp;
-    _catchSpecies = wild.speciesId == null
-        ? null
-        : kSpeciesDefs[wild.speciesId];
-    _catchHits = 0;
-    _catchHitsNeeded = qteHitsRequired(rarity);
-    _catchWindow = qteWindow(
-      rarity,
-      hpFraction: hpFraction,
-      catchRate: catchRate,
-    );
-    _catchMissed = false;
-    _catchResolving = false;
-    setState(() => _catchOpen = true);
-    _startCatchRound();
+    if (_catcher == null) return;
+    setState(() {
+      _catchOpen = true;
+      _choosingBait = true;
+    });
   }
 
-  void _startCatchRound() {
-    if (!_catchOpen) return;
-    final species = _catchSpecies;
-    final jitter = 1 + (_rng.nextDouble() * 2 - 1) * kQteDurationJitter;
-    final secs = species != null ? qteSeconds(species, round: _catchHits) : 1.8;
-    _catchBetween = false;
-    _ring
-      ..duration = Duration(milliseconds: (secs * jitter * 1000).round())
-      ..forward(from: 0);
-    setState(() {});
+  /// Backs out of the bait list without spending anything — the deck
+  /// returns to its normal tabs.
+  void _cancelBaitChoice() {
+    setState(() {
+      _choosingBait = false;
+      _catchOpen = false;
+    });
+    _catchWild = null;
+    _catcher = null;
   }
 
-  void _catchTap() {
-    if (!_catchOpen || _catchBetween || _catchResolving) return;
-    _ring.stop();
-    final radius = 1 - _ring.value; // outer edge = 1, centre = 0
-    final inWindow = radius >= _catchWindow.lo && radius <= _catchWindow.hi;
-    if (inWindow) {
-      _catchMissed = false;
-      _catchHits += 1;
-      if (_catchHits >= _catchHitsNeeded) {
-        Feel.fanfare(); // caught!
-        _catchSucceed();
-      } else {
-        Feel.tap(); // ring hit, more to go
-        _betweenCatchRounds();
+  /// Spends [bait] (unless this is the tutorial's practice throw) and
+  /// pushes [CaptureBarScreen] with it. AP for the whole attempt is spent
+  /// once the minigame resolves (miss or success), not here — see
+  /// [_resolveCatchAttempt].
+  Future<void> _chooseBait(ItemDef bait) async {
+    final wild = _catchWild;
+    final catcher = _catcher;
+    if (wild == null || catcher == null) return;
+    if (!widget.guaranteedCatch) {
+      final err = await SettlementController().consumeItem(bait.id);
+      if (!mounted) return;
+      if (err != null) {
+        _flashMessage(err);
+        return; // stay on the bait list — stock ran out between taps
       }
-    } else if (widget.guaranteedCatch) {
-      // Tutorial: a miss simply restarts the ring — the catch cannot be lost.
-      _catchHits = 0;
-      _catchMissed = true;
-      _betweenCatchRounds();
+    }
+    setState(() => _choosingBait = false);
+
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CaptureBarScreen(
+          wild: wild,
+          catcher: catcher,
+          rng: _engine.rng,
+          deterministicCombat: _engine.deterministicCombat,
+          itemStart: bait.magnitude,
+          guaranteedCatch: widget.guaranteedCatch,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _catchOpen = false);
+    if (result == true) {
+      Feel.fanfare();
+      _catchSucceed();
     } else {
       _catchMiss();
     }
   }
 
-  void _betweenCatchRounds() {
-    setState(() => _catchBetween = true);
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted && _catchOpen && _catchBetween) _startCatchRound();
-    });
-  }
-
-  /// A failed attempt: the wild slips free, the overlay closes, and the AP
-  /// is spent regardless (user 2026-09-11: trying to catch now costs the
-  /// same AP whether or not it lands — see CombatEngine.attemptCatch). The
-  /// fight goes on either way — it always did for a miss, but now for a hit
-  /// too (see [_catchSucceed]).
+  /// A failed attempt: the wild slips free, and the AP is spent regardless
+  /// (user 2026-09-11: trying to catch now costs the same AP whether or not
+  /// it lands — see CombatEngine.attemptCatch). The fight goes on either
+  /// way — it always did for a miss, but now for a hit too (see
+  /// [_catchSucceed]).
   void _catchMiss() {
-    if (_catchResolving) return;
-    _catchResolving = true;
-    _ring.stop();
     final name = _catchWild?.name ?? 'It';
-    setState(() {
-      _catchOpen = false;
-      _catchBetween = false;
-    });
     _flashMessage('💨 $name slipped free!');
     _resolveCatchAttempt();
   }
@@ -3087,14 +3304,7 @@ class _BattleScreenState extends State<BattleScreen>
   /// fielded-and-benched wild is gone, via the same path every other battle
   /// already uses.
   void _catchSucceed() {
-    if (_catchResolving) return;
-    _catchResolving = true;
-    _ring.stop();
     final wild = _catchWild;
-    setState(() {
-      _catchOpen = false;
-      _catchBetween = false;
-    });
     if (wild != null) {
       _engine.catchEnemy(wild);
       _caught.add(wild);
@@ -3160,7 +3370,7 @@ class _BattleScreenState extends State<BattleScreen>
         builder: (context, online, _) => Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            PixelIcon(
               online ? Icons.hourglass_top : Icons.wifi_off,
               size: 13,
               color: CreamPalette.paperTop,
@@ -3262,11 +3472,46 @@ class _BattleScreenState extends State<BattleScreen>
   // MOVED to the top bar as a round key (user 2026-09-21: "Typecharte woanders
   // platzieren, so dass die Beschreibung der Fähigkeiten mehr Platz hat") — the
   // strip under the deck took a row of height the ability text needs.
-  Widget _typeChartButton() => _glassKey(
-    Icons.hexagon_outlined,
-    'Type chart',
-    () => showTypeChart(context, initial: _target?.element),
+  Widget _typeChartButton() {
+    final tutorial = _scriptBeat == _ScriptBeat.typeChartPrompt;
+    final key = _glassKey(
+      Icons.hexagon_outlined,
+      'Type chart',
+      tutorial ? _openTypeChartFromTutorial : _openTypeChart,
+    );
+    // Tagged only while it is actually the lit control — see
+    // [_ScriptBeat.typeChartPrompt]'s own doc comment.
+    return tutorial
+        ? KeyedSubtree(
+            key: IntroSpotlightAnchors.of('battle-typechart-btn'),
+            child: key,
+          )
+        : key;
+  }
+
+  /// Outside the scripted first fight's own [typeChartPrompt] beat (which
+  /// goes through [_openTypeChartFromTutorial] instead), this is still the
+  /// ONLY way into the chart during any other battle fought while the guided
+  /// intro hasn't finished yet (the second node, say) — [IntroStep.secondNode]
+  /// is `introStep.isActive` same as every earlier step. The banner there
+  /// too (user 2026-10-01: "wenn der type chart geöffnet wird während des
+  /// tutorials, bitte ein Text einblenden, welcher erklärt..."), with no
+  /// script beat to advance afterwards — closing it is simply closing it.
+  void _openTypeChart() => showTypeChart(
+    context,
+    initial: _target?.element,
+    tutorialBanner: SettlementController().introStep.isActive,
   );
+
+  /// Closing the chart (however that happens — there is no separate
+  /// dismiss to wait for) is what carries the tutorial on to bankEndTurn
+  /// (user 2026-09-30: "Dann muss der User das Menü wieder schliessen und
+  /// das Tutorial geht weiter").
+  Future<void> _openTypeChartFromTutorial() async {
+    await showTypeChart(context, initial: _target?.element, tutorialBanner: true);
+    if (!mounted || _scriptBeat != _ScriptBeat.typeChartPrompt) return;
+    setState(() => _scriptBeat = _ScriptBeat.bankEndTurn);
+  }
 
   /// A round key on the arena itself: dark glass with a white glyph, so it reads
   /// on grass, stone or a region's own art alike. Null [onTap] = dead.
@@ -3280,11 +3525,11 @@ class _BattleScreenState extends State<BattleScreen>
             height: 34,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              shape: BoxShape.rectangle,
               color: const Color(0x80000000),
               border: Border.all(color: const Color(0x33FFFFFF)),
             ),
-            child: Icon(
+            child: PixelIcon(
               icon,
               size: 17,
               color: onTap == null ? const Color(0x66FFFFFF) : Colors.white,
@@ -3292,6 +3537,24 @@ class _BattleScreenState extends State<BattleScreen>
           ),
         ),
       );
+
+  /// The initiative bar's own order during the scripted first fight — strict
+  /// alternation, matching what the script actually forces turn to turn
+  /// (user 2026-10-01: "die Zugreihenfolge während des tutorials an die
+  /// Fakereihenfolge anpassen"). [CombatEngine.forecast] predicts off real
+  /// speed, which the script overrides every turn via [_forceHandoffToEnemy]
+  /// / `forceActing` (see [_useAbility] and [_runScriptedEnemyBeat]) — the
+  /// bar showed that real prediction regardless, so a starter faster than
+  /// its counter-picked opponent could show itself two turns running right
+  /// before the engine forced the alternation the script actually plays out.
+  List<Combatant> _tutorialForecast(int count) {
+    final me = _engine.activePlayer;
+    final foe = _engine.activeEnemy;
+    if (me == null || foe == null) return _engine.forecast(count);
+    final first = _engine.currentActor;
+    final second = first == me ? foe : me;
+    return [for (var i = 0; i < count; i++) i.isEven ? first : second];
+  }
 
   // ── Turn order (CTB queue) ────────────────────────────────
   /// Who acts next, as faceted cards between Flee and AUTO (redesign
@@ -3325,9 +3588,11 @@ class _BattleScreenState extends State<BattleScreen>
       // strip before its predecessor's animation was actually done, which is
       // the same premature reveal the acting-glow fix addressed for the
       // sprites themselves, just on this bar instead.
+      List<Combatant> computeOrder() =>
+          _isFirstBattleTutorial ? _tutorialForecast(fit) : _engine.forecast(fit);
       final order = _presenting
-          ? (_lastSettledOrder ??= _engine.forecast(fit))
-          : (_lastSettledOrder = _engine.forecast(fit));
+          ? (_lastSettledOrder ??= computeOrder())
+          : (_lastSettledOrder = computeOrder());
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -4079,11 +4344,13 @@ class _BattleScreenState extends State<BattleScreen>
                   child: Transform.scale(
                     scale: zoom,
                     alignment: Alignment.bottomCenter,
-                    child: _spriteWithShadow(
-                      url,
-                      imgH,
-                      0.0,
-                      c.element.shadowColor,
+                    child: _sprite(
+                      c,
+                      back: back,
+                      url: url,
+                      imgH: imgH,
+                      flash: 0.0,
+                      shadowColor: c.element.shadowColor,
                       decodeH: targetH,
                     ),
                   ),
@@ -4206,15 +4473,22 @@ class _BattleScreenState extends State<BattleScreen>
                 child: Stack(
                   alignment: Alignment.bottomCenter,
                   children: [
-                    _spriteWithShadow(
-                      url,
-                      imgH,
-                      flash,
-                      glowColor ?? c.element.shadowColor,
+                    _sprite(
+                      c,
+                      back: back,
+                      url: url,
+                      imgH: imgH,
+                      flash: flash,
+                      shadowColor: glowColor ?? c.element.shadowColor,
                       decodeH: targetH,
                       // The reacting sprite flashes in the STRIKING move's
                       // colour.
                       flashColor: reacts ? _fxImpact : Colors.white,
+                      // Species with baked 3D art play their own attack and
+                      // hit animations on top of the lunge/shake.
+                      anim: (attacks && lunging)
+                          ? 'attack'
+                          : (active ? 'hurt' : 'idle'),
                     ),
                     if (buffSweep || debuffSweep)
                       Positioned.fill(
@@ -4246,6 +4520,40 @@ class _BattleScreenState extends State<BattleScreen>
     );
   }
 
+  /// The creature on the field: its baked animated 3D art if it has any
+  /// (see [MonsterSheets]), otherwise the flat network sprite with its drop
+  /// shadow. [anim] only matters for the animated art.
+  Widget _sprite(
+    Combatant c, {
+    required bool back,
+    required String? url,
+    required double imgH,
+    required double flash,
+    required Color shadowColor,
+    Color flashColor = Colors.white,
+    double? decodeH,
+    String anim = 'idle',
+  }) {
+    final sheets = MonsterSheets.battle(c.speciesId, c.stage, back: back);
+    if (sheets == null) {
+      return _spriteWithShadow(
+        url,
+        imgH,
+        flash,
+        shadowColor,
+        flashColor: flashColor,
+        decodeH: decodeH,
+      );
+    }
+    return MonsterSheetPlayer(
+      set: sheets,
+      anim: anim,
+      height: imgH,
+      flash: flash,
+      flashColor: flashColor,
+    );
+  }
+
   /// The battlefield sprite with a drop shadow behind it — a SHARP, un-blurred
   /// silhouette in the element's own [shadowColor] (the same tone, and the same
   /// crisp offset trick, as its type icon's 3D emboss), nudged down so the
@@ -4260,7 +4568,7 @@ class _BattleScreenState extends State<BattleScreen>
     double? decodeH,
   }) {
     Widget img(FilterQuality quality) => url == null
-        ? Icon(Icons.pets, color: FoE.gold, size: imgH * 0.6)
+        ? PixelIcon(Icons.pets, color: FoE.gold, size: imgH * 0.6)
         : Image.network(
             url,
             height: imgH,
@@ -4278,7 +4586,7 @@ class _BattleScreenState extends State<BattleScreen>
                 : SizedBox(
                     height: imgH,
                     child: Center(
-                      child: Icon(
+                      child: PixelIcon(
                         Icons.pets,
                         color: FoE.gold.withValues(alpha: 0.25),
                         size: imgH * 0.6,
@@ -4286,7 +4594,7 @@ class _BattleScreenState extends State<BattleScreen>
                     ),
                   ),
             errorBuilder: (_, _, _) =>
-                Icon(Icons.pets, color: FoE.gold, size: imgH * 0.6),
+                PixelIcon(Icons.pets, color: FoE.gold, size: imgH * 0.6),
           );
     return Stack(
       alignment: Alignment.center,
@@ -4329,14 +4637,12 @@ class _BattleScreenState extends State<BattleScreen>
       : FoE.positive;
 
   Widget _portrait(Combatant c, {required double size}) => c.imageUrl == null
-      ? Icon(Icons.pets, color: FoE.gold, size: size)
-      : Image.network(
-          filterQuality: FilterQuality.none,
-          c.imageUrl!,
-          fit: BoxFit.contain,
-          cacheWidth: decodeWidthFor(context, size),
-          errorBuilder: (_, _, _) =>
-              Icon(Icons.pets, color: FoE.gold, size: size),
+      ? PixelIcon(Icons.pets, color: FoE.gold, size: size)
+      : CreatureSprite(
+          url: c.imageUrl!,
+          width: size,
+          height: size,
+          fallback: PixelIcon(Icons.pets, color: FoE.gold, size: size),
         );
 
   // The battle log's fixed height. The log is centred on the seam, so its
@@ -4376,7 +4682,7 @@ class _BattleScreenState extends State<BattleScreen>
             end: Alignment.bottomCenter,
             colors: [CreamPalette.paperTop, CreamPalette.paperBottom],
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: vr(12),
           boxShadow: const [
             BoxShadow(color: CreamPalette.tanShadow, offset: Offset(0, 3)),
           ],
@@ -4414,7 +4720,7 @@ class _BattleScreenState extends State<BattleScreen>
               Positioned(
                 right: 2,
                 bottom: 1,
-                child: Icon(Icons.unfold_more, size: 11, color: kBoxInkFaint),
+                child: PixelIcon(Icons.unfold_more, size: 11, color: kBoxInkFaint),
               ),
           ],
         ),
@@ -4427,14 +4733,19 @@ class _BattleScreenState extends State<BattleScreen>
   /// Monsterassets zeigen") — shared by the inline bar and the full-log
   /// sheet so the two can't drift into two different looks.
   Widget _logRow(_LogLine line, {required Color color}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 1),
+    // Was vertical:1 — the fixed _kLogHeight box fits exactly 2 of these
+    // rows with almost no slack, so a line whose font falls back for one
+    // glyph (a slightly taller substitute font) is enough to overflow by a
+    // couple of pixels. Zero reclaims that margin without touching
+    // _kLogHeight itself, which also positions the battle seam.
+    padding: EdgeInsets.zero,
     child: Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (line.iconUrl != null) ...[
           ClipRRect(
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: vr(3),
             child: Image.network(
               line.iconUrl!,
               width: 14,
@@ -4506,7 +4817,7 @@ class _BattleScreenState extends State<BattleScreen>
                             children: [
                               if (line.iconUrl != null) ...[
                                 ClipRRect(
-                                  borderRadius: BorderRadius.circular(3),
+                                  borderRadius: vr(3),
                                   child: Image.network(
                                     line.iconUrl!,
                                     width: 16,
@@ -4684,7 +4995,7 @@ class _BattleScreenState extends State<BattleScreen>
                 child: IgnorePointer(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: vr(10),
                       border: Border.all(color: kBoxInk, width: 2),
                     ),
                   ),
@@ -4744,7 +5055,7 @@ class _BattleScreenState extends State<BattleScreen>
                   onTap: () => setState(() => _infoAbilityId = ability.id),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(5, 6, 8, 4),
-                    child: Icon(
+                    child: PixelIcon(
                       Icons.info_outline,
                       size: 14,
                       color: fg.withValues(alpha: 0.9),
@@ -4776,7 +5087,7 @@ class _BattleScreenState extends State<BattleScreen>
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: color ?? FoE.textDim),
+        PixelIcon(icon, size: 16, color: color ?? FoE.textDim),
         const SizedBox(width: 9),
         Expanded(
           child: Text(
@@ -4877,7 +5188,7 @@ class _BattleScreenState extends State<BattleScreen>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.smart_toy, size: 14, color: ink),
+              PixelIcon(Icons.smart_toy, size: 14, color: ink),
               const SizedBox(width: 4),
               Text(
                 _autoBattle ? 'AUTO ✔' : 'AUTO',
@@ -5086,8 +5397,225 @@ class _BattleScreenState extends State<BattleScreen>
   }
 
   // ── End overlay ───────────────────────────────────────────
+  /// What "Continue" does: hand the result back to whoever launched the fight (a
+  /// capture battle also returns every wild caught along the way, 2026-09-11) —
+  /// a PvP fight has nobody waiting and goes back to the app root instead.
+  VoidCallback _continueTap(CombatOutcome outcome) =>
+      () => widget.isPvp
+      ? Navigator.of(context).popUntil((r) => r.isFirst)
+      : Navigator.of(context).pop(
+          widget.isCapture
+              ? HuntBattleResult(
+                  outcome,
+                  _caught,
+                  widget.enemies.where((w) => !w.alive).length,
+                )
+              : outcome,
+        );
+
+  /// THE VICTORY PAGE (user 2026-09-28: "Victory Screen muss auf einer Seite Platz
+  /// haben ohne zu scrollen. Es kann auch eine volle Seite sein"). A full page,
+  /// laid out on a fixed 860 × 372 design grid that is scaled DOWN as a whole when
+  /// the screen is smaller — so nothing ever scrolls or overflows, however many
+  /// monsters levelled up or unlocks came with the win. Left: the verdict (stars
+  /// and the ticks that earned them, or the foe count) and Continue; right: the
+  /// team with its XP, the level-ups and what was unlocked.
+  Widget _victoryPage(BattleStars? stars) {
+    final foes = _engine.enemies.length;
+    Widget heading(String t) => CreamHeading(title: t);
+    return Container(
+      color: Colors.black.withValues(alpha: 0.6),
+      padding: const EdgeInsets.all(10),
+      alignment: Alignment.center,
+      child: creamCard(
+        padding: const EdgeInsets.all(14),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: SizedBox(
+            width: 860,
+            height: 372,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── The verdict ──
+                SizedBox(
+                  width: 260,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        '🏆 Victory!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: kBoxInk,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      if (stars != null)
+                        Expanded(child: _starsPanel(stars))
+                      else
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              'Defeated $foes ${foes == 1 ? 'foe' : 'foes'}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: kBoxInkSoft,
+                              ),
+                            ),
+                          ),
+                        ),
+                      SocialGoldButton(
+                        'Continue',
+                        height: 44,
+                        fontSize: 15,
+                        onTap: _continueTap(CombatOutcome.victory),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 20),
+                // ── The team, the level-ups, the unlocks ──
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      heading(
+                        stars != null
+                            ? 'Your team · $foes ${foes == 1 ? 'foe' : 'foes'} defeated'
+                            : 'Your team',
+                      ),
+                      const SizedBox(height: 8),
+                      // The tiles keep their size and the row shrinks as a whole
+                      // for a big party, instead of wrapping onto a second line.
+                      SizedBox(
+                        height: monsterTileHeight(context) + 22,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (final p in _engine.players) ...[
+                                _victoryCreatureTile(p),
+                                const SizedBox(width: 10),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 900),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, v, _) => RecessBar(
+                          value: v,
+                          color: CreamPalette.gold,
+                          height: 10,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      // Whatever is left: level-ups, then unlocks — scaled down
+                      // to fit rather than scrolled.
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.topLeft,
+                          child: SizedBox(
+                            width: 560,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (_levelUps.isNotEmpty) ...[
+                                  heading('Level up'),
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
+                                    children: [
+                                      for (var i = 0; i < _levelUps.length; i++)
+                                        SizedBox(
+                                          width: 272,
+                                          child: _levelUpCard(_levelUps[i], i),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                ],
+                                if (widget.victoryRewards.isNotEmpty) ...[
+                                  heading('Unlocked'),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 16,
+                                    runSpacing: 2,
+                                    children: [
+                                      for (final r in widget.victoryRewards)
+                                        SizedBox(
+                                          width: 272,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 3,
+                                            ),
+                                            child: r.buildingId != null
+                                                ? _victoryBuildingRow(r)
+                                                : _victoryPlainRow(r),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _endOverlay() {
     final outcome = _engine.outcome!;
+    // A capture battle's "victory" (every wild caught or fought down) gets
+    // NO end-of-battle screen at all now (user 2026-10-04: "victoryscreen
+    // nach catch entfernen") — CaptureEncounterScreen's own summary right
+    // after this pops ("🎉 N caught · N defeated · N lost") already says
+    // what happened; a stars/rewards victory page on top of that was a
+    // second "you did it!" screen for the same moment. Pops with the exact
+    // same HuntBattleResult the Continue button below would have, just
+    // automatically — a defeat or a flee in a capture battle still gets
+    // the small card beneath.
+    if (outcome == CombatOutcome.victory && widget.isCapture) {
+      if (!_autoPoppedCaptureVictory) {
+        _autoPoppedCaptureVictory = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).pop(
+            HuntBattleResult(
+              outcome,
+              _caught,
+              widget.enemies.where((w) => !w.alive).length,
+            ),
+          );
+        });
+      }
+      return const SizedBox.shrink();
+    }
+    // A won campaign or Survival fight has its own full page (PvP keeps the
+    // small card: its reward is the rating, not spoils).
+    if (outcome == CombatOutcome.victory && !widget.isPvp) {
+      return _victoryPage(_stars);
+    }
     // Victory has no subtitle any more (user 2026-08-28: "Your Team grew
     // Stronger löschen") — the rewards below already say what was won.
     final (title, subtitle) = switch (outcome) {
@@ -5095,6 +5623,7 @@ class _BattleScreenState extends State<BattleScreen>
       CombatOutcome.defeat => ('💀 Defeat…', 'Your team needs healing.'),
       CombatOutcome.fled => ('🏃 Fled', 'No reward.'),
     };
+    final stars = _stars;
     return Container(
       color: Colors.black.withValues(alpha: 0.6),
       alignment: Alignment.center,
@@ -5104,7 +5633,7 @@ class _BattleScreenState extends State<BattleScreen>
         // Height-bounded + scrollable so a fight where the whole party levels
         // (several cards) can't overflow the panel (user 2026-07-24).
         constraints: BoxConstraints(
-          maxWidth: 560,
+          maxWidth: stars != null ? 740 : 560,
           maxHeight: MediaQuery.of(context).size.height * 0.92,
         ),
         child: creamCard(
@@ -5133,7 +5662,20 @@ class _BattleScreenState extends State<BattleScreen>
                 // visible on the Ranking tab, not restated here.
                 if (outcome == CombatOutcome.victory && !widget.isPvp) ...[
                   const SizedBox(height: 16),
-                  _victoryRewards(),
+                  // A numbered campaign fight is judged in STARS: the report on
+                  // the left, the team and its XP on the right (user 2026-09-28,
+                  // "Variante 5"). Any other victory keeps the plain layout.
+                  if (stars != null)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 5, child: _starsPanel(stars)),
+                        const SizedBox(width: 20),
+                        Expanded(flex: 6, child: _victoryRewards()),
+                      ],
+                    )
+                  else
+                    _victoryRewards(),
                   if (_levelUps.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     _levelUpSection(),
@@ -5191,6 +5733,103 @@ class _BattleScreenState extends State<BattleScreen>
     );
   }
 
+  /// The star report of a won campaign battle: the stars, the three ticks that
+  /// earned them (the same yardstick whatever the team's size — see
+  /// battle_stars.dart) and what the stars paid.
+  Widget _starsPanel(BattleStars s) {
+    Widget star(int i) => TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: 380 + 170 * i),
+      curve: Curves.easeOutBack,
+      builder: (context, v, _) => Transform.scale(
+        scale: i < s.count ? v.clamp(0.0, 1.25) : 1.0,
+        child: PixelIcon(
+          Icons.star_rounded,
+          size: 48,
+          color: i < s.count
+              ? CreamPalette.gold
+              : kBoxInk.withValues(alpha: 0.16),
+        ),
+      ),
+    );
+    Widget tick(bool ok, String text, {String? trail}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          PixelIcon(
+            ok ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 18,
+            color: ok ? CreamPalette.better : kBoxInkFaint,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: FoE.label(
+                size: 12.5,
+              ).copyWith(color: ok ? kBoxInk : kBoxInkSoft),
+            ),
+          ),
+          if (trail != null)
+            Text(
+              trail,
+              style: FoE.value(
+                size: 12.5,
+              ).copyWith(color: ok ? CreamPalette.better : CreamPalette.warn),
+            ),
+        ],
+      ),
+    );
+    final hpNeed = (kStarHpFraction * 100).round();
+    Widget chip(String text) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: raisedTile(radius: 10),
+      child: Text(
+        text,
+        style: FoE.label(
+          size: 12,
+        ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [for (var i = 0; i < 3; i++) star(i)],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '${s.count} of 3',
+          textAlign: TextAlign.center,
+          style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+        ),
+        const SizedBox(height: 10),
+        CreamHeading(title: 'How you did'),
+        const SizedBox(height: 4),
+        tick(true, 'Won the battle'),
+        tick(s.noKnockOut, 'No monster knocked out'),
+        tick(
+          s.hpKept,
+          'Team kept $hpNeed % of its HP',
+          trail: '${(s.hpLeft * 100).round()} %',
+        ),
+        if (s.xpMultiplier > 1 || _starGold > 0) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (s.xpMultiplier > 1)
+                chip('XP ×${_fmtMult(s.xpMultiplier)} for ${s.count} stars'),
+              if (_starGold > 0) chip('+$_starGold 🪙 first time'),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
   /// Victory spoils: how many foes fell, each team member with the XP it earned,
   /// and a gold XP bar that sweeps 0→full so the reward feels earned (user
   /// request 2026-07-20).
@@ -5202,7 +5841,7 @@ class _BattleScreenState extends State<BattleScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.military_tech, size: 15, color: kBoxAccent),
+            const PixelIcon(Icons.military_tech, size: 15, color: kBoxAccent),
             const SizedBox(width: 6),
             Text(
               'Defeated $foes ${foes == 1 ? 'foe' : 'foes'}',
@@ -5434,14 +6073,16 @@ class _BattleScreenState extends State<BattleScreen>
               width: 34,
               height: 34,
               child: up.imageUrl == null
-                  ? const Icon(Icons.pets, color: FoE.gold, size: 24)
-                  : Image.network(
-                      up.imageUrl!,
-                      filterQuality: FilterQuality.none,
-                      fit: BoxFit.contain,
-                      cacheWidth: decodeWidthFor(context, 34),
-                      errorBuilder: (_, _, _) =>
-                          const Icon(Icons.pets, color: FoE.gold, size: 24),
+                  ? const PixelIcon(Icons.pets, color: FoE.gold, size: 24)
+                  : CreatureSprite(
+                      url: up.imageUrl!,
+                      width: 34,
+                      height: 34,
+                      fallback: const PixelIcon(
+                        Icons.pets,
+                        color: FoE.gold,
+                        size: 24,
+                      ),
                     ),
             ),
             const SizedBox(width: 10),
@@ -5528,149 +6169,6 @@ class _BattleScreenState extends State<BattleScreen>
     _ => stat.label,
   };
 
-  // ── Catch mini-game overlay ───────────────────────────────
-  /// The inline ring QTE: a shrinking ring closes on the wild — tap while it
-  /// crosses the golden band. Success catches it; a miss burns the turn and the
-  /// fight goes on (user 2026-07-18).
-  Widget _catchOverlay() {
-    // The wild THIS attempt is against (2026-09-11) — captured at
-    // _startCatch time, not necessarily the same as _engine.activeEnemy /
-    // fieldEnemies.first once more than one wild can be on the field.
-    final wild = _catchWild;
-    final showRing = _catchOpen && !_catchBetween;
-    return Positioned.fill(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => _catchTap(),
-        child: ColoredBox(
-          color: Colors.black.withValues(alpha: 0.74),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Catch it!',
-                style: FoE.title(size: 18).copyWith(color: FoE.goldBright),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _catchMissed && _catchBetween
-                    ? '💫 Missed — here it comes again!'
-                    : _catchBetween
-                    ? 'Get ready…'
-                    : 'Hit $_catchHits/$_catchHitsNeeded — tap in the golden ring!',
-                style: FoE.label(size: 13).copyWith(color: FoE.parchment),
-              ),
-              const SizedBox(height: 14),
-              // Zoom in on the wild as the overlay opens — a one-shot scale so
-              // it feels like the camera pushes onto the enemy (user 2026-07-18).
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0.55, end: 1.0),
-                duration: const Duration(milliseconds: 320),
-                curve: Curves.easeOutBack,
-                builder: (context, scale, child) =>
-                    Transform.scale(scale: scale, child: child),
-                child: SizedBox(
-                  width: 280,
-                  height: 280,
-                  // The ring is the only thing that moves while it closes, so
-                  // it is the only thing that rebuilds — the wild's picture
-                  // rides along as `child` and is built once (2026-09-21).
-                  child: AnimatedBuilder(
-                    animation: _ring,
-                    builder: (context, child) => CustomPaint(
-                      painter: _BattleRingPainter(
-                        radiusFraction: showRing ? (1 - _ring.value) : 1.0,
-                        showRing: showRing,
-                        windowLo: _catchWindow.lo,
-                        windowHi: _catchWindow.hi,
-                        zoneColor: _catchBetween ? FoE.positive : FoE.gold,
-                      ),
-                      child: child,
-                    ),
-                    child: Center(
-                      child: SizedBox(
-                        width: 150,
-                        height: 150,
-                        child: wild?.imageUrl == null
-                            ? const Icon(Icons.pets, color: FoE.gold, size: 80)
-                            : Image.network(
-                                wild!.imageUrl!,
-                                filterQuality: FilterQuality.none,
-                                fit: BoxFit.contain,
-                                cacheWidth: decodeWidthFor(context, 150),
-                                errorBuilder: (_, _, _) => const Icon(
-                                  Icons.pets,
-                                  color: FoE.gold,
-                                  size: 80,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text('Miss and your turn is spent.', style: FoE.dim(size: 11)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Golden target band + shrinking ring for the inline catch QTE (mirrors the
-/// capture screen's ring). The band bounds come from the wild's rarity/depth.
-class _BattleRingPainter extends CustomPainter {
-  final double radiusFraction;
-  final bool showRing;
-  final double windowLo;
-  final double windowHi;
-  final Color zoneColor;
-
-  const _BattleRingPainter({
-    required this.radiusFraction,
-    required this.showRing,
-    required this.windowLo,
-    required this.windowHi,
-    required this.zoneColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final maxR = size.shortestSide / 2 - 4;
-
-    final band = Paint()
-      ..color = zoneColor.withValues(alpha: 0.22)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = (windowHi - windowLo) * maxR;
-    final bandMid = (windowLo + windowHi) / 2;
-    canvas.drawCircle(center, bandMid * maxR, band);
-
-    final bandEdge = Paint()
-      ..color = zoneColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(center, windowLo * maxR, bandEdge);
-    canvas.drawCircle(center, windowHi * maxR, bandEdge);
-
-    if (showRing) {
-      final ring = Paint()
-        ..color = FoE.accentBlue
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 4;
-      canvas.drawCircle(center, radiusFraction * maxR, ring);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_BattleRingPainter old) =>
-      old.radiusFraction != radiusFraction ||
-      old.showRing != showRing ||
-      old.windowLo != windowLo ||
-      old.windowHi != windowHi ||
-      old.zoneColor != zoneColor;
 }
 
 /// One floating combat number's data (see _BattleScreenState._floats). Pure

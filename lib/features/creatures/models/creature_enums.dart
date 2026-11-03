@@ -624,11 +624,11 @@ double? breedingPowerForHours(double baseHours, double targetHours) {
 //   team size        → position on the linear path (already true since
 //                      2026-07-24 — see SettlementController.partyCap)
 
-/// Hunts start at the shortest variant (10 min, 1 hunter); each point of the
-/// settlement's `huntOptions` opens the next kCaptureHuntOptions entry in order
-/// (30 min → 60 min → 4 h → 8 h → 24 h). The exact-hunter-count gate still
-/// applies on top (user decision 2026-07-17): a longer variant needs BOTH the
-/// scouting for it AND enough ready monsters.
+/// Hunts start at the shortest variant (500 steps, 1 hunter); each point of
+/// the settlement's `huntOptions` opens the next kCaptureHuntOptions entry in
+/// order (1,000 → 2,000 → 5,000 → 10,000 steps). The exact-hunter-count gate
+/// still applies on top (user decision 2026-07-17): a longer variant needs
+/// BOTH the scouting for it AND enough ready monsters.
 /// Left unclamped on purpose: both callers bound it against the real option
 /// list (`take` / an index check), and clamping here would mean naming
 /// kCaptureHuntOptions from this file, which capture_math already imports.

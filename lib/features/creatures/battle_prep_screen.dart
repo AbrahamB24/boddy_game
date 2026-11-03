@@ -19,7 +19,9 @@ import 'services/battle_rewards.dart';
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/creature_card.dart';
-import 'widgets/versus_kit.dart';
+import 'widgets/picker_detail_panel.dart';
+import 'widgets/versus_kit.dart';
+import '../../core/theme/voxel_icons.dart';
 
 // ── Pre-battle briefing (user 2026-07-24) ───────────────────
 // Before a fight starts you see WHO you're fighting, WHAT clearing it unlocks,
@@ -92,7 +94,18 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
     _showPrepIntro = _isFirstBattleTutorial;
     // The scripted fight ahead needs a heal item to actually exist in the
     // bag (user 2026-09-03) — see SettlementController.grantTutorialPotion.
-    if (_isFirstBattleTutorial) SettlementController().grantTutorialPotion();
+    // Deferred a frame: called straight from initState it ran while
+    // SettlementScreen (this screen's own pusher) was still mid-build, and
+    // the grant's notifyListeners chain (_grantItems -> NewItems.add) tried
+    // to setState() it right then — "setState() or markNeedsBuild() called
+    // during build" (caught live 2026-09-30 QA pass; Flutter's debug handler
+    // swallowed it so nothing looked wrong on screen, but it is still a real
+    // framework violation worth not shipping).
+    if (_isFirstBattleTutorial) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => SettlementController().grantTutorialPotion(),
+      );
+    }
     // Pre-select the default roster so a player can just hit Fight — the
     // saved active team if there is one (battleTeam honours it), else the
     // first N ready. Still fully re-pickable. SKIPPED for the tutorial's
@@ -128,26 +141,37 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
       // gesture/hardware button here, and the header's own close via
       // showClose below.
       canPop: !_isFirstBattleTutorial,
-      child: MenuScaffold(
-        title: widget.title,
-        showClose: !_isFirstBattleTutorial,
-        trailing: Text(
-          'party of ${widget.partySize}',
-          style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
-        ),
-        child: Stack(
-          children: [
-            _stage(ready),
-            if (anchor != null)
-              IntroSpotlightOverlay(
-                anchorName: anchor,
-                hint: anchor == 'battleprep-add'
-                    ? 'Add your monster to the team.'
-                    : 'Hit Fight when ready.',
-              ),
-            if (_showPrepIntro) _prepIntroOverlay(),
-          ],
-        ),
+      // "Before you fight" is a SIBLING of MenuScaffold now, not nested
+      // inside its own `child` slot (user 2026-09-30: "nicht der ganze
+      // screen aussen ist abgedunkelt") — nested there, its Positioned.fill
+      // only covered MenuScaffold's own content area, leaving the header
+      // ("Battle 1 / party of 1") undimmed outside it. Out here it fills
+      // the whole route instead.
+      child: Stack(
+        children: [
+          MenuScaffold(
+            title: widget.title,
+            showClose: !_isFirstBattleTutorial,
+            trailing: Text(
+              'party of ${widget.partySize}',
+              style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
+            ),
+            child: _stage(ready),
+          ),
+          // Sibling of MenuScaffold, not nested in its `child` — the same fix
+          // _prepIntroOverlay below already has (user 2026-10-01: "hier den
+          // ganzen screen abdunkeln, das heisst auch den Rand" — nested, the
+          // dim only reached MenuScaffold's own content slot, leaving the
+          // header ("Battle 1 / party of 1") and its hairline undimmed).
+          if (anchor != null)
+            IntroSpotlightOverlay(
+              anchorName: anchor,
+              hint: anchor == 'battleprep-add'
+                  ? 'Add your monster to the team.'
+                  : 'Hit Fight when ready.',
+            ),
+          if (_showPrepIntro) _prepIntroOverlay(),
+        ],
       ),
     );
   }
@@ -174,9 +198,13 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Up top: who you face, and what winning gets you. Below: '
-                  'your own team — pick who fights. The bar between them '
-                  'shows who is stronger.',
+                  // Reworded twice now (user 2026-09-30): first pass dropped
+                  // "the bar between them shows who is stronger"; this pass
+                  // swaps "the rewards below" for "great rewards" — "below"
+                  // pointed at a screen region this overlay itself now
+                  // hides.
+                  'You can see what you face, and set your team to earn '
+                  'great rewards.',
                   style: FoE.label(size: 12).copyWith(color: kBoxInk),
                 ),
                 const SizedBox(height: 12),
@@ -496,6 +524,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
         onPick: (c) => _pick(c, slotIndex),
         chosen: () => _selected.length,
         partySize: widget.partySize,
+        isTutorial: _isFirstBattleTutorial,
       ),
     );
     if (mounted) setState(() {});
@@ -547,12 +576,20 @@ class _TeamPickerScreen extends StatefulWidget {
   final int Function() chosen;
   final int partySize;
 
+  /// The tutorial's first fight (user 2026-09-30: "Who Fights: ein kurzer
+  /// Text, dass ich das Monster anwählen soll und dieses Highlighten (sonst
+  /// nichts anwählbar)") — this screen had no tutorial awareness at all
+  /// before, unlike every other step of the guided intro. Spotlights the
+  /// one ready monster and dead-zones the rest (search/sort/filter).
+  final bool isTutorial;
+
   const _TeamPickerScreen({
     required this.ready,
     required this.isPicked,
     required this.onPick,
     required this.chosen,
     required this.partySize,
+    this.isTutorial = false,
   });
 
   @override
@@ -565,6 +602,11 @@ class _TeamPickerScreenState extends State<_TeamPickerScreen> {
   CreatureElement? _filterElement;
   String? _sortKey; // null = combat power
   bool _descending = true;
+
+  /// Tapping a tile only PREVIEWS it here (user 2026-10-05, "Konzept 4") —
+  /// the detail panel's own button is what actually picks it. Null = nothing
+  /// tapped yet.
+  CreatureInstance? _preview;
 
   static final PillPalette _pills = PillPalette.cream;
 
@@ -596,68 +638,139 @@ class _TeamPickerScreenState extends State<_TeamPickerScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => MenuScaffold(
-    title: 'Who fights?',
-    trailing: Text(
-      '${widget.chosen()} of ${widget.partySize} chosen',
-      style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: creamCard(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Stack(
+    children: [
+      MenuScaffold(
+        title: 'Who fights?',
+        trailing: Text(
+          '${widget.chosen()} of ${widget.partySize} chosen',
+          style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
+        ),
+        // No card of its own any more (user 2026-09-30, "hier und
+        // andernorts sind noch die alten Kästchen vorhanden") —
+        // MenuScaffold is already the one card on screen.
+        child: _body(),
+      ),
+      // Sibling of MenuScaffold, not nested in its `child` (same fix as
+      // _BattlePrepScreenState's own build, earlier in this file, user
+      // 2026-10-01: "hier auch" — nested, the dim only reached MenuScaffold's
+      // content slot, leaving the "Who fights? / 0 of 1 chosen" header and
+      // its hairline undimmed).
+      if (widget.isTutorial)
+        const IntroSpotlightOverlay(
+          anchorName: 'teampicker-tile',
+          hint: 'Tap your monster to add it to the team.',
+        ),
+    ],
+  );
+
+  Widget _body() => Padding(
+    padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: SearchPill(
-                    controller: _search,
-                    palette: _pills,
-                    onChanged: (v) => setState(() => _query = v),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(flex: 2, child: _sortPill()),
-                const SizedBox(width: 8),
-                Expanded(flex: 2, child: _filterPill()),
-              ],
-            ),
-            const SizedBox(height: 12),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(top: 14, bottom: 16),
-                child: monsterTileGrid([for (final c in _filtered) _tile(c)]),
+              flex: 3,
+              child: SearchPill(
+                controller: _search,
+                palette: _pills,
+                onChanged: (v) => setState(() => _query = v),
               ),
             ),
+            const SizedBox(width: 8),
+            Expanded(flex: 2, child: _sortPill()),
+            const SizedBox(width: 8),
+            Expanded(flex: 2, child: _filterPill()),
           ],
         ),
-      ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _detail(),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(top: 14, bottom: 16),
+                  child: monsterTileGrid([
+                    for (final c in _filtered) _tile(c),
+                  ]),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     ),
   );
 
+  /// The left panel: combat power, HP and type — what a battle pick is
+  /// judged on. [action] is the only thing that actually commits a pick now;
+  /// tapping a tile just fills this in for a look first.
+  Widget _detail() {
+    final c = _preview;
+    if (c == null) {
+      return const PickerDetailPanel(
+        placeholder: 'Tap a monster to see its stats.',
+      );
+    }
+    final picked = widget.isPicked(c);
+    return PickerDetailPanel(
+      art: CreatureCard(creature: c, showHp: false),
+      title: c.displayName,
+      subtitle: 'Lv ${c.level}',
+      rows: [
+        pickerStatRow('Power', '⚡ ${combatPower(c)}'),
+        pickerStatRow('HP', '${c.hp} / ${c.maxHp}'),
+        pickerStatRow('Type', c.species?.element.label ?? '—'),
+        if (c.species?.rarity != null)
+          pickerStatRow('Rarity', c.species!.rarity.label),
+      ],
+      action: pickerChooseButton(
+        label: picked ? 'Remove' : 'Choose',
+        onTap: () {
+          final close = widget.onPick(c);
+          setState(() {});
+          if (close) Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
   Widget _tile(CreatureInstance c) {
     final picked = widget.isPicked(c);
-    return Stack(
+    final previewed = _preview?.id == c.id;
+    // The tutorial's one ready monster still picks on a single tap (user
+    // 2026-09-30: the scripted first fight spotlights it and expects that tap
+    // to close the picker) — everywhere else, a tap only previews.
+    final card = Stack(
       children: [
         Opacity(
           opacity: picked ? 0.45 : 1,
-          child: CreatureCard(
-            creature: c,
-            onTap: () {
-              final close = widget.onPick(c);
-              setState(() {});
-              if (close) Navigator.pop(context);
-            },
+          child: pickerPreviewFrame(
+            active: previewed,
+            child: CreatureCard(
+              creature: c,
+              onTap: () {
+                if (widget.isTutorial) {
+                  final close = widget.onPick(c);
+                  setState(() {});
+                  if (close) Navigator.pop(context);
+                  return;
+                }
+                setState(() => _preview = c);
+              },
+            ),
           ),
         ),
         if (picked)
           const Positioned(
             top: 2,
             left: 2,
-            child: Icon(
+            child: PixelIcon(
               Icons.check_circle,
               size: 18,
               color: CreamPalette.better,
@@ -665,6 +778,15 @@ class _TeamPickerScreenState extends State<_TeamPickerScreen> {
           ),
       ],
     );
+    // The tutorial's one ready monster (see [IntroSpotlightOverlay] above) —
+    // untagged once picked, since picking it closes the picker anyway.
+    if (widget.isTutorial && !picked) {
+      return KeyedSubtree(
+        key: IntroSpotlightAnchors.of('teampicker-tile'),
+        child: card,
+      );
+    }
+    return card;
   }
 
   Widget _sortPill() => MenuPill<String>(
@@ -682,7 +804,7 @@ class _TeamPickerScreenState extends State<_TeamPickerScreen> {
       MapEntry('level', 'Level'),
       MapEntry('name', 'Name'),
     ],
-    trailing: Icon(
+    trailing: PixelIcon(
       _descending ? Icons.arrow_downward : Icons.arrow_upward,
       size: 14,
       color: CreamPalette.goldDeep,

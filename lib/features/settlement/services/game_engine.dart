@@ -44,6 +44,10 @@ class GameTickResult {
   /// same uptime the engine used.
   final double effectiveHours;
 
+  /// The REAL hours this tick spans, whatever the energy was — what timers (a
+  /// build, a craft) run on, since they no longer stretch with energy.
+  final double realHours;
+
   /// Building id → the wall-clock moment it FINISHED, for any building that
   /// completed during this tick. A load-time catch-up folds hours of offline
   /// time into one tick, so a building that finished long ago would otherwise
@@ -56,6 +60,7 @@ class GameTickResult {
     required this.resources,
     required this.buildings,
     this.effectiveHours = 0,
+    this.realHours = 0,
     this.completedAt = const {},
   });
 }
@@ -101,6 +106,10 @@ class GameEngine {
       final def = kBuildingDefs[b.buildingTypeId];
       if (def == null || !b.isComplete) continue;
       if (def.isRoad) {
+        // A road waiting in the Umbaumodus tray is not lying anywhere — its
+        // old cell must not keep connecting buildings (the building loop
+        // below already skips stored buildings the same way).
+        if (b.isStored) continue;
         roadCells.add(_cellKey(b.gridX, b.gridY));
       } else if (def.isMainBuilding) {
         mainHall = b;
@@ -382,13 +391,13 @@ class GameEngine {
         buildSpeedFromPoints(buildPoints) *
         (1.0 + techBuildSpeed + buildingsBuildSpeedBonus) *
         buildSpeedScale *
-        effectiveHours;
+        hoursDelta;
 
-    // Construction only runs during the energy-gated effectiveHours, which
-    // occupy the START of this tick's window (energy drains, then work stops),
-    // so a build finishes at prevNow + (fraction of the gain it needed) ×
-    // effectiveHours. Precise enough to timestamp the "finished" event to when
-    // it really happened rather than to screen-open.
+    // Construction runs in REAL time (user 2026-09-28: "10h sind nicht wirklich
+    // 10h"): energy no longer stretches a build — it only scales what is
+    // PRODUCED. A build therefore finishes at prevNow + (fraction of the gain it
+    // needed) × the tick's real hours, which also timestamps the "finished" event
+    // to when it really happened rather than to screen-open.
     final prevNow = energy.lastUpdatedAt;
     final completedAt = <String, DateTime>{};
 
@@ -410,7 +419,7 @@ class GameEngine {
             b.constructionSecondsRequired - b.constructionSecondsBuilt;
         final frac = (remaining / buildSecondsGained).clamp(0.0, 1.0);
         completedAt[b.id] = prevNow.add(
-          Duration(microseconds: (frac * effectiveHours * 3.6e9).round()),
+          Duration(microseconds: (frac * hoursDelta * 3.6e9).round()),
         );
       }
       anyBuildingChanged = true;
@@ -452,6 +461,7 @@ class GameEngine {
       ),
       buildings: newBuildings,
       effectiveHours: effectiveHours,
+      realHours: hoursDelta,
       completedAt: completedAt,
     );
   }

@@ -13,6 +13,8 @@ import 'dev_theme.dart';
 import 'path_node_form.dart';
 import 'path_species_sheet.dart';
 import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 // The Dev-Mode "Pfad" tab (user 2026-07-25): the linear overworld path as an
 // editable, REORDERABLE list of battle nodes. Drag to move a node (also between
@@ -318,7 +320,7 @@ class _PathEditorTabState extends State<PathEditorTab> {
                 index: index,
                 child: const Padding(
                   padding: EdgeInsets.only(left: 4),
-                  child: Icon(Icons.drag_handle, color: FoE.textDim),
+                  child: PixelIcon(Icons.drag_handle, color: FoE.textDim),
                 ),
               ),
             ],
@@ -395,11 +397,11 @@ class _TotalLevelFieldState extends State<_TotalLevelField> {
         prefixStyle: FoE.dim(size: 11),
         contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: vr(6),
           borderSide: const BorderSide(color: FoE.panelMid),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: vr(6),
           borderSide: const BorderSide(color: FoE.gold),
         ),
       ),

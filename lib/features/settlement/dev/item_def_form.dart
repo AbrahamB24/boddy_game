@@ -10,6 +10,7 @@ import '../data/resource_icons.dart';
 import '../services/game_defs_controller.dart';
 import 'dev_theme.dart';
 import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 // Create/edit one craftable/tradeable ItemDef (user 2026-07-25). Same
 // trusted-single-author dev pattern as AreaDefForm / PathNodeForm; saved to
@@ -166,7 +167,7 @@ class _ItemDefFormState extends State<ItemDefForm> {
           actions: [
             if (!_isNew)
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                icon: const PixelIcon(Icons.delete_outline, color: Colors.redAccent),
                 onPressed: _delete,
               ),
           ],
@@ -384,7 +385,7 @@ class _ItemDefFormState extends State<ItemDefForm> {
           ),
         ),
         IconButton(
-          icon: const Icon(
+          icon: const PixelIcon(
             Icons.remove_circle_outline,
             color: Colors.redAccent,
           ),
@@ -415,7 +416,7 @@ class _ItemDefFormState extends State<ItemDefForm> {
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(
             children: [
-              Icon(
+              PixelIcon(
                 value ? Icons.check_box : Icons.check_box_outline_blank,
                 color: value ? FoE.gold : FoE.textDim,
               ),

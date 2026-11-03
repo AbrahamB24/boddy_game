@@ -4,6 +4,7 @@ import '../../../core/theme/cream_kit.dart';
 import '../../../core/ui/pressable.dart';
 import '../../creatures/models/species_def.dart' show kSpeciesDefs;
 import 'dev_foe.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
 
 /// The dev forms' Material theme: cream (user 2026-09-20, "Dev Mode Variante 3").
 ///
@@ -19,7 +20,7 @@ ThemeData buildDevModeTheme() {
   final line = CreamPalette.tan.withValues(alpha: 0.55);
 
   OutlineInputBorder border(Color c, [double w = 1.5]) => OutlineInputBorder(
-    borderRadius: BorderRadius.circular(10),
+    borderRadius: vr(10),
     borderSide: BorderSide(color: c, width: w),
   );
 
@@ -142,7 +143,7 @@ ThemeData buildDevModeTheme() {
         foregroundColor: ink,
         elevation: 0,
         textStyle: const TextStyle(fontWeight: FontWeight.w800),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: vr(12)),
       ),
     ),
     snackBarTheme: const SnackBarThemeData(
@@ -206,7 +207,7 @@ Future<bool> confirmDeleteDialog(
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: CreamPalette.warn,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: vr(12),
                         boxShadow: const [
                           BoxShadow(
                             color: Color(0xFF7D3512),

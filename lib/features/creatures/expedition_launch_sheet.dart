@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/cream_kit.dart' show goldButton;
 import '../../core/theme/foe_theme.dart';
-import '../../core/theme/strategy_theme.dart' show Strategy;
 import '../../core/ui/feel.dart';
+import '../settlement/resources_screen.dart' show romanNumeral;
 import '../settlement/settlement_controller.dart';
 import '../settlement/widgets/parchment_sheet.dart';
 import 'models/area.dart';
@@ -18,50 +18,37 @@ import '../settlement/data/gather_defs.dart';
 import 'services/expedition_targets.dart';
 import 'services/gather_math.dart';
 import 'widgets/creature_card.dart';
+import 'widgets/picker_detail_panel.dart';
 import '../common/widgets/empty_monster_slot.dart';
 import '../common/widgets/filter_pills.dart';
 import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/parchment_kit.dart';
 import '../common/widgets/recess_bar.dart';
 import '../../core/ui/pressable.dart';
-import '../../core/ui/snack.dart';
+import '../../core/ui/snack.dart';
+import '../../core/theme/voxel_icons.dart';
 
-/// Picks the group for [target] and sends the trip. Returns true when one was
-/// actually dispatched.
-///
-/// A SHEET over the expeditions screen, not a page (user 2026-07-25): the trips
-/// already out are the context for deciding who to send next — how many slots
-/// are left, who is still away — so covering that list with a full screen threw
-/// away the thing you were reading. It also merges the two old planner screens
-/// (expedition_planner_screen / capture_planner_screen), which had drifted into
-/// two different layouts for the same decision: pick a group, read the
-/// forecast, send.
-Future<bool?> showExpeditionLaunchSheet(
-  BuildContext context,
-  ExpeditionTarget target,
-) => showModalBottomSheet<bool>(
-  context: context,
-  isScrollControlled: true,
-  backgroundColor: Colors.transparent,
-  builder: (_) => ExpeditionLaunchPanel(target: target),
-);
-
-/// The same picker, [inline] on the page instead of under a modal sheet —
-/// used when the Expeditions hub has exactly one hunt to offer, so there is
-/// nothing left to disambiguate by covering the page (user 2026-09-08:
-/// "Ich möchte, dass der Inhalt von diesem Overlay auf dieser Seite
-/// angezeigt wird" — the FIRST version of this request just auto-opened the
-/// modal on tap, which still covered the page; this is what was actually
-/// asked for). [showExpeditionLaunchSheet] still wraps this in
-/// [ParchmentSheet] for every other case — gathering, and a hunt where more
-/// than one region is open and which one was meant is a real question.
+/// Picks the group for [target] and sends the trip — embedded directly on
+/// the Expeditions hub's own composer (user 2026-10-02, "Konzept 24": the
+/// hub picks the target, this panel is just the part of it that was always
+/// the same regardless of target). It used to also live under a
+/// [showModalBottomSheet] wrapper reached from a separate tile grid; that
+/// grid and its sheet are both gone now that the composer feeds this panel
+/// a target directly, so there is nothing left to disambiguate by covering
+/// the page — this is always inline.
 class ExpeditionLaunchPanel extends StatefulWidget {
   final ExpeditionTarget target;
-  final bool inline;
+
+  /// Hunt only: which duration variant this sheet opens on (user 2026-09-29)
+  /// — the Expeditions hub's own composer IS the picker now, so a tap there
+  /// means the choice is made, not merely offered; there is no picker left
+  /// inside the sheet to override it with. Clamped to a valid index.
+  final int? initialOptionIndex;
+
   const ExpeditionLaunchPanel({
     super.key,
     required this.target,
-    this.inline = false,
+    this.initialOptionIndex,
   });
 
   @override
@@ -85,7 +72,9 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   String? _swapTargetId;
 
   /// Hunt only: which variant (index into kCaptureHuntOptions). Each has a
-  /// fixed duration and find count — no longer a hunter count (2026-09-11).
+  /// fixed step target and find count — no longer a hunter count
+  /// (2026-09-11), and no longer a duration (2026-10-02 — hunts run on real
+  /// steps now).
   int _optionIndex = 0;
 
   /// The roster picker's own search box — a FIELD tied to this State's own
@@ -96,6 +85,15 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   /// controller) for the rest of that animation, so an immediate dispose
   /// crashed it with "TextEditingController was used after being disposed".
   final _pickerSearch = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final i = widget.initialOptionIndex;
+    if (i != null) {
+      _optionIndex = i.clamp(0, kCaptureHuntOptions.length - 1);
+    }
+  }
 
   @override
   void dispose() {
@@ -118,8 +116,8 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   /// unten 2 '+' Boxen sein" — that cap silently held every hunt at 1 slot
   /// until battle progress separately unlocked more, which is exactly the
   /// coupling hunt group size was supposed to have dropped) — one monster
-  /// more per rung of [kCaptureHuntOptions], from 1 at 10 min up to 6 at
-  /// 24 h, full stop.
+  /// more per rung of [kCaptureHuntOptions], from 1 at 500 steps up to 5 at
+  /// 10,000, full stop.
   int get _groupCap => _isHunt ? _optionIndex + 1 : _creatures.teamSizeCap;
 
   GatherPlan? get _plan => widget.target.spot == null
@@ -134,10 +132,6 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   /// standing (user 2026-07-27) — the area decides the danger, the level and
   /// the travel, no longer the guest list.
   List<SpeciesDef> get _pool => catchableSpecies(_settlement.dungeonMaxStage);
-
-  int get _unlockedOptions => maxHuntOptionCount(
-    _settlement.buildingHuntOptions + _settlement.pathHuntOptions,
-  );
 
   void _toggle(CreatureInstance c) {
     final selected = _selected.contains(c.id);
@@ -154,23 +148,8 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
     setState(() => selected ? _selected.remove(c.id) : _selected.add(c.id));
   }
 
-  void _selectOption(int i) {
-    setState(() {
-      _optionIndex = i;
-      // Switching to a shorter hunt can drop the cap below what's already
-      // picked — trim from the end of the roster's own order rather than
-      // leave more members filled in than the new cap has places for.
-      while (_selected.length > _groupCap) {
-        _selected.remove(_members.last.id);
-      }
-    });
-  }
-
-  // No pop-up any more (user 2026-08-29: "wirklich alle pop up
-  // nachrichten... löschen") — kept as a real no-op method rather than
-  // removed so its five call sites don't all need touching for the same
-  // request.
-  void _say(String message) {}
+  // Messages are back (user 2026-11-02) — they were a no-op from 2026-08-29.
+  void _say(String message) => context.snack(message, error: true);
 
   Future<void> _send() async {
     setState(() => _sending = true);
@@ -197,16 +176,12 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
       return;
     }
     Feel.success();
-    if (widget.inline) {
-      // No modal to pop — the panel stays right where it is (still one hunt
-      // to offer, most likely), ready for another group if slots allow.
-      // ExpeditionController's own notifyListeners() is what actually moves
-      // the new trip into "Out now"; this only clears this panel's own pick.
-      setState(_selected.clear);
-      if (context.mounted) context.snack('Off they go!');
-      return;
-    }
-    Navigator.pop(context, true);
+    // No modal to pop — the panel stays right where it is, ready for
+    // another group if slots allow. ExpeditionController's own
+    // notifyListeners() is what actually moves the new trip into "Out now";
+    // this only clears this panel's own pick.
+    setState(_selected.clear);
+    if (context.mounted) context.snack('Off they go!');
   }
 
   // WHERE, under the title — the region and its danger decide the level of
@@ -240,7 +215,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '${_area.emoji} ${_area.name}',
+              '${_area.emoji} Level ${romanNumeral(_area.order)}',
               style: FoE.dim(size: 11).copyWith(color: ParchmentSheet.inkSoft),
             ),
           ),
@@ -249,74 +224,121 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
     );
   }
 
+  /// The hub's composer hands this an `Expanded` slot of its own (user
+  /// 2026-10-02, "Konzept 24") — not an ambient scrolling list, so a hunt
+  /// with a big enough roster still has somewhere to go rather than
+  /// overflowing the column outright. The body scrolls within whatever
+  /// height it's actually given; [_whereRow] and [_sendBar] stay fixed top
+  /// and bottom around it.
   @override
-  Widget build(BuildContext context) => widget.inline
-      ? _buildInline()
-      : ParchmentSheet(
-          title: _isHunt ? 'Hunt' : 'Gather ${widget.target.label}',
-          initialSize: 0.85,
-          minSize: 0.5,
-          maxSize: 0.95,
-          trailing: Text(
-            '${_expeditions.activeCount}/${_expeditions.maxSlots}',
-            style: FoE.value(size: 13).copyWith(color: kAccent),
-          ),
-          builder: (context, scrollCtrl) => Column(
-            children: [
-              _whereRow(),
-              Expanded(
-                child: ListView(
-                  controller: scrollCtrl,
-                  // kMonsterTilePageMargin (24), not
-                  // ParchmentPage.kParchmentPagePad (36) — user 2026-09-11:
-                  // "bitte 3 Boxen nebeneinander und nicht nur 2". The
-                  // Group section's [monsterTileGrid] sizes its tiles off
-                  // the raw device width assuming a 24px host margin, same
-                  // as the Monsters screen and this sheet's own roster
-                  // GridView below; hosting it at 36 left just short of
-                  // room for a third tile per row.
-                  padding: const EdgeInsets.fromLTRB(
-                    kMonsterTilePageMargin,
-                    4,
-                    kMonsterTilePageMargin,
-                    14,
-                  ),
-                  children: _isHunt ? _huntBody() : _gatherBody(),
-                ),
-              ),
-              _sendBar(),
-            ],
-          ),
-        );
-
-  /// The [ParchmentSheet]'s own chrome (drag handle, drag-sized sheet, title
-  /// bar) dropped — embedded straight in the host page instead of under a
-  /// sheet. NOT "sized to itself" any more (2026-09-22 fix): its one caller
-  /// ([ExpeditionsScreen._targetsColumn]) hands it a bounded height through
-  /// an `Expanded` slot beside the region rail, not an ambient scrolling
-  /// list the way the doc comment here used to assume — a hunt with a big
-  /// enough roster (a real, reported crash: "RenderFlex overflowed… Column
-  /// ← ExpeditionLaunchPanel") simply had nowhere to go. The body scrolls
-  /// within whatever height it is actually given now, exactly the way the
-  /// modal sheet's own [build] already does above; [_whereRow] and
-  /// [_sendBar] stay fixed top and bottom either way.
-  Widget _buildInline() => Column(
+  Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       _whereRow(),
-      Expanded(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: _isHunt ? _huntBody() : _gatherBody(),
-        ),
-      ),
+      Expanded(child: _body()),
       const SizedBox(height: 12),
       _sendBar(),
     ],
   );
 
+  /// The body, as ONE column (2026-10-01 — "Konzept 8" of ten redesign
+  /// proposals, picked over the old left-rail/right-content split). That
+  /// split only ever existed to give the hunt's "Hunt length" grid somewhere
+  /// to live; the hub's composer hands this an `initialOptionIndex` already
+  /// chosen, so re-offering the same cards here would be the composer's own
+  /// choice asked a second time. [_statStrip] carries the figures the rail
+  /// used to; the roster gets the sheet's full width instead. A hunt with no
+  /// species defined still gets the old full-width notice.
+  ///
+  /// SCALED TO FIT, NOT SCROLLED (user 2026-10-02: "es sollte alles auf einem
+  /// Screen ohne scrollen sichtbar sein") — a [SingleChildScrollView] here
+  /// used to let a 5-slot hunt's group [Wrap] spill onto a second row and
+  /// just scroll past the fold, same problem the hub's old era-resource
+  /// stack had before it adopted this exact [FittedBox] technique. Laying
+  /// the column out at the slot's own WIDTH but UNBOUNDED height, then
+  /// scaling the whole result down to fit, means a 1-slot hunt looks
+  /// untouched (nothing to shrink) and only a long hunt's bigger group ever
+  /// pays for it — uniformly, text and tiles together, rather than cropping
+  /// anything off the bottom.
+  Widget _body() {
+    if (_isHunt && _pool.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Text(
+          'No species are defined yet.\nAdd some in Dev Mode → Species.',
+          textAlign: TextAlign.center,
+          style: FoE.dim(size: 12),
+        ),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) => FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: constraints.maxWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _isHunt ? _huntSections() : _gatherSections(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A row of equal-width figures — "Length · Finds · Duration", "Haul ·
+  /// Carry cap · Duration" — replacing the old narrow info rail. [trailing]
+  /// is the ⓘ that still opens the fuller, rarely-needed table behind it.
+  Widget _statStrip(
+    List<(String label, String value)> stats, {
+    Widget? trailing,
+  }) => Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      for (var i = 0; i < stats.length; i++) ...[
+        if (i > 0) const SizedBox(width: 8),
+        Expanded(child: _statChip(stats[i].$1, stats[i].$2)),
+      ],
+      if (trailing != null) ...[const SizedBox(width: 10), trailing],
+    ],
+  );
+
+  Widget _statChip(String label, String value) => Container(
+    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+    decoration: ShapeDecoration(
+      color: kInk.withValues(alpha: 0.05),
+      shape: FoE.facet(
+        radius: 10,
+        side: BorderSide(color: kInk.withValues(alpha: 0.16)),
+      ),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: FoE.title(size: 14).copyWith(color: kInk),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label.toUpperCase(),
+          style: FoE.dim(
+            size: 9,
+          ).copyWith(color: kInkFaint, letterSpacing: 0.6),
+        ),
+      ],
+    ),
+  );
+
   // ── Gather ────────────────────────────────────────────────
-  List<Widget> _gatherBody() {
+  /// Spot stock/regen moved behind the ⓘ (2026-10-01, Konzept 8) — they
+  /// never change with who's picked, only the three trip figures do, so they
+  /// sit in the strip and the spot's own numbers are one tap away instead of
+  /// permanently on screen.
+  List<Widget> _gatherSections() {
     final spot = widget.target.spot!;
     final plan = _plan;
     final stock = _expeditions.availableStock(spot);
@@ -324,40 +346,48 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
     // Resources), not per spot.
     final dials = gatherDefFor(spot.resource);
     return [
-      _panel([
-        _kv(
-          'In the ground',
-          '${stock.toStringAsFixed(0)} / '
-              '${dials.spotCapacity.toStringAsFixed(0)}',
+      _statStrip(
+        [
+          (
+            'Haul',
+            plan == null || !plan.isViable
+                ? '—'
+                : '${plan.amount.toStringAsFixed(0)} ${plan.resource}',
+          ),
+          ('Carry cap', plan?.loadCap.toStringAsFixed(0) ?? '0'),
+          (
+            'Duration',
+            plan != null && plan.isViable
+                ? fmtTripDuration(plan.duration)
+                : '—',
+          ),
+        ],
+        trailing: ParchmentInfoButton(
+          title: 'Spot',
+          content: (_) => [
+            _kv(
+              'In the ground',
+              '${stock.toStringAsFixed(0)} / '
+                  '${dials.spotCapacity.toStringAsFixed(0)}',
+            ),
+            _bar(
+              dials.spotCapacity <= 0 ? 0 : stock / dials.spotCapacity,
+              kParchmentGo,
+            ),
+            const SizedBox(height: 8),
+            _kv('Regrows', '${dials.regenPerHour.toStringAsFixed(0)}/h'),
+            _kv(
+              'Carry point',
+              '${_fmtNum(dials.unitsPerCarry)} ${spot.resource}',
+            ),
+            const SizedBox(height: 8),
+            _kv(
+              'Mining rate',
+              '${plan?.ratePerHour.toStringAsFixed(1) ?? '0'}/h',
+            ),
+          ],
         ),
-        _bar(
-          dials.spotCapacity <= 0 ? 0 : stock / dials.spotCapacity,
-          kParchmentGo,
-        ),
-        const SizedBox(height: 8),
-        _kv('Regrows', '${dials.regenPerHour.toStringAsFixed(0)}/h'),
-        _kv(
-          'One carry point holds',
-          '${_fmtNum(dials.unitsPerCarry)} ${spot.resource}',
-        ),
-      ]),
-      const SizedBox(height: 12),
-      _panel([
-        Text('This trip', style: FoE.label(size: 12).copyWith(color: kAccent)),
-        const SizedBox(height: 8),
-        _kv(
-          'Haul',
-          plan == null || !plan.isViable
-              ? '—'
-              : '${plan.amount.toStringAsFixed(0)} ${plan.resource}',
-        ),
-        _kv('Carry cap', plan?.loadCap.toStringAsFixed(0) ?? '0'),
-        _kv('Mining rate', '${plan?.ratePerHour.toStringAsFixed(1) ?? '0'}/h'),
-        _kv(
-          'Duration',
-          plan != null && plan.isViable ? fmtTripDuration(plan.duration) : '—',
-        ),
-      ]),
+      ),
       const SizedBox(height: 14),
       ..._groupSection(
         hint:
@@ -373,64 +403,28 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   }
 
   // ── Hunt ──────────────────────────────────────────────────
-  List<Widget> _huntBody() {
-    final pool = _pool;
-    if (pool.isEmpty) {
-      return [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          child: Text(
-            'No species are defined yet.\nAdd some in '
-            'Dev Mode → Species.',
-            textAlign: TextAlign.center,
-            style: FoE.dim(size: 12),
-          ),
-        ),
-      ];
-    }
-    final present = pool.map((s) => s.rarity).toSet();
-
-    // WHAT THE SHEET NO LONGER SHOWS (user 2026-07-30: "what lives here kann
-    // komplett gelöscht werden. Catch timing kann gelöscht werden. Seltenheit
-    // kann in ein kleines 'i' gepackt werden").
-    //
-    // Two full panels used to sit between the player and the only decision on
-    // this sheet — which variant, and who goes. A roster of every catchable
-    // species, and a per-rarity timing table. Neither changes with the choice;
-    // both are reference. The rarity ODDS used to move with the variant too,
-    // but no longer do (user 2026-09-11: length should only change how many
-    // finds you get, never their odds) — still one tap away, as reference.
+  // NO DURATION GRID any more (2026-10-01, Konzept 8) — every path into this
+  // sheet for a hunt hands it an `initialOptionIndex` already (the
+  // Expeditions hub's own 2×3 duration grid is the only way in; see
+  // [ExpeditionsScreen._openHunt]), so re-offering the same six cards here
+  // was the hub's own choice asked a second time. [_statStrip] carries what
+  // the old left column did; what was the right-hand "Hunt length" grid is
+  // now just more room for [_groupSection]. Catch timing and rarity odds
+  // stay reference, one tap away behind the ⓘ (user 2026-07-30: "what lives
+  // here kann komplett gelöscht werden... Seltenheit kann in ein kleines 'i'
+  // gepackt werden") — rather than sitting between the player and the
+  // decision.
+  List<Widget> _huntSections() {
+    final o = _option;
     return [
-      ParchmentSectionHeader(
-        title: 'Hunt length',
+      _statStrip(
+        [('Length', o.label), ('Finds', '${o.finds}')],
         trailing: ParchmentInfoButton(
           title: 'Find odds',
-          content: (_) => _oddsRows(present),
+          content: (_) => _oddsRows(_pool.map((s) => s.rarity).toSet()),
         ),
-      ),
-      // No caption here (user 2026-09-11) — "a longer hunt needs more
-      // hunters" is true again (see [_groupCap]) but the Group section right
-      // below already says so via its own "n / cap chosen" hint.
-      const SizedBox(height: 4),
-      // THREE ACROSS (user 2026-07-30: "immer drei hunt optionen
-      // nebeneinander"). Six full-width rows pushed the group picker off the
-      // sheet entirely; as a grid the whole ladder is one glance.
-      GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          mainAxisExtent: 92,
-        ),
-        itemCount: kCaptureHuntOptions.length,
-        itemBuilder: (_, i) => _variantTile(i),
       ),
       const SizedBox(height: 14),
-      // No hint here any more (user 2026-09-11) — the sentence explaining the
-      // catch-by-hand mini-game was cut along with the length caption above.
       ..._groupSection(
         caption: (c) => '🪤 ${c.statValue(CreatureStat.catchRate)}',
       ),
@@ -488,68 +482,6 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
           ),
         ),
     ];
-  }
-
-  /// One hunt length, as a CARD rather than a row — three fit across.
-  ///
-  /// What survived the squeeze is what the choice is actually made on: how
-  /// long, how many finds. The lock reason moved to the tap, because a grid
-  /// cell has no room for a sentence and the sentence is only needed once.
-  Widget _variantTile(int i) {
-    final o = kCaptureHuntOptions[i];
-    // Locked by campaign progress ONLY now (2026-09-11) — team size stopped
-    // gating a variant the moment hunts stopped requiring an exact,
-    // variant-sized team (see kCaptureHuntOptions's own comment).
-    final locked = i >= _unlockedOptions;
-    final active = _optionIndex == i;
-    return Pressable(
-      onTap: () {
-        if (!locked) {
-          _selectOption(i);
-        } else {
-          _say('Win more battles to unlock the ${o.label} hunt.');
-        }
-      },
-      child: Opacity(
-        opacity: locked ? 0.5 : 1,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          decoration: ShapeDecoration(
-            color: active
-                ? kAccent.withValues(alpha: 0.12)
-                : kInk.withValues(alpha: 0.06),
-            shape: FoE.facet(
-              radius: 10,
-              side: BorderSide(
-                color: active
-                    ? kAccent.withValues(alpha: 0.55)
-                    : kInk.withValues(alpha: 0.18),
-                width: active ? 1.6 : 1,
-              ),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '${locked ? '🔒 ' : ''}${o.label}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: FoE.title(
-                  size: 13,
-                ).copyWith(color: active ? kAccent : kInk),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '🪤 ${o.finds} find${o.finds > 1 ? 's' : ''}',
-                style: FoE.label(size: 11).copyWith(color: kInkSoft),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   // ── Group picker (shared) ─────────────────────────────────
@@ -665,7 +597,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.replay_rounded, size: 14, color: kInk),
+            const PixelIcon(Icons.replay_rounded, size: 14, color: kInk),
             const SizedBox(width: 6),
             Text(
               'Same as last time (${party.length})',
@@ -719,6 +651,10 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
     CreatureElement? filterElement;
     String? sortKey; // null = the trip's own stat (catch rate / mining power)
     bool descending = true;
+    // Tapping a candidate only PREVIEWS it here (user 2026-10-05, "Konzept
+    // 4") — the detail panel's own button is what actually adds, removes or
+    // swaps it.
+    CreatureInstance? preview;
 
     double primary(CreatureInstance c) => _isHunt
         ? c.statValue(CreatureStat.catchRate).toDouble()
@@ -797,7 +733,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
                             const MapEntry('level', 'Level'),
                             const MapEntry('name', 'Name'),
                           ],
-                          trailing: Icon(
+                          trailing: PixelIcon(
                             descending
                                 ? Icons.arrow_downward
                                 : Icons.arrow_upward,
@@ -842,40 +778,63 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
                   ),
                 ),
                 Expanded(
-                  child: GridView.builder(
-                    controller: scrollCtrl,
-                    // 24, not 26 (user 2026-08-31: "genau gleich gross sein
-                    // wie die Kacheln beim Monstersscreen") — the 2px
-                    // difference from [kMonsterTilePageMargin] was enough to
-                    // hand every tile in this sheet a slightly narrower cell
-                    // than the Monsters grid's own.
-                    padding: const EdgeInsets.fromLTRB(
-                      kMonsterTilePageMargin,
-                      0,
-                      kMonsterTilePageMargin,
-                      20,
-                    ),
-                    gridDelegate: monsterTileGridDelegate(sheetCtx),
-                    itemCount: candidates.length + (swapping ? 1 : 0),
-                    itemBuilder: (_, i) {
-                      // A dedicated EMPTY tile (user 2026-08-31: "beim
-                      // Auswahlscreen eine 'leere' Kachel anbieten, wenn ich
-                      // diese anwähle, dann ist dieser Slot leer") —
-                      // swapping in nothing, the same clearing job the ✗
-                      // badge used to do, but as a real choice in the roster
-                      // instead of a shortcut on the tile behind it.
-                      if (swapping && i == 0) {
-                        return EmptyMonsterSlot(
-                          label: 'Empty',
-                          onTap: () {
-                            setState(() => _selected.remove(_swapTargetId));
-                            Navigator.pop(sheetCtx);
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          left: kMonsterTilePageMargin,
+                        ),
+                        child: _pickerDetail(preview, sheetCtx, setSheetState),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: GridView.builder(
+                          controller: scrollCtrl,
+                          // 24, not 26 (user 2026-08-31: "genau gleich gross
+                          // sein wie die Kacheln beim Monstersscreen") — the
+                          // 2px difference from [kMonsterTilePageMargin] was
+                          // enough to hand every tile in this sheet a
+                          // slightly narrower cell than the Monsters grid's
+                          // own.
+                          padding: const EdgeInsets.fromLTRB(
+                            0,
+                            0,
+                            kMonsterTilePageMargin,
+                            20,
+                          ),
+                          gridDelegate: monsterTileGridDelegate(sheetCtx),
+                          itemCount: candidates.length + (swapping ? 1 : 0),
+                          itemBuilder: (_, i) {
+                            // A dedicated EMPTY tile (user 2026-08-31: "beim
+                            // Auswahlscreen eine 'leere' Kachel anbieten, wenn
+                            // ich diese anwähle, dann ist dieser Slot leer")
+                            // — swapping in nothing, the same clearing job
+                            // the ✗ badge used to do, but as a real choice in
+                            // the roster instead of a shortcut on the tile
+                            // behind it. Clearing is unambiguous, so it stays
+                            // a single tap rather than going through preview.
+                            if (swapping && i == 0) {
+                              return EmptyMonsterSlot(
+                                label: 'Empty',
+                                onTap: () {
+                                  setState(
+                                    () => _selected.remove(_swapTargetId),
+                                  );
+                                  Navigator.pop(sheetCtx);
+                                },
+                              );
+                            }
+                            final c = candidates[i - (swapping ? 1 : 0)];
+                            return _pickerTile(
+                              c,
+                              preview,
+                              (p) => setSheetState(() => preview = p),
+                            );
                           },
-                        );
-                      }
-                      final c = candidates[i - (swapping ? 1 : 0)];
-                      return _pickerTile(c, sheetCtx, setSheetState);
-                    },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -888,59 +847,97 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
     if (mounted) setState(() {});
   }
 
-  Widget _pickerTile(
-    CreatureInstance c,
+  /// The left panel: the stat this trip actually judges a member on, plus
+  /// carry — not combat power or HP, which neither hunting nor gathering
+  /// cares about.
+  Widget _pickerDetail(
+    CreatureInstance? preview,
     BuildContext sheetCtx,
     void Function(VoidCallback) setSheetState,
   ) {
+    if (preview == null) {
+      return const PickerDetailPanel(
+        placeholder: 'Tap a monster to see its details.',
+      );
+    }
+    final picked = _selected.contains(preview.id);
+    final swapping = _swapTargetId != null;
+    final label = swapping
+        ? 'Swap in'
+        : (picked ? 'Remove from group' : 'Add to group');
+    return PickerDetailPanel(
+      art: CreatureCard(creature: preview, showHp: true),
+      title: preview.displayName,
+      subtitle: 'Lv ${preview.level}',
+      rows: [
+        pickerStatRow(
+          _isHunt ? 'Catch' : 'Mining',
+          '${_isHunt ? preview.statValue(CreatureStat.catchRate) : gatherPowerOf(preview)}',
+        ),
+        pickerStatRow('Carry', '${preview.statValue(CreatureStat.carry)}'),
+      ],
+      action: pickerChooseButton(
+        label: label,
+        onTap: () {
+          if (_swapTargetId != null) {
+            setState(() {
+              _selected.remove(_swapTargetId);
+              _selected.add(preview.id);
+            });
+            Navigator.pop(sheetCtx);
+            return;
+          }
+          _toggle(preview);
+          setSheetState(() {});
+          // A full group means the question is answered; holding the picker
+          // open would leave a list that refuses every further tap.
+          if (_members.length >= _groupCap) {
+            Navigator.pop(sheetCtx);
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _pickerTile(
+    CreatureInstance c,
+    CreatureInstance? preview,
+    ValueChanged<CreatureInstance> onPreview,
+  ) {
     final picked = _selected.contains(c.id);
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: Opacity(
-            opacity: picked ? 0.45 : 1,
-            child: CreatureCard(
-              creature: c,
-              // The stat this trip is actually judged on, in the tile
-              // itself (user 2026-08-31: "den gleichen Stil übernehmen" —
-              // the work-post picker's flag on the tile)
-              // instead of a caption line below it.
-              extras: [
-                TileValue(
-                  _isHunt ? 'Catch' : 'Mining',
-                  _isHunt
-                      ? c.statValue(CreatureStat.catchRate)
-                      : gatherPowerOf(c),
-                ),
-              ],
-              onTap: () {
-                if (_swapTargetId != null) {
-                  setState(() {
-                    _selected.remove(_swapTargetId);
-                    _selected.add(c.id);
-                  });
-                  Navigator.pop(sheetCtx);
-                  return;
-                }
-                _toggle(c);
-                setSheetState(() {});
-                // A full group means the question is answered; holding
-                // the picker open would leave a list that refuses every
-                // further tap.
-                if (_members.length >= _groupCap) {
-                  Navigator.pop(sheetCtx);
-                }
-              },
+    return pickerPreviewFrame(
+      active: preview?.id == c.id,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: picked ? 0.45 : 1,
+              child: CreatureCard(
+                creature: c,
+                // The stat this trip is actually judged on, in the tile
+                // itself (user 2026-08-31: "den gleichen Stil übernehmen" —
+                // the work-post picker's flag on the tile)
+                // instead of a caption line below it.
+                extras: [
+                  TileValue(
+                    _isHunt ? 'Catch' : 'Mining',
+                    _isHunt
+                        ? c.statValue(CreatureStat.catchRate)
+                        : gatherPowerOf(c),
+                  ),
+                ],
+                onTap: () => onPreview(c),
+              ),
             ),
           ),
-        ),
-        if (picked)
-          const Positioned(
-            top: 2,
-            left: 2,
-            child: Icon(Icons.check_circle, size: 18, color: kAccent),
-          ),
-      ],
+          if (picked)
+            const Positioned(
+              top: 2,
+              left: 2,
+              child: PixelIcon(Icons.check_circle, size: 18, color: kAccent),
+            ),
+        ],
+      ),
     );
   }
 
@@ -962,8 +959,7 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
                     '(${_expeditions.activeCount}/${_expeditions.maxSlots})'
         : _isHunt
         ? ready
-              ? 'Send ${_option.label} hunt · '
-                    '${fmtTripDuration(captureDuration(_option))}'
+              ? 'Send ${_option.label} hunt'
               : 'Pick who goes'
         : ready
         ? 'Send expedition · ${fmtTripDuration(plan!.duration)}'
@@ -971,38 +967,11 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
         ? 'Pick who goes'
         : 'Nothing left to mine here';
 
-    // The send bar is a FOOTER cut from the same paper, not a dark strip
-    // bolted under the sheet (user 2026-07-29 redraw). A hairline above it is
-    // what separates it from the scrolling list; the shadow does the rest.
-    // Inline, there is no fixed-height sheet to foot — it is just the next
-    // thing in the page's own flow, so the footer chrome and the bottom
-    // safe-area padding (meant for a bar actually pinned to the screen's own
-    // edge) both drop.
-    return Container(
+    // No footer chrome or bottom safe-area padding — there is no fixed-height
+    // sheet to foot any more (2026-10-02): this bar is just the next thing in
+    // the composer's own column.
+    return SizedBox(
       width: double.infinity,
-      decoration: widget.inline
-          ? null
-          : BoxDecoration(
-              color: Strategy.cream,
-              border: Border(
-                top: BorderSide(color: kInk.withValues(alpha: 0.18)),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: kInk.withValues(alpha: 0.16),
-                  blurRadius: 0,
-                  offset: const Offset(0, -3),
-                ),
-              ],
-            ),
-      padding: widget.inline
-          ? EdgeInsets.zero
-          : EdgeInsets.fromLTRB(
-              20,
-              10,
-              20,
-              10 + MediaQuery.of(context).viewPadding.bottom,
-            ),
       child: _sending
           ? const Padding(
               padding: EdgeInsets.symmetric(vertical: 10),
@@ -1027,22 +996,25 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   }
 
   // ── Small shared pieces ───────────────────────────────────
-  Widget _panel(List<Widget> children) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(12),
-    decoration: ParchmentSheet.card,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
-    ),
-  );
-
   Widget _kv(String label, String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 2),
     child: Row(
       children: [
-        Text(label, style: FoE.dim(size: 11).copyWith(color: kInkFaint)),
-        const Spacer(),
+        // Expanded + ellipsis, not a Spacer (2026-09-29, the two-column
+        // launch sheet): a Spacer only shrinks the GAP, so a label/value
+        // pair that is merely SNUG in the old wide panel overflows outright
+        // in the new 160px info rail ("Carry point" + "20 wood" does). The
+        // label is the one that can afford to lose a word; the value never
+        // truncates.
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: FoE.dim(size: 11).copyWith(color: kInkFaint),
+          ),
+        ),
+        const SizedBox(width: 6),
         Text(value, style: FoE.value(size: 12).copyWith(color: kInk)),
       ],
     ),

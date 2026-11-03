@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/cream_kit.dart';
@@ -13,6 +15,8 @@ import '../models/placed_building.dart';
 import '../settlement_controller.dart';
 import '../sheets/building_preview_dialog.dart';
 import 'building_icon.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 // ── The Build menu, folded into the map (2026-09-18 redesign) ──────────────
 //
@@ -66,6 +70,14 @@ const double _kRightInset = 58;
 /// The category buttons' diameter and the gap between them.
 const double _kDot = 36;
 const double _kDotGap = 6;
+
+/// The build/queue readout's fixed distance from the strip's bottom (user
+/// 2026-09-30: pinning it to the container's top put it too high once the
+/// container grew tall enough to fit the card strip — "wie früher, wenn
+/// alle 3 Kategorien vorhanden sind"). Reproduces where it sat before that
+/// fix, in the reference 3-category layout: 10 (the category column's own
+/// bottom margin) + 8 (the gap above the dots) + 3 dots + 2 gaps between them.
+const double _kSlotChipsBottomInset = 10 + 8 + 3 * _kDot + 2 * _kDotGap;
 
 class BuildingCarousel extends StatefulWidget {
   final SettlementController ctrl;
@@ -184,13 +196,18 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
     // The column is taller than the card strip, and it stands above it at the
     // left edge — so the widget claims the column's height, and only the strip
     // and the column themselves take hits (the map between them stays live).
+    // With few categories (1-2) the column is SHORTER than the card strip
+    // itself (buildingCarouselHeight) — Stack clips overflow by default, so
+    // without the max() the cards' top (their art) got cut off, leaving only
+    // their text/cost band visible (bug report 2026-09-30, screenshot showed
+    // a Road/Healing Hut row with no building art).
     final columnH =
         _SlotChips.height +
         8 +
         sections.length * _kDot +
         (sections.length - 1) * _kDotGap;
     return SizedBox(
-      height: columnH + 10,
+      height: math.max(columnH + 10, buildingCarouselHeight(context)),
       child: Stack(
         children: [
           Positioned(
@@ -208,6 +225,21 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
             // backdrop either (user 2026-09-18: "mache beim Baumenü keinen
             // Background") — the cards float straight over the map.
             child: _cardRow(defs, stock, introTarget),
+          ),
+          // The build/queue readout (user 2026-09-30: "immer am gleichen Ort
+          // fixieren über den Kacheln") — pinned at a fixed spot ABOVE the
+          // bottom of the strip ([_kSlotChipsBottomInset]), clear of the
+          // category column below it. It used to be the top item of that
+          // column, which is bottom-anchored and sized to its content, so
+          // with fewer categories (a shorter column) it sank down the strip
+          // instead of staying put; pinning it to the container's TOP
+          // overcorrected (the container is now tall enough to fit the card
+          // strip, so top:0 sat too high) — this reproduces where it sat
+          // "früher" in the reference 3-category layout.
+          Positioned(
+            left: 10,
+            bottom: _kSlotChipsBottomInset,
+            child: _SlotChips(ctrl: ctrl),
           ),
           Positioned(
             left: 10,
@@ -258,7 +290,7 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
         sections.length * _kDot +
         (sections.length - 1) * _kDotGap;
     return SizedBox(
-      height: columnH + 10,
+      height: math.max(columnH + 10, buildingCarouselHeight(context)),
       child: Stack(
         children: [
           Positioned(
@@ -267,6 +299,11 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
             bottom: 0,
             height: buildingCarouselHeight(context),
             child: _trayCardRow(items),
+          ),
+          Positioned(
+            left: 10,
+            bottom: _kSlotChipsBottomInset,
+            child: _SlotChips(ctrl: ctrl),
           ),
           Positioned(
             left: 10,
@@ -286,8 +323,6 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _SlotChips(ctrl: ctrl),
-      const SizedBox(height: 8),
       for (var i = 0; i < sections.length; i++) ...[
         if (i > 0) const SizedBox(height: _kDotGap),
         _categoryButton(
@@ -313,7 +348,7 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
           width: _kDot,
           height: _kDot,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            shape: BoxShape.rectangle,
             gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -326,7 +361,7 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
               ),
             ],
           ),
-          child: const Icon(Icons.close, size: 18, color: CreamPalette.ink),
+          child: const PixelIcon(Icons.close, size: 18, color: CreamPalette.ink),
         ),
       ),
     ),
@@ -388,8 +423,11 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
   }
 
   // ── Category buttons, stacked down the left edge ─────────────
-  /// The build slots on top, then one round button per category. Flush with the
-  /// cards' bottom edge (10 below), where the quick rail's own tiles stand.
+  /// One round button per category, bottom-anchored. Flush with the cards'
+  /// bottom edge (10 below), where the quick rail's own tiles stand. The
+  /// build-slot readout used to sit on top of this column, but that made it
+  /// sink down the strip on a short column (few categories) — it now lives
+  /// in its own fixed-position [_SlotChips] Positioned above this one.
   Widget _categoryColumn(
     List<({BuildingCategory cat, List<BuildingDef> defs})> sections,
     BuildingCategory selected, {
@@ -398,8 +436,6 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _SlotChips(ctrl: ctrl),
-      const SizedBox(height: 8),
       for (var i = 0; i < sections.length; i++) ...[
         if (i > 0) const SizedBox(height: _kDotGap),
         _categoryButton(
@@ -435,7 +471,7 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
             height: _kDot,
             decoration: active
                 ? BoxDecoration(
-                    shape: BoxShape.circle,
+                    shape: BoxShape.rectangle,
                     color: CreamPalette.gold,
                     boxShadow: [
                       BoxShadow(
@@ -445,7 +481,7 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
                     ],
                   )
                 : BoxDecoration(
-                    shape: BoxShape.circle,
+                    shape: BoxShape.rectangle,
                     gradient: const LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
@@ -458,7 +494,7 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
                       ),
                     ],
                   ),
-            child: Icon(cat.icon, size: 18, color: CreamPalette.ink),
+            child: PixelIcon(cat.icon, size: 18, color: CreamPalette.ink),
           ),
         ),
       ),
@@ -483,7 +519,7 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
           width: _kDot,
           height: _kDot,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            shape: BoxShape.rectangle,
             gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -496,7 +532,7 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
               ),
             ],
           ),
-          child: const Icon(Icons.open_with, size: 18, color: CreamPalette.ink),
+          child: const PixelIcon(Icons.open_with, size: 18, color: CreamPalette.ink),
         ),
       ),
     ),
@@ -634,7 +670,7 @@ Widget _darkPill({required Widget child, EdgeInsetsGeometry? padding}) =>
           padding ?? const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: CreamPalette.ink.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: vr(10),
       ),
       child: child,
     );
@@ -685,7 +721,7 @@ class _SlotChips extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 15, color: tint, shadows: _edge),
+        PixelIcon(icon, size: 15, color: tint, shadows: _edge),
         const SizedBox(width: 3),
         Text(
           count,
@@ -738,7 +774,13 @@ class _TrayCard extends StatelessWidget {
               right: 0,
               top: panelTop,
               bottom: 0,
-              child: creamCard(child: const SizedBox.expand()),
+              // Keeps the diamond lattice (user 2026-09-30: "Nur beim
+              // Baumenü nicht, dort die Vierecke behalten") — every other
+              // screen switched to the plain gradient default.
+              child: creamCard(
+                pattern: CreamPatternStyle.diamond,
+                child: const SizedBox.expand(),
+              ),
             ),
             Positioned(
               left: 0,
@@ -853,8 +895,13 @@ class _CarouselCard extends StatelessWidget {
               right: 0,
               top: panelTop,
               bottom: 0,
+              // Keeps the diamond lattice, same reasoning as the other
+              // build card above.
               child: enabled
-                  ? creamCard(child: const SizedBox.expand())
+                  ? creamCard(
+                      pattern: CreamPatternStyle.diamond,
+                      child: const SizedBox.expand(),
+                    )
                   : DecoratedBox(
                       decoration: raisedTile(locked: true, radius: 14),
                     ),
@@ -927,7 +974,7 @@ class _CarouselCard extends StatelessWidget {
                           height: 20,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            shape: BoxShape.circle,
+                            shape: BoxShape.rectangle,
                             color: CreamPalette.gold,
                             boxShadow: [
                               BoxShadow(
@@ -976,7 +1023,7 @@ class _CarouselCard extends StatelessWidget {
     Widget fact(IconData icon, String text) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 11, color: ink),
+        PixelIcon(icon, size: 11, color: ink),
         const SizedBox(width: 2),
         Text(
           text,

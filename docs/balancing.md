@@ -126,8 +126,8 @@ unschaffbar wird. Ein Test wacht darüber.
 |---|---|---|---|
 | WorkshopRole.mult (Ressourcen) | building_definitions | 0.3–0.7 | gegen 14 Holz/h-Ziel prüfen |
 | WorkshopRole.mult (research/crafting) | building_definitions | 30–40 | Skala dokumentieren |
-| kBuildPointsForHalfTime | building_definitions | 100 | **Bauzeit-Kurve (2026-07-26 umgebaut).** Bau-Punkte sind keine Sekunden-Währung mehr, sondern kaufen **% Kürzung** auf die angeschriebene Bauzeit: `cut = P / (P + 100)`. 0 Punkte = −0 %, d. h. die eingetragene Zeit ist die echte Zeit und eine unbesetzte Baustelle steht **nicht** mehr still. 100 P = −50 %, 400 P = −80 %, 900 P = −90 % — abflachend, aber **ohne Deckel** (gleiche Begründung wie beim Breeding-Cap: sonst wird Aufstufen ab einem Punkt wertlos). `kBuildSecondsPerPoint` / `kHallBuildPointsPerLevel` und der 20-Punkte-Eichwert sind ersatzlos weg. |
-| Bau-Punkte (Arbeiter + passiv) | building_definitions / settlement_controller | Builder Camp mult 1.0 | Jeder Punkt zählt 1:1, egal woher. Arbeiter: Stat × mult × Stufenfaktor — das mult ist der Dial „Bau-Punkte pro Statpunkt" (10 = 1 Statpunkt → 10 Punkte). Passiv: ein `production`-Effekt mit Schlüssel `construction` landet roh als Punkte im selben Topf. Gegen die Kurve oben prüfen: mit mult 1.0 ist EIN Bauarbeiter mit Stat 70 schon −41 %. |
+| kBuildPointsForHalfTime | building_definitions | 140 (war 100) | **Bauzeit-Kurve (2026-07-26 umgebaut, K 2026-09-28 angehoben).** Bau-Punkte sind keine Sekunden-Währung mehr, sondern kaufen **% Kürzung** auf die angeschriebene Bauzeit: `cut = P / (P + 140)`. 0 Punkte = −0 %, d. h. die eingetragene Zeit ist die echte Zeit und eine unbesetzte Baustelle steht **nicht** mehr still. 140 P = −50 %, 560 P = −80 %, 1260 P = −90 % — abflachend, aber **ohne Deckel** (gleiche Begründung wie beim Breeding-Cap: sonst wird Aufstufen ab einem Punkt wertlos). K war 100, bis ein Bericht (User 2026-09-28: Stat 114 im Breeding schon −66 %) zeigte, dass ein einzelner starker Arbeiter zu dominant war; siehe kBreedingK unten für dieselbe Rechnung am schlimmeren Fall. `kBuildSecondsPerPoint` / `kHallBuildPointsPerLevel` und der 20-Punkte-Eichwert sind ersatzlos weg. |
+| Bau-Punkte (Arbeiter + passiv) | building_definitions / settlement_controller | Builder Camp mult 0.5 | Jeder Punkt zählt 1:1, egal woher. Arbeiter: Stat × mult × Stufenfaktor — das mult ist der Dial „Bau-Punkte pro Statpunkt" (10 = 1 Statpunkt → 10 Punkte). Passiv: ein `production`-Effekt mit Schlüssel `construction` landet roh als Punkte im selben Topf. Gegen die Kurve oben prüfen: mit mult 0.5 macht ein Bauarbeiter mit Stat 114 57 Punkte → −29 % (K=140). |
 | kGatherRefStat / kTravelSeconds | gather_math | 25 / 300 | gegen Trip-Ziele prüfen — Anreise ist seit 2026-09-11 FLACH (keine Gefahrenstufe mehr, siehe Zeile darunter) |
 | kTradeBaseHours / kTradeSpeedForHalfTime | trade_caravan | 2 h / 100 | **Handel ist eine Expedition (2026-07-26).** Ein Handel wird nicht mehr über die Theke abgewickelt: er lädt eine Karawane. `speed` (Σ der mitgeschickten Monster) kürzt die Reise über dieselbe abflachende Kurve wie Bauzeit/Breeding — `cut = S/(S+100)`, 0 Speed = volle 2 h, 100 = 1 h, 400 = 24 min, kein Deckel. `carry` deckelt die Ladung über die **bestehenden** `unitsPerCarry`-Dials, ein Tausch ist durch **beide** Beine begrenzt (hin **und** zurück). Preise bleiben Sache des Trade Centers (`tradeDiscount` = Gebäudestufe + stationierte `trade`-Arbeiter) — die Karawane ändert **wann** und **wieviel**, nie den Kurs. Scout Post (travelMult) und Warehouse (carryMult) wirken mit. Der Item-Shop bleibt bewusst sofort. |
 | Trip-Verstärker-Posten | building_definitions | mult 0.002–0.003 | Jeder Posten liest den Wert, den er verstärkt: Scout Post → `speed`, Warehouse → `carry`, Smokehouse → `gathering` — **nicht** `logistics` (der Stat war 2026-07-26 genau deswegen gelöscht). DB-Zeilen mit `stat:"logistics"` werden in `WorkshopRole.fromJson` **nach Posten** aufgelöst, nicht per flachem Rename; seit 2026-07-30 gilt das nur noch für diese drei Trip-Keys, sonst meint der Name wieder den echten Stat. |
@@ -156,13 +156,14 @@ unschaffbar wird. Ein Test wacht darüber.
 | kWildStatMult (nicht-Boss-Wilde) | combatant.dart | 0.85 | Nur Battle-Stats; gefangene behalten volle Gene. 3v1-Fangkampf gleiches Lv ≈ 100 % / ~17 % HP (nach Budget-Umstellung 2026-07-17) |
 | kCaptureWildStatMult (nur Fang-Kämpfe) | capture_math | 0.75 | ×0.85 Wild-Malus ≈ 0.64 gesamt. Fangen ist QTE-Skill-Check, der Kampf davor nur der Hebel (User-Report 2026-07-17: Oneshots durch STAB×Typ×Crit-Stack bis 4,5×). Achtung: Stack kann Oneshots bei Off-Budget-Spezies weiterhin erlauben — Budgets via Dev Mode ⚖️ fixen |
 | xpToNextLevel (Faktor·L^Exponent) | xp_balance (Dev: ⚖️ → XP) | 6 · L^2.5 | Level-Tempo an Stage-Tempo koppeln. Seit 2026-07-26 dev-authorbar statt konstant — der Reiter zeigt zu jeder Kurve die XP UND die Stunden pro Level |
-| Kill-XP (Faktor·Stufe^Exponent) | xp_balance (Dev: ⚖️ → XP) | 9 · L^2.3, Boss ×6 | Was ein besiegtes Monster NACH SEINER STUFE zahlt, summiert über das Gegnerteam und auf die eigene Gruppe aufgeteilt. Seit 2026-07-26 authorbar — DIE Schraube fürs Level-Tempo, weil Kämpfen der Hauptweg ist. Der Reiter zeigt dazu „Siege bis zum Level-Up" |
+| Kill-XP (Faktor·Stufe^Exponent) | xp_balance (Dev: ⚖️ → XP) | 9 · L^1.8, Boss ×3 (war 1.3 seit 2026-07-29, angehoben 2026-11-02; Live-Wert per `supabase/balance_kill_xp_1_8.sql`) | **Kampagnen-Probe 2026-11-02**: jeder Pfadkampf einmal, XP auf die Gruppe verteilt, Ø ×1.25 Sterne. Bei 1.3 lag das Team bei Kampf 30 auf Lv 9 gegen Lv-15-Gegner, bei Kampf 57 auf Lv 14 gegen Lv 32 (60–85 % HP-Verlust pro Kampf, Auto-Kampf verliert). Bei 1.8: Kampf 1–10 identisch, Kampf 30 Lv 13/15, Kampf 57 Lv 21/32 — der Rest kommt aus Jagden und Training. Kills pro Level wachsen weiter mit L^0.7, also kein Schneeball. |
+| ~~Kill-XP alt~~ | — | 9 · L^2.3, Boss ×6 | Was ein besiegtes Monster NACH SEINER STUFE zahlt, summiert über das Gegnerteam und auf die eigene Gruppe aufgeteilt. Seit 2026-07-26 authorbar — DIE Schraube fürs Level-Tempo, weil Kämpfen der Hauptweg ist. Der Reiter zeigt dazu „Siege bis zum Level-Up" |
 | kTrainingXpPerHour (Training Grounds) | xp_balance (Dev: ⚖️ → XP) | 250 | Die HÖHERE der zwei automatischen Raten; Trainee produziert NICHTS (Opportunitätskosten). ~1,3 h/Level @ Lv5, ~7,6 h @ Lv10, ~1,8 d @ Lv20, ~5 d @ Lv30 — Kämpfen bleibt der schnellste Weg (40→100→250 am 2026-07-17) |
 | workPerHour / workLevelGrowth (Arbeit) | xp_balance (Dev: ⚖️ → XP) | 10 XP/h, ×1,05 pro Gebäudestufe | EIN Wert für JEDES Gebäude mit Monster-Slots (User 2026-07-30: „Jedes Gebäude, welches Monster anstellt soll EP geben. Jedes Gebäude gibt genau gleich viel EP"). Wachstum bewusst schwach („nicht sehr stark"): ×1,6 auf Stufe 10, ×2,9 auf Stufe 24 — primäre EP-Quelle bleibt Kampf/Training. Ersetzt den per-Gebäude-`xp`-Effekt, der auf 11 Ära-I-Gebäuden lag und auf ~40 späteren mit Arbeitsplätzen NICHT |
 | ~~per-Gebäude `xp`-Effekt~~ | — | GELÖSCHT 2026-07-30 | War pro Gebäude einstellbar und darum pro Gebäude anders — Lehmgruben, Raffinerien und Spezialgebäude ab Ära II zahlten gar nichts. Regel jetzt in `CreaturesController.xpRatePerHour`, Zahl in `XpConfig.workPerHour`; DB-Zeilen mit `xp` werden beim Laden verworfen |
 | ~~kPassiveXpPerHour~~ / ~~eraXpMultiplier~~ | — | GELÖSCHT 2026-07-26 | Der pauschale Arbeits-Floor und der Ära-Aufholfaktor sind weg (User: „das braucht es nicht"). Seit 2026-07-30 zahlt jeder Arbeitsplatz wieder etwas — aber als EINE settlement-weite Rate, nicht als Floor pro Gebäude; eine spätere Ära zahlt mehr, weil ihre Monster höherstufig sind, nicht wegen eines Multiplikators |
 | breedHours / hatchHours (pro Seltenheit) | species_balance (Dev: ⚖️ → Breeding) | 4/6/8/16 h | ZWEI getrennte Uhren seit 2026-07-26 (Paarung im Breeding Hut, Ausbrüten in der Hatchery), gleich vorbelegt. Der Reiter rechnet Wunschdauer → nötige Power |
-| kBreedingK (Halbwertspunkt) | creature_enums | 60 | Arbeiter-Beschleunigung: Power = Σ(breeding-Stat × Rollen-mult × Stufenfaktor); Ersparnis = P/(P+60). KEIN Deckel mehr (2026-07-26, vorher −50 %) — nur abflachend: Power 60 = −50 %, 240 = −80 %, 540 = −90 %; Dauer geht gegen 0, wird aber nie 0. Der Deckel machte Gebäudestufen ab dem zweiten Brüter wertlos |
+| kBreedingK (Halbwertspunkt) | creature_enums | 260 (war 60) | Arbeiter-Beschleunigung: Power = Σ(breeding-Stat × Rollen-mult × Stufenfaktor); Ersparnis = P/(P+260). KEIN Deckel mehr (2026-07-26, vorher −50 %) — nur abflachend: Power 260 = −50 %, 1040 = −80 %, 2340 = −90 %; Dauer geht gegen 0, wird aber nie 0. Der Deckel machte Gebäudestufen ab dem zweiten Brüter wertlos. **K angehoben 2026-09-28** (User-Report: ein einzelner Brüter mit Stat 114 war bei K=60 schon −66 %, und die Rolle hat mult 1 — Power IST der Stat — sodass über 10 Brüter die Dauer fast auf 0 drückten; bei K=260 macht derselbe Stat-114-Brüter ≈−30 %, zehn davon ≈−81 %). |
 | Gebäude-/Era-Kosten, researchSeconds (=bpCost×72) | building/tech/era defs | — | gegen 5–7-Tage-Anker |
 | buildingYieldFactor (Gebäude-Level) | building_definitions | 1+0.5·(L−1) | Ertrag/Boni pro Level: L5 = ×3. Skaliert workshopPower, Housing, buildSpeed/queue-Boni |
 | buildingCostFactor / buildingTimeFactor | building_definitions | 1.6^(L−1) | Upgrade-Kosten & -Zeit: L5 = ×6.55. Kosten wachsen schneller als Ertrag → Upgrade ist Platz/Bequemlichkeit-Trade |
@@ -576,6 +577,29 @@ er zu Zeit.
 Skaliert wie die Goods: `sellRate` ist **abgeleitet** („ist das ein Good?"),
 keine Tabelle pro Ressource — eine Ära-II-Ressource verkauft sich am Tag ihrer
 Einführung ohne Codeänderung. Ein Test prüft genau das.
+
+### 9a. Gold-Bilanz (2026-11-02, User: „Gold … damit es wirklich eine wichtige Ressource wird")
+
+Gold war trotz der Aufwertung vom 2026-09-22 im Überfluss da — drei Quellen,
+die nichts mit Spielen zu tun hatten, überschwemmten die verdienten:
+
+| Quelle | vorher | nachher |
+|---|---|---|
+| Häuser (klein/gross) | 1 🪙/h je Haus — bei ~10 Häusern ≈ 250/Tag, rein passiv | **0,25 🪙/h** (Code + `supabase/balance_gold_2026_11.sql`) |
+| Survival | volle Dreieckszahl JEDEN Lauf: 20 Etagen = 🪙 3150, beliebig oft | Dreieck nur für **neue Rekord-Etagen**, schon erreichte Etagen 1 🪙 (`goldRewardForFloors(…, previousBest:)`) |
+| Craften → Verkaufen | 1 Fisch → Cleanse → 🪙 4; ein Werktisch ≈ 430/Tag | craftbare Items sind **unverkäuflich** (`itemSellValue`) — Verkaufen bleibt „Ausweg aus einer vollen Tasche" für gefundene Items |
+
+Unverändert bleiben die VERDIENTEN Quellen: Tagesaufgaben (12–30) + Truhe
+(25–150, Serie), Erst-Sterne (20/40 pro Kampf), Bossbelohnung
+(60·1,8^(Region−1)), Gold-Spots auf Expeditionen, Burg/Kirche/Marktplatz/Schatzkammer.
+
+**Ergebnis, aktiver Spieler Mitte Ära I:** ~100 🪙/Tag verdient (Aufgaben +
+Truhe) plus ~100–150 passiv (Burg, Kirche, Marktplatz, Häuser) ≈ **200–250 🪙/Tag**
+statt vorher 600+ mit Survival/Craften im vier- bis fünfstelligen Bereich.
+Gegenwert: ~20–25 min Abkürzung (🪙 600/h), oder 4–5 Tränke, oder ein halber
+Tag Holz am Markt (Aufschlag 2,5). Gold zwingt damit zur Wahl — genau das
+Ziel. Erst-Sterne einer Region (bis 🪙 1140) sind der grosse Batzen und
+belohnen gutes Spielen statt Wiederholung.
 
 ## 10. Offene Folgen
 - Release-/Verwertungs-Mechanik (Fang-Tempo 5–8/Tag).

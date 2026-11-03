@@ -232,14 +232,23 @@ String dateKeyFor(DateTime day) =>
 ///
 /// [carry] is the state the new day replaces: its streak and the date of its last
 /// chest live on, the tasks do not.
-DailyTasksState rollDailyTasks(DateTime day, {DailyTasksState? carry}) {
+///
+/// [exclude] names kinds the player cannot make progress on yet (no Hatchery,
+/// no Healing Hut, no workshop) — a task that can only fail used to cost the
+/// whole day's chest AND the streak. The full list is still shuffled with the
+/// same seed before filtering, so two devices with the same buildings agree.
+DailyTasksState rollDailyTasks(
+  DateTime day, {
+  DailyTasksState? carry,
+  Set<DailyTaskKind> exclude = const {},
+}) {
   final key = dateKeyFor(day);
   final rng = math.Random(key.hashCode);
   final kinds = List<DailyTaskKind>.from(DailyTaskKind.values)..shuffle(rng);
   return DailyTasksState(
     dateKey: key,
     tasks: [
-      for (final kind in kinds.take(3))
+      for (final kind in kinds.where((k) => !exclude.contains(k)).take(3))
         () {
           final s = _spec(kind, rng);
           return DailyTask(kind: kind, target: s.target, reward: s.reward);

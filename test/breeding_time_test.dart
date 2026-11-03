@@ -33,6 +33,16 @@ void main() {
       expect(breedingHours(8, kBreedingK * 9), closeTo(0.8, 1e-9));
     });
 
+    test('a single strong breeder (user 2026-09-28: stat 114) is dramatic, '
+        'not near-instant', () {
+      // The role's mult is 1, so power IS the stat here — this was the
+      // exact case the K dial got raised for (was ≈66 %).
+      expect(breedingTimeCut(114), lessThan(0.35));
+      // Ten of them (every slot a Breeding Hut can reach) still leave a
+      // real timer running, not a rounding error.
+      expect(breedingTimeCut(114 * 10), lessThan(0.85));
+    });
+
     test('returns still diminish — each further point buys less', () {
       final first = breedingTimeCut(60) - breedingTimeCut(0);
       final second = breedingTimeCut(120) - breedingTimeCut(60);
@@ -117,24 +127,27 @@ void main() {
       expect(back.of(CreatureRarity.rare).hatchHours, 20);
     });
 
-    test('a config saved before the split keeps hatching at ITS breed time', () {
-      // The pre-2026-07-26 rows have no hatchHours; the Hatchery ran on
-      // breedHours back then, so that — not the code default — is the honest
-      // fallback.
-      final legacy = {
-        for (final r in CreatureRarity.values)
-          r.name: {
-            'combatBase': 100.0,
-            'workBase': 100.0,
-            'combatGrowth': 3.0,
-            'workGrowth': 3.0,
-            'catchRate': 1.0,
-            'breedHours': 30.0,
-          },
-      };
-      final back = SpeciesBalance.fromJson(legacy);
-      expect(back.of(CreatureRarity.rare).breedHours, 30);
-      expect(back.of(CreatureRarity.rare).hatchHours, 30);
-    });
+    test(
+      'a config saved before the split keeps hatching at ITS breed time',
+      () {
+        // The pre-2026-07-26 rows have no hatchHours; the Hatchery ran on
+        // breedHours back then, so that — not the code default — is the honest
+        // fallback.
+        final legacy = {
+          for (final r in CreatureRarity.values)
+            r.name: {
+              'combatBase': 100.0,
+              'workBase': 100.0,
+              'combatGrowth': 3.0,
+              'workGrowth': 3.0,
+              'catchRate': 1.0,
+              'breedHours': 30.0,
+            },
+        };
+        final back = SpeciesBalance.fromJson(legacy);
+        expect(back.of(CreatureRarity.rare).breedHours, 30);
+        expect(back.of(CreatureRarity.rare).hatchHours, 30);
+      },
+    );
   });
 }

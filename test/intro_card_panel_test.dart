@@ -13,14 +13,12 @@ import 'package:boddygame/features/settlement/settlement_controller.dart';
 // copy is on screen, and the one control it offers does what the step needs.
 void main() {
   late List<IntroDestination> navigated;
-  late int promptedQuickMenu;
 
   Future<void> open(WidgetTester t, IntroStep step) async {
     t.view.physicalSize = const Size(932, 430);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     navigated = [];
-    promptedQuickMenu = 0;
     final ctrl = SettlementController();
     ctrl.introStep = step;
     await t.pumpWidget(
@@ -29,11 +27,7 @@ void main() {
           body: Center(
             child: SizedBox(
               width: 520,
-              child: IntroCardPanel(
-                ctrl: ctrl,
-                onNavigate: navigated.add,
-                onPromptQuickMenu: () => promptedQuickMenu++,
-              ),
+              child: IntroCardPanel(ctrl: ctrl, onNavigate: navigated.add),
             ),
           ),
         ),
@@ -89,15 +83,14 @@ void main() {
     expect(navigated, isEmpty);
   });
 
-  testWidgets('pickStarter\'s button hands off to the Monsters tile', (
-    t,
-  ) async {
-    // Also no navigation: it lights the real quick-pad tile instead of
-    // opening the picker itself (user 2026-09-02).
+  testWidgets('pickStarter offers no button — it hands off to the Monsters '
+      'tile from the start', (t) async {
+    // No CTA of its own any more (user 2026-09-30) — the quick-pad's
+    // Monsters tile is the lit target from the moment this step begins,
+    // same as every other narration-only step.
+    expect(introCardFor(IntroStep.pickStarter)!.ctaLabel, isNull);
     await open(t, IntroStep.pickStarter);
-    await press(t, find.text(introCardFor(IntroStep.pickStarter)!.ctaLabel!));
-    expect(promptedQuickMenu, 1);
-    expect(navigated, isEmpty);
+    expect(find.byType(InkWell), findsNothing);
   });
 
   testWidgets('a navigating step sends the player where its card says', (

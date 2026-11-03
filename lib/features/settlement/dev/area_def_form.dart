@@ -8,6 +8,7 @@ import '../../creatures/widgets/battle_scene.dart';
 import '../services/game_defs_service.dart';
 import 'dev_theme.dart';
 import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 // Create/edit form for a single overworld AreaDef — same trusted-single-author
 // dev-content pattern as EraDefForm. `battle_stage` doubles as the unlock gate
@@ -224,7 +225,7 @@ class _AreaDefFormState extends State<AreaDefForm> {
           ),
           if (_imageUrl != null)
             IconButton(
-              icon: const Icon(Icons.close, color: Colors.redAccent, size: 18),
+              icon: const PixelIcon(Icons.close, color: Colors.redAccent, size: 18),
               onPressed: () => setState(() => _imageUrl = null),
             ),
         ],
@@ -265,7 +266,7 @@ class _AreaDefFormState extends State<AreaDefForm> {
           actions: [
             if (!_isNew)
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                icon: const PixelIcon(Icons.delete_outline, color: Colors.redAccent),
                 onPressed: _delete,
               ),
           ],
@@ -391,7 +392,7 @@ class _AreaDefFormState extends State<AreaDefForm> {
               ),
             ),
             IconButton(
-              icon: const Icon(
+              icon: const PixelIcon(
                 Icons.remove_circle_outline,
                 color: Colors.redAccent,
               ),

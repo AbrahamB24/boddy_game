@@ -14,9 +14,6 @@ class ManagementScreen extends StatelessWidget {
   const ManagementScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const MenuScaffold(
-    title: 'Management',
-    trailing: ExpeditionSlotChip(),
-    child: ExpeditionsBody(),
-  );
+  Widget build(BuildContext context) =>
+      const MenuScaffold(title: 'Expedition', child: ExpeditionsBody());
 }

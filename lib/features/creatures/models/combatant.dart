@@ -290,6 +290,8 @@ class Combatant {
   /// Re-applying a self buff just refreshes its duration (no stack).
   void applySelfBuff(SelfBuffKind kind, {int turns = 0, double value = 0}) {
     selfBuffs[kind] = ActiveEffect(
+      // Cast on its own turn — see [ActiveEffect.fresh].
+      fresh: true,
       turnsRemaining: turns > 0 ? turns : kSelfBuffDuration,
       value: value > 0
           ? value
@@ -312,7 +314,13 @@ class Combatant {
     selfPenaltyStat = penalty.stat;
     selfPenaltyMult = penalty.mult;
     selfPenaltyTurnsRemaining = penalty.turns;
+    // Same reason as [ActiveEffect.fresh]: a 1-turn "lowers your own
+    // defence" cost used to expire before any opponent could punish it,
+    // which made the move's drawback free.
+    _selfPenaltyFresh = true;
   }
+
+  bool _selfPenaltyFresh = false;
 
   /// Rolled once per round at the start of this combatant's turn: main
   /// status (frost/fear/…) can skip the turn entirely. Confusion is
@@ -418,7 +426,9 @@ class Combatant {
     }
     _decrementAndPrune(secondaryDebuffs);
     _decrementAndPrune(selfBuffs);
-    if (selfPenaltyTurnsRemaining > 0) {
+    if (_selfPenaltyFresh) {
+      _selfPenaltyFresh = false;
+    } else if (selfPenaltyTurnsRemaining > 0) {
       selfPenaltyTurnsRemaining--;
       if (selfPenaltyTurnsRemaining <= 0) {
         selfPenaltyStat = null;
@@ -431,6 +441,10 @@ class Combatant {
   static void _decrementAndPrune<K>(Map<K, ActiveEffect> active) {
     final expired = <K>[];
     for (final e in active.entries) {
+      if (e.value.fresh) {
+        e.value.fresh = false;
+        continue;
+      }
       e.value.turnsRemaining--;
       if (e.value.turnsRemaining <= 0) expired.add(e.key);
     }

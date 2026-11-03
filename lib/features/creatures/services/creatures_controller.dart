@@ -363,6 +363,25 @@ class CreaturesController extends ChangeNotifier {
     }
   }
 
+  /// Called when the SIGNED-IN ACCOUNT changes (sign out, then sign back in as
+  /// someone else, all within the same running app — no full restart). [load]
+  /// only ever fetches once per app run (the `_loadedOnce` guard above), so
+  /// without this the singleton keeps serving the PREVIOUS account's
+  /// collection under the new one's session: user report 2026-09-30, "bei
+  /// meinem anderen Account wurden die Monster zurückgesetzt" — the other
+  /// account's monsters weren't actually gone, this controller was just still
+  /// showing account A's (post-reset, empty) list under account B until
+  /// something eventually forced a reload. See the hookup in `main.dart`'s
+  /// `_AuthGate`.
+  void resetForAccountSwitch() {
+    _loadedOnce = false;
+    creatures = [];
+    breedingIds.clear();
+    expeditionIds.clear();
+    savedTeams.clear();
+    notifyListeners();
+  }
+
   Future<void> load({bool force = false}) async {
     if (isLoading || (_loadedOnce && !force)) return;
     final userId = _userId;
@@ -584,12 +603,35 @@ class CreaturesController extends ChangeNotifier {
     }
   }
 
-  /// Returns a user-facing error instead of releasing when the creature is
-  /// locked in a breeding job (its egg would silently die via FK cascade).
-  Future<String?> release(CreatureInstance creature) async {
+  /// Why [creature] cannot be released right now, or null when it can — read
+  /// by the release dialog BEFORE it asks, so a refusal is explained instead
+  /// of the dialog silently doing nothing.
+  ///
+  ///  • breeding — its egg would silently die via the FK cascade;
+  ///  • away on an expedition — the trip row still lists it as a member;
+  ///  • the last monster — monsters are the whole workforce and the only way
+  ///    to fight or catch, so an empty roster is a dead end.
+  String? releaseBlocker(CreatureInstance creature) {
     if (isBreeding(creature.id)) {
-      return 'This creature is currently breeding — cancel breeding first.';
+      return '${creature.displayName} is breeding right now — cancel the '
+          'breeding first.';
     }
+    if (isOnExpedition(creature.id)) {
+      return '${creature.displayName} is away on an expedition — wait until '
+          'it is back.';
+    }
+    if (creatures.length <= 1) {
+      return '${creature.displayName} is your only monster — you cannot '
+          'release it.';
+    }
+    return null;
+  }
+
+  /// Returns a user-facing error instead of releasing when
+  /// [releaseBlocker] refuses.
+  Future<String?> release(CreatureInstance creature) async {
+    final blocked = releaseBlocker(creature);
+    if (blocked != null) return blocked;
     creatures.removeWhere((c) => c.id == creature.id);
     notifyListeners();
     try {
@@ -697,6 +739,46 @@ class CreaturesController extends ChangeNotifier {
     }
   }
 
+  /// DEV: one of every monster at every evolution stage the account does not
+  /// already own, whatever housing says (user 2026-11-03: "jedes Monster inkl.
+  /// jeder Evolutionsstufe einmal, egal wie hoch das Limit wäre — so kann ich
+  /// alle anschauen"). Each joins at the level its stage unlocks at, with rolled
+  /// genes like any catch. Returns how many were added.
+  Future<int> devGrantAllSpeciesAndStages() async {
+    final userId = _userId;
+    if (userId == null) return 0;
+    final owned = {for (final c in creatures) '${c.speciesId}#${c.stage}'};
+    var added = 0;
+    for (final species in kSpeciesDefs.values) {
+      for (var stage = 0; stage < species.stages.length; stage++) {
+        if (owned.contains('${species.id}#$stage')) continue;
+        final level = stage == 0
+            ? 1
+            : (stage == 1 ? species.evoLevel1 : species.evoLevel2);
+        final c = CreatureInstance(
+          id: '',
+          userId: userId,
+          speciesId: species.id,
+          gender: _rng.nextBool() ? CreatureGender.male : CreatureGender.female,
+          level: level,
+          stage: stage,
+          statBase: CreatureInstance.rollBaseGenes(species, _rng),
+          statSlope: CreatureInstance.rollSlopeGenes(species, _rng),
+          learnedAbilityIds: null,
+        );
+        c.backfillAbilities();
+        try {
+          creatures.add(await _svc.insert(c));
+          added++;
+        } catch (e) {
+          debugPrint('[CreaturesController] devGrantAll failed: $e');
+        }
+      }
+    }
+    notifyListeners();
+    return added;
+  }
+
   /// Heal-space effect (dungeon): revives K.O. creatures at 50% HP and heals
   /// the rest by 60% of max — capped at maxHp. Persisted immediately (the HP
   /// pool is persistent by design).
@@ -727,9 +809,15 @@ class CreaturesController extends ChangeNotifier {
   ///
   /// Returns the level-up messages to report (empty if none). The caller owns
   /// telling the player; this just does the maths.
-  Future<List<String>> accruePassiveXp(double effectiveHours) async {
+  ///
+  /// Returns one record per level-up — the line for the feed AND whose it is, so
+  /// the feed entry can open that monster.
+  Future<List<({String message, String creatureId})>> accruePassiveXp(
+    double effectiveHours,
+  ) async {
     if (effectiveHours <= 0) return const [];
-    final messages = <String>[];
+    final messages = <({String message, String creatureId})>[];
+    var levelsGained = 0;
 
     // isWorkingNow, not isAssigned: passive XP is pay for doing the job, and a
     // creature away on an expedition isn't doing it. It earns on the trip
@@ -751,13 +839,24 @@ class CreaturesController extends ChangeNotifier {
         debugPrint('[CreaturesController] passive xp persist failed: $e');
       }
       if (levels > 0) {
-        messages.add(
-          '${c.displayName} reached Lv ${c.level}'
-          '${levels > 1 ? ' (+$levels levels)' : ''}',
-        );
+        levelsGained += levels;
+        messages.add((
+          message:
+              '${c.displayName} reached Lv ${c.level}'
+              '${levels > 1 ? ' (+$levels levels)' : ''}',
+          creatureId: c.id,
+        ));
       }
     }
-    if (messages.isNotEmpty) notifyListeners();
+    if (messages.isNotEmpty) {
+      notifyListeners();
+      // Daily goal "Level up monsters": a level is a level, wherever it was
+      // earned — training and work used to count for nothing towards it.
+      SettlementController().reportDailyProgress(
+        DailyTaskKind.levelUpMonsters,
+        levelsGained,
+      );
+    }
     return messages;
   }
 
@@ -984,9 +1083,12 @@ class CreaturesController extends ChangeNotifier {
 
     // Concurrent-heal cap from the Healing Hut's per-level `healSlots` effect
     // (user 2026-07-25). null = no building authored one → unlimited (the old
-    // behaviour). The dev free-heal and the tutorial are INSTANT, so they
-    // occupy no slot and ignore the cap. Any overflow stays hurt and is pulled
-    // into treatment automatically as slots free (see _autoStartQueuedHeals).
+    // behaviour). The dev free-heal and the tutorial ignore the cap — the
+    // tutorial only ever has the one starter, so a slot is never actually in
+    // short supply, and exempting it means a building whose data hasn't
+    // loaded yet can't accidentally wall the script off. Any overflow stays
+    // hurt and is pulled into treatment automatically as slots free (see
+    // _autoStartQueuedHeals).
     if (!free && !intro) {
       final cap = settlement.healCapacity;
       if (cap != null) {
@@ -1014,22 +1116,27 @@ class CreaturesController extends ChangeNotifier {
       }
     }
 
-    // Tutorial: costed but INSTANT (user script 2026-07-17) — the K.O.'d
-    // starter is a scripted state, and making the very next step "wait out a
-    // timer" would teach patience instead of the mechanic. The real
-    // treatment time starts applying the moment the tutorial ends. (`intro` is
-    // computed above, where it also exempts the tutorial from the heal cap.)
+    // The tutorial used to make this INSTANT (user script 2026-07-17) — no
+    // longer (user 2026-10-01: "soll es zunächst geheilt werden wie normal,
+    // d.h es braucht zeit. Aber ich muss es wieder mit gold beschleunigen"):
+    // the Healing Hut screen already grew its own "finish now for gold" pill
+    // on the bed card for exactly this moment (2026-09-30, see
+    // [HealingHutScreen._bedCard]/[skipHealWithGold]) — skipping straight to
+    // [_finishHeal] here meant the starter was healed before that card ever
+    // had a REAL timer to show a pill for, so the tutorial's own "speed it up
+    // with gold" teaching moment never actually happened. `intro` still
+    // exempts the tutorial from the heal cap above (there is only ever the
+    // one starter to treat, so the cap can never genuinely bind).
     final now = DateTime.now();
     for (final c in hurt) {
-      if (free || intro) {
+      if (free) {
         _finishHeal(c);
       } else {
         // No more energy gate (user 2026-09-14, was "NOTHING RUNS ON AN
         // EMPTY TANK" from 2026-07-27) — low energy stretches treatment
         // instead of refusing to start it.
-        c.healingUntil = now.add(
-          healDuration(c) * (speedMult / settlement.energyMultiplier),
-        );
+        // Real time: energy does not stretch a treatment (user 2026-09-28).
+        c.healingUntil = now.add(healDuration(c) * speedMult);
         // A REAL deadline (unlike crafting/construction, which accrue seconds and
         // whose finish time moves with staffing), so it can be promised (user
         // 2026-07-30).
@@ -1117,7 +1224,17 @@ class CreaturesController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  Future<void> _autoStartQueuedHeals() async {
+  ///
+  /// SERIALISED (2026-11-02): it is reached from the tick, from load and from
+  /// every queue action, and a monster leaves the line only AFTER its bill
+  /// was awaited — two overlapping passes both saw it waiting and both
+  /// charged it. A second caller now joins the pass in flight.
+  Future<void> _autoStartQueuedHeals() => _autoStarting ??=
+      _autoStartQueuedHealsOnce().whenComplete(() => _autoStarting = null);
+
+  Future<void>? _autoStarting;
+
+  Future<void> _autoStartQueuedHealsOnce() async {
     final settlement = SettlementController();
     if (settlement.introStep.isActive) return;
     final waiting = healQueue;
@@ -1194,6 +1311,7 @@ class CreaturesController extends ChangeNotifier {
         GameEventKind.levelUp,
         '${c.displayName} is patched up and ready',
         at: finishedAt,
+        ref: c.id,
       );
     }
     notifyListeners();
@@ -1350,7 +1468,6 @@ class CreaturesController extends ChangeNotifier {
   /// The one body behind a job actually starting, whether straight away
   /// ([queueForTraining]) or pulled off the line ([_autoStartQueuedTrainings]).
   Future<String?> _startTraining(CreatureInstance c, String abilityId) async {
-    final settlement = SettlementController();
     final ability = kAbilityDefs[abilityId];
     if (ability == null) return 'Unknown ability';
     c.trainingAbilityId = abilityId;
@@ -1360,9 +1477,8 @@ class CreaturesController extends ChangeNotifier {
     // it. The intro's own jumpstart-scale exemption for this system never
     // existed as a separate check — energy's own rate already reads 100%
     // by default, so nothing extra is needed to keep the tutorial unaffected.
-    c.trainingUntil = DateTime.now().add(
-      trainingDuration(ability) * (1.0 / settlement.energyMultiplier),
-    );
+    // Real time: energy does not stretch a lesson (user 2026-09-28).
+    c.trainingUntil = DateTime.now().add(trainingDuration(ability));
     unawaited(
       GameNotifications.schedule(
         kind: NotifyKind.training,
@@ -1478,6 +1594,7 @@ class CreaturesController extends ChangeNotifier {
           GameEventKind.levelUp,
           '${c.displayName} learned ${kAbilityDefs[abilityId]?.name ?? abilityId}',
           at: finishedAt,
+          ref: c.id,
         );
       }
     }
@@ -1592,10 +1709,16 @@ class CreaturesController extends ChangeNotifier {
     }
     notifyListeners();
     // Daily goal: every level gained in the fight counts.
-    if (levelUps.isNotEmpty) {
+    // (Was `levelUps.length` — the number of MONSTERS that levelled, so a
+    // double level-up counted once, contradicting the line above.)
+    final levelsGained = levelUps.fold<int>(
+      0,
+      (sum, u) => sum + (u.toLevel - u.fromLevel),
+    );
+    if (levelsGained > 0) {
       SettlementController().reportDailyProgress(
         DailyTaskKind.levelUpMonsters,
-        levelUps.length,
+        levelsGained,
       );
     }
     return levelUps;

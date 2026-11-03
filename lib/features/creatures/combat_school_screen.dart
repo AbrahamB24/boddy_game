@@ -13,7 +13,8 @@ import 'models/creature_instance.dart';
 import 'services/creatures_controller.dart';
 import 'services/training_cost.dart';
 import 'widgets/creature_family.dart';
-import 'widgets/slot_kit.dart';
+import 'widgets/slot_kit.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 /// The Combat School (user 2026-09-05; laid out like the Healing Hut since
 /// 2026-09-20, "Variante 2, Slot-Karten") — where a creature actually learns a
@@ -132,7 +133,7 @@ class _CombatSchoolScreenState extends State<CombatSchoolScreen> {
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
     decoration: BoxDecoration(
       color: CreamPalette.tan.withValues(alpha: 0.18),
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: vr(9),
     ),
     child: Text(
       '${cap == null ? training : '$training/${cap < training ? training : cap}'}'
@@ -265,6 +266,10 @@ class _MovePickerScreen extends StatelessWidget {
         'Teach ${creature.displayName}',
         style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
       ),
+      // The monster's own identity card is a different Gebiet from the list
+      // of moves it could learn (user 2026-09-29, "Trennlinien und Zonen
+      // gemischt", app-wide), so it gets a [zoneBox] of its own.
+      // (MenuScaffold is the one card now — no [pageCard] here.)
       child: Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
@@ -272,76 +277,75 @@ class _MovePickerScreen extends StatelessWidget {
           children: [
             SizedBox(
               width: 270,
-              child: creamCard(
-                padding: const EdgeInsets.all(14),
+              child: zoneBox(
+                padding: const EdgeInsets.all(8),
                 child: Column(
-                  children: [
-                    CreatureAvatar.of(creature, size: 76),
-                    const SizedBox(height: 8),
-                    Text(
-                      creature.displayName,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: kBoxInk,
-                      ),
-                    ),
-                    Text(
-                      'Lv ${creature.level} · '
-                      '${creature.equippedAbilityIds.length + 1}/'
-                      '$kMaxAbilitiesTotal moves (Attack included)',
-                      style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: const Text(
-                        'KNOWS',
-                        style: TextStyle(
-                          fontSize: 10,
+                    children: [
+                      CreatureAvatar.of(creature, size: 76),
+                      const SizedBox(height: 8),
+                      Text(
+                        creature.displayName,
+                        style: const TextStyle(
+                          fontSize: 16,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 0.9,
-                          color: kBoxAccent,
+                          color: kBoxInk,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Align(
-                          alignment: Alignment.topLeft,
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: [
-                              for (final k in known)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: raisedTile(radius: 9),
-                                  child: Text(
-                                    k,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: kBoxInk,
-                                    ),
-                                  ),
-                                ),
-                            ],
+                      Text(
+                        'Lv ${creature.level} · '
+                        '${creature.equippedAbilityIds.length + 1}/'
+                        '$kMaxAbilitiesTotal moves (Attack included)',
+                        style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: const Text(
+                          'KNOWS',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.9,
+                            color: kBoxAccent,
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 6),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                for (final k in known)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: raisedTile(radius: 9),
+                                    child: Text(
+                                      k,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: kBoxInk,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: creamCard(
+              const SizedBox(width: 14),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -380,11 +384,10 @@ class _MovePickerScreen extends StatelessWidget {
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _moveRow(BuildContext context, AbilityDef a) => Pressable(

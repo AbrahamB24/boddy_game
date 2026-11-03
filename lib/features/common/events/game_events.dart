@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/ui/feel.dart';
 
 /// The game's event feed (user request 2026-07-16: "einen notification button
 /// für alle Events — Monster aufgestiegen, Expedition beendet etc.").
@@ -48,21 +49,30 @@ class GameEvent {
   /// anything that had gone unread from an earlier session.
   bool read;
 
+  /// What the event is ABOUT, so tapping it lands on the thing itself (user
+  /// 2026-09-28): a placed building's id for [GameEventKind.building], a
+  /// creature's id for [GameEventKind.levelUp] / [GameEventKind.caught].
+  /// Null for an event with nothing specific behind it — the tap then falls
+  /// back to the kind's own screen, if it has one.
+  final String? ref;
+
   GameEvent({
     required this.kind,
     required this.message,
     required this.at,
     this.read = false,
+    this.ref,
   });
 
   Map<String, dynamic> toJson() => {
-        // Store the NAME, not the index — reordering the enum then can't
-        // silently relabel old events.
-        'k': kind.name,
-        'm': message,
-        'a': at.millisecondsSinceEpoch,
-        'r': read,
-      };
+    // Store the NAME, not the index — reordering the enum then can't
+    // silently relabel old events.
+    'k': kind.name,
+    'm': message,
+    'a': at.millisecondsSinceEpoch,
+    'r': read,
+    if (ref != null) 'i': ref,
+  };
 
   static GameEvent? fromJson(Map<String, dynamic> j) {
     final name = j['k'] as String?;
@@ -80,6 +90,7 @@ class GameEvent {
       // A row written before the flag existed counts as READ. The alternative
       // is to greet everyone upgrading with a digest of their entire history.
       read: j['r'] as bool? ?? true,
+      ref: j['i'] as String?,
     );
   }
 }
@@ -164,13 +175,44 @@ class GameEventLog extends ChangeNotifier {
   /// (an expedition that finished hours ago, passive level-ups) so the feed
   /// shows the real time, not when the resolver happened to run on screen
   /// open. Defaults to now for live events.
-  void add(GameEventKind kind, String message, {DateTime? at}) {
+  void add(GameEventKind kind, String message, {DateTime? at, String? ref}) {
+    // A LIVE event (no timestamp: it is happening now) is heard as well as
+    // read — a finished building, a hatched egg, a level. An offline one is a
+    // digest line and stays silent.
+    if (at == null) _chime(kind);
     _insertSorted(
-      GameEvent(kind: kind, message: message, at: at ?? DateTime.now()),
+      GameEvent(
+        kind: kind,
+        message: message,
+        at: at ?? DateTime.now(),
+        ref: ref,
+      ),
     );
     _cap();
     _persist();
     notifyListeners();
+  }
+
+  DateTime _lastChime = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// The sound of a live event — at most one every 1.5 s, so a burst (five
+  /// monsters levelling in the same tick) is one chime, not a rattle.
+  void _chime(GameEventKind kind) {
+    final now = DateTime.now();
+    if (now.difference(_lastChime) < const Duration(milliseconds: 1500)) return;
+    _lastChime = now;
+    switch (kind) {
+      case GameEventKind.levelUp:
+      case GameEventKind.caught:
+        Feel.fanfare();
+      case GameEventKind.expedition:
+      case GameEventKind.craft:
+        Feel.collect();
+      case GameEventKind.research:
+      case GameEventKind.building:
+      case GameEventKind.breeding:
+        Feel.success();
+    }
   }
 
   /// Adds several at once with a single notify — offline resolution can land

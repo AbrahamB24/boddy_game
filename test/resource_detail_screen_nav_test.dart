@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:boddygame/core/theme/voxel_kit.dart';
 
 import 'package:boddygame/features/settlement/models/resource_model.dart';
 import 'package:boddygame/features/settlement/resource_detail_screen.dart';
@@ -56,7 +57,9 @@ void main() {
     expect(tester.takeException(), isNull);
 
     // The menu's gold close button (the page is a MenuScaffold now).
-    await tester.tap(find.byIcon(Icons.close));
+    await tester.tap(
+      find.byWidgetPredicate((w) => w is VoxelIcon && w.glyph == VoxelGlyph.close),
+    );
     // Step through the pop transition frame by frame instead of
     // pumpAndSettle's single jump to the end — if a rebuild mid-transition
     // is what throws, jumping past it would hide the very frame that fails.

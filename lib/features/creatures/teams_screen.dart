@@ -5,6 +5,7 @@ import '../../core/theme/cream_kit.dart';
 import '../../core/theme/strategy_theme.dart'
     show chunkyDecoration, strategyDarken;
 import '../../core/ui/snack.dart';
+import '../../core/ui/scroll_cue.dart';
 import '../common/widgets/filter_pills.dart';
 import '../settlement/settlement_controller.dart';
 import 'models/creature_enums.dart';
@@ -13,8 +14,13 @@ import 'models/saved_team.dart';
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'services/overworld_path.dart';
+import 'widgets/creature_card.dart';
 import 'widgets/creature_family.dart';
-import '../../core/ui/pressable.dart';
+import 'widgets/picker_detail_panel.dart';
+import 'widgets/roster_row.dart';
+import '../../core/ui/pressable.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 // Saved battle rosters. The active team is what battleTeam() hands to every
 // fight in the game, so this screen is the ONLY place the player says who
@@ -65,7 +71,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
     return MenuScaffold(
       title: 'Teams',
       trailing: _newTeamButton(),
-      child: creamCard(
+      // No card of its own any more (user 2026-09-30, "hier und andernorts
+      // sind noch die alten Kästchen vorhanden") — MenuScaffold is already
+      // the one card on screen.
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
         child: teams.isEmpty
             ? _empty(cap)
@@ -87,7 +96,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.add, size: 16, color: CreamPalette.ink),
+          const PixelIcon(Icons.add, size: 16, color: CreamPalette.ink),
           const SizedBox(width: 4),
           Text(
             'New team',
@@ -112,6 +121,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
   );
 
   // ── One team ──────────────────────────────────────────────
+  // A bit bigger than the old 34px avatars (user 2026-10-04: "ein bisschen
+  // grösser"), matching the slot size used in the Edit sheet's drag bar.
+  static const double _kSeatSize = 44;
+
   Widget _teamRow(SavedTeam team, int cap) {
     final members = team.memberIds
         .map(_ctrl.byId)
@@ -134,7 +147,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
         ? '$missing gone'
         : '${members.length}/$cap seats';
     return Container(
-      height: 52,
+      height: _kSeatSize + 22,
       margin: const EdgeInsets.only(bottom: 5),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: raisedTile(radius: 12, lit: team.isActive),
@@ -147,7 +160,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                 : _ctrl.activateTeam(team),
             child: SizedBox(
               width: 24,
-              child: Icon(
+              child: PixelIcon(
                 team.isActive ? Icons.star_rounded : Icons.star_border_rounded,
                 size: 22,
                 color: team.isActive ? CreamPalette.goldDeep : kBoxInkFaint,
@@ -185,26 +198,72 @@ class _TeamsScreenState extends State<TeamsScreen> {
             child: Row(
               children: [
                 for (var k = 0; k < seats; k++) ...[
-                  if (k < members.length)
+                  if (k < members.length && members[k].isKo && k < cap)
+                    // A K.O. monster cannot fight, so its seat is as good as
+                    // empty (user 2026-09-28: "auch für Monster, welche
+                    // kampfunfähig sind") — the same "+" a free seat wears
+                    // everywhere else in the app (user 2026-10-04: "diese
+                    // sollen überall in der App gleich aussehen"). Still a
+                    // real occupant underneath, so it drags like one.
+                    Tooltip(
+                      message: '${members[k].displayName} is K.O.',
+                      child: _dragSeat(
+                        index: k,
+                        draggable: true,
+                        acceptsDrop: true,
+                        onDropped: (from) =>
+                            _reorderSeat(team, members, from, k),
+                        child: _emptySeatBox(),
+                      ),
+                    )
+                  else if (k < members.length)
                     // Past the cap they hold their place but do not fight.
-                    Opacity(
-                      opacity: k >= cap ? 0.4 : 1,
-                      child: CreatureAvatar.of(
-                        members[k],
-                        size: 34,
-                        showHp: false,
+                    _dragSeat(
+                      index: k,
+                      draggable: true,
+                      acceptsDrop: true,
+                      onDropped: (from) => _reorderSeat(team, members, from, k),
+                      child: Opacity(
+                        opacity: k >= cap ? 0.4 : 1,
+                        child: CreatureAvatar.of(
+                          members[k],
+                          size: _kSeatSize,
+                          showHp: false,
+                        ),
                       ),
                     )
                   else
-                    _seatBox(const Icon(Icons.add, size: 16), faint: false),
-                  const SizedBox(width: 8),
+                    // Drag a seat here to move it to this empty spot — same
+                    // drop target the filled seats are, just nothing to drag
+                    // FROM.
+                    _dragSeat(
+                      index: k,
+                      draggable: false,
+                      acceptsDrop: true,
+                      onDropped: (from) => _reorderSeat(team, members, from, k),
+                      child: _emptySeatBox(),
+                    ),
+                  const SizedBox(width: 9),
                 ],
                 if (next != null)
                   Tooltip(
                     message: 'Seat ${cap + 1} from battle ${next.battle}',
-                    child: _seatBox(
-                      Icon(Icons.lock_outline, size: 15, color: kBoxInkFaint),
-                      faint: true,
+                    child: SizedBox(
+                      width: _kSeatSize,
+                      height: _kSeatSize,
+                      child: CustomPaint(
+                        painter: DashedRRectPainter(
+                          color: CreamPalette.tan.withValues(alpha: 0.5),
+                          radius: 10,
+                        ),
+                        child: Center(
+                          child: PixelIcon(
+                            Icons.lock_outline,
+                            size: 18,
+                            color: kBoxInkFaint,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
               ],
@@ -231,18 +290,72 @@ class _TeamsScreenState extends State<TeamsScreen> {
     );
   }
 
-  /// A seat with nobody in it: a dashed square, the size of a monster's face.
-  Widget _seatBox(Widget child, {required bool faint}) => SizedBox(
-    width: 34,
-    height: 34,
-    child: CustomPaint(
-      painter: DashedRRectPainter(
-        color: CreamPalette.tan.withValues(alpha: faint ? 0.5 : 0.85),
-        radius: 9,
-      ),
-      child: Center(child: child),
-    ),
+  /// The ONE empty-monster-slot look, app-wide (user 2026-08-30, reaffirmed
+  /// 2026-10-04) — [EmptySeat] already is that shared widget; this just
+  /// gives it the fixed size every seat in this row (filled or not) shares.
+  Widget _emptySeatBox() => SizedBox(
+    width: _kSeatSize,
+    height: _kSeatSize,
+    child: EmptySeat(radius: 10),
   );
+
+  /// Wraps a seat so it can be dragged (if [draggable], long-press) and/or
+  /// dropped onto (if [acceptsDrop]) — the exact same drag-reorder gesture
+  /// [_TeamEditorSheetState._slotTile] uses, so a team's fight order can be
+  /// changed right here without opening Edit (user 2026-10-04: "dann kann
+  /// ich diese direkt in diesem Screen verschieben durch dnd").
+  Widget _dragSeat({
+    required int index,
+    required Widget child,
+    required bool draggable,
+    required bool acceptsDrop,
+    required void Function(int from) onDropped,
+  }) {
+    Widget tile = child;
+    if (acceptsDrop) {
+      final inner = tile;
+      tile = DragTarget<int>(
+        onWillAcceptWithDetails: (details) => details.data != index,
+        onAcceptWithDetails: (details) => onDropped(details.data),
+        builder: (context, candidates, rejected) => candidates.isEmpty
+            ? inner
+            : DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: vr(10),
+                  border: Border.all(color: CreamPalette.gold, width: 3),
+                ),
+                child: inner,
+              ),
+      );
+    }
+    if (!draggable) return tile;
+    return LongPressDraggable<int>(
+      data: index,
+      feedback: Material(
+        color: Colors.transparent,
+        child: SizedBox(width: _kSeatSize, height: _kSeatSize, child: child),
+      ),
+      childWhenDragging: Opacity(opacity: 0.3, child: tile),
+      child: tile,
+    );
+  }
+
+  /// Drags seat [from] onto seat [onto] — reorders [team]'s saved fight
+  /// order and persists immediately (there is no Save button in this
+  /// compact row, unlike the editor sheet).
+  Future<void> _reorderSeat(
+    SavedTeam team,
+    List<CreatureInstance> members,
+    int from,
+    int onto,
+  ) async {
+    if (from == onto || from >= members.length) return;
+    final ids = members.map((c) => c.id).toList();
+    final id = ids.removeAt(from);
+    ids.insert(onto.clamp(0, ids.length), id);
+    final err = await _ctrl.setTeamMembers(team, ids);
+    if (err != null && mounted) context.snack(err, error: true);
+  }
 
   Future<void> _confirmDelete(SavedTeam team) async {
     final ok = await showDialog<bool>(
@@ -251,7 +364,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
       builder: (dctx) => AlertDialog(
         backgroundColor: CreamPalette.paperTop,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: vr(14),
           side: BorderSide(color: CreamPalette.tan, width: 1.5),
         ),
         title: Text(
@@ -369,6 +482,19 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
   );
   late final List<String> _picked = [...?widget.team?.memberIds];
 
+  /// The slot bar index currently armed for a swap-in (user 2026-10-04: "ich
+  /// muss Monster austauschen können") — tap a slot (filled or the "+" of an
+  /// empty one), then tap a roster monster, and THAT slot gets it, instead
+  /// of always appending to the end. Null while nothing is armed, which is
+  /// when a roster tap falls back to the old add/remove toggle. Cleared
+  /// after every swap and every drag-reorder.
+  int? _replaceTarget;
+
+  /// Tapping a roster row only PREVIEWS it here (user 2026-10-05, "Konzept
+  /// 4") — the detail panel's own button is what actually adds, removes or
+  /// swaps it. Null = nothing tapped yet.
+  CreatureInstance? _preview;
+
   // Sort/filter/search, added everywhere a monster or a group is picked
   // (user 2026-09-11: "überall, wo ich ein Monster oder eine Gruppe
   // auswähle, sollen diese nach dem entsprechenden Wert geordnet sein und
@@ -409,6 +535,156 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
     return list;
   }
 
+  /// Arms/disarms [i] as the swap target — see [_replaceTarget]'s own doc.
+  void _tapSlot(int i) =>
+      setState(() => _replaceTarget = _replaceTarget == i ? null : i);
+
+  /// A roster tap. With a slot armed, it fills (or replaces) THAT slot
+  /// instead of the old append/remove toggle — unless [c] is already on
+  /// the team in a DIFFERENT slot, which is ignored rather than
+  /// duplicating it (dragging is how an already-picked monster moves).
+  void _tapRoster(CreatureInstance c) {
+    final existingIndex = _picked.indexOf(c.id);
+    final target = _replaceTarget;
+    if (target != null) {
+      if (existingIndex != -1 && existingIndex != target) return;
+      setState(() {
+        if (target < _picked.length) {
+          _picked[target] = c.id;
+        } else {
+          _picked.add(c.id);
+        }
+        _replaceTarget = null;
+      });
+      return;
+    }
+    setState(() {
+      if (existingIndex != -1) {
+        _picked.removeAt(existingIndex);
+      } else {
+        _picked.add(c.id);
+      }
+    });
+  }
+
+  /// A slot tile was dropped onto slot [onto] — reorders within [_picked]
+  /// (fight order). Dropping onto an empty slot (beyond the current
+  /// length) just moves it to the end, the only sensible reading of
+  /// "there" when there's no gap to actually sit in.
+  void _dropOnto(int from, int onto) {
+    if (from == onto) return;
+    setState(() {
+      final id = _picked.removeAt(from);
+      _picked.insert(onto.clamp(0, _picked.length), id);
+      _replaceTarget = null;
+    });
+  }
+
+  /// The line-up — every slot up to [cap] (plus any over-cap picks
+  /// inherited from a team saved before the cap shrank, still shown so
+  /// they can be seen and swapped out rather than silently vanishing).
+  /// Filled slots drag to reorder; every slot (filled or the "+" of an
+  /// empty one) is also a tap target for [_tapSlot].
+  Widget _slotBar(int cap) {
+    final slotCount = _picked.length > cap ? _picked.length : cap;
+    return SizedBox(
+      height: 72,
+      child: Row(
+        children: [
+          for (var i = 0; i < slotCount; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(child: _slotTile(i, cap)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _slotTile(int i, int cap) {
+    final filled = i < _picked.length;
+    final overCap = i >= cap;
+    final targeted = _replaceTarget == i;
+    final c = filled ? CreaturesController().byId(_picked[i]) : null;
+
+    final box = Container(
+      decoration: BoxDecoration(
+        color: filled ? null : CreamPalette.tan.withValues(alpha: 0.12),
+        gradient: filled
+            ? const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [CreamPalette.tileTop, CreamPalette.tileBottom],
+              )
+            : null,
+        borderRadius: vr(10),
+        border: Border.all(
+          color: targeted
+              ? CreamPalette.gold
+              : overCap
+              ? CreamPalette.warn
+              : filled
+              ? CreamPalette.goldDeep
+              : CreamPalette.tan.withValues(alpha: 0.4),
+          width: targeted ? 2.5 : 1.5,
+        ),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (c != null)
+            CreatureAvatar.of(c, size: 36)
+          else
+            PixelIcon(Icons.add, color: kBoxInkFaint, size: 22),
+          if (filled)
+            Positioned(
+              top: 2,
+              left: 3,
+              child: Text(
+                '${i + 1}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: kBoxAccent,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    Widget tile = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _tapSlot(i),
+      child: box,
+    );
+
+    final preDrop = tile;
+    tile = DragTarget<int>(
+      onWillAcceptWithDetails: (details) => details.data != i,
+      onAcceptWithDetails: (details) => _dropOnto(details.data, i),
+      builder: (context, candidates, rejected) => candidates.isEmpty
+          ? preDrop
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: vr(10),
+                border: Border.all(color: CreamPalette.gold, width: 3),
+              ),
+              child: preDrop,
+            ),
+    );
+
+    if (!filled) return tile;
+    return LongPressDraggable<int>(
+      data: i,
+      feedback: Material(
+        color: Colors.transparent,
+        child: SizedBox(width: 56, height: 56, child: box),
+      ),
+      childWhenDragging: Opacity(opacity: 0.3, child: tile),
+      child: tile,
+    );
+  }
+
   Widget _controlsRow() => Row(
     children: [
       Expanded(
@@ -437,7 +713,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
             MapEntry('level', 'Level'),
             MapEntry('name', 'Name'),
           ],
-          trailing: Icon(
+          trailing: PixelIcon(
             _descending ? Icons.arrow_downward : Icons.arrow_upward,
             size: 14,
             color: CreamPalette.accent,
@@ -506,132 +782,211 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
             ),
           ),
           padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.team == null ? 'New team' : 'Edit team',
-                style: FoE.title(size: 16).copyWith(color: kBoxInk),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _name,
-                style: FoE.label(size: 14).copyWith(color: kBoxInk),
-                decoration: InputDecoration(
-                  hintText: 'Team name (e.g. Steinteam)',
-                  hintStyle: FoE.dim(size: 13).copyWith(color: kBoxInkFaint),
-                  filled: true,
-                  fillColor: CreamPalette.tan.withValues(alpha: 0.16),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(FoE.radiusSmall),
-                    borderSide: BorderSide.none,
-                  ),
+          // SCROLLABLE AS A WHOLE now (user-visible bug, 2026-10-05 QA pass):
+          // the fixed chrome above the roster — title, name field, slot bar,
+          // hint, controls — already eats most of a short landscape
+          // viewport's height on its own, which used to leave the roster's
+          // own `Expanded` as little as ~27px to work with. A plain
+          // `ListView` inside that just clipped silently, but the new
+          // detail panel's commit BUTTON has a real minimum size and ended
+          // up partly outside the Row's own bounds — un-clickable, not just
+          // ugly. Giving the detail/roster row a fixed, GENEROUS height
+          // instead and letting the sheet scroll for the rest if the
+          // viewport is too short to show it all at once keeps both halves
+          // always fully usable.
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.team == null ? 'New team' : 'Edit team',
+                  style: FoE.title(size: 16).copyWith(color: kBoxInk),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Picked ${_picked.length}/$cap — tap to add or remove. Order is '
-                'the order they fight in.',
-                style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
-              ),
-              const SizedBox(height: 8),
-              _controlsRow(),
-              const SizedBox(height: 8),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [for (final c in _roster(ctrl)) _row(c, cap)],
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: Pressable(
-                  onTap: () =>
-                      Navigator.pop(context, _TeamDraft(_name.text, _picked)),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    alignment: Alignment.center,
-                    decoration: goldButton(),
-                    child: Text(
-                      'Save team',
-                      style: FoE.title(
-                        size: 14,
-                      ).copyWith(color: goldButtonInk()),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _name,
+                  style: FoE.label(size: 14).copyWith(color: kBoxInk),
+                  decoration: InputDecoration(
+                    hintText: 'Team name (e.g. Steinteam)',
+                    hintStyle: FoE.dim(size: 13).copyWith(color: kBoxInkFaint),
+                    filled: true,
+                    fillColor: CreamPalette.tan.withValues(alpha: 0.16),
+                    border: OutlineInputBorder(
+                      borderRadius: vr(FoE.radiusSmall),
+                      borderSide: BorderSide.none,
                     ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                _slotBar(cap),
+                const SizedBox(height: 6),
+                Text(
+                  _replaceTarget != null
+                      ? 'Tap a monster below, then confirm in the panel, to '
+                            'fill that slot.'
+                      : 'Drag a slot to reorder (fight order) — tap a slot, '
+                            'then a monster, to swap it in.',
+                  style: FoE.dim(size: 11).copyWith(
+                    color: _replaceTarget != null
+                        ? CreamPalette.accent
+                        : kBoxInkSoft,
+                    fontWeight: _replaceTarget != null
+                        ? FontWeight.w800
+                        : FontWeight.normal,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _controlsRow(),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 240,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _detail(cap),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Builder(
+                          builder: (context) {
+                            final roster = _roster(ctrl);
+                            return roster.isEmpty
+                                ? RosterRow.emptyState('No monsters.')
+                                : ScrollCue(
+                                    builder: (context, controller) => ListView(
+                                      controller: controller,
+                                      shrinkWrap: true,
+                                      children: [
+                                        for (final c in roster) _row(c, cap),
+                                      ],
+                                    ),
+                                  );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: Pressable(
+                    onTap: () =>
+                        Navigator.pop(context, _TeamDraft(_name.text, _picked)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      alignment: Alignment.center,
+                      decoration: goldButton(),
+                      child: Text(
+                        'Save team',
+                        style: FoE.title(
+                          size: 14,
+                        ).copyWith(color: goldButtonInk()),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  /// One roster row via the shared [RosterRow] (user 2026-10-05: "wirklich
+  /// überall den gleichen [Monsterpicker] nehmen") — same face/bar/pill/
+  /// figure/icon layout the worker-assignment picker uses, with team-editor
+  /// values in its slots: Power for the bar, this monster's seat (or why
+  /// it has none) for the status pill, Level for the figure. A tap only
+  /// PREVIEWS it in [_detail] now — the icon still says what the detail
+  /// panel's button will do, but that button is what actually does it.
   Widget _row(CreatureInstance c, int cap) {
     final at = _picked.indexOf(c.id);
     final picked = at >= 0;
     // Over-cap picks are allowed but flagged: the cap grows with research, and
     // silently refusing the 4th monster reads as a bug rather than a rule.
     final overCap = picked && at >= cap;
-    return Pressable(
-      onTap: () =>
-          setState(() => picked ? _picked.remove(c.id) : _picked.add(c.id)),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        decoration: ShapeDecoration(
-          color: picked
-              ? CreamPalette.tan.withValues(alpha: 0.18)
-              : Colors.transparent,
-          shape: FoE.facet(
-            radius: FoE.radiusSmall,
-            side: BorderSide(
-              color: picked
-                  ? CreamPalette.accent
-                  : CreamPalette.tan.withValues(alpha: 0.45),
-            ),
-          ),
-        ),
-        child: Row(
-          children: [
-            Text(
-              picked ? '${at + 1}.' : '  ',
-              style: FoE.value(size: 12).copyWith(color: kBoxAccent),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    c.displayName,
-                    style: FoE.label(size: 13).copyWith(color: kBoxInk),
-                  ),
-                  Text(
-                    [
-                      'Lv ${c.level}',
-                      if (c.isKo)
-                        '💀 K.O.'
-                      else
-                        '${c.hp.toStringAsFixed(0)} HP',
-                      if (overCap) 'over cap — sits out',
-                    ].join(' · '),
-                    style: FoE.dim(size: 10)
-                        .copyWith(color: kBoxInkSoft)
-                        .copyWith(color: overCap ? CreamPalette.warn : null),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              totalPower(c).toStringAsFixed(0),
-              style: FoE.value(size: 13).copyWith(color: kBoxAccent),
-            ),
-          ],
-        ),
+    // Already on the team in a different slot while one is armed for a
+    // swap — a tap here is ignored (see _tapRoster), so it reads as such.
+    final blocked = _replaceTarget != null && picked && at != _replaceTarget;
+    final statMax = CreaturesController().creatures.fold<int>(
+      1,
+      (m, o) => totalPower(o) > m ? totalPower(o) : m,
+    );
+    final (status, kind) = c.isKo
+        ? ('💀 K.O.', RosterPillKind.no)
+        : overCap
+        ? ('Over cap', RosterPillKind.warn)
+        : picked
+        ? ('Seat ${at + 1}', RosterPillKind.free)
+        : ('Not picked', RosterPillKind.no);
+    return pickerPreviewFrame(
+      active: _preview?.id == c.id,
+      child: RosterRow(
+        creature: c,
+        statValue: totalPower(c),
+        statMax: statMax,
+        status: status,
+        statusKind: kind,
+        figureText: 'Lv ${c.level}',
+        figureColor: kBoxInkSoft,
+        dimmed: blocked,
+        actionIcon: picked
+            ? Icons.close
+            : (_replaceTarget != null ? Icons.swap_horiz : Icons.add),
+        actionColor: picked ? CreamPalette.warn : CreamPalette.gold,
+        actionIconColor: picked ? Colors.white : CreamPalette.ink,
+        onTap: () => setState(() => _preview = c),
+      ),
+    );
+  }
+
+  /// The left panel: power and this monster's seat — what the team editor's
+  /// roster is judged on. [action] is the only thing that actually adds,
+  /// removes or swaps a member now; tapping a row just fills this in first.
+  Widget _detail(int cap) {
+    final c = _preview;
+    if (c == null) {
+      return const PickerDetailPanel(
+        placeholder: 'Tap a monster to see its details.',
+      );
+    }
+    final at = _picked.indexOf(c.id);
+    final picked = at >= 0;
+    final overCap = picked && at >= cap;
+    final armed = _replaceTarget != null;
+    final blocked = armed && picked && at != _replaceTarget;
+    final (status, statusColor) = c.isKo
+        ? ('K.O.', CreamPalette.warn)
+        : overCap
+        ? ('Over cap', CreamPalette.warn)
+        : picked
+        ? ('Seat ${at + 1}', CreamPalette.better)
+        : ('Not picked', kBoxInkSoft);
+    final label = blocked
+        ? 'On the team already'
+        : armed
+        ? 'Place in slot ${_replaceTarget! + 1}'
+        : picked
+        ? 'Remove from team'
+        : 'Add to team';
+    return PickerDetailPanel(
+      art: CreatureCard(creature: c),
+      title: c.displayName,
+      subtitle: 'Lv ${c.level}',
+      rows: [
+        pickerStatRow('Power', '⚡ ${totalPower(c)}'),
+        pickerStatRow('Status', status, valueColor: statusColor),
+      ],
+      action: pickerChooseButton(
+        label: label,
+        onTap: blocked
+            ? null
+            : () {
+                _tapRoster(c);
+                setState(() {});
+              },
       ),
     );
   }

@@ -9,7 +9,8 @@ import 'pvp_pane.dart';
 import 'ranking_pane.dart';
 import 'services/message_notifier.dart';
 import 'social_controller.dart';
-import 'widgets/social_kit.dart';
+import 'widgets/social_kit.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 /// What the right-hand card is showing.
 enum _Pane { chat, friends, pvp, ranking }
@@ -79,14 +80,19 @@ class _SocialScreenState extends State<SocialScreen> {
     builder: (context, _) => MenuScaffold(
       title: 'Social',
       trailing: _readout(),
+      // Conversations and the open pane switch together too tightly to earn
+      // a zone each (user 2026-09-29, "Trennlinien und Zonen gemischt",
+      // app-wide) — a plain [vHairline] is enough, the same call
+      // crafting_screen's rail-to-list gap makes. (MenuScaffold is the one
+      // card now — no [pageCard] here.)
       child: Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(width: 320, child: creamCard(child: _left())),
-            const SizedBox(width: 10),
-            Expanded(child: creamCard(child: _right())),
+            SizedBox(width: 320, child: _left()),
+            vHairline(),
+            Expanded(child: _right()),
           ],
         ),
       ),
@@ -110,7 +116,7 @@ class _SocialScreenState extends State<SocialScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: CreamPalette.tan.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: vr(9),
       ),
       child: Text(text, style: FoE.value(size: 11).copyWith(color: kBoxInk)),
     );
@@ -152,7 +158,7 @@ class _SocialScreenState extends State<SocialScreen> {
     padding: const EdgeInsets.all(3),
     decoration: BoxDecoration(
       color: CreamPalette.tan.withValues(alpha: 0.18),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: vr(12),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -175,7 +181,7 @@ class _SocialScreenState extends State<SocialScreen> {
         decoration: on
             ? BoxDecoration(
                 color: CreamPalette.gold,
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: vr(9),
                 boxShadow: const [
                   BoxShadow(color: CreamPalette.goldDeep, offset: Offset(0, 2)),
                 ],

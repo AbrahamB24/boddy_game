@@ -54,6 +54,15 @@ class BreedingController extends ChangeNotifier {
     }
   }
 
+  /// See [CreaturesController.resetForAccountSwitch] — same bug, same fix:
+  /// without this, switching to a different account in the same running app
+  /// keeps showing the PREVIOUS account's breeding jobs/eggs.
+  void resetForAccountSwitch() {
+    _loadedOnce = false;
+    jobs = [];
+    notifyListeners();
+  }
+
   Future<void> load({bool force = false}) async {
     if (isLoading || (_loadedOnce && !force)) return;
     final userId = _userId;
@@ -266,12 +275,11 @@ class BreedingController extends ChangeNotifier {
     // TANK" from 2026-07-27) — low energy now stretches the mating out
     // instead of refusing to start it at all, the same inverse-rate scale
     // ExpeditionController bakes into a trip's own duration.
-    final hours =
-        breedingHours(
-          kSpeciesBalance.of(species.rarity).breedHours,
-          workerPower,
-        ) /
-        settlement.energyMultiplier;
+    // Real time: energy does not stretch a mating (user 2026-09-28).
+    final hours = breedingHours(
+      kSpeciesBalance.of(species.rarity).breedHours,
+      workerPower,
+    );
 
     // A mating COSTS SUPPLIES (user 2026-07-27) — the goods of the era the
     // PARENTS come from, not the settlement's. See breeding_cost.dart. Charged
@@ -311,7 +319,7 @@ class BreedingController extends ChangeNotifier {
     } catch (e) {
       // The supplies were already spent — give them back, or a failed insert
       // costs the pair's bill for nothing.
-      if (cost.isNotEmpty) await settlement.grantResources(cost);
+      if (cost.isNotEmpty) await settlement.grantResources(cost, refund: true);
       return 'Breeding failed: $e';
     }
   }
@@ -334,12 +342,11 @@ class BreedingController extends ChangeNotifier {
     // own comment; low energy stretches the incubation instead.
     final settlement = SettlementController();
     final workerPower = settlement.hatchingPower(kHatcheryBuildingId);
-    final hours =
-        breedingHours(
-          kSpeciesBalance.of(species.rarity).hatchHours,
-          workerPower,
-        ) /
-        settlement.energyMultiplier;
+    // Real time: energy does not stretch an incubation either.
+    final hours = breedingHours(
+      kSpeciesBalance.of(species.rarity).hatchHours,
+      workerPower,
+    );
     final readyAt = DateTime.now().add(
       Duration(milliseconds: (hours * 3600000).round()),
     );

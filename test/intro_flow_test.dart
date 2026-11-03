@@ -266,11 +266,13 @@ void main() {
       expect(boosted, closeTo(full * kJumpstartTimeScale, 1));
     });
 
-    test('shortens a capture hunt proportionally', () {
+    test('shortens a capture hunt\'s step target proportionally', () {
+      // Hunts moved off a wall clock onto real steps (user 2026-10-02) —
+      // the jumpstart now shrinks the STEP target the same way it used to
+      // shrink the duration, so the tutorial's gold-skip stays cheap.
       final o = kCaptureHuntOptions.first;
-      final full = captureDuration(o).inSeconds;
-      final boosted =
-          captureDuration(o, timeScale: kJumpstartTimeScale).inSeconds;
+      final full = effectiveHuntSteps(o);
+      final boosted = effectiveHuntSteps(o, timeScale: kJumpstartTimeScale);
       expect(boosted, closeTo(full * kJumpstartTimeScale, 1));
     });
 
@@ -335,7 +337,7 @@ void main() {
       );
       expect(unscaled.duration, explicit.duration);
       final o = kCaptureHuntOptions.first;
-      expect(captureDuration(o), captureDuration(o, timeScale: 1.0));
+      expect(effectiveHuntSteps(o), effectiveHuntSteps(o, timeScale: 1.0));
     });
 
     test('wild stats are unscaled unless a caller opts in', () {

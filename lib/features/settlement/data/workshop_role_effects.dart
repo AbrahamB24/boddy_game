@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../../../core/ui/number_format.dart';
 import '../../creatures/models/creature_enums.dart' show breedingTimeCut;
 import '../services/trade_center.dart' show kMaxTradeDiscount;
@@ -524,7 +526,25 @@ List<String> workshopPowerParts(
 /// branch here: they have several powers, not one, and callers reach them via
 /// [workshopPowerLabel].
 String workshopRoleEffect(String resource, double power) {
-  String pct(double v) => '${(v * 100).toStringAsFixed(0)} %';
+  // Rounded to the nearest whole percent, but never DOWN to 0 for a power
+  // that is actually doing something (user 2026-10-01: "Effekte werden min.
+  // auf 1% oder 1 hochgerundet. Wenn ein Monster eingestellt ist, kann dies
+  // niemals 0 sein" — a screenshot of a freshly-posted Healing Hut worker
+  // reading "−0 %" for both itself and the Total line, which looks exactly
+  // like the stationed monster is doing nothing). `toStringAsFixed(0)` alone
+  // rounds a real-but-small cut (a level-1 stat on a level-1 building) down
+  // to the same "0 %" an UNSTAFFED post already shows via the `—`/haltReason
+  // branches above this switch — the one case this function must not produce
+  // is a positive power printing as if it were one of those.
+  String pct(double v) {
+    final n = (v * 100).round();
+    return '${n == 0 && v > 0 ? 1 : n} %';
+  }
+
+  // Same rule for a bare count: a room ceiling or similar NEVER reads as "+0"
+  // while a worker posted there is actually contributing something.
+  int count(double v) => v > 0 ? math.max(1, v.round()) : v.round();
+
   return switch (resource) {
     // Both breeder posts read the same curve — only the clock they shorten
     // differs (mating vs. incubation).
@@ -542,7 +562,7 @@ String workshopRoleEffect(String resource, double power) {
     // A COUNT of units, not a fraction and not a rate (user 2026-07-30): this
     // many more wood/stone/… the store can hold, per resource it stores. Rounded
     // because a ceiling of 190.4 is a ceiling of 190.
-    WorkshopRole.kStorageRoom => '+${power.round()} room',
+    WorkshopRole.kStorageRoom => '+${count(power)} room',
     _ => '+${power.toStringAsFixed(1)}/h',
   };
 }

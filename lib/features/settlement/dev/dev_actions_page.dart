@@ -8,9 +8,12 @@ import '../../creatures/models/creature_instance.dart';
 import '../../creatures/services/breeding_controller.dart';
 import '../../creatures/services/creatures_controller.dart';
 import '../../creatures/services/expedition_controller.dart';
-import '../data/building_definitions.dart' show kDevResetFloat;
+import '../data/building_definitions.dart'
+    show kDevResetFloat, kEnergyMaxPercent;
 import '../settlement_controller.dart';
 import 'dev_species_tools.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 /// THE DEV MENU'S ACTIONS PAGE (user 2026-09-20: "alle dev buttons wie heal all
 /// oder add resources etc. im Devmenü verstecken … ich will alle Menüs so sehen
@@ -161,6 +164,20 @@ class _DevActionsPageState extends State<DevActionsPage> {
             '🩹 Alle Monster geheilt',
           ),
         ),
+        _action(
+          '🧬 Jedes Monster, jede Stufe',
+          'Eines von jeder Art und jeder Evolutionsstufe, die du noch nicht hast — '
+              'ohne Rücksicht auf die Unterkünfte. Zum Anschauen.',
+          () => _run(() async {
+            final n = await _creatures.devGrantAllSpeciesAndStages();
+            _say('🧬 $n Monster hinzugefügt');
+          }, '🧬 Fertig'),
+        ),
+        _action(
+          '⚡ Energie auffüllen',
+          'Der Pool springt sofort auf ${kEnergyMaxPercent.round()} %.',
+          () => _run(() => _settlement.devFillEnergy(), '⚡ Energie aufgefüllt'),
+        ),
         const SizedBox(height: 4),
         Row(
           children: [
@@ -171,7 +188,7 @@ class _DevActionsPageState extends State<DevActionsPage> {
                 alignment: Alignment.centerLeft,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: vr(10),
                   border: Border.all(
                     color: CreamPalette.tan.withValues(alpha: 0.55),
                     width: 1.5,
@@ -355,7 +372,7 @@ class _DevActionsPageState extends State<DevActionsPage> {
               ),
             ),
             const SizedBox(width: 8),
-            Icon(Icons.play_arrow_rounded, color: kBoxInkFaint, size: 20),
+            PixelIcon(Icons.play_arrow_rounded, color: kBoxInkFaint, size: 20),
           ],
         ),
       ),

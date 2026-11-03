@@ -7,6 +7,7 @@ import 'package:boddygame/features/creatures/models/creature_enums.dart';
 import 'package:boddygame/features/creatures/models/expedition.dart';
 import 'package:boddygame/features/creatures/models/species_def.dart';
 import 'package:boddygame/features/creatures/services/capture_math.dart';
+import 'package:boddygame/features/settlement/services/gold_economy.dart';
 
 SpeciesDef _species(
   String id,
@@ -225,25 +226,29 @@ void main() {
 
   });
 
-  group('hunt variants (6 fixed durations)', () {
-    test('fixed duration per variant, scaled only by timeScale', () {
+  group('hunt variants (5 fixed step counts, user 2026-10-02)', () {
+    test('effective steps scale with timeScale and travelMult, never free',
+        () {
       final o = kCaptureHuntOptions.first;
-      expect(captureDuration(o).inSeconds, o.seconds);
+      expect(effectiveHuntSteps(o), o.steps);
+      expect(effectiveHuntSteps(o, timeScale: 0.5), (o.steps * 0.5).round());
       expect(
-        captureDuration(o, timeScale: 0.5).inSeconds,
-        (o.seconds * 0.5).round(),
+        effectiveHuntSteps(o, travelMult: 2.0),
+        (o.steps / 2.0).round(),
       );
+      // Even scaled far down (the tutorial's jumpstart), at least 1 step.
+      expect(effectiveHuntSteps(o, timeScale: 0.001), greaterThanOrEqualTo(1));
     });
 
-    test('longer variants: longer, more finds', () {
-      var prevSeconds = 0;
+    test('longer variants: more steps, more finds', () {
+      var prevSteps = 0;
       var prevFinds = 0;
       for (final o in kCaptureHuntOptions) {
-        expect(o.seconds, greaterThan(prevSeconds),
-            reason: 'duration strictly increases');
+        expect(o.steps, greaterThan(prevSteps),
+            reason: 'step target strictly increases');
         expect(o.finds, greaterThan(prevFinds),
             reason: 'finds strictly increase');
-        prevSeconds = o.seconds;
+        prevSteps = o.steps;
         prevFinds = o.finds;
       }
     });
@@ -255,21 +260,23 @@ void main() {
     // follows the same growing teamSizeCap Gather already uses — see
     // kCaptureHuntOptions's own comment.
 
-    test('the six variants match the user spec (10m..24h, finds 1..12)', () {
-      expect(kCaptureHuntOptions.map((o) => o.seconds),
-          [600, 1800, 3600, 14400, 28800, 86400]);
-      // The user's ladder: 60' = 3, 4 h = 5, 8 h = 8, 24 h = 12.
-      expect(kCaptureHuntOptions.map((o) => o.finds), [1, 2, 3, 5, 8, 12]);
+    test('the five variants match the user spec (500..10000, finds 1..8)', () {
+      expect(kCaptureHuntOptions.map((o) => o.steps),
+          [500, 1000, 2000, 5000, 10000]);
+      expect(kCaptureHuntOptions.map((o) => o.finds), [1, 2, 3, 5, 8]);
     });
 
-    test('a longer hunt is a convenience, never the efficient play', () {
-      // 24 h returns 12 finds where 24 ten-minute hunts would return 24. If
-      // that ever inverts, the whole ladder collapses onto its last rung.
-      final short = kCaptureHuntOptions.first;
+    test('a longer hunt never pays MORE per step than the shortest', () {
+      // 10,000 steps returns 8 finds where 20× 500-step hunts would return
+      // 20. If that ever inverts, the whole ladder collapses onto its last
+      // rung. Non-strict (≤): the first two rungs tie at exactly the same
+      // finds/step rate, which is fine — "never better", not "always worse".
+      final shortRate =
+          kCaptureHuntOptions.first.finds / kCaptureHuntOptions.first.steps;
       for (final o in kCaptureHuntOptions.skip(1)) {
-        final findsPerSecond = o.finds / o.seconds;
-        expect(findsPerSecond, lessThan(short.finds / short.seconds),
-            reason: '${o.id} pays better per minute than the shortest hunt');
+        final rate = o.finds / o.steps;
+        expect(rate, lessThanOrEqualTo(shortRate),
+            reason: '${o.id} pays better per step than the shortest hunt');
       }
     });
 
@@ -295,6 +302,137 @@ void main() {
       final e = exp({'speciesId': 'mouse', 'level': 5});
       expect(e.captureFindSpeciesIds, ['mouse']);
       expect(e.captureFindsDone, 0);
+    });
+  });
+
+  group('Balkenjagd (bar-chase catch, user 2026-10-01)', () {
+    test('rarity speed/duration both strictly increase', () {
+      var prevSpeed = 0.0;
+      var prevDuration = 0;
+      for (final r in CreatureRarity.values) {
+        expect(barBaseSpeed(r), greaterThan(prevSpeed));
+        expect(barDurationMs(r), greaterThan(prevDuration));
+        prevSpeed = barBaseSpeed(r);
+        prevDuration = barDurationMs(r);
+      }
+    });
+
+    test('a longer duration never outpaces the speed increase (net harder)',
+        () {
+      // "mehr Zeit, aber auch mehr Zeit für Fehler" — speed growth must beat
+      // duration growth, or a rarer find would actually be EASIER overall.
+      var prevRatio = double.infinity;
+      for (final r in CreatureRarity.values) {
+        final ratio = barBaseSpeed(r) * barDurationMs(r);
+        expect(ratio, greaterThan(prevRatio == double.infinity ? 0 : prevRatio));
+        prevRatio = ratio;
+      }
+    });
+
+    test('Resteleben depth slows the wild, floor at 0.55×', () {
+      const r = CreatureRarity.rare;
+      final atThreshold = barSpeedMul(r, catchHpThreshold(r));
+      final nearZero = barSpeedMul(r, 0.0);
+      expect(atThreshold, closeTo(1.0, 1e-9)); // depth 0 = no slowdown yet
+      expect(nearZero, closeTo(0.55, 1e-9)); // depth 1 = full slowdown
+      expect(nearZero, lessThan(atThreshold));
+    });
+
+    test('catchRate widens the bar with diminishing returns, never unbounded',
+        () {
+      final none = barWidthFraction(0);
+      final some = barWidthFraction(18);
+      final lots = barWidthFraction(1000);
+      expect(none, closeTo(kBarWidthBase, 1e-9));
+      expect(some, greaterThan(none));
+      expect(lots, greaterThan(some));
+      expect(lots, lessThan(kBarWidthBase + kBarWidthMaxBonus));
+    });
+
+    test('skill points earned over a FULL round always sum to kBarSkillMax',
+        () {
+      for (final ms in kBarDurationMs.values) {
+        final total = barSkillGainPerSecond(ms) * (ms / 1000);
+        expect(total, closeTo(kBarSkillMax, 1e-9));
+      }
+    });
+
+    test('percent is item-start + skill, clamped, and the floor never drops',
+        () {
+      expect(barCatchPercent(0.40, 0), closeTo(40, 1e-9));
+      expect(barCatchPercent(0.40, kBarSkillMax), closeTo(100, 1e-9));
+      expect(barCatchPercent(0.10, kBarSkillMax), closeTo(70, 1e-9));
+      // Over-accumulating skill (shouldn't happen, but the clamp must hold).
+      expect(barCatchPercent(0.40, 999), closeTo(100, 1e-9));
+    });
+
+    test('only the top item can reach a true 100% ceiling', () {
+      // Every tier's ceiling is itemStart*100 + kBarSkillMax; only 40% + 60
+      // hits 100 exactly. Cheaper tiers cap below it even on a flawless run.
+      expect(barCatchPercent(0.40, kBarSkillMax), 100);
+      expect(barCatchPercent(0.25, kBarSkillMax), lessThan(100));
+      expect(barCatchPercent(0.10, kBarSkillMax), lessThan(100));
+    });
+  });
+
+  group('Expedition step-gating (capture only, user 2026-10-02)', () {
+    Expedition capture({int stepsTarget = 1000, int stepsWalked = 0}) =>
+        Expedition(
+          id: 'e',
+          userId: 'u',
+          type: ExpeditionType.capture,
+          areaId: 'a',
+          startedAt: DateTime(2026),
+          payload: {'stepsTarget': stepsTarget, 'stepsWalked': stepsWalked},
+        );
+
+    Expedition gather() => Expedition(
+      id: 'g',
+      userId: 'u',
+      type: ExpeditionType.gather,
+      areaId: 'a',
+      startedAt: DateTime(2026),
+      duration: const Duration(hours: 1),
+    );
+
+    test('only capture is step-gated — gather keeps the wall clock', () {
+      expect(capture().isStepGated, isTrue);
+      expect(gather().isStepGated, isFalse);
+    });
+
+    test('progress/isFinished read steps, never the clock', () {
+      final e = capture(stepsTarget: 1000, stepsWalked: 400);
+      // A wildly wrong "now" changes nothing — steps drive this, not time.
+      expect(e.progress(DateTime(2099)), closeTo(0.4, 1e-9));
+      expect(e.isFinished(DateTime(2026)), isFalse);
+      expect(e.remaining(DateTime.now()), Duration.zero);
+    });
+
+    test('isFinished flips exactly when stepsWalked reaches the target', () {
+      final now = DateTime.now();
+      expect(
+        capture(stepsTarget: 500, stepsWalked: 499).isFinished(now),
+        isFalse,
+      );
+      expect(
+        capture(stepsTarget: 500, stepsWalked: 500).isFinished(now),
+        isTrue,
+      );
+    });
+
+    test('stepsRemaining never goes negative', () {
+      expect(capture(stepsTarget: 500, stepsWalked: 900).stepsRemaining, 0);
+    });
+  });
+
+  group('goldToSkipSteps', () {
+    test('free once there is nothing left', () {
+      expect(goldToSkipSteps(0), 0);
+    });
+
+    test('scales with remaining steps, never free otherwise', () {
+      expect(goldToSkipSteps(10), greaterThanOrEqualTo(1));
+      expect(goldToSkipSteps(10000), greaterThan(goldToSkipSteps(10)));
     });
   });
 }

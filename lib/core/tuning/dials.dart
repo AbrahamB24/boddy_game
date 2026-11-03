@@ -185,7 +185,12 @@ final List<Dial> kDials = [
     help:
         'Baupunkte kürzen die im Gebäude hinterlegte Bauzeit. Ohne Deckel, '
         'aber mit abnehmendem Ertrag.',
-    def: 100,
+    // Was 100 (user 2026-09-28: "ein Monster mit Stat 114 alleine bereits 66%
+    // Zeitreduktion" — that was the breeding dial below, same curve, weaker
+    // mult; raised here too so a single elite builder lands near the same
+    // ~30 %, not ~35-40 %). At mult 0.5 a stat-114 worker makes 57 points;
+    // 140 puts that at ≈29 %, and ten of them at ≈80 %, never free.
+    def: 140,
     min: 1,
     felt: _halfAtK,
   ),
@@ -197,7 +202,13 @@ final List<Dial> kDials = [
     help:
         'Wie stark die Arbeiter in Zuchthütte und Brutstätte die Dauer '
         'kürzen. Dieselbe Kurve wie bei der Bauzeit.',
-    def: 60,
+    // Was 60 (user 2026-09-28: "ein Monster mit Stat 114 alleine bereits 66%
+    // Zeitreduktion … könnten über 10 angestellt werden"). The role's mult is
+    // 1, so power IS the stat — a single strong breeder was already two
+    // thirds of the way to a free mating, and ten of them left almost
+    // nothing of the timer. 260 puts one stat-114 breeder at ≈30 % and ten of
+    // them at ≈81 %: a full Breeding Hut is dramatic, not instant.
+    def: 260,
     min: 1,
     felt: _halfAtK,
   ),
@@ -222,7 +233,7 @@ final List<Dial> kDials = [
     help:
         'Wie viel die Siedlung noch leistet, wenn die Energie auf 0 '
         'gesunken ist.',
-    def: 0.25,
+    def: 0.0,
     kind: DialKind.percent,
     felt: (v) => 'Bei leerer Energie läuft alles mit ${_n(v * 100)} %.',
   ),
@@ -400,9 +411,10 @@ final List<Dial> kDials = [
     section: 'Survival',
     label: 'Gold pro Etage',
     help:
-        'Die Belohnung am Ende eines Survival-Laufs ist dieser Wert mal '
-        'die Dreieckszahl der geschafften Etagen (1+2+…+N) — je tiefer der '
-        'Lauf, desto überproportional mehr.',
+        'Jede NEUE Rekord-Etage zahlt diesen Wert mal ihre Etagennummer '
+        '(der erste Lauf bis Etage N also die Dreieckszahl 1+2+…+N). '
+        'Etagen, die schon ein früherer Lauf geschafft hat, zahlen nur 1 '
+        'Gold (seit 2026-11-02, sonst war Survival eine endlose Goldquelle).',
     def: 15,
     kind: DialKind.decimal,
     min: 0,

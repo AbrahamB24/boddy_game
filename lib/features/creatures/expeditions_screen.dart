@@ -9,16 +9,20 @@ import '../../core/theme/strategy_theme.dart';
 import '../../core/ui/snack.dart';
 import '../common/widgets/parchment_kit.dart' show parchmentConfirm;
 import '../onboarding/intro_flow.dart';
-import '../settlement/data/gather_defs.dart';
+import '../onboarding/intro_spotlight.dart';
+import '../settlement/resources_screen.dart' show romanNumeral;
 import '../settlement/settlement_controller.dart';
 import 'capture_encounter_screen.dart';
 import 'expedition_launch_sheet.dart';
 import 'models/area.dart';
+import 'models/creature_enums.dart' show maxHuntOptionCount;
 import 'models/expedition.dart';
+import 'services/capture_math.dart' show kCaptureHuntOptions;
 import 'services/creatures_controller.dart';
 import 'services/expedition_controller.dart';
 import 'services/expedition_targets.dart';
 import '../../core/ui/pressable.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 // ── The Expeditions hub (rebuilt 2026-07-25, redrawn 2026-07-29, reskinned
 // 2026-09-17, restructured 2026-09-17, landscape 2026-09-18) ───────────────
@@ -52,87 +56,25 @@ class ExpeditionsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const MenuScaffold(
-    title: 'Expeditions',
-    // The slot count is the first thing that decides whether you can send
-    // anything at all, so it rides in the bar rather than down the page.
-    trailing: ExpeditionSlotChip(),
+    title: 'Expedition',
+    // No slot chip up here any more (user 2026-09-29: "Icon oben rechts
+    // neben dem 'x' und n/n löschen") — the same reading now lives on the
+    // "Expeditions" card itself, the one thing it is actually about.
     child: ExpeditionsBody(),
   );
 }
 
-/// The slot readout — a gem badge + "2/3" in the header. Its own widget so
-/// either host can show it without owning the count.
-class ExpeditionSlotChip extends StatefulWidget {
-  const ExpeditionSlotChip({super.key});
-
-  @override
-  State<ExpeditionSlotChip> createState() => _ExpeditionSlotChipState();
-}
-
-class _ExpeditionSlotChipState extends State<ExpeditionSlotChip> {
-  final _ctrl = ExpeditionController();
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl.addListener(_onChange);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.removeListener(_onChange);
-    super.dispose();
-  }
-
-  void _onChange() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      GemBadge(
-        size: 30,
-        color: _ctrl.slotsFull ? Strategy.coral : Strategy.gold,
-        child: const Text('🧭', style: TextStyle(fontSize: 13)),
-      ),
-      const SizedBox(width: 5),
-      // Navy, not white: the readout sits on a cream title card now.
-      Text(
-        '${_ctrl.activeCount}/${_ctrl.maxSlots}',
-        style: const TextStyle(
-          color: kBoxInk,
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
-        ),
-      ),
-    ],
-  );
-}
-
-/// The two kinds of thing a group can be sent after — how the filter chips
-/// split the Targets list. Luxury used to be a third, separate drawer (user
-/// 2026-08-30), but merged back into Resources (user 2026-09-12, once the
-/// region ladder dropped to one luxury per region: "dann kann ich bei
-/// Management die Luxury aufheben und zu Resources nehmen, da 3 nebeneinander
-/// Platz haben, dadurch wird es auch aufgeräumter").
-enum ExpeditionTargetCategory {
-  resources('Resources', '🪵'),
-  hunt('Hunt', '🪤');
-
-  final String label;
-  final String emoji;
-  const ExpeditionTargetCategory(this.label, this.emoji);
-}
-
-ExpeditionTargetCategory _categoryOf(ExpeditionTarget t) => t.isHunt
-    ? ExpeditionTargetCategory.hunt
-    : ExpeditionTargetCategory.resources;
-
-/// What is out, and everywhere you could send a group — one page, no tabs:
-/// a narrow "out now" column, a Resources/Hunt filter, and every unlocked
-/// region's targets as its own horizontally-scrolling rail beside it.
+/// What is out, and everywhere you could send a group — one page, never a
+/// scrollbar ("Variante 10" of ten proposals, user 2026-09-29): a narrow "out
+/// now" column, then every unlocked region's own row of resources — always
+/// the era's fixed 3, since that is how many every era actually has — scaled
+/// down AS A WHOLE to fit however many regions are open, the same technique
+/// the Breeding page's gene table and the victory screen use. Hunt sits in
+/// its own panel beside it, because it isn't a 4th resource: it is its OWN
+/// system, 6 fixed DURATIONS (user 2026-09-29: "Hunt ist losgelöst von den
+/// Äras … mit der 3er Spalte lösbar") gated by the Scout Post's level, not by
+/// which era happens to be open. A region chip there only picks which
+/// species pool a hunt draws from.
 class ExpeditionsBody extends StatefulWidget {
   const ExpeditionsBody({super.key});
 
@@ -142,25 +84,90 @@ class ExpeditionsBody extends StatefulWidget {
 
 class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   final _ctrl = ExpeditionController();
-  final _creatures = CreaturesController();
   final _settlement = SettlementController();
   Timer? _ticker;
 
-  // One-time explanation on the tutorial's own catch step (user 2026-08-24:
-  // "Trips erklären, Ressourcen sammeln, dass diese regenerieren").
-  bool _showTripsIntro = false;
+  /// Which region's species pool the Hunt panel draws from — null until the
+  /// player picks one, which reads as "the first unlocked region".
+  String? _huntAreaId;
 
-  /// Which target drawer the rails show. Resources leads — it is the
-  /// everyday trip, same reasoning [targetsIn] already gives the hunt for
-  /// sorting last within one area.
-  ExpeditionTargetCategory _category = ExpeditionTargetCategory.resources;
+  /// The composer's own type choice (user 2026-10-02, "Konzept 24" of the
+  /// full-hub redesign: creating an expedition is the screen's whole job
+  /// now, not something a separate tile grid hands off to a sheet). Null
+  /// means "not decided yet" — [_composerKindOrDefault] then falls back to
+  /// whichever the settlement can actually do (gather if anything is
+  /// unlocked, since that's the everyday trip; hunt otherwise, which is
+  /// also what a brand-new tutorial account needs before it has ever built
+  /// a gathering hut).
+  ExpeditionTargetKind? _composerKind;
 
-  /// Fixed tile size for a region rail's target cards — deliberately its
-  /// OWN constant rather than the shared monster-tile grid's (that one
-  /// reads the device's raw WIDTH, which is now this screen's long axis in
-  /// landscape and would size a tile taller than the whole screen).
-  static const double _tileW = 92;
-  static const double _tileH = 126;
+  /// Composer, gather only: which chip is selected, by [ExpeditionTarget.id]
+  /// — re-resolved against the live target list every build rather than
+  /// cached as an [ExpeditionTarget] itself, so a spot that empties out or
+  /// starts being worked by another trip is never silently kept selected.
+  String? _composerGatherTargetId;
+
+  /// Composer, hunt only: which [kCaptureHuntOptions] variant is selected.
+  int _composerHuntOptionIndex = 0;
+
+  /// True for the whole of firstCapture — it covers BOTH halves of this step:
+  /// picking the shortest hunt (500 steps), then speeding up the hunt that
+  /// comes out of it with gold (user 2026-10-01: "bitte die 10min Hunt
+  /// highlighten, damit ich nur diese anwählen kann. Im Anschluss soll diese
+  /// wieder mit Gold beschleunigt werden" — the hunt itself moved from a
+  /// 10-minute timer to 500 real steps on 2026-10-02, but the two-phase
+  /// script is unchanged: gold is still how the tutorial gets through it).
+  bool get _huntTutorial => _settlement.introStep == IntroStep.firstCapture;
+
+  /// The hunt THIS step's own script put out, once it exists — null before
+  /// the player has picked a duration. Only ever one: [maxHuntOptionCount]
+  /// caps this account at a single Scout-Post-free slot this early.
+  Expedition? get _tutorialHunt => _huntTutorial
+      ? _ctrl.expeditions
+            .where((e) => e.type == ExpeditionType.capture)
+            .firstOrNull
+      : null;
+
+  // ── Tile art ──────────────────────────────────────────────
+  // "Bild-Kachel" (user 2026-09-30: "Sie wirken zu leer und langweilig" —
+  // VC, the chosen one of six proposals for the Hunt/Resources/Expedition
+  // tiles). Every tile used to be one flat cream block with an emoji
+  // floating on it; now each gets its own coloured ART ZONE — a little
+  // painted "place" the glyph actually stands in — over the same cream BAND
+  // the rest of the app's tiles use for their text, so it still reads as
+  // this game rather than a random photo card.
+  //
+  // A fixed, hand-picked palette rather than one colour per resource: the
+  // roster (wood/stone/fish plus whatever Dev Mode's goods add) is open-
+  // ended, so a resource's colour is looked up by hashing its key into this
+  // list instead of naming every one — stable across a session, no upkeep
+  // as the roster grows.
+  static const List<List<Color>> _kArtGradients = [
+    [Color(0xFF8AA85E), Color(0xFF3A4E26)], // moss
+    [Color(0xFF7E8FA6), Color(0xFF384252)], // slate
+    [Color(0xFF3C8CA8), Color(0xFF1B4E63)], // teal
+    [Color(0xFFC97B4A), Color(0xFF6E3E22)], // clay
+    [Color(0xFFB85C6B), Color(0xFF5C2530)], // berry
+    [Color(0xFF9CAA55), Color(0xFF4B5729)], // olive
+    [Color(0xFFD9A441), Color(0xFF7A5218)], // amber
+  ];
+
+  /// Hunt isn't a resource — it gets its own fixed colour (a "danger/wild"
+  /// violet) rather than a hashed one, so every hunt tile reads as the same
+  /// system at a glance the way the resource tiles read as an era.
+  static const List<Color> _kHuntGradient = [
+    Color(0xFF6B4394),
+    Color(0xFF33204F),
+  ];
+
+  List<Color> _artFor(String key) =>
+      _kArtGradients[key.hashCode.abs() % _kArtGradients.length];
+
+  LinearGradient _artGradient(List<Color> stops) => LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: stops,
+  );
 
   @override
   void initState() {
@@ -175,7 +182,6 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _ctrl.collectFinished();
     });
-    _showTripsIntro = _settlement.introStep == IntroStep.firstCapture;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_ctrl.expeditions.any((e) => e.isReadyToCollect(DateTime.now()))) {
         _ctrl.collectFinished();
@@ -223,77 +229,113 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         if (!ExpeditionController.isCaravan(e)) e,
     ];
     final areas = unlockedAreas(_settlement.dungeonMaxStage);
+    final tutorialHunt = _tutorialHunt;
     return Stack(
       children: [
         _layout(running, areas),
-        if (_showTripsIntro) _tripsIntroOverlay(),
+        // firstCapture, phase 1: the Trips explainer and the spotlight on the
+        // 10-minute hunt tile now show TOGETHER (user 2026-10-01: "soll der
+        // Text Trips gleichzeitig wie das gehighlightete Huntbutton
+        // erscheinen, d.h. tap anywhere to continue ist nicht mehr nötig") —
+        // this used to be a blocking "tap anywhere to continue" card the
+        // player had to dismiss FIRST, with the spotlight only appearing
+        // after. Nothing else on this screen is reachable until the hunt
+        // tile is picked (user 2026-10-01: "damit ich nur diese anwählen
+        // kann").
+        if (_huntTutorial && tutorialHunt == null) ...[
+          const IntroSpotlightOverlay(
+            anchorName: 'hunt-10min-option',
+            hint: 'Tap to send a hunt.',
+          ),
+          _tripsNarrationCard(),
+        ],
+        // Phase 2: the hunt is out — the one thing left to teach is that gold
+        // speeds it up too, same as it did for the Healing Hut (user
+        // 2026-10-01: "im Anschluss soll diese wieder mit Gold beschleunigt
+        // werden").
+        if (tutorialHunt != null &&
+            !tutorialHunt.isReadyToCollect(DateTime.now()))
+          const IntroSpotlightOverlay(
+            anchorName: 'hunt-skip-gold',
+            hint: 'Gold speeds this up too.',
+          ),
       ],
     );
   }
 
-  Widget _layout(List<Expedition> running, List<AreaDef> areas) => Padding(
-    // The menu frame already pads; only the bottom needs a little air here.
-    padding: EdgeInsets.zero,
-    child: Column(
+  // Out now only shows up once something IS out (user 2026-10-02, "Konzept
+  // 24" of ten full-hub proposals: creating an expedition is the screen's
+  // whole job now, not a tile grid beside a monitoring column). With nothing
+  // running, [_composer] gets the entire card; the moment a trip starts, a
+  // slim rail slides in beside it. (MenuScaffold itself is the one card now
+  // — no [pageCard] here any more, or this would nest a card inside its
+  // card.)
+  Widget _layout(List<Expedition> running, List<AreaDef> areas) {
+    if (areas.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(4),
+        child: Text(
+          'No region is open yet — win your first battles.',
+          style: TextStyle(color: kBoxInkSoft, fontSize: 12),
+        ),
+      );
+    }
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // WHY NOTHING CAN GO, before the list of things that can't (user
-        // 2026-07-29: the base pool is 0, so a settlement with no Scout Post
-        // has an empty screen and no idea it is missing a building).
+        // WHY NOTHING CAN GO, before the composer (user 2026-07-29: the base
+        // pool is 0, so a settlement with no Scout Post has an empty screen
+        // and no idea it is missing a building).
         if (_ctrl.noSlots) ...[_noSlotsBanner(), const SizedBox(height: 10)],
         Expanded(
-          // The left column's width is a FRACTION of what's actually
-          // available (2026-09-18, responsiveness pass), not a flat 220px —
-          // a landscape phone's long axis runs anywhere from ~667px (iPhone
-          // SE) to this app's own 932px cap, and a fixed width either ate
-          // more of a narrow phone's room than intended or left a small
-          // phone's target column cramped.
-          child: LayoutBuilder(
-            builder: (context, c) {
-              final outNowWidth = (c.maxWidth * 0.26).clamp(190.0, 260.0);
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Each column is a cream card of its own, with a flat
-                  // heading — text stands on cards, never on the map.
-                  SizedBox(
-                    width: outNowWidth,
-                    child: sectionCard(
-                      title: 'Out now',
-                      icon: Icons.explore,
-                      trailing: Flexible(
-                        child: Text(
-                          _outHint(running),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: kBoxInkFaint,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
+          child: running.isEmpty
+              ? _composer(areas)
+              // The rail's width is a FRACTION of what's actually available
+              // (same reasoning as the old "out now" column's). Floored at
+              // 200 rather than the old 190 (2026-10-02 regression, caught by
+              // a widget test): a trip card's own skip/cancel chip row
+              // overflowed a narrower rail — it's secondary to the composer
+              // now, but still has to fit its own content.
+              : LayoutBuilder(
+                  builder: (context, c) {
+                    final railWidth = (c.maxWidth * 0.22).clamp(200.0, 230.0);
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _composer(areas)),
+                        const SizedBox(width: 14),
+                        SizedBox(
+                          width: railWidth,
+                          child: zoneBox(
+                            padding: const EdgeInsets.all(10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                sectionLabel(
+                                  'Out now',
+                                  trailing: Text(
+                                    '${_ctrl.activeCount}/${_ctrl.maxSlots}',
+                                    style: const TextStyle(
+                                      color: kBoxInk,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Expanded(child: _outNowColumn(running)),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      expand: true,
-                      child: _outNowColumn(running),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: sectionCard(
-                      title: 'Targets',
-                      icon: Icons.travel_explore,
-                      expand: true,
-                      child: _targetsColumn(areas),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+                      ],
+                    );
+                  },
+                ),
         ),
       ],
-    ),
-  );
+    );
+  }
 
   /// Resources this settlement can actually gather — a spot doesn't show
   /// until something producing it has been built (user 2026-09-12: "Fish
@@ -305,178 +347,417 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
       if (b.isComplete) b.buildingTypeId,
   ]);
 
-  /// Each unlocked area, paired with only the targets [_category] shows —
-  /// areas with none in this drawer (a region with no fish spot, say) are
-  /// left out entirely rather than printing an empty rail.
-  List<(AreaDef, List<ExpeditionTarget>)> _visibleAreas(List<AreaDef> areas) =>
-      [
-        for (final a in areas)
-          (
-            a,
-            targetsIn(
-              a,
-              unlockedResources: _unlockedResources,
-            ).where((t) => _categoryOf(t) == _category).toList(),
-          ),
-      ]..removeWhere((e) => e.$2.isEmpty);
+  /// Gather targets only — every area contributes exactly one Hunt entry too
+  /// (see [targetsIn]), but that's picked through [_huntPickerSection]
+  /// instead.
+  List<ExpeditionTarget> _gatherTargets(AreaDef a) => targetsIn(
+    a,
+    unlockedResources: _unlockedResources,
+  ).where((t) => !t.isHunt).toList();
 
-  /// The one hunt target in [visible], or null when there is more than one
-  /// (or the drawer open isn't Hunt at all — every target in it would fail
-  /// `isHunt` then, same result). [visible] is already filtered to
-  /// [_category] by [_visibleAreas], so when it IS Hunt every target here
-  /// already is one.
-  ExpeditionTarget? _soleHunt(List<(AreaDef, List<ExpeditionTarget>)> visible) {
-    if (_category != ExpeditionTargetCategory.hunt) return null;
-    final hunts = [for (final (_, targets) in visible) ...targets];
-    return hunts.length == 1 ? hunts.first : null;
-  }
+  // ── The rail: what's out ──────────────────────────────────
+  // Only ever built once [running] is non-empty — see [_layout].
+  Widget _outNowColumn(List<Expedition> running) => ListView.separated(
+    padding: const EdgeInsets.only(bottom: 4),
+    itemCount: running.length,
+    separatorBuilder: (_, _) => const SizedBox(height: 10),
+    itemBuilder: (context, i) => _tripCard(running[i]),
+  );
 
-  // ── Left column: what's out ──────────────────────────────
-  // The heading and the hint live on the card's own title row now.
-  Widget _outNowColumn(List<Expedition> running) => running.isEmpty
-      ? _emptyOut()
-      : ListView.separated(
-          padding: const EdgeInsets.only(bottom: 4),
-          itemCount: running.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 10),
-          itemBuilder: (context, i) => _tripCard(running[i]),
-        );
+  // ── The composer: "New Expedition" ───────────────────────
+  // Picking a kind and a target used to live in a tile grid that handed off
+  // to a sheet ([showExpeditionLaunchSheet]); now the composer picks the
+  // target itself and renders the SAME [ExpeditionLaunchPanel] right here,
+  // inline (user 2026-10-02, "Konzept 24"). [_layout] decides how much
+  // screen this gets.
 
-  // ── Right column: everywhere you can send a group ────────
-  Widget _targetsColumn(List<AreaDef> areas) {
-    if (areas.isEmpty) {
-      return Text(
-        'No region is open yet — win your first battles.',
-        style: TextStyle(color: kBoxInkSoft, fontSize: 12),
-      );
+  /// Every gather target across every unlocked area, flattened — the
+  /// composer doesn't group by era the way the old Resources column did;
+  /// "I'm gathering wood" doesn't need to know which region it's gathered in
+  /// first.
+  List<ExpeditionTarget> _allGatherTargets(List<AreaDef> areas) => [
+    for (final a in areas) ..._gatherTargets(a),
+  ];
+
+  /// [_composerKind] if the player has chosen one; otherwise whichever kind
+  /// the settlement can actually do — gather (the everyday trip) if anything
+  /// is unlocked, hunt otherwise. A brand-new tutorial account has usually
+  /// built nothing that produces a resource yet, so this already lands on
+  /// Hunt for it with no extra gating needed for the firstCapture spotlight
+  /// below.
+  ExpeditionTargetKind _composerKindOrDefault(
+    List<ExpeditionTarget> gatherTargets,
+  ) =>
+      _composerKind ??
+      (gatherTargets.isEmpty
+          ? ExpeditionTargetKind.hunt
+          : ExpeditionTargetKind.gather);
+
+  /// The selected chip, re-resolved every build rather than cached as an
+  /// [ExpeditionTarget] — a spot that empties out or starts being worked by
+  /// another trip must never stay silently selected. Prefers one that's
+  /// actually sendable so the composer never opens on a target it would
+  /// immediately have to explain is blocked.
+  ExpeditionTarget? _currentGatherTarget(List<ExpeditionTarget> gatherTargets) {
+    if (gatherTargets.isEmpty) return null;
+    final id = _composerGatherTargetId;
+    if (id != null) {
+      for (final t in gatherTargets) {
+        if (t.id == id) return t;
+      }
     }
-    final visible = _visibleAreas(areas);
-    final soleHunt = _soleHunt(visible);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _filterRow(areas),
-        const SizedBox(height: 10),
-        Expanded(
-          child: visible.isEmpty
-              ? Center(
-                  child: Text(
-                    'Nothing in ${_category.label.toLowerCase()} yet.',
-                    style: TextStyle(color: kBoxInkSoft, fontSize: 12),
-                  ),
-                )
-              : soleHunt != null
-              // Exactly one hunt on offer: nothing left to pick between, so
-              // its own launch panel replaces the rails (user 2026-09-08:
-              // "Ich möchte, dass der Inhalt von diesem Overlay auf dieser
-              // Seite angezeigt wird"). More than one hunt still shows the
-              // rails — which one was meant is a real question there.
-              ? ExpeditionLaunchPanel(
-                  key: ValueKey('hunt_inline_${soleHunt.area.id}'),
-                  target: soleHunt,
-                  inline: true,
-                )
-              : ListView(
-                  children: [
-                    for (final (a, targets) in visible) _regionRail(a, targets),
-                  ],
-                ),
-        ),
-      ],
-    );
+    for (final t in gatherTargets) {
+      if (!_busySpotIds.contains(t.spot?.id) &&
+          _ctrl.availableStock(t.spot!) >= 1) {
+        return t;
+      }
+    }
+    return gatherTargets.first;
   }
 
-  /// The Resources / Hunt switch — a pair of live filter chips, each naming
-  /// what it holds and how much of it, plus how many monsters are free to
-  /// send right now.
-  Widget _filterRow(List<AreaDef> areas) {
-    final all = [
-      for (final a in areas)
-        ...targetsIn(a, unlockedResources: _unlockedResources),
-    ];
-    final free = _creatures.availableForExpedition().length;
-    return Row(
-      children: [
-        for (final cat in ExpeditionTargetCategory.values) ...[
-          SelectChip(
-            emoji: cat.emoji,
-            label: cat.label,
-            count: all.where((t) => _categoryOf(t) == cat).length,
-            active: _category == cat,
-            onTap: () => setState(() => _category = cat),
+  AreaDef _resolvedHuntArea(List<AreaDef> areas) =>
+      areas.firstWhere((a) => a.id == _huntAreaId, orElse: () => areas.first);
+
+  Widget _composer(List<AreaDef> areas) {
+    final gatherTargets = _allGatherTargets(areas);
+    final kind = _composerKindOrDefault(gatherTargets);
+    final showTypeSwitch = gatherTargets.isNotEmpty;
+    final target = kind == ExpeditionTargetKind.gather
+        ? _currentGatherTarget(gatherTargets)
+        : ExpeditionTarget(
+            kind: ExpeditionTargetKind.hunt,
+            area: _resolvedHuntArea(areas),
+          );
+    return zoneBox(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          sectionLabel('New Expedition'),
+          const SizedBox(height: 10),
+          if (showTypeSwitch) ...[
+            _typeSwitch(kind),
+            const SizedBox(height: 10),
+          ],
+          kind == ExpeditionTargetKind.gather
+              ? _gatherChipsRow(gatherTargets, selectedId: target?.id)
+              : _huntPickerSection(areas),
+          const SizedBox(height: 12),
+          // The SAME panel every target tile used to open as a sheet — see
+          // that widget's own doc comment. Keyed on the target + variant so
+          // picking a different chip gets a fresh group/send state instead
+          // of carrying over a selection made for a different trip.
+          Expanded(
+            child: target == null
+                ? Center(
+                    child: Text(
+                      'Nothing to send yet.',
+                      style: TextStyle(color: kBoxInkSoft, fontSize: 12),
+                    ),
+                  )
+                : ExpeditionLaunchPanel(
+                    key: ValueKey(
+                      '${target.id}_'
+                      '${kind == ExpeditionTargetKind.hunt ? _composerHuntOptionIndex : 0}',
+                    ),
+                    target: target,
+                    initialOptionIndex: kind == ExpeditionTargetKind.hunt
+                        ? _composerHuntOptionIndex
+                        : null,
+                  ),
           ),
-          const SizedBox(width: 8),
         ],
-        const Spacer(),
-        Text(
-          '🐾 $free free',
-          style: TextStyle(
-            color: kBoxInkSoft,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _tripsIntroOverlay() => Positioned.fill(
-    child: Pressable(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _showTripsIntro = false),
-      // In the cream kit, like the one Battle Prep shows (2026-09-21) — this
-      // was the last tutorial overlay still built out of `Strategy.*` and a
-      // navy scrim, from the step of the redesign before the cream kit
-      // existed. Both cards appear in the same run of the tutorial, minutes
-      // apart, so they cannot look like two different games.
-      child: Container(
-        color: CreamPalette.dim,
-        alignment: Alignment.center,
-        padding: const EdgeInsets.all(24),
-        child: SizedBox(
-          width: 360,
-          child: creamCard(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Trips',
-                  style: FoE.title(size: 15).copyWith(color: kBoxInk),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Send monsters out to gather resources or hunt a wild one. '
-                  'A spot you empty out regenerates over time, so it is worth '
-                  'a return trip later.',
-                  style: FoE.label(size: 12).copyWith(color: kBoxInk),
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    'Tap anywhere to continue',
-                    style: FoE.dim(size: 11).copyWith(color: kBoxAccent),
-                  ),
-                ),
-              ],
-            ),
+  Widget _typeSwitch(ExpeditionTargetKind kind) => Container(
+    padding: const EdgeInsets.all(3),
+    decoration: BoxDecoration(
+      color: kBoxInk.withValues(alpha: 0.07),
+      borderRadius: vr(10),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: _typeSwitchOption(
+            '⛏️ Gather',
+            active: kind == ExpeditionTargetKind.gather,
+            onTap: () =>
+                setState(() => _composerKind = ExpeditionTargetKind.gather),
           ),
+        ),
+        Expanded(
+          child: _typeSwitchOption(
+            '🪤 Hunt',
+            active: kind == ExpeditionTargetKind.hunt,
+            onTap: () =>
+                setState(() => _composerKind = ExpeditionTargetKind.hunt),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _typeSwitchOption(
+    String label, {
+    required bool active,
+    required VoidCallback onTap,
+  }) => Pressable(
+    onTap: onTap,
+    child: Container(
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: active ? Strategy.gold : Colors.transparent,
+        borderRadius: vr(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: active ? kBoxInk : kBoxInkFaint,
         ),
       ),
     ),
   );
 
-  String _outHint(List<Expedition> running) {
-    final away = _ctrl.activeCount;
-    final home = _ctrl.awaitingPlay
-        .where((e) => !ExpeditionController.isCaravan(e))
-        .length;
-    if (running.isEmpty) return 'nobody is away';
-    if (away == 0) return '$home back — play ${home > 1 ? 'them' : 'it'}';
-    return home == 0 ? '$away on the road' : '$away on the road · $home back';
+  Widget _gatherChipsRow(
+    List<ExpeditionTarget> targets, {
+    required String? selectedId,
+  }) => SizedBox(
+    height: 70,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      itemCount: targets.length,
+      separatorBuilder: (_, _) => const SizedBox(width: 8),
+      itemBuilder: (_, i) =>
+          _gatherChip(targets[i], selected: targets[i].id == selectedId),
+    ),
+  );
+
+  /// One resource, as a chip rather than a full tile — the composer's job is
+  /// picking WHICH target, not explaining it at length; [ExpeditionLaunchPanel]
+  /// below already shows the haul/carry/duration figures once one is chosen.
+  Widget _gatherChip(ExpeditionTarget t, {required bool selected}) {
+    final spot = t.spot!;
+    final stock = _ctrl.availableStock(spot);
+    final busy = _busySpotIds.contains(spot.id);
+    final empty = stock < 1;
+    final blocked = busy || empty;
+    final reason = busy
+        ? 'Working'
+        : empty
+        ? 'Mined out'
+        : null;
+    final ink = blocked ? kBoxInkFaint : kBoxInk;
+    return Pressable(
+      onTap: blocked
+          ? null
+          : () => setState(() {
+              _composerKind = ExpeditionTargetKind.gather;
+              _composerGatherTargetId = t.id;
+            }),
+      child: Container(
+        width: 92,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+        decoration: raisedTile(
+          radius: 10,
+          locked: blocked,
+          lit: selected && !blocked,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(t.emoji, style: const TextStyle(fontSize: 18)),
+            const SizedBox(height: 3),
+            Text(
+              resourceName(spot.resource),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+                color: ink,
+              ),
+            ),
+            Text(
+              reason ?? '${stock.toStringAsFixed(0)} left',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 7.5,
+                fontWeight: FontWeight.w600,
+                color: kBoxInkFaint,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
+
+  /// HUNT — its own system (user 2026-09-29): a region chip row (which
+  /// species pool) over a scrolling row of the 5 step-count variants
+  /// ([kCaptureHuntOptions]), locked past however many the Scout Post has
+  /// opened. Picking a chip feeds [ExpeditionLaunchPanel] below with that
+  /// variant already chosen — the team is still picked there, same as
+  /// before.
+  Widget _huntPickerSection(List<AreaDef> areas) {
+    final area = _resolvedHuntArea(areas);
+    final unlocked = maxHuntOptionCount(
+      _settlement.buildingHuntOptions + _settlement.pathHuntOptions,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (areas.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Wrap(
+              spacing: 5,
+              runSpacing: 5,
+              children: [
+                for (final a in areas)
+                  _huntAreaChip(a, active: a.id == area.id),
+              ],
+            ),
+          ),
+        SizedBox(
+          height: 70,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: kCaptureHuntOptions.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (_, i) => _huntDurationChip(
+              i,
+              locked: i >= unlocked,
+              // The tutorial's own lit control (user 2026-10-01) — only the
+              // shortest variant ever carries it, and only until the hunt it
+              // starts actually exists.
+              spotlight: i == 0 && _huntTutorial && _tutorialHunt == null,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _huntAreaChip(AreaDef a, {required bool active}) => Pressable(
+    onTap: () => setState(() => _huntAreaId = a.id),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: raisedTile(radius: 8, locked: !active),
+      child: Text(
+        '${a.emoji} Level ${romanNumeral(a.order)}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+          color: active ? kBoxInk : kBoxInkFaint,
+        ),
+      ),
+    ),
+  );
+
+  Widget _huntDurationChip(
+    int i, {
+    required bool locked,
+    bool spotlight = false,
+  }) {
+    final option = kCaptureHuntOptions[i];
+    final selected = _composerHuntOptionIndex == i;
+    final ink = locked ? kBoxInkFaint : kBoxInk;
+    return GestureDetector(
+      key: spotlight ? IntroSpotlightAnchors.of('hunt-10min-option') : null,
+      behavior: HitTestBehavior.opaque,
+      onTap: locked
+          ? null
+          : () => setState(() {
+              _composerKind = ExpeditionTargetKind.hunt;
+              _composerHuntOptionIndex = i;
+            }),
+      child: Container(
+        width: 84,
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        decoration: raisedTile(
+          radius: 10,
+          locked: locked,
+          lit: selected && !locked,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(locked ? '🔒' : '🪤', style: const TextStyle(fontSize: 16)),
+            const SizedBox(height: 3),
+            Text(
+              option.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: ink,
+              ),
+            ),
+            Text(
+              locked
+                  ? 'Locked'
+                  : '${option.finds} find${option.finds > 1 ? 's' : ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 7.5,
+                fontWeight: FontWeight.w600,
+                color: ink,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Narration alongside the spotlighted shortest-hunt tile, not a blocking
+  /// modal of its own any more (user 2026-10-01: "soll der Text Trips
+  /// gleichzeitig wie das gehighlightete Huntbutton erscheinen, d.h. tap
+  /// anywhere to continue ist nicht mehr nötig") — the player's one action
+  /// here is tapping that tile, so a SECOND tap just to dismiss this first
+  /// was a step the tutorial never needed. [IgnorePointer] lets that tap (and
+  /// everything the spotlight scrim already blocks) pass straight through;
+  /// pinned to the top-LEFT, narrower than the old centred 360px card, so it
+  /// never sits over the Hunt panel docked at the screen's own right edge.
+  Widget _tripsNarrationCard() => Positioned(
+    top: 8,
+    left: 8,
+    child: IgnorePointer(
+      child: SizedBox(
+        width: 340,
+        child: creamCard(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Trips',
+                style: FoE.title(size: 15).copyWith(color: kBoxInk),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Send monsters out to gather resources or hunt a wild one. '
+                'A spot you empty out regenerates over time, so it is worth '
+                'a return trip later.',
+                style: FoE.label(size: 12).copyWith(color: kBoxInk),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 
   /// The one thing worth saying when the settlement cannot send anything at
   /// all. A row of tiles that all refuse to open is not an explanation.
@@ -520,16 +801,6 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
     ),
   );
 
-  Widget _emptyOut() => Text(
-    'No group is out. Pick a target — gathering fills the storehouse, a '
-    'hunt brings monsters home.',
-    style: TextStyle(
-      fontSize: 10.5,
-      fontWeight: FontWeight.w600,
-      color: kBoxInkSoft,
-    ),
-  );
-
   // ── Out now ───────────────────────────────────────────────
   // A plain card in its own scrolling column now (2026-09-18 landscape
   // pass) — the [RadialTimer] dial still halves the height a trip card
@@ -540,76 +811,124 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   Widget _tripCard(Expedition e) {
     final now = DateTime.now();
     final ready = e.isReadyToCollect(now);
+    // Same art zone the targets use, coloured by what is actually out there —
+    // the resource being gathered, or the hunt violet.
+    final art = e.type == ExpeditionType.gather
+        ? _artFor((e.payload['resource'] as String?) ?? e.type.name)
+        : _kHuntGradient;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(10),
+      clipBehavior: Clip.antiAlias,
       // A raised tile on the card; READY earns the gold rim.
       decoration: raisedTile(lit: ready),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          RadialTimer(
-            value: e.progress(now),
-            emoji: e.type.emoji,
-            ready: ready,
-            size: 46,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _tripTitle(e),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                    color: Strategy.outline,
-                  ),
+      // IntrinsicHeight (2026-09-30 fix): this card sits in a ListView now
+      // (`_outNowColumn`, since the 2026-09-18 landscape pass replaced a
+      // fixed-size carousel with a plain scrolling column), which hands the
+      // Row an UNBOUNDED height — `stretch` then tries to pass that
+      // infinity straight down to its children ("BoxConstraints forces an
+      // infinite height", crashed live for a user with an expedition
+      // actually out; a QA pass with an empty `running` list never hit this
+      // branch). IntrinsicHeight gives the Row a real, finite height to
+      // stretch to instead, sized off its own content.
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 58,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(gradient: _artGradient(art)),
+              // The timer's own ring reads its colours (ink track, gold/cyan
+              // fill) against CREAM — a cream medallion behind it keeps that
+              // contrast on top of whatever the art zone's colour is, rather
+              // than recolouring the dial itself.
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  shape: BoxShape.rectangle,
+                  color: CreamPalette.tileTop,
                 ),
-                const SizedBox(height: 3),
-                PillBadge(
-                  text: ready ? 'READY' : fmtTripDuration(e.remaining(now)),
-                  color: ready ? Strategy.cyan : Strategy.outline,
+                child: RadialTimer(
+                  value: e.progress(now),
+                  emoji: e.type.emoji,
+                  ready: ready,
+                  size: 40,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _tripDetailText(e, ready),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w600,
-                    color: Strategy.outline.withValues(alpha: 0.75),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (e.type == ExpeditionType.capture && ready)
-                      _miniChip(
-                        '▶️ Play',
-                        color: Strategy.cyan,
-                        deep: Strategy.cyanDeep,
-                        onTap: () => _openEncounter(e),
-                      )
-                    else if (!ready)
-                      _skipChip(e),
-                    const SizedBox(width: 4),
-                    _miniChip(
-                      '✕',
-                      color: Strategy.coral,
-                      deep: Strategy.coralDeep,
-                      onTap: () => _confirmCancel(e),
+                    Text(
+                      _tripTitle(e),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        color: Strategy.outline,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    PillBadge(
+                      text: ready
+                          ? 'READY'
+                          : e.isStepGated
+                          ? '${e.stepsWalked}/${e.stepsTarget} Schritte'
+                          : fmtTripDuration(e.remaining(now)),
+                      color: ready ? Strategy.cyan : Strategy.outline,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _tripDetailText(e, ready),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: Strategy.outline.withValues(alpha: 0.75),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        if (e.type == ExpeditionType.capture && ready)
+                          _miniChip(
+                            '▶️ Play',
+                            color: Strategy.cyan,
+                            deep: Strategy.cyanDeep,
+                            onTap: () => _openEncounter(e),
+                          )
+                        else if (!ready)
+                          // The tutorial's own second lit control, once this
+                          // IS that hunt (user 2026-10-01) — see
+                          // [_tutorialHunt]'s own doc comment.
+                          _tutorialHunt?.id == e.id
+                              ? KeyedSubtree(
+                                  key: IntroSpotlightAnchors.of(
+                                    'hunt-skip-gold',
+                                  ),
+                                  child: _skipChip(e),
+                                )
+                              : _skipChip(e),
+                        const SizedBox(width: 4),
+                        _miniChip(
+                          '✕',
+                          color: Strategy.coral,
+                          deep: Strategy.coralDeep,
+                          onTap: () => _confirmCancel(e),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -664,196 +983,6 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
               : '🪤 Something took the bait — '
                     '$total encounter${total > 1 ? 's' : ''} await!')
         : '🪤 Tracking… ($total find${total > 1 ? 's' : ''} ahead)';
-  }
-
-  // ── Targets ───────────────────────────────────────────────
-  // Grouped into per-region RAILS — a header naming the region, a
-  // horizontally-scrolling row of its own spots — stacked vertically in
-  // the right-hand column now that "out now" has its own column beside it.
-  Widget _regionRail(AreaDef area, List<ExpeditionTarget> targets) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 2, bottom: 6),
-          child: Row(
-            children: [
-              Text(area.emoji, style: const TextStyle(fontSize: 13)),
-              const SizedBox(width: 6),
-              Text(
-                area.name,
-                style: TextStyle(
-                  color: kBoxAccent,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: _tileH,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: targets.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (context, i) => SizedBox(
-              width: _tileW,
-              child: _targetCard(
-                targets[i],
-                busy: _busySpotIds.contains(targets[i].spot?.id),
-              ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _targetCard(ExpeditionTarget t, {required bool busy}) {
-    final spot = t.spot;
-    final stock = spot == null ? 0.0 : _ctrl.availableStock(spot);
-    final dials = spot == null ? null : gatherDefFor(spot.resource);
-    final full = _ctrl.slotsFull;
-    // A depleted spot is shown, not hidden: it regrows, and knowing WHICH rock
-    // is empty is what makes the regen rate meaningful.
-    final empty = spot != null && stock < 1;
-    final blocked = full || busy || empty;
-    // WHY it is blocked, on the card. It used to take a tap to find out, which
-    // meant tapping every dead tile in turn to learn the same thing.
-    final reason = busy
-        ? 'Working'
-        : empty
-        ? 'Mined out'
-        : full
-        ? (_ctrl.noSlots ? 'Needs a Scout Post' : 'Slots full')
-        : null;
-
-    final title = t.isHunt ? 'Hunt' : resourceName(spot!.resource);
-    final ink = blocked ? kBoxInkFaint : kBoxInk;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _openTarget(t, busy: busy, empty: empty, full: full),
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        // The same raised tile as a trip; greyed when it cannot be used.
-        decoration: raisedTile(locked: blocked, radius: 14),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(7, 7, 7, 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Opacity(
-                      opacity: blocked ? 0.5 : 1,
-                      child: Text(
-                        t.emoji,
-                        style: const TextStyle(fontSize: 32),
-                      ),
-                    ),
-                    if (blocked)
-                      const Positioned(
-                        bottom: 0,
-                        child: Text('🔒', style: TextStyle(fontSize: 14)),
-                      ),
-                    if (spot != null)
-                      Positioned(
-                        top: -2,
-                        right: -2,
-                        child: PillBadge(
-                          text: stock.toStringAsFixed(0),
-                          color: blocked ? Strategy.locked : Strategy.gold,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: ink,
-                ),
-              ),
-              const SizedBox(height: 3),
-              if (reason != null)
-                Text(
-                  reason,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w600,
-                    color: ink,
-                  ),
-                )
-              else if (dials != null)
-                ChunkyBar(
-                  value: dials.spotCapacity <= 0
-                      ? 0
-                      : (stock / dials.spotCapacity).clamp(0.0, 1.0),
-                  color: Strategy.gold,
-                  height: 6,
-                )
-              else
-                Text(
-                  'By hand',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w600,
-                    color: ink,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openTarget(
-    ExpeditionTarget t, {
-    required bool busy,
-    required bool empty,
-    required bool full,
-  }) async {
-    // The tile already says WHY (see `reason` above); the tap repeats it as a
-    // snackbar for the case where the caption was scrolled past.
-    if (busy) {
-      context.snack('A group is already working this spot.');
-      return;
-    }
-    if (empty) {
-      context.snack('This spot is mined out — it regrows over time.');
-      return;
-    }
-    if (full) {
-      // "All 0 slots are busy" is not an answer (user 2026-07-29): with no
-      // Scout Post there is no party to recall, so the tile names the building
-      // instead of blaming an imaginary queue.
-      context.snack(
-        _ctrl.noSlots
-            ? 'No expedition slots — build a Scout Post to open them.'
-            : 'All ${_ctrl.maxSlots} expedition slots are busy. Recall one, '
-                  'or wait.',
-      );
-      return;
-    }
-    final sent = await showExpeditionLaunchSheet(context, t);
-    if (!mounted) return;
-    if (sent == true) context.snack('Off they go!');
-    setState(() {});
   }
 
   // ── Actions ───────────────────────────────────────────────

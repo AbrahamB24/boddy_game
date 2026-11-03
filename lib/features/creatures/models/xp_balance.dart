@@ -67,7 +67,16 @@ class XpConfig {
     // level. At 1.3 the reward grows far slower than the requirement, so
     // levelling stays a climb rather than a snowball, and a boss is worth 3
     // normal kills instead of 6.
-    this.killExponent = 1.3,
+    //
+    // Raised to 1.8 on 2026-11-02 (balance pass). A campaign probe that
+    // clears every path battle once, XP split across the party, showed the
+    // team falling ever further behind its enemies at 1.3: ~7 levels under
+    // at the end of region 2, ~18 under in region 3 — fights cost 60–85 % HP
+    // and the auto-battle started losing. Battles 1–10 come out identical;
+    // at 1.8 a team that only fights the path sits ~2 levels under at battle
+    // 30 and ~11 under at 57, the rest coming from hunts and training. Still
+    // a climb (kills per level keep growing as L^0.7), not a snowball.
+    this.killExponent = 1.8,
     this.bossMultiplier = 3.0,
   });
 

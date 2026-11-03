@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/snack.dart';
+import '../onboarding/intro_flow.dart';
+import '../onboarding/intro_spotlight.dart';
 import '../settlement/data/goods_definitions.dart';
 import '../settlement/settlement_controller.dart';
 import '../social/widgets/social_kit.dart';
@@ -12,7 +14,8 @@ import 'models/creature_instance.dart';
 import 'services/creatures_controller.dart';
 import 'services/healing_cost.dart';
 import 'widgets/creature_family.dart';
-import 'widgets/slot_kit.dart';
+import 'widgets/slot_kit.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 /// The Healing Hut (user 2026-09-20, "Variante 2, Slot-Karten").
 ///
@@ -124,6 +127,15 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
   static String _hp(CreatureInstance c) =>
       c.isKo ? 'K.O. · HP 0/${c.maxHp}' : 'HP ${c.hp}/${c.maxHp}';
 
+  /// The tutorial's own step for this screen (user 2026-09-30: "Nur Healing
+  /// Button anwählbar, sonst alles ausgegraut" — only the one wounded
+  /// starter's Heal button is lit; Heal All, the free beds and the skip-
+  /// with-gold pills are all dead until it is tapped). Only ever true while
+  /// the starter is still hurt, which — this being right after the
+  /// tutorial's first and only fight so far — is also the only creature
+  /// [_waiting] can contain.
+  bool get _isHealTutorial => _ctrl.introStep == IntroStep.healStarter;
+
   // ── The page ──────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -134,25 +146,70 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
       final waiting = _waiting;
       final cap = _ctrl.healCapacity;
       final qCap = _ctrl.healQueueCapacity;
-      return MenuScaffold(
-        title: 'Healing Hut',
-        trailing: _readout(treating.length, cap, queued.length, qCap),
-        child: SlotFamilyLayout(
-          slots: [
-            for (final c in treating) _bedCard(c),
-            ..._freeBeds(cap, treating.length, waiting.isNotEmpty),
-          ],
-          line: _line(queued, qCap),
-          tilesTitle: 'Wounded · ${waiting.length}',
-          tilesTrailing: waiting.isEmpty ? null : _healAll(waiting),
-          tiles: [for (final c in waiting) _tile(c)],
-          whenNoTiles: slotEmptyNote(
-            treating.isEmpty && queued.isEmpty
-                ? 'Everyone is at full health.'
-                : 'Everyone hurt is in the hut or in line.',
-            'Wounded monsters turn up here after a fight.',
+      final tutorialWaiting = _isHealTutorial && waiting.isNotEmpty;
+      // Once the tap on Heal moves the starter out of [_waiting] and into
+      // [_inTreatment] (user 2026-09-30: "Sobald das Monster angewählt
+      // wird, kommt es nach oben und erneut soll ich es mit Gold
+      // beschleunigen") — the bed card's own skip-with-gold pill is the
+      // exact same "Finish now" mechanic the construction site taught, so
+      // this just points at it rather than inventing a second one.
+      final tutorialTreating = _isHealTutorial && treating.isNotEmpty;
+      return Stack(
+        children: [
+          MenuScaffold(
+            title: 'Healing Hut',
+            trailing: _readout(treating.length, cap, queued.length, qCap),
+            child: SlotFamilyLayout(
+              slots: [
+                for (var i = 0; i < treating.length; i++)
+                  tutorialTreating && i == 0
+                      ? KeyedSubtree(
+                          key: IntroSpotlightAnchors.of('healinghut-skip'),
+                          child: _bedCard(treating[i]),
+                        )
+                      : _bedCard(treating[i]),
+                ..._freeBeds(cap, treating.length, waiting.isNotEmpty),
+              ],
+              line: _line(queued, qCap),
+              tilesTitle: 'Wounded · ${waiting.length}',
+              tilesTrailing: waiting.isEmpty ? null : _healAll(waiting),
+              tiles: [
+                for (var i = 0; i < waiting.length; i++)
+                  tutorialWaiting && i == 0
+                      ? KeyedSubtree(
+                          key: IntroSpotlightAnchors.of('healinghut-heal'),
+                          child: _tile(waiting[i]),
+                        )
+                      : _tile(waiting[i]),
+              ],
+              whenNoTiles: slotEmptyNote(
+                treating.isEmpty && queued.isEmpty
+                    ? 'Everyone is at full health.'
+                    : 'Everyone hurt is in the hut or in line.',
+                'Wounded monsters turn up here after a fight.',
+              ),
+            ),
           ),
-        ),
+          // Sibling of MenuScaffold, not nested in its `child` (same fix as
+          // battle_prep_screen.dart's tutorial overlays, user 2026-10-01:
+          // "hier auch" — nested, the dim only reached MenuScaffold's
+          // content slot, leaving the "Healing Hut" title/readout header and
+          // its hairline undimmed). Healing always costs resources (user
+          // 2026-09-30: "erklären, dass Healing immer Ressourcen
+          // verbraucht") — named here rather than only in the intro card,
+          // right where the cost (see [_tile]'s own note line) is on screen
+          // to point at.
+          if (tutorialWaiting)
+            const IntroSpotlightOverlay(
+              anchorName: 'healinghut-heal',
+              hint: 'Healing always costs resources.',
+            ),
+          if (!tutorialWaiting && tutorialTreating)
+            const IntroSpotlightOverlay(
+              anchorName: 'healinghut-skip',
+              hint: 'Gold speeds this up too — finish it instantly.',
+            ),
+        ],
       );
     },
   );
@@ -161,7 +218,7 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
     decoration: BoxDecoration(
       color: CreamPalette.tan.withValues(alpha: 0.18),
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: vr(9),
     ),
     child: Text(
       '${cap == null ? treating : '$treating/${cap < treating ? treating : cap}'}'
@@ -272,11 +329,13 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
       // lines up into figures you can compare.
       note: '${_goodsLabel(cost)} · ⏱ ${_fmt(_durationOf(c))}',
       noteWarn: !affordable && !queueing,
+      // "Heal", not "Treat" (user 2026-09-30, same rename as the intro
+      // card's own CTA for this step).
       actionLabel: lineFull
           ? 'Full'
           : queueing
           ? 'Line up'
-          : 'Treat',
+          : 'Heal',
       onAction: live
           ? () => _run(key, () => _creatures.queueForHealing(c))
           : null,

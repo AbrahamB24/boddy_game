@@ -11,6 +11,8 @@ import 'services/messages_service.dart';
 import 'social_actions.dart';
 import 'social_controller.dart';
 import 'widgets/social_kit.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 /// The right half of the Messenger layout: one friend's conversation, with
 /// Visit and Challenge in its header. A friend's open PvP business (a
@@ -285,14 +287,14 @@ class _ChatPaneState extends State<ChatPane> {
       margin: const EdgeInsets.only(top: 6, bottom: 6),
       padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: vr(12),
         color: CreamPalette.gold.withValues(alpha: 0.34),
         border: Border.all(color: CreamPalette.goldDeep),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          const PixelIcon(
             Icons.sports_martial_arts,
             size: 16,
             color: CreamPalette.accent,
@@ -319,7 +321,7 @@ class _ChatPaneState extends State<ChatPane> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
         decoration: BoxDecoration(
           color: CreamPalette.tan.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: vr(8),
         ),
         child: Text(
           _dayLabel(day),
@@ -391,7 +393,7 @@ class _ChatPaneState extends State<ChatPane> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: CreamPalette.tan.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: vr(12),
             ),
             child: TextField(
               controller: _inputCtrl,

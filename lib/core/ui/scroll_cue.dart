@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/cream_kit.dart';
+import '../theme/voxel_kit.dart' show vr;
 
 /// A scrolling area that SAYS when there is more (user 2026-09-22, the fight
 /// card's rewards: "Reward muss ausklappbar sein oder irgendwie signalisieren,
@@ -120,7 +121,7 @@ class _ScrollCueState extends State<ScrollCue> {
                   ),
                   decoration: BoxDecoration(
                     color: CreamPalette.gold,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: vr(10),
                     boxShadow: [
                       BoxShadow(
                         color: CreamPalette.goldDeep,

@@ -22,6 +22,7 @@ import '../data/resource_icons.dart';
 import '../services/game_defs_controller.dart';
 import 'dev_theme.dart';
 import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 // Create/edit one battle NODE on the linear path (user 2026-07-25). Same
 // trusted-single-author dev pattern as AreaDefForm; saved to Supabase
@@ -472,7 +473,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
             ),
           ),
           IconButton(
-            icon: const Icon(
+            icon: const PixelIcon(
               Icons.remove_circle_outline,
               color: Colors.redAccent,
             ),
@@ -528,7 +529,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
           actions: [
             if (!_isNew)
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                icon: const PixelIcon(Icons.delete_outline, color: Colors.redAccent),
                 onPressed: _delete,
               ),
           ],
@@ -847,7 +848,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
           ),
         ),
         IconButton(
-          icon: const Icon(
+          icon: const PixelIcon(
             Icons.remove_circle_outline,
             color: Colors.redAccent,
           ),
@@ -921,7 +922,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
             ),
           ),
           IconButton(
-            icon: const Icon(
+            icon: const PixelIcon(
               Icons.remove_circle_outline,
               color: Colors.redAccent,
             ),
@@ -1037,7 +1038,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
             hintText:
                 'Search buildings… '
                 '(${selected.length + rest.length} of ${all.length})',
-            prefixIcon: const Icon(Icons.search, color: FoE.gold, size: 18),
+            prefixIcon: const PixelIcon(Icons.search, color: FoE.gold, size: 18),
             isDense: true,
           ),
           onChanged: (v) => setState(() => _buildingFilter = v),
@@ -1114,7 +1115,7 @@ class _PathNodeFormState extends State<PathNodeForm> {
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(
             children: [
-              Icon(
+              PixelIcon(
                 value ? Icons.check_box : Icons.check_box_outline_blank,
                 color: value ? FoE.gold : FoE.textDim,
               ),

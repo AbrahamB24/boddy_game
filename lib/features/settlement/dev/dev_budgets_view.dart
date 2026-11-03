@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/cream_kit.dart';
 import '../../creatures/models/creature_enums.dart';
 import '../../creatures/models/species_balance.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
 
 /// BUDGETS & LIMITS, TO READ (user 2026-09-20: "das genau gleiche bei Budgets und
 /// Grenzen" — shown with an explanation, changes by request).
@@ -114,7 +115,7 @@ class DevBudgetsView extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: CreamPalette.tan.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: vr(10),
             ),
             child: Text(
               'Zum Ändern: sag mir, welche Zahl und auf welchen Wert — ich '
@@ -290,7 +291,7 @@ class DevBudgetsView extends StatelessWidget {
               color: r.index.isEven
                   ? CreamPalette.tan.withValues(alpha: 0.10)
                   : null,
-              borderRadius: BorderRadius.circular(7),
+              borderRadius: vr(7),
             ),
             child: Row(
               children: [

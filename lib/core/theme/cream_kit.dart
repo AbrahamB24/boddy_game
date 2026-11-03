@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../ui/pressable.dart';
+import 'fachwerk.dart';
 import 'strategy_theme.dart';
+import 'voxel_kit.dart';
+import 'voxel_icons.dart';
 
 // ── The cream kit: the building detail dialog's look, as shared parts ──────
 //
@@ -27,90 +30,138 @@ import 'strategy_theme.dart';
 /// colour worlds for the building detail redesign): sand-coloured paper, leather
 /// tan, dark-brown ink, amber buttons, a brown ground. Everything in this file
 /// reads these, so a screen built from the kit recolours by editing here.
+///
+/// FACHWERK (user 2026-11-02, matching the new rendered buildings): the
+/// paper is the houses' pale PLASTER now (less yellow than the old sand),
+/// lines and shadows are TIMBER (red-brown, not leather tan), headings take
+/// the dark of a roof tile, and the ground is a timber beam in shade. Gold
+/// stays — it is the lit windows and the ridge finial.
 abstract final class CreamPalette {
-  static const Color paperTop = Color(0xFFF6E7CC);
-  static const Color paperBottom = Color(0xFFE2C9A0);
+  static const Color paperTop = Color(0xFF1F4E63);
+  static const Color paperBottom = Color(0xFF1B4558);
 
-  /// Lines, the iso grid, dashed seats.
-  static const Color tan = Color(0xFF9C6B3E);
+  /// Lines, dashed seats — light timber.
+  static const Color tan = Color(0xFF4C8CA6);
 
-  /// The hard shadow under a card or tile.
-  static const Color tanShadow = Color(0xFF7C532C);
+  /// The hard shadow under a card or tile — timber in shade.
+  static const Color tanShadow = Color(0xFF0A2029);
 
-  /// Headings on a card.
-  static const Color accent = Color(0xFF5A3A1B);
-  static const Color ink = Color(0xFF2A1A0C);
+  /// Headings on a card — a shaded roof tile.
+  static const Color accent = Color(0xFF7FD6E8);
+  static const Color ink = Color(0xFF08222B);
 
-  /// The one button colour, and the shade its hard shadow falls in.
-  static const Color gold = Color(0xFFF5B83A);
-  static const Color goldDeep = Color(0xFFC98A10);
+  /// The one button colour (a lit window), and the shade its hard shadow
+  /// falls in.
+  static const Color gold = Color(0xFF3FD0D0);
+  static const Color goldDeep = Color(0xFF1C8C8C);
 
-  /// A raised tile standing on a card.
-  static const Color tileTop = Color(0xFFFCF2DE);
-  static const Color tileBottom = Color(0xFFEBD5AE);
+  /// A raised tile standing on a card — fresh plaster.
+  static const Color tileTop = Color(0xFF2C6A80);
+  static const Color tileBottom = Color(0xFF265C70);
 
   /// The menu ground and the tint dimming the map behind a dialog.
-  static const Color groundTop = Color(0xFF5C3B22);
-  static const Color groundBottom = Color(0xFF2A1A0C);
-  static const Color dim = Color(0x9E2A1A0C);
+  static const Color groundTop = Color(0xFF1E5266);
+  static const Color groundBottom = Color(0xFF0E2530);
+  static const Color dim = Color(0x9E0E2530);
 
   /// A locked seat.
-  static const Color lockedTop = Color(0xFFDCCDB5);
-  static const Color lockedBottom = Color(0xFFC9B79B);
-  static const Color lockedShadow = Color(0xFFA69577);
+  static const Color lockedTop = Color(0xFF2E5367);
+  static const Color lockedBottom = Color(0xFF28485A);
+  static const Color lockedShadow = Color(0xFF1A3442);
 
-  /// "Gets better" — the upgrade deltas.
-  static const Color better = Color(0xFF2E7D4F);
+  /// "Gets better" — the upgrade deltas. The lawn's shaded green.
+  static const Color better = Color(0xFF4AE08F);
 
   /// A warning ON paper — what you are short of, MAX, QUEUE. [FoE.danger] is
   /// the light coral for dark grounds; on cream it is too faint to read.
-  static const Color warn = Color(0xFFB4531F);
+  static const Color warn = Color(0xFFFF8A5C);
 }
 
 /// Ink on the cards, in three weights, plus a deep brown for headings
 /// ("Production", "Storage").
-const Color kBoxInk = CreamPalette.ink;
-final Color kBoxInkSoft = CreamPalette.ink.withValues(alpha: 0.78);
-final Color kBoxInkFaint = CreamPalette.ink.withValues(alpha: 0.5);
+// NACHT (2026-11-03): the cards are dark now, so ink ON THEM is light. [CreamPalette.ink]
+// stays the dark navy that goes on the orange buttons.
+const Color kBoxInk = Color(0xFFEAF4F8);
+// Voxel pass (2026-11-03): a pixel face has thin strokes, so ink that was fine
+// for a smooth face at 78 % / 50 % is too faint now. Raised to read at 11-12 px.
+final Color kBoxInkSoft = kBoxInk.withValues(alpha: 0.86);
+final Color kBoxInkFaint = kBoxInk.withValues(alpha: 0.6);
 const Color kBoxAccent = CreamPalette.accent;
 
+/// Which texture [_CreamPatternPainter] draws (user 2026-09-30, picked from
+/// ten background proposals to replace the diamond lattice — "lieber gar
+/// kein Muster, sondern nur den Farbverlauf", then "direkt auf die gesamte
+/// app übernehmen. Nur beim Baumenü nicht, dort die Vierecke behalten"):
+/// [none] — just the paper gradient and the corner glow — is the app-wide
+/// default now; [diamond] (the map's own iso grid, faint) is kept ONLY for
+/// the build menu's own cards (`building_carousel.dart`), the one place the
+/// user asked to leave alone.
+enum CreamPatternStyle { none, diamond }
+
 /// The card surface. Still the build menu's cream and tan — but not a flat fill:
-/// a warm gradient from paper to sand, the map's own ISOMETRIC GRID showing
-/// faintly through it, and a thin inner frame, so it reads as a printed plate
-/// rather than a white rectangle. Drawn by [_CreamPatternPainter], which does its
-/// own rounded clipping — a ClipRRect here would cut off art that rises out of a
-/// card's top edge.
+/// a warm gradient from paper to sand, a faint background texture (see
+/// [CreamPatternStyle]) showing through it, and a thin inner frame, so it
+/// reads as a printed plate rather than a white rectangle. Drawn by
+/// [_CreamPatternPainter], which does its own rounded clipping — a ClipRRect
+/// here would cut off art that rises out of a card's top edge.
 Widget creamCard({
   required Widget child,
   EdgeInsetsGeometry padding = EdgeInsets.zero,
   Color? deep,
+  CreamPatternStyle pattern = CreamPatternStyle.none,
 
   /// A control laid on the card's top-right corner — the dialog's
   /// [KitCloseButton] (user 2026-09-22: one leaving button, always there).
   Widget? corner,
+
+  /// A TIMBER FRAME round the card (Fachwerk, 2026-11-02) — for a main
+  /// surface: a menu screen, a dialog. Inner cards leave it off, or a page
+  /// would be beams inside beams.
+  bool framed = false,
+
+  /// A course of ROOF TILES along the top edge, inside the frame — the
+  /// "roof" over a screen's or dialog's title. The child is pushed down by
+  /// [kRoofHeight] to make room for it.
+  bool roof = false,
 }) => _withCorner(
   corner,
+  // VOXEL (2026-11-03): one flat sheet of paper, cut at the corners in whole
+  // blocks, with a bevel, a dark outline and a hard shadow underneath. A framed
+  // card (a screen, a dialog) gets the heavier outline instead of the old
+  // timber beam and roof tiles.
   Container(
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [CreamPalette.paperTop, CreamPalette.paperBottom],
+    decoration: ShapeDecoration(
+      color: CreamPalette.paperTop,
+      shape: VoxelShape(notch: framed ? 3 : 2, lines: framed ? 2 : 1),
+      shadows: voxelDrop(
+        depth: framed ? 4 : 3,
+        color: deep ?? CreamPalette.tanShadow,
       ),
-      borderRadius: BorderRadius.circular(14),
-      boxShadow: [
-        BoxShadow(
-          color: deep ?? CreamPalette.tanShadow,
-          offset: const Offset(0, 3),
-        ),
-      ],
     ),
-    child: CustomPaint(
-      painter: const _CreamPatternPainter(),
-      child: Padding(padding: padding, child: child),
-    ),
+    child: pattern == CreamPatternStyle.diamond
+        ? CustomPaint(
+            painter: const _CreamPatternPainter(
+              radius: 2,
+              frame: false,
+              pattern: CreamPatternStyle.diamond,
+            ),
+            child: Padding(
+              padding: padding,
+              child: child,
+            ),
+          )
+        : Padding(
+            padding: padding,
+            child: child,
+          ),
   ),
 );
+
+/// The beam width of a framed [creamCard].
+const double kTimberWidth = 4;
+
+/// The height of the roof-tile course a roofed [creamCard] wears.
+const double kRoofHeight = 0;
 
 Widget _withCorner(Widget? corner, Widget card) => corner == null
     ? card
@@ -122,10 +173,17 @@ Widget _withCorner(Widget? corner, Widget card) => corner == null
       );
 
 class _CreamPatternPainter extends CustomPainter {
-  const _CreamPatternPainter({this.radius = 14, this.frame = true});
+  const _CreamPatternPainter({
+    this.radius = 14,
+    this.frame = true,
+    this.pattern = CreamPatternStyle.none,
+  });
 
   final double radius;
   final bool frame;
+  final CreamPatternStyle pattern;
+  final bool timber = false;
+  final bool roof = false;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -136,18 +194,9 @@ class _CreamPatternPainter extends CustomPainter {
     canvas.save();
     canvas.clipRRect(card);
 
-    // The iso grid: two families of 2:1 diagonals, the slope every cell on the
-    // settlement map has. Faint enough that the ink on top never fights it.
-    final grid = Paint()
-      ..color = CreamPalette.tan.withValues(alpha: 0.14)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-    const step = 28.0;
-    final h = size.height;
-    for (var x = -2 * h; x <= size.width + 2 * h; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x + 2 * h, h), grid); // down-right
-      canvas.drawLine(Offset(x, 0), Offset(x - 2 * h, h), grid); // down-left
-    }
+    if (pattern == CreamPatternStyle.diamond) _paintDiamond(canvas, size);
+    // Plaster grain (Fachwerk, 2026-11-02).
+    paintPlaster(canvas, Offset.zero & size);
 
     // A warm glow in the top-left corner, where the light comes from.
     canvas.drawRect(
@@ -159,22 +208,53 @@ class _CreamPatternPainter extends CustomPainter {
           colors: [Color(0x33FFFFFF), Color(0x00FFFFFF)],
         ).createShader(Offset.zero & size),
     );
+    if (roof) {
+      final inset = timber ? kTimberWidth : 0.0;
+      paintRoofTiles(
+        canvas,
+        Rect.fromLTWH(inset, inset, size.width - 2 * inset, kRoofHeight),
+        tileWidth: 22,
+      );
+    }
     canvas.restore();
 
+    if (timber) {
+      paintTimberFrame(canvas, card, width: kTimberWidth);
+      return;
+    }
     if (!frame) return;
-    // The inner frame.
+    // The inner frame — a thin timber line, like a beam seen edge-on.
     canvas.drawRRect(
       card.deflate(3),
       Paint()
-        ..color = CreamPalette.tan.withValues(alpha: 0.38)
+        ..color = CreamPalette.tan.withValues(alpha: 0.32)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
   }
 
+  // The iso grid: two families of 2:1 diagonals, the slope every cell on the
+  // settlement map has. Faint enough that the ink on top never fights it.
+  void _paintDiamond(Canvas canvas, Size size) {
+    final grid = Paint()
+      ..color = CreamPalette.tan.withValues(alpha: 0.14)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    const step = 28.0;
+    final h = size.height;
+    for (var x = -2 * h; x <= size.width + 2 * h; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x + 2 * h, h), grid); // down-right
+      canvas.drawLine(Offset(x, 0), Offset(x - 2 * h, h), grid); // down-left
+    }
+  }
+
   @override
   bool shouldRepaint(covariant _CreamPatternPainter old) =>
-      old.radius != radius || old.frame != frame;
+      old.radius != radius ||
+      old.frame != frame ||
+      old.pattern != pattern ||
+      old.timber != timber ||
+      old.roof != roof;
 }
 
 /// One grouped block: a titled [creamCard]. Grouping is what turns a long run of
@@ -203,15 +283,14 @@ Widget sectionCard({
         Row(
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 15, color: kBoxAccent),
+              PixelIcon(icon, size: 15, color: kBoxAccent),
               const SizedBox(width: 6),
             ],
             Text(
               title.toUpperCase(),
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.1,
+                letterSpacing: 1.0,
                 color: kBoxAccent,
               ),
             ),
@@ -220,12 +299,101 @@ Widget sectionCard({
           ],
         ),
         const SizedBox(height: 6),
-        Container(height: 1, color: CreamPalette.tan.withValues(alpha: 0.55)),
+        Container(height: 2, color: CreamPalette.tan.withValues(alpha: 0.6)),
         const SizedBox(height: 10),
       ],
       if (expand) Expanded(child: child) else child,
     ],
   ),
+);
+
+// ── One page, not several boxes ─────────────────────────────────────────────
+//
+// User 2026-09-29, looking at a screen built of two/three stacked
+// [sectionCard]s (Management: "OUT NOW" card beside a "TARGETS" card): "ich
+// möchte bei den Menüs nicht, dass es unterschiedliche Boxen sind... diese
+// sollen eine volle Seite ausmachen." The rule that followed, picked from ten
+// mockups: "Trennlinien und Zonen gemischt. Bei deutlich unterschiedlichen
+// Gebieten eine Zone machen zum Abheben, sonst nur eine Trennlinie oder gar
+// nichts." — applied app-wide to every screen that used to stack several
+// [sectionCard]s in one body.
+//
+// So a screen with several facets now builds ONE [pageCard] (the title card
+// stays separate — that is chrome, not a content "Gebiet") and lays its
+// facets out with [sectionLabel] headings, reaching for [zoneBox] only where
+// two facets are genuinely different SYSTEMS (gather vs Hunt, what's out vs
+// where you can go), [hairline]/[vHairline] where they are just two halves of
+// the same list, and neither when the heading and the spacing already say
+// enough on their own.
+
+/// The one surface a multi-facet menu body stands on, replacing what used to
+/// be several separate [sectionCard]s. Compose its [child] from
+/// [sectionLabel], [zoneBox], [hairline] and [vHairline] — never nest another
+/// [creamCard] inside it, or the "several boxes" look is right back.
+Widget pageCard({
+  required Widget child,
+  EdgeInsetsGeometry padding = const EdgeInsets.fromLTRB(14, 11, 14, 14),
+  bool framed = false,
+}) => creamCard(padding: padding, framed: framed, child: child);
+
+/// A facet's heading with no card of its own — the surface comes from the
+/// enclosing [pageCard]. The same glyph/capitals/[trailing] row
+/// [sectionCard] used to draw above its hairline.
+Widget sectionLabel(String title, {IconData? icon, Widget? trailing}) => Row(
+  children: [
+    if (icon != null) ...[
+      PixelIcon(icon, size: 15, color: kBoxAccent),
+      const SizedBox(width: 6),
+    ],
+    Text(
+      title.toUpperCase(),
+      style: TextStyle(
+        fontSize: 11,
+        letterSpacing: 1.0,
+        color: kBoxAccent,
+      ),
+    ),
+    const Spacer(),
+    if (trailing != null) trailing,
+  ],
+);
+
+/// A thin rule — the ONLY separator between two facets that are different
+/// halves of the same thing (not different "Gebiete"; those get [zoneBox]
+/// instead). Stacks two facets in a [Column].
+Widget hairline({double gap = 10}) => Padding(
+  padding: EdgeInsets.symmetric(vertical: gap),
+  child: Container(height: 2, color: CreamPalette.tan.withValues(alpha: 0.6)),
+);
+
+/// [hairline]'s vertical twin, for two facets sitting side by side in a
+/// [Row].
+Widget vHairline({double gap = 12}) => Padding(
+  padding: EdgeInsets.symmetric(horizontal: gap),
+  child: Container(width: 2, color: CreamPalette.tan.withValues(alpha: 0.6)),
+);
+
+/// A tonal zone — for a facet that is a genuinely different SYSTEM from its
+/// neighbour, not just another entry in the same list (Hunt beside the
+/// gather targets; "out now" beside "where you can go"). A tint plus a thin
+/// edge, no shadow, so it reads as a region of the same sheet rather than a
+/// card sitting on top of it — but a visible one (user 2026-09-30: "diese
+/// etwas dunkleren Boxen fallen fast nicht auf" — the original 8%-alpha fill
+/// alone was too close to the paper behind it to register as its own zone).
+Widget zoneBox({
+  required Widget child,
+  EdgeInsetsGeometry padding = const EdgeInsets.all(8),
+  Color? tint,
+}) => Container(
+  padding: padding,
+  decoration: BoxDecoration(
+    color: tint ?? CreamPalette.tan.withValues(alpha: 0.18),
+    borderRadius: vr(12),
+    // (No shadow ring here: the fill is translucent and a ring behind it would
+    // show through as mud.)
+    border: Border.all(color: CreamPalette.tan.withValues(alpha: 0.9)),
+  ),
+  child: child,
 );
 
 /// A small light tile standing on a [creamCard] — lighter than the card, with a
@@ -236,18 +404,21 @@ BoxDecoration raisedTile({
   bool locked = false,
   double radius = 12,
 }) => BoxDecoration(
-  gradient: LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: locked
-        ? const [CreamPalette.lockedTop, CreamPalette.lockedBottom]
-        : const [CreamPalette.tileTop, CreamPalette.tileBottom],
+  // One flat tone, a two-pixel outline and a hard slab of shadow: a block
+  // standing on the card.
+  color: locked ? CreamPalette.lockedTop : CreamPalette.tileTop,
+  borderRadius: vr(radius),
+  border: Border.all(
+    color: lit ? CreamPalette.goldDeep : CreamPalette.tan.withValues(alpha: 0.5),
   ),
-  borderRadius: BorderRadius.circular(radius),
-  border: lit ? Border.all(color: CreamPalette.gold, width: 2) : null,
   boxShadow: [
     BoxShadow(
-      color: lit ? CreamPalette.goldDeep : CreamPalette.tanShadow,
+      color: lit ? CreamPalette.goldDeep : Voxel.outline.withValues(alpha: 0.8),
+      spreadRadius: 1.5,
+      blurRadius: 0,
+    ),
+    BoxShadow(
+      color: lit ? CreamPalette.gold : CreamPalette.tanShadow,
       offset: const Offset(0, 3),
     ),
   ],
@@ -264,7 +435,7 @@ BoxDecoration goldButton({bool active = true}) => chunkyDecoration(
 );
 
 Color goldButtonInk({bool active = true}) =>
-    active ? CreamPalette.ink : CreamPalette.ink.withValues(alpha: 0.5);
+    active ? CreamPalette.ink : kBoxInk.withValues(alpha: 0.6);
 
 // ── Full-screen menus ───────────────────────────────────────────────────────
 
@@ -315,6 +486,13 @@ class MenuScaffold extends StatelessWidget {
   final bool showClose;
   final VoidCallback? onClose;
 
+  /// Drops the title row (and its close button) and the hairline under it
+  /// entirely, handing [child] the whole card — for a screen with nothing to
+  /// call itself or go back from (the empty-collection starter pick: there is
+  /// no "Monsters" count worth showing before the first one exists, and
+  /// nowhere earlier to close back to until it's chosen).
+  final bool showHeader;
+
   /// Whether the button reads BACK (an arrow) instead of CLOSE (a cross). Null =
   /// worked out: a menu opened over another menu goes back, a menu opened from
   /// the map closes. See [KitCloseButton].
@@ -323,6 +501,13 @@ class MenuScaffold extends StatelessWidget {
   /// Passed straight to the [Scaffold].
   final Widget? floatingActionButton;
 
+  /// The screen's background texture — [CreamPatternStyle.none] (just the
+  /// paper gradient) app-wide by default (user 2026-09-30); only the build
+  /// menu's own cards keep [CreamPatternStyle.diamond] — see
+  /// `building_carousel.dart`, which sets it directly rather than through a
+  /// [MenuScaffold].
+  final CreamPatternStyle pattern;
+
   const MenuScaffold({
     super.key,
     required this.title,
@@ -330,9 +515,11 @@ class MenuScaffold extends StatelessWidget {
     this.trailing,
     this.maxWidth = 960,
     this.showClose = true,
+    this.showHeader = true,
     this.onClose,
     this.back,
     this.floatingActionButton,
+    this.pattern = CreamPatternStyle.none,
   });
 
   @override
@@ -340,20 +527,38 @@ class MenuScaffold extends StatelessWidget {
     builder: (nested) => Scaffold(
       backgroundColor: CreamPalette.groundBottom,
       floatingActionButton: floatingActionButton,
-      body: DecoratedBox(
-        decoration: const BoxDecoration(gradient: kMenuGround),
-        child: SafeArea(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const Positioned.fill(child: VoxelBackdrop(color: CreamPalette.groundTop)),
+          SafeArea(
           child: Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: maxWidth),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+              // ONE card for the whole screen now, the title included (user
+              // 2026-09-29: "überall ist noch der Header abgetrennt, dieser
+              // soll aber auch in den gleichen Kasten. Resp. diese Kasten
+              // gibt es nicht mehr" — the last holdout of the old
+              // several-boxes-per-menu look, after the "Trennlinien und
+              // Zonen gemischt" pass folded every screen's OWN several
+              // section cards into one), and FULL BLEED (user 2026-09-29,
+              // seeing the card still framed by a brown margin: "es soll
+              // wirklich ganz bis nach aussen gehen ohne den dunkelbraunen
+              // Hintergrund") — no outer padding left for [kMenuGround] to
+              // show through at all; it now only ever paints the sliver
+              // behind a notch/home-indicator SafeArea has to leave clear.
+              child: creamCard(
+                padding: const EdgeInsets.fromLTRB(14, 9, 10, 10),
+                pattern: pattern,
+                // Fachwerk (2026-11-02): the screen is a house wall — a beam
+                // round it and the roof's tiles over its title.
+                framed: true,
+                roof: showHeader,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    creamCard(
-                      padding: const EdgeInsets.fromLTRB(14, 7, 8, 9),
-                      child: Row(
+                    if (showHeader) ...[
+                      Row(
                         children: [
                           Expanded(
                             child: Text(
@@ -361,8 +566,8 @@ class MenuScaffold extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 21,
+                                letterSpacing: 0.3,
                                 color: kBoxInk,
                               ),
                             ),
@@ -378,8 +583,8 @@ class MenuScaffold extends StatelessWidget {
                             ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 12),
+                      hairline(gap: 8),
+                    ],
                     Expanded(child: child),
                   ],
                 ),
@@ -387,6 +592,7 @@ class MenuScaffold extends StatelessWidget {
             ),
           ),
         ),
+        ],
       ),
     ),
   );
@@ -437,35 +643,54 @@ class KitCloseButton extends StatelessWidget {
   /// An arrow (back) instead of a cross (close).
   final bool back;
 
-  const KitCloseButton({super.key, this.onTap, this.back = false});
+  /// Tints the disc away from the kit's default gold (user 2026-09-29, the
+  /// creature detail screen: "Zurückbutton … sollen auch in der
+  /// entsprechenden Typfarben gehalten werden") — every other screen omits
+  /// this and keeps the shared gold.
+  final Color? color;
+
+  const KitCloseButton({super.key, this.onTap, this.back = false, this.color});
 
   /// Its size, for a layout that has to leave room for it.
   static const double size = 34;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: back ? 'Back' : 'Close',
-    button: true,
-    child: Pressable(
-      onTap: onTap ?? () => Navigator.of(context).maybePop(),
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: CreamPalette.gold,
-          boxShadow: [
-            BoxShadow(color: CreamPalette.goldDeep, offset: const Offset(0, 2)),
-          ],
-        ),
-        child: Icon(
-          back ? Icons.arrow_back_rounded : Icons.close,
-          size: 19,
-          color: CreamPalette.ink,
+  Widget build(BuildContext context) {
+    final fill = color ?? CreamPalette.gold;
+    // A dark tint (most elements, over their own darkened backdrop) reads
+    // best with a light icon; only a pale tint needs the kit's usual dark ink.
+    final ink = fill.computeLuminance() > 0.45
+        ? CreamPalette.ink
+        : Colors.white;
+    return Semantics(
+      label: back ? 'Back' : 'Close',
+      button: true,
+      child: Pressable(
+        onTap: onTap ?? () => Navigator.of(context).maybePop(),
+        child: Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: ShapeDecoration(
+            color: fill,
+            shape: const VoxelShape(notch: 2),
+            shadows: voxelDrop(
+              depth: 2,
+              color: color == null
+                  ? CreamPalette.goldDeep
+                  : Color.lerp(fill, Colors.black, 0.35)!,
+            ),
+          ),
+          child: VoxelIcon(
+            back ? VoxelGlyph.back : VoxelGlyph.close,
+            size: 20,
+            color: ink,
+            shadow: false,
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// A cream SURFACE for a sheet or a page body: the same paper, iso grid and glow
@@ -476,12 +701,9 @@ Widget creamSurface({
   BorderRadius radius = const BorderRadius.vertical(top: Radius.circular(18)),
 }) => DecoratedBox(
   decoration: BoxDecoration(
-    gradient: const LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [CreamPalette.paperTop, CreamPalette.paperBottom],
-    ),
+    color: CreamPalette.paperTop,
     borderRadius: radius,
+    border: Border.all(color: Voxel.outline, width: 2),
   ),
   child: ClipRRect(
     borderRadius: radius,
@@ -515,10 +737,14 @@ class CreamHeading extends StatelessWidget {
       Row(
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 15, color: kBoxAccent),
+            PixelIcon(icon, size: 15, color: kBoxAccent),
             const SizedBox(width: 6),
           ],
-          Flexible(
+          // EXPANDED, not Flexible + Spacer (user 2026-09-28: "das X ist nicht
+          // rechts sondern eher mittig"). Both were flex 1, so they split the
+          // free room in half and a loose Flexible left its unused half empty —
+          // a short title pushed everything on the right towards the middle.
+          Expanded(
             child: Text(
               title.toUpperCase(),
               maxLines: 1,
@@ -531,12 +757,11 @@ class CreamHeading extends StatelessWidget {
               ),
             ),
           ),
-          const Spacer(),
           if (trailing != null) trailing!,
         ],
       ),
       const SizedBox(height: 6),
-      Container(height: 1, color: CreamPalette.tan.withValues(alpha: 0.55)),
+      Container(height: 2, color: CreamPalette.tan.withValues(alpha: 0.6)),
     ],
   );
 }
@@ -599,7 +824,7 @@ class EmptySeat extends StatelessWidget {
             width: 26,
             height: 26,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              shape: BoxShape.rectangle,
               color: CreamPalette.gold,
               boxShadow: [
                 BoxShadow(
@@ -608,7 +833,7 @@ class EmptySeat extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.add, size: 18, color: CreamPalette.ink),
+            child: const PixelIcon(Icons.add, size: 18, color: CreamPalette.ink),
           ),
           if (label != null) ...[
             const SizedBox(height: 5),

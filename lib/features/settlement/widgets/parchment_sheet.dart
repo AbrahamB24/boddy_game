@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/cream_kit.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
 
 /// The bottom sheet every settlement menu wears (user 2026-07-27: "Bag und
 /// Energy sollen im gleichen Stil gestaltet werden wie die anderen neueren
@@ -68,7 +69,7 @@ class ParchmentSheet extends StatelessWidget {
                   height: 4,
                   decoration: BoxDecoration(
                     color: kBoxInkFaint.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: vr(2),
                   ),
                 ),
               ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/feel.dart';
+import '../../core/ui/snack.dart';
 import '../../core/ui/pressable.dart';
 import '../common/widgets/recess_bar.dart';
 import '../creatures/egg_detail_screen.dart';
@@ -12,12 +13,14 @@ import '../creatures/models/species_def.dart';
 import '../creatures/services/breeding_controller.dart';
 import '../creatures/services/creature_power.dart';
 import '../creatures/services/creatures_controller.dart';
+import '../creatures/widgets/creature_family.dart' show CreatureAvatar;
 import '../creatures/widgets/egg_card.dart';
 import '../common/widgets/monster_tile_grid.dart' show kMonsterTileAspect;
 import 'data/item_definitions.dart';
 import 'data/resource_icons.dart';
 import 'services/new_items.dart';
 import 'settlement_controller.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 /// The bag: everything the settlement owns that isn't a resource.
 ///
@@ -150,7 +153,10 @@ class _BagScreenState extends State<BagScreen>
   Future<void> _use(ItemDef def, CreatureInstance c) async {
     final err = await _creatures.useItemOn(def.id, c);
     if (!mounted) return;
-    if (err != null) Feel.deny();
+    if (err != null) {
+      Feel.deny();
+      context.snack(err, error: true);
+    }
     setState(() {});
   }
 
@@ -188,6 +194,11 @@ class _BagScreenState extends State<BagScreen>
         total == 0 ? 'empty' : '$total item${total > 1 ? 's' : ''}',
         style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
       ),
+      // The drawer list and its chosen item ARE different Gebiete (user
+      // 2026-09-29, "Trennlinien und Zonen gemischt", app-wide) — browsing
+      // versus the one thing you are looking at in full — so the detail
+      // side gets a [zoneBox] of its own. (MenuScaffold is the one card
+      // now — no [pageCard] here.)
       child: Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
@@ -196,46 +207,45 @@ class _BagScreenState extends State<BagScreen>
             // LEFT: the drawers and the chosen drawer's tiles.
             Expanded(
               flex: 14,
-              child: creamCard(
-                child: Column(
-                  children: [
-                    _tabBar({
-                      _BagTab.items: itemCount,
-                      _BagTab.eggs: eggs.length,
-                      _BagTab.packs: packCount,
-                    }),
-                    Container(
-                      height: 1,
-                      color: CreamPalette.tan.withValues(alpha: 0.55),
-                    ),
-                    Expanded(
-                      child: switch (_tab) {
-                        _BagTab.items => _tileDrawer(
-                          entries,
-                          _selItem,
-                          (id) => setState(() => _selItem = id),
-                          'No items.\n\nCraft them in the Workshop, buy them at '
-                          'the Trade Center, or win them on the map.',
-                        ),
-                        _BagTab.eggs => _eggDrawer(eggs),
-                        _BagTab.packs => _tileDrawer(
-                          packs,
-                          _selPack,
-                          (id) => setState(() => _selPack = id),
-                          'No resource packs.\n\nThey are won on the map — every '
-                          'battle pays one — and open into your stores from here.',
-                        ),
-                      },
-                    ),
-                  ],
-                ),
+              child: Column(
+                children: [
+                  _tabBar({
+                    _BagTab.items: itemCount,
+                    _BagTab.eggs: eggs.length,
+                    _BagTab.packs: packCount,
+                  }),
+                  Container(
+                    height: 1,
+                    color: CreamPalette.tan.withValues(alpha: 0.55),
+                  ),
+                  Expanded(
+                    child: switch (_tab) {
+                      _BagTab.items => _tileDrawer(
+                        entries,
+                        _selItem,
+                        (id) => setState(() => _selItem = id),
+                        'No items.\n\nCraft them in the Workshop, buy them at '
+                        'the Trade Center, or win them on the map.',
+                      ),
+                      _BagTab.eggs => _eggDrawer(eggs),
+                      _BagTab.packs => _tileDrawer(
+                        packs,
+                        _selPack,
+                        (id) => setState(() => _selPack = id),
+                        'No resource packs.\n\nThey are won on the map — every '
+                        'battle pays one — and open into your stores from here.',
+                      ),
+                    },
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             // RIGHT: the chosen one, in full.
             Expanded(
               flex: 11,
-              child: creamCard(
+              child: zoneBox(
+                padding: EdgeInsets.zero,
                 child: switch (_tab) {
                   _BagTab.items => _itemDetail(_chosen(entries, _selItem)),
                   _BagTab.eggs => _eggDetail(_chosenEgg(eggs)),
@@ -385,7 +395,7 @@ class _BagScreenState extends State<BagScreen>
                   width: 9,
                   height: 9,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
+                    shape: BoxShape.rectangle,
                     color: CreamPalette.gold,
                     border: Border.all(color: Colors.white, width: 2),
                   ),
@@ -555,7 +565,7 @@ class _BagScreenState extends State<BagScreen>
                       ),
                       decoration: BoxDecoration(
                         color: CreamPalette.gold.withValues(alpha: 0.32),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: vr(6),
                         border: Border.all(color: CreamPalette.goldDeep),
                       ),
                       child: Text(
@@ -592,9 +602,7 @@ class _BagScreenState extends State<BagScreen>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         CreamHeading(
-          title: targets.isEmpty
-              ? 'Who could take it'
-              : 'Who could take it · ${targets.length}',
+          title: targets.isEmpty ? 'Use' : 'Use · ${targets.length}',
         ),
         const SizedBox(height: 10),
         Expanded(
@@ -627,14 +635,8 @@ class _BagScreenState extends State<BagScreen>
       decoration: raisedTile(radius: 12),
       child: Row(
         children: [
-          Container(
-            width: 9,
-            height: 26,
-            decoration: BoxDecoration(
-              color: c.species?.element.color ?? CreamPalette.tan,
-              borderRadius: BorderRadius.circular(5),
-            ),
-          ),
+          // The monster itself, not a coloured bar (user 2026-09-28).
+          CreatureAvatar.of(c, size: 36, showHp: false),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -757,8 +759,10 @@ class _BagScreenState extends State<BagScreen>
     setState(() => _using = null);
     if (err != null) {
       Feel.deny();
+      context.snack(err, error: true);
       return;
     }
     Feel.collect();
+    context.snack('${def.emoji} ${def.name} unpacked.');
   }
 }

@@ -105,10 +105,10 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('an empty pool says what it still runs at', (t) async {
+  testWidgets('an empty pool stops production but not the clock', (t) async {
     await open(t, 0, steps: 0);
-    expect(find.textContaining('Empty. Production and building'), findsOne);
-    expect(find.text('×0.25'), findsOneWidget);
+    expect(find.textContaining('Empty. Production is at a standstill'), findsOne);
+    expect(find.text('×0.00'), findsOneWidget);
     expect(find.text('—'), findsOneWidget);
     expect(t.takeException(), isNull);
   });

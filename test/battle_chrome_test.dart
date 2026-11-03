@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:boddygame/core/theme/foe_theme.dart';
+import 'package:boddygame/core/theme/voxel_kit.dart';
 import 'package:boddygame/features/creatures/battle_screen.dart';
 
 // ── Der Kampfscreen, neu (user 2026-08-01) ──────────────────
@@ -29,7 +29,7 @@ void main() {
     // what keeps the battle screen from drifting into a private style again.
     // (The shape became a curve on 2026-08-04; what is pinned is that the
     // screen takes the app's shape, not which shape that happens to be.)
-    expect(FoE.facet(), isA<RoundedRectangleBorder>());
+    expect(FoE.facet(), isA<VoxelShape>());
     for (final s in FoE.drop()) {
       expect(s.blurRadius, 0, reason: 'a faceted world casts no fog');
     }

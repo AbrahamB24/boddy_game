@@ -18,19 +18,31 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Bøddy Game - settlement and creature game.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#2A1A0C">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="boddygame">
+  <meta name="apple-mobile-web-app-title" content="Bøddy">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>boddygame</title>
+  <title>Bøddy Game</title>
   <link rel="manifest" href="manifest.json">
+  <!-- Matches CreamPalette.groundBottom (the settlement screen's own
+       background) and the theme-color above — the page holds this colour
+       from the instant Chrome paints it, so the stretch before Flutter's
+       own first frame (compiling in debug, downloading CanvasKit, decoding
+       this game's image-heavy asset set) reads as the app loading rather
+       than a blank white screen (user 2026-09-30, flutter run on web:
+       "kommt nach ein paar Sekunden ein weisser screen"). -->
+  <style>
+    html, body { background: #2A1A0C; height: 100%; margin: 0; }
+  </style>
 </head>
 <body>
   <!--

@@ -36,6 +36,8 @@ dependencies:
   # wants silence gets it, and every clip is a small generated WAV in
   # assets/sfx/ — see core/ui/feel.dart.
   audioplayers: ^6.5.1
+  firebase_core: ^4.15.0
+  firebase_crashlytics: ^5.4.0
 
 dev_dependencies:
   flutter_test:
@@ -57,6 +59,11 @@ flutter:
     # road tiles would simply not ship.
     - assets/images/roads/
     - assets/images/buildings/
+    # Baked, animated 3D monsters (tool/blender/monster_anim_pro.py): one folder
+    # per species, WebP sheets played by creatures/widgets/monster_sheet.dart.
+    - assets/images/monsters/tidelord/
+    - assets/images/monsters/tidelord_s1/
+    - assets/images/monsters/tidelord_s2/
     - assets/images/terrain/
     - assets/sfx/
     - assets/music/
@@ -66,3 +73,22 @@ flutter:
     # not at all offline on a fresh install. Only the weights the app asks
     # for; the licence (SIL OFL) travels with them.
     - assets/fonts/
+  # The app's one face (Jersey 10, SIL OFL): a pixel font cut for small sizes.
+  # The one Regular file is registered for EVERY weight on purpose: a pixel
+  # font has no bold, and without these entries Flutter would smear a fake one
+  # over it wherever the code asks for w700/w800.
+  fonts:
+    - family: Jersey10
+      fonts:
+        - asset: assets/fonts/Jersey10-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Jersey10-Regular.ttf
+          weight: 500
+        - asset: assets/fonts/Jersey10-Regular.ttf
+          weight: 600
+        - asset: assets/fonts/Jersey10-Regular.ttf
+          weight: 700
+        - asset: assets/fonts/Jersey10-Regular.ttf
+          weight: 800
+        - asset: assets/fonts/Jersey10-Regular.ttf
+          weight: 900

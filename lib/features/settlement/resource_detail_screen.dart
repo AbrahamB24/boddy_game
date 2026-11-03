@@ -10,7 +10,9 @@ import 'models/placed_building.dart';
 import 'services/game_engine.dart';
 import 'settlement_controller.dart';
 import 'sheets/building_detail_dialog.dart';
-import 'widgets/building_icon.dart';
+import 'widgets/building_icon.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 /// ONE RESOURCE, WHOLE (user 2026-09-22, "Epochen-Regale"): what is in the store
 /// and how full it is, what MAKES it and what EATS it, and where the room to keep
@@ -104,24 +106,71 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
     final net =
         madeSum + energyDelta + eaten.fold<double>(0, (a, s) => a + s.amount);
 
+    // The hero pile is a different KIND of thing from the two lists beside
+    // it — a big readout, not a row list (user 2026-09-29, "Trennlinien und
+    // Zonen gemischt", app-wide) — so it gets its own [zoneBox]; Produced by
+    // and Storage are both building lists, so they stay just a [vHairline]
+    // apart. (MenuScaffold is the one card now — no [pageCard] here, or this
+    // would nest a card inside its card.)
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(width: 210, child: _hero(stored, capacity, rate)),
-        const SizedBox(width: 12),
+        SizedBox(
+          width: 210,
+          child: zoneBox(
+            padding: const EdgeInsets.all(6),
+            child: _hero(stored, capacity, rate),
+          ),
+        ),
+        const SizedBox(width: 14),
         Expanded(
-          child: _productionCard(
-            made,
-            eaten,
-            net,
-            energyDelta: energyDelta,
-            energyPercent: energy?.percent,
-            energyMult: mult,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              sectionLabel(
+                'Produced by',
+                // Flexible, not bare (the 2026-08-31 crash: "RenderFlex
+                // children have non-zero flex but incoming width
+                // constraints are unbounded"): [MenuPill] has an Expanded
+                // label inside it, so it needs a bounded width from the Row
+                // it sits in.
+                trailing: made.isEmpty ? null : Flexible(child: _sortPill()),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: _productionBody(
+                  made,
+                  eaten,
+                  net,
+                  energyDelta: energyDelta,
+                  energyPercent: energy?.percent,
+                  energyMult: mult,
+                ),
+              ),
+            ],
           ),
         ),
         if (hasCap) ...[
-          const SizedBox(width: 12),
-          SizedBox(width: 280, child: _storageCard(stored, capacity)),
+          vHairline(),
+          SizedBox(
+            width: 280,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                sectionLabel(
+                  'Storage',
+                  trailing: Text(
+                    '${_group(stored)} / ${_group(capacity)}',
+                    style: FoE.value(size: 13).copyWith(
+                      color: stored >= capacity ? CreamPalette.warn : kBoxInk,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(child: _storageBody(stored, capacity)),
+              ],
+              ),
+            ),
         ],
       ],
     );
@@ -132,8 +181,8 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
     final hasCap = capacity > 0;
     final full = hasCap && stored >= capacity;
     final frac = hasCap ? (stored / capacity).clamp(0.0, 1.0) : 0.0;
-    return creamCard(
-      padding: const EdgeInsets.all(14),
+    return Padding(
+      padding: const EdgeInsets.all(8),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -188,77 +237,82 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
   }
 
   // ── Production ────────────────────────────────────────────
-  Widget _productionCard(
+  // The heading (with its sort pill) now lives in [_body] — the surface is
+  // the shared [pageCard], not a card of this function's own.
+  Widget _productionBody(
     List<(PlacedBuilding, BuildingDef, double)> made,
     List<ProductionSource> eaten,
     double net, {
     required double energyDelta,
     required double? energyPercent,
     required double energyMult,
-  }) => sectionCard(
-    title: 'Produced by',
-    // Flexible, not bare (the 2026-08-31 crash: "RenderFlex children have
-    // non-zero flex but incoming width constraints are unbounded"): [MenuPill]
-    // has an Expanded label inside it, so it needs a bounded width from the Row it
-    // sits in. Without it the whole page failed to lay out — only one card showed.
-    trailing: made.isEmpty ? null : Flexible(child: _sortPill()),
-    expand: true,
-    child: made.isEmpty && eaten.isEmpty
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Nothing is producing this yet.',
-                style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+  }) => made.isEmpty && eaten.isEmpty
+      ? Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Nothing is producing this yet.',
+              style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+            ),
+            const SizedBox(height: 12),
+            // A way forward, not a dead end (user 2026-09-22): the build strip,
+            // on the category that makes things.
+            _actionButton(
+              'Build a producer',
+              () => BuildMenuRequest.open(
+                context,
+                category: BuildingCategory.production,
               ),
-              const SizedBox(height: 12),
-              // A way forward, not a dead end (user 2026-09-22): the build strip,
-              // on the category that makes things.
-              _actionButton(
-                'Build a producer',
-                () => BuildMenuRequest.open(
-                  context,
-                  category: BuildingCategory.production,
-                ),
+            ),
+          ],
+        )
+      : ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            for (final s in made)
+              !s.$1.isComplete
+                  ? _builtRow(
+                      s.$1,
+                      s.$2,
+                      '0/h',
+                      sub: 'Lv ${s.$1.level} · Under construction',
+                      color: kBoxInkFaint,
+                    )
+                  : s.$1.isPaused
+                  ? _builtRow(
+                      s.$1,
+                      s.$2,
+                      '0/h',
+                      sub: 'Lv ${s.$1.level} · Paused',
+                      color: kBoxInkFaint,
+                    )
+                  : _builtRow(s.$1, s.$2, '+${_amt(s.$3)}/h'),
+            // A MODIFIER on the buildings above, not a producer — the same
+            // row, but bare (no tile) so it reads as a different kind of
+            // line (user 2026-09-28).
+            if (energyDelta.abs() >= 0.05)
+              _row(
+                tile: false,
+                icon: const Text('⚡', style: TextStyle(fontSize: 24)),
+                name: 'Energy ${(energyPercent ?? 0).round()} %',
+                sub: energyDelta > 0
+                    ? 'bonus: +${((energyMult - 1) * 100).round()} % on production'
+                    : 'malus: ${((energyMult - 1) * 100).round()} % on production',
+                value:
+                    '${energyDelta > 0 ? '+' : '−'}${_amt(energyDelta.abs())}/h',
+                color: energyDelta > 0
+                    ? CreamPalette.better
+                    : CreamPalette.warn,
               ),
+            if (eaten.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _subheading('Consumed by'),
+              const SizedBox(height: 6),
+              for (final s in eaten) _drainRow(s),
             ],
-          )
-        : ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              for (final s in made)
-                s.$1.isPaused
-                    ? _builtRow(
-                        s.$1,
-                        s.$2,
-                        '0/h',
-                        sub: 'Lv ${s.$1.level} · Paused',
-                        color: kBoxInkFaint,
-                      )
-                    : _builtRow(s.$1, s.$2, '+${_amt(s.$3)}/h'),
-              if (energyDelta.abs() >= 0.05)
-                _row(
-                  icon: const Text('⚡', style: TextStyle(fontSize: 24)),
-                  name: 'Energy ${(energyPercent ?? 0).round()} %',
-                  sub: energyDelta > 0
-                      ? 'bonus: +${((energyMult - 1) * 100).round()} % on production'
-                      : 'malus: ${((energyMult - 1) * 100).round()} % on production',
-                  value:
-                      '${energyDelta > 0 ? '+' : '−'}${_amt(energyDelta.abs())}/h',
-                  color: energyDelta > 0
-                      ? CreamPalette.better
-                      : CreamPalette.warn,
-                ),
-              if (eaten.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                _subheading('Consumed by'),
-                const SizedBox(height: 6),
-                for (final s in eaten) _drainRow(s),
-              ],
-              _totalRow(net),
-            ],
-          ),
-  );
+            _totalRow(net),
+          ],
+        );
 
   Widget _subheading(String text) => Text(
     text.toUpperCase(),
@@ -287,7 +341,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
       MapEntry('level', 'Level'),
       MapEntry('name', 'Name'),
     ],
-    trailing: Icon(
+    trailing: PixelIcon(
       _descending ? Icons.arrow_downward : Icons.arrow_upward,
       size: 14,
       color: kBoxAccent,
@@ -339,7 +393,10 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
   );
 
   // ── Storage ───────────────────────────────────────────────
-  Widget _storageCard(double stored, double capacity) {
+  // The heading (with its "stored / capacity" trailing) now lives in
+  // [_body] — the surface is the shared [pageCard], not a card of this
+  // function's own.
+  Widget _storageBody(double stored, double capacity) {
     final full = stored >= capacity;
     final frac = (stored / capacity).clamp(0.0, 1.0);
     final sources = _ctrl.storageSourcesByBuilding(widget.resourceId)
@@ -348,52 +405,37 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
     // above the sortable ones.
     final baseCap = capacity - sources.fold<double>(0, (a, s) => a + s.$3);
     final rate = _ctrl.hourlyRates[widget.resourceId] ?? 0;
-    return sectionCard(
-      title: 'Storage',
-      trailing: Text(
-        '${_group(stored)} / ${_group(capacity)}',
-        style: FoE.value(
-          size: 13,
-        ).copyWith(color: full ? CreamPalette.warn : kBoxInk),
-      ),
-      expand: true,
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          _bar(frac, full ? CreamPalette.warn : CreamPalette.gold, 12),
-          const SizedBox(height: 4),
-          Text(
-            _outlook(stored, capacity, rate).isEmpty
-                ? ' '
-                : _outlook(stored, capacity, rate),
-            style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        _bar(frac, full ? CreamPalette.warn : CreamPalette.gold, 12),
+        const SizedBox(height: 4),
+        Text(
+          _outlook(stored, capacity, rate).isEmpty
+              ? ' '
+              : _outlook(stored, capacity, rate),
+          style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+        ),
+        const SizedBox(height: 8),
+        if (baseCap > 0)
+          _row(
+            icon: const Text('🏛', style: TextStyle(fontSize: 24)),
+            name: 'The settlement itself',
+            sub: 'base room',
+            value: '+${baseCap.toStringAsFixed(0)}',
+            color: kBoxInk,
           ),
-          const SizedBox(height: 8),
-          if (baseCap > 0)
-            _row(
-              icon: const Text('🏛', style: TextStyle(fontSize: 24)),
-              name: 'The settlement itself',
-              sub: 'base room',
-              value: '+${baseCap.toStringAsFixed(0)}',
-              color: kBoxInk,
-            ),
-          for (final s in sources)
-            _builtRow(
-              s.$1,
-              s.$2,
-              '+${s.$3.toStringAsFixed(0)}',
-              color: kBoxInk,
-            ),
-          const SizedBox(height: 6),
-          // More room is one tap away: the build strip, on the category of a
-          // building that stores this. Amber when the store is already full.
-          _actionButton(
-            'Build more storage',
-            () => BuildMenuRequest.open(context, category: _storageCategory()),
-            primary: full,
-          ),
-        ],
-      ),
+        for (final s in sources)
+          _builtRow(s.$1, s.$2, '+${s.$3.toStringAsFixed(0)}', color: kBoxInk),
+        const SizedBox(height: 6),
+        // More room is one tap away: the build strip, on the category of a
+        // building that stores this. Amber when the store is already full.
+        _actionButton(
+          'Build more storage',
+          () => BuildMenuRequest.open(context, category: _storageCategory()),
+          primary: full,
+        ),
+      ],
     );
   }
 
@@ -475,10 +517,11 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
     String? sub,
     required String value,
     required Color color,
+    bool tile = true,
   }) => Container(
     margin: const EdgeInsets.only(bottom: 5),
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: raisedTile(radius: 10),
+    decoration: tile ? raisedTile(radius: 10) : null,
     child: Row(
       children: [
         SizedBox(width: 44, child: Center(child: icon)),
@@ -509,7 +552,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
   );
 
   Widget _bar(double frac, Color color, double height) => ClipRRect(
-    borderRadius: BorderRadius.circular(height / 2),
+    borderRadius: vr(height / 2),
     child: SizedBox(
       height: height,
       width: double.infinity,

@@ -9,7 +9,9 @@ import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/creature_sprite.dart';
 import '../../core/ui/pressable.dart';
-import '../common/widgets/recess_bar.dart';
+import '../common/widgets/recess_bar.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 // The bestiary (Dex) — the collection endgame.
 //
@@ -128,11 +130,16 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
                   style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
                 ),
               )
+            // No card of its own any more (user 2026-09-30, "hier und
+            // andernorts sind noch die alten Kästchen vorhanden") —
+            // MenuScaffold is already the one card on screen; the progress
+            // bar keeps a light [zoneBox] so it still reads as its own
+            // readout above the grid.
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // How far the whole book is filled in.
-                  creamCard(
+                  zoneBox(
                     padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                     child: Column(
                       children: [
@@ -159,7 +166,12 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(
                             maxCrossAxisExtent: 452,
-                            mainAxisExtent: 156,
+                            // Card padding (24) + header row (~18) + gap (8) +
+                            // the square stage tiles (as wide as a 452-column
+                            // allows, so ~137 tall at aspect 1) + gap (3) +
+                            // stage name line (~13) — 156 was too short and
+                            // clipped the bottom row (user-reported overflow).
+                            mainAxisExtent: 214,
                             mainAxisSpacing: 12,
                             crossAxisSpacing: 12,
                           ),
@@ -193,7 +205,7 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
       child: Container(
         decoration: discovered
             ? BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: vr(15),
                 border: Border.all(
                   color: species.rarity.color.withValues(alpha: 0.75),
                   width: 2,
@@ -261,16 +273,17 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
     );
   }
 
-  /// The surface of one species line: the kit's cream card once you have started
-  /// it, the grey locked tile before.
+  /// The surface of one species line: a raised tile either way — lit once
+  /// you have started it (user 2026-09-30: a grid of cream cards read as a
+  /// grid of tiny page-cards, not a grid of items — the same tile family
+  /// every other list in the app stands its rows on), grey and locked
+  /// before.
   Widget _lineCard({required bool discovered, required Widget child}) =>
-      discovered
-      ? creamCard(padding: const EdgeInsets.all(12), child: child)
-      : Container(
-          padding: const EdgeInsets.all(12),
-          decoration: raisedTile(locked: true, radius: 14),
-          child: child,
-        );
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: raisedTile(locked: !discovered, radius: 14),
+        child: child,
+      );
 
   /// One stage of a line: its art if you have got this far, else its own
   /// silhouette.
@@ -292,14 +305,15 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
               shape: FoE.facet(radius: 10),
             ),
             child: url == null
-                ? Icon(Icons.help_outline, size: 20, color: kBoxInkFaint)
+                ? PixelIcon(Icons.help_outline, size: 20, color: kBoxInkFaint)
                 : seen
                 ? CreatureSprite(url: url)
                 : ColorFiltered(
                     // Flat black, no blur: the same hard-edged treatment
                     // the rest of the app gives a silhouette.
                     colorFilter: ColorFilter.mode(
-                      CreamPalette.ink.withValues(alpha: 0.55),
+                      // Light on the dark tile (Nacht, 2026-11-03).
+                      kBoxInk.withValues(alpha: 0.42),
                       BlendMode.srcIn,
                     ),
                     child: CreatureSprite(url: url),

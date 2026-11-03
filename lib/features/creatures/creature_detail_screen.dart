@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/foe_theme.dart';
 import '../../core/theme/cream_kit.dart';
+import '../../core/theme/voxel_kit.dart';
+import '../../core/ui/feel.dart';
 import '../../core/ui/snack.dart';
 import '../settlement/data/building_definitions.dart';
 import '../settlement/data/item_definitions.dart';
@@ -22,6 +24,7 @@ import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import '../common/widgets/recess_bar.dart';
 import '../../core/ui/pressable.dart';
+import '../../core/theme/voxel_icons.dart';
 
 // One creature, Pokédex-style (user 2026-07-17): the element backdrop up top
 // with the monster art straddling into a white sheet below, a short description
@@ -107,6 +110,23 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   // Which detail tab is shown: 0 General · 1 Stats · 2 Evolution · 3 Abilities.
   int _tab = 0;
 
+  // ── THE VOXEL SKIN ──
+  // A species with baked block art (Tidelord) gets the whole page drawn as
+  // blocks too (user 2026-11-03: "ganzes UI"): stepped corners, flat tones,
+  // hard shadows, a pixel face, bars cut into blocks. Set from [build]; every
+  // helper below asks [_sh] / [_vox] instead of hard-coding a look, so every
+  // other species' screen is exactly what it was.
+  bool _vox = false;
+  Color _elem = CreamPalette.tan;
+
+  ShapeBorder _sh({
+    double radius = FoE.radius,
+    BorderSide side = BorderSide.none,
+  }) => _vox
+      ? VoxelShape(notch: radius >= 12 ? 3 : (radius >= 8 ? 2 : 1))
+      : FoE.facet(radius: radius, side: side);
+
+  // â
   /// Which gene the Stats tab's bars are drawn from — see [GeneBarToggle].
   bool _barsShowGrowth = false;
 
@@ -181,7 +201,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                       // Dark glass in the element's own deep tone, like every
                       // card on this page.
                       color: Color.lerp(element, Colors.black, 0.62),
-                      shape: FoE.facet(
+                      shape: _sh(
                         radius: 10,
                         side: const BorderSide(color: Color(0x59FFFFFF)),
                       ),
@@ -272,7 +292,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
 
   /// The dialogs and menus are still cream paper (they float above the page,
   /// like everywhere else in the app), so THEY keep the dark brown ink.
-  static const _dlgInk = CreamPalette.ink;
+  static const _dlgInk = kBoxInk;
   static const _dlgDim = Color(0x942A1A0C); // ink @ 58 %
   static const _dlgTrack = Color(0x212A1A0C); // ink @ 13 %
 
@@ -302,13 +322,17 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
 
   Future<void> _evolve(CreatureInstance creature) async {
     setState(() => _evolving = true);
-    // No pop-up confirmation any more (user 2026-08-29: "bitte wirklich alle
-    // pop up nachrichten... löschen") — the screen's own state already shows
-    // the result (the new stage's art/name), so this was a message about
-    // something already visible.
-    await _ctrl.evolve(creature);
+    final before = creature.displayName;
+    final err = await _ctrl.evolve(creature);
     if (!mounted) return;
     setState(() => _evolving = false);
+    // Messages are back (user 2026-11-02).
+    if (err != null) {
+      context.snack(err, error: true);
+    } else {
+      Feel.fanfare();
+      context.snack('✨ $before evolved into ${creature.displayName}!');
+    }
   }
 
   // Rename dialog, styled to match this screen (dark sheet, Outfit font, the
@@ -321,7 +345,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: _paper(element, 0.16),
-        shape: FoE.facet(radius: 20),
+        shape: _sh(radius: 20),
         title: Text(
           'Rename',
           style: GoogleFonts.outfit(
@@ -377,46 +401,51 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   }
 
   Future<void> _release(CreatureInstance creature) async {
+    // Asked up front so the dialog can SAY why, instead of the old flow
+    // (confirm, then nothing happens) — the reason replaces the question.
+    final blocked = _ctrl.releaseBlocker(creature);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: CreamPalette.paperTop,
-        shape: FoE.facet(radius: 12, side: BorderSide(color: CreamPalette.tan)),
+        shape: _sh(radius: 12, side: BorderSide(color: CreamPalette.tan)),
         title: Text(
-          'Release?',
+          blocked == null ? 'Release?' : 'Cannot release',
           style: FoE.title(size: 15).copyWith(color: _dlgInk),
         ),
         content: Text(
-          '${creature.displayName} leaves you forever.',
+          blocked ?? '${creature.displayName} leaves you forever.',
           style: FoE.label(size: 13).copyWith(color: _dlgInk),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(
-              'Cancel',
+              blocked == null ? 'Cancel' : 'OK',
               style: FoE.dim(size: 13).copyWith(color: _dlgDim),
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              'Release',
-              style: FoE.label(
-                size: 13,
-              ).copyWith(color: CreamPalette.warn, fontWeight: FontWeight.w800),
+          if (blocked == null)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(
+                'Release',
+                style: FoE.label(size: 13).copyWith(
+                  color: CreamPalette.warn,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
     if (ok == true) {
       final error = await _ctrl.release(creature);
       if (!mounted) return;
-      // No pop-up on failure any more (user 2026-08-29: "wirklich alle pop
-      // up nachrichten... löschen") — the dialog simply doesn't proceed;
-      // staying on this screen with nothing released IS the signal.
-      if (error != null) return;
+      if (error != null) {
+        context.snack(error, error: true);
+        return;
+      }
       Navigator.of(context).pop();
     }
   }
@@ -461,11 +490,15 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           }
           final species = creature.species;
           final element = species?.element.color ?? CreamPalette.tan;
+          _vox = species?.id == 'tidelord';
+          _elem = element;
           return Stack(
             fit: StackFit.expand,
             children: [
               Positioned.fill(
-                child: species == null
+                child: _vox
+                    ? VoxelBackdrop(color: element)
+                    : species == null
                     ? ColoredBox(color: element)
                     : CreatureBackdrop(
                         element: species.element,
@@ -474,11 +507,16 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                       ),
               ),
               SafeArea(
-                child: DefaultTextStyle.merge(
-                  style: GoogleFonts.outfit(color: _ink),
-                  child: LayoutBuilder(
-                    builder: (context, c) =>
-                        _stage(context, c, creature, species, element),
+                child: MediaQuery(
+                  data: MediaQuery.of(context),
+                  child: DefaultTextStyle.merge(
+                    style: _vox
+                        ? Voxel.text(color: _ink)
+                        : GoogleFonts.outfit(color: _ink),
+                    child: LayoutBuilder(
+                      builder: (context, c) =>
+                          _stage(context, c, creature, species, element),
+                    ),
                   ),
                 ),
               ),
@@ -529,10 +567,26 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         Positioned(
           top: 8,
           right: 12,
-          child: KitCloseButton(
-            back: true,
-            onTap: () => Navigator.of(context).pop(),
-          ),
+          child: _vox
+              ? Pressable(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    width: KitCloseButton.size,
+                    height: KitCloseButton.size,
+                    alignment: Alignment.center,
+                    decoration: ShapeDecoration(
+                      color: Voxel.tone(element, 3),
+                      shape: const VoxelShape(notch: 2),
+                      shadows: voxelDrop(depth: 2),
+                    ),
+                    child: const VoxelIcon(VoxelGlyph.back, size: 20),
+                  ),
+                )
+              : KitCloseButton(
+                  back: true,
+                  color: element,
+                  onTap: () => Navigator.of(context).pop(),
+                ),
         ),
         // THE TABS AS A RAIL (variant 3): they cost 70 px of width instead of a
         // 56-px row of height, and the height is what the Stats page needs.
@@ -542,7 +596,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           width: railW,
           top: 12,
           bottom: 12,
-          child: Center(child: _tabRail(element)),
+          child: Center(child: _tabRail(creature, element)),
         ),
         Positioned(
           left: contentLeft,
@@ -583,45 +637,54 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   }
 
   /// LEVEL AND EP under the monster (user 2026-09-21, from a picture): "Level 26"
-  /// in bold white, a flat rounded bar — gold fill on a darker tone of the page —
-  /// and "3120 / 4400 EP" under it.
+  /// in the monster's own type colour, a flat rounded bar filled in a lighter
+  /// tint of it on a darker tone of the page (user 2026-09-29: "Level n und
+  /// Erfahrungsbalken sollen auch in der entsprechenden Typfarben gehalten
+  /// werden" — the bar was plain gold before, the one thing on the page not
+  /// tinted to the element already painted everywhere around it) — and
+  /// "3120 / 4400 EP" under it.
   Widget _levelBlock(CreatureInstance creature, Color element) {
     final atMax = creature.level >= kCreatureMaxLevel;
     final need = atMax ? 1 : xpToNextLevel(creature.level);
     final frac = atMax ? 1.0 : (creature.xp / need).clamp(0.0, 1.0);
+    final fill = Color.lerp(element, Colors.white, 0.4)!;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           'Level ${creature.level}',
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: fill,
             fontSize: 19,
             fontWeight: FontWeight.w800,
+            shadows: const [Shadow(color: Color(0x99000000), blurRadius: 3)],
           ),
         ),
         const SizedBox(height: 5),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(7),
-          child: SizedBox(
-            height: 14,
-            width: double.infinity,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ColoredBox(color: Color.lerp(element, Colors.black, 0.45)!),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: frac,
-                    heightFactor: 1,
-                    child: const ColoredBox(color: CreamPalette.gold),
+        if (_vox)
+          VoxelBar(value: frac, color: fill, height: 14)
+        else
+          ClipRRect(
+            borderRadius: vr(7),
+            child: SizedBox(
+              height: 14,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ColoredBox(color: Color.lerp(element, Colors.black, 0.45)!),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: frac,
+                      heightFactor: 1,
+                      child: ColoredBox(color: fill),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
         const SizedBox(height: 4),
         Text(
           atMax ? 'MAX' : '${creature.xp} / $need EP',
@@ -649,22 +712,53 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   /// every monster display uses ([CreatureFigure]), decoded at the size it is
   /// drawn (user 2026-08-29: "die Monsterassets werden sehr langsam geladen").
   Widget _leftArt(CreatureInstance creature) => LayoutBuilder(
-    builder: (context, constraints) => CreatureFigure(
-      imageUrl: creature.imageUrl,
-      element: creature.species?.element ?? CreatureElement.fire,
-      decodeSize: constraints.maxHeight,
-    ),
+    builder: (context, constraints) {
+      final figure = CreatureFigure(
+        imageUrl: creature.imageUrl,
+        element: creature.species?.element ?? CreatureElement.fire,
+        decodeSize: constraints.maxHeight,
+      );
+      if (!_vox) return figure;
+      // The three-step block plinth under the creature was removed (user
+      // 2026-11-03: "Diese drei Balken können entfernt werden").
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            bottom: 26,
+            child: Transform.scale(
+              scale: 1.3,
+              alignment: Alignment.bottomCenter,
+              child: figure,
+            ),
+          ),
+        ],
+      );
+    },
   );
 
   /// THE TAB RAIL: four keys with a symbol over a short word; the live one is
-  /// white, the others dark glass.
-  Widget _tabRail(Color element) {
+  /// white, the others dark glass. Release moved OFF this rail again (user
+  /// 2026-09-29: "unterhalb von Strengths, dafür Work Kasten kleiner
+  /// machen") — see [_generalBody]'s right column.
+  Widget _tabRail(CreatureInstance creature, Color element) {
     const tabs = [
       ('❤️', 'General'),
       ('📊', 'Stats'),
       ('🧬', 'Evolution'),
       ('⚔️', 'Abilities'),
     ];
+    // The Evolution tile itself says so (user 2026-09-29: "Die Kachel
+    // Evolution soll zeigen, dass eine Evolution möglich ist") — the same
+    // green arrow the collection tile wears, so a player never has to open
+    // the tab just to learn it is worth opening.
+    const glyphs = [
+      VoxelGlyph.heart,
+      VoxelGlyph.bars,
+      VoxelGlyph.dna,
+      VoxelGlyph.sword,
+    ];
+    final canEvolve = !_isPreview && creature.canEvolve;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -673,34 +767,81 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           Pressable(
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(() => _tab = i),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOut,
-              height: 66,
-              width: double.infinity,
-              alignment: Alignment.center,
-              decoration: ShapeDecoration(
-                color: _tab == i ? Colors.white : const Color(0x47000000),
-                shape: FoE.facet(radius: 14),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(tabs[i].$1, style: const TextStyle(fontSize: 20)),
-                  const SizedBox(height: 3),
-                  Text(
-                    tabs[i].$2,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: _tab == i
-                          ? Color.lerp(element, Colors.black, 0.55)
-                          : _inkDim,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  curve: Curves.easeOut,
+                  height: 66,
+                  width: double.infinity,
+                  alignment: Alignment.center,
+                  decoration: ShapeDecoration(
+                    color: _vox
+                        ? (_tab == i
+                              ? Voxel.tone(element, 4)
+                              : Voxel.tone(element, 1))
+                        : (_tab == i ? Colors.white : const Color(0x47000000)),
+                    shape: _sh(radius: 14),
+                    shadows: _vox ? voxelDrop(depth: _tab == i ? 1 : 3) : null,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (_vox)
+                        VoxelIcon(
+                          glyphs[i],
+                          size: 24,
+                          color: _tab == i
+                              ? Voxel.tone(element, 0)
+                              : Colors.white,
+                          shadow: _tab != i,
+                        )
+                      else
+                        Text(tabs[i].$1, style: const TextStyle(fontSize: 20)),
+                      const SizedBox(height: 3),
+                      Text(
+                        tabs[i].$2,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: _tab == i
+                              ? Color.lerp(element, Colors.black, 0.55)
+                              : _inkDim,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (i == 2 && canEvolve)
+                  Positioned(
+                    top: -6,
+                    right: -6,
+                    child: Semantics(
+                      label: 'Evolution ready',
+                      container: true,
+                      child: _vox
+                          ? const VoxelIcon(
+                              VoxelGlyph.arrowUp,
+                              size: 22,
+                              color: Color(0xFF2FD37A),
+                            )
+                          : PixelIcon(
+                        Icons.arrow_upward_rounded,
+                        size: 20,
+                        color: Color(0xFF2FD37A),
+                        shadows: [
+                          Shadow(color: Color(0xCC000000), blurRadius: 3),
+                          Shadow(
+                            color: Color(0x99000000),
+                            offset: Offset(0, 1.5),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
           ),
         ],
@@ -715,6 +856,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     SpeciesDef? species,
     Color element,
   ) {
+    // The level chip in the type colour too (user 2026-09-29: "Die
+    // Levelanzeige unterhalb des Namens … ist noch nicht in der Farbe des
+    // Elements") — every OTHER fact on this page already reads in [element]
+    // (the backdrop, the back button, the Level/XP block under the portrait);
+    // this chip was still the kit's flat gold.
+    final levelTint = Color.lerp(element, Colors.white, 0.35)!;
     const shadow = [
       Shadow(color: Color(0x66000000), blurRadius: 4, offset: Offset(0, 1)),
     ];
@@ -764,7 +911,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                   ),
                   decoration: ShapeDecoration(
                     color: CreamPalette.gold,
-                    shape: FoE.facet(radius: 6),
+                    shape: _sh(radius: 6),
                   ),
                   child: Text(
                     'NEW',
@@ -782,9 +929,11 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               Pressable(
                 onTap: () => _rename(creature),
                 behavior: HitTestBehavior.opaque,
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.only(left: 8),
-                  child: Icon(Icons.edit, size: 15, color: _inkDim),
+                  child: _vox
+                      ? const VoxelIcon(VoxelGlyph.edit, size: 16, color: _inkDim)
+                      : PixelIcon(Icons.edit, size: 15, color: _inkDim),
                 ),
               ),
           ],
@@ -797,8 +946,10 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           children: [
             _chip(
               'Lv ${creature.level}',
-              bg: CreamPalette.gold,
-              fg: CreamPalette.ink,
+              bg: levelTint,
+              fg: levelTint.computeLuminance() > 0.45
+                  ? CreamPalette.ink
+                  : Colors.white,
             ),
             _chip('⚡ ${totalPower(creature)}'),
             if (species != null) ...[
@@ -815,8 +966,9 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
         decoration: ShapeDecoration(
-          color: bg ?? const Color(0x47000000),
-          shape: FoE.facet(radius: 9),
+          color: bg ?? (_vox ? Voxel.tone(_elem, 1) : const Color(0x47000000)),
+          shape: _sh(radius: 9),
+          shadows: _vox ? voxelDrop(depth: 2) : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -825,7 +977,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               Container(
                 width: 7,
                 height: 7,
-                decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                decoration: BoxDecoration(color: dot, shape: BoxShape.rectangle),
               ),
               const SizedBox(width: 5),
             ],
@@ -921,11 +1073,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     decoration: ShapeDecoration(
       // DARK GLASS over the element colour (variant 13): black at ~28 % keeps
       // the page's hue and makes white text legible on any element.
-      color: const Color(0x47000000),
-      shape: FoE.facet(
+      color: _vox ? Voxel.tone(_elem, 1) : const Color(0x47000000),
+      shape: _sh(
         radius: radius,
         side: const BorderSide(color: Color(0x24FFFFFF)),
       ),
+      shadows: _vox ? voxelDrop() : null,
     ),
     child: child,
   );
@@ -1010,6 +1163,11 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         _aboutPanel(creature),
       ],
     );
+    // Not shown in preview (user 2026-09-02) — the caller's own footer takes
+    // that spot instead, since Release assumes a creature that is owned. The
+    // starter never gets one at all (user 2026-09-02: "Das Startmonster kann
+    // aber niemals entlassen werden").
+    final canRelease = !_isPreview && !creature.isStarter;
     final right = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1017,7 +1175,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         if (top.isNotEmpty)
           _panel(
             title: 'Strengths',
-            gap: 0,
+            gap: canRelease ? 8 : 0,
             child: Column(
               children: [
                 for (var i = 0; i < top.length; i += 2) ...[
@@ -1037,6 +1195,11 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               ],
             ),
           ),
+        // Release moved here (user 2026-09-29: "unterhalb von Strengths,
+        // dafür Work Kasten kleiner machen") — Work is an Expanded
+        // [_fillPanel] slot, so it gives up exactly this row's height on its
+        // own; the column's total stays the same as the left one's.
+        if (canRelease) _releaseButton(creature),
       ],
     );
     return Row(
@@ -1107,33 +1270,26 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         ],
       ),
     );
-    // Not shown in preview (user 2026-09-02) — the caller's own footer takes that
-    // spot instead, since Release assumes a creature that is owned. The starter
-    // never gets a Release at all (user 2026-09-02: "Das Startmonster kann aber
-    // niemals entlassen werden").
-    final canRelease = !_isPreview && !creature.isStarter;
     return _fillPanel(
-      header: _panelTitle(
-        'About',
-        // Release: readable, but a small link in the corner rather than a big
-        // button, and it asks again before it does anything (user 2026-09-21:
-        // "Release ist schwer zu erkennen und sollte nicht zu prominent sein,
-        // damit es nicht aus versehen angewählt wird").
-        trailing: canRelease ? _releaseLink(creature) : null,
-      ),
+      header: _panelTitle('About'),
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (desc.isNotEmpty)
-              Text(
-                desc,
-                style: const TextStyle(
-                  color: _inkDim,
-                  fontSize: 11.5,
-                  height: 1.3,
-                ),
+            Text(
+              // Species text is still mostly unwritten (user 2026-09-29: "bei
+              // About könnte ein kleiner Infotext … diese werden dann noch
+              // gefüllt werden, daher nur Platzhaltertext") — an empty About
+              // said nothing at all, which read as a bug rather than content
+              // still to come.
+              desc.isNotEmpty ? desc : 'No info yet — coming soon.',
+              style: TextStyle(
+                color: _inkDim,
+                fontSize: 11.5,
+                height: 1.3,
+                fontStyle: desc.isEmpty ? FontStyle.italic : FontStyle.normal,
               ),
+            ),
             if (origin != null) ...[
               SizedBox(height: desc.isEmpty ? 0 : 6),
               Text(
@@ -1155,20 +1311,45 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     );
   }
 
-  /// Release as a small light-coral link — visible against the glass, nowhere near
-  /// as loud as the outlined button it replaces.
-  Widget _releaseLink(CreatureInstance creature) => Pressable(
+  /// Release, below Strengths on the General tab's right column (user
+  /// 2026-09-29: "unterhalb von Strengths, dafür Work Kasten kleiner
+  /// machen" — Work uses [_fillPanel], an Expanded slot, so it shrinks by
+  /// itself the moment this row takes its share of the column's fixed
+  /// height; nothing else has to change). An outlined coral button, not a
+  /// filled one: still deliberately quieter than the gold Evolve button so
+  /// it is never the thing an idle thumb lands on (user 2026-09-21: "Release
+  /// ist schwer zu erkennen und sollte nicht zu prominent sein, damit es
+  /// nicht aus versehen angewählt wird" — the confirm dialog in [_release] is
+  /// the other half of that same guard).
+  static const Color _releaseTint = Color(0xFFFFB4A2);
+
+  Widget _releaseButton(CreatureInstance creature) => Pressable(
     behavior: HitTestBehavior.opaque,
     onTap: () => _release(creature),
-    child: const Padding(
-      padding: EdgeInsets.fromLTRB(8, 2, 0, 2),
-      child: Text(
-        'Release…',
-        style: TextStyle(
-          color: Color(0xFFFFB4A2),
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
+    child: Container(
+      height: 30,
+      width: double.infinity,
+      alignment: Alignment.center,
+      decoration: ShapeDecoration(
+        shape: _sh(
+          radius: 10,
+          side: const BorderSide(color: _releaseTint, width: 1.2),
         ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          PixelIcon(Icons.logout_rounded, size: 13, color: _releaseTint),
+          SizedBox(width: 6),
+          Text(
+            'Release',
+            style: TextStyle(
+              color: _releaseTint,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     ),
   );
@@ -1180,7 +1361,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: ShapeDecoration(
           color: const Color(0x29FFFFFF),
-          shape: FoE.facet(
+          shape: _sh(
             radius: 10,
             side: const BorderSide(color: Color(0x40FFFFFF)),
           ),
@@ -1303,7 +1484,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            if (beats) const Icon(Icons.arrow_drop_up, size: 16, color: better),
+            if (beats) const PixelIcon(Icons.arrow_drop_up, size: 16, color: better),
             Text(
               text,
               textAlign: TextAlign.right,
@@ -1317,7 +1498,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       return Row(
         children: [
           SizedBox(
-            width: 76,
+            width: _vox ? 92 : 76,
             // Tap the name for what the stat is actually used for (user
             // 2026-09-06) — see [_showStatInfo].
             child: GestureDetector(
@@ -1333,11 +1514,18 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             ),
           ),
           Expanded(
-            child: RecessBar(
-              value: maxVal > 0 ? barValues[stat]! / maxVal : 0,
-              color: barColor,
-              height: 9,
-            ),
+            child: _vox
+                ? VoxelBar(
+                    value: maxVal > 0 ? barValues[stat]! / maxVal : 0,
+                    color: barColor,
+                    height: 9,
+                    block: 7,
+                  )
+                : RecessBar(
+                    value: maxVal > 0 ? barValues[stat]! / maxVal : 0,
+                    color: barColor,
+                    height: 9,
+                  ),
           ),
           const SizedBox(width: 4),
           num('${values[stat]}', valueStyle, valueBeats),
@@ -1358,9 +1546,11 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       ),
     );
 
+    // Read order Lv1 → Now → Max (user 2026-09-28: "Stats und Breeding Hut:
+    // Lv1 dann Now dann Max Level"), same as the shared LevelRefToggle.
     final refIndex = switch (_refLevel) {
-      null => 0,
-      1 => 1,
+      1 => 0,
+      null => 1,
       _ => 2,
     };
     final controls = Row(
@@ -1368,14 +1558,14 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         Expanded(
           child: _glassSeg(
             [
-              'Now · Lv ${creature.level}',
               'Lv 1',
+              'Now · Lv ${creature.level}',
               'Max · Lv $kCreatureMaxLevel',
             ],
             refIndex,
             (i) => setState(
               () => _refLevel = switch (i) {
-                1 => 1,
+                0 => 1,
                 2 => kCreatureMaxLevel,
                 _ => null,
               },
@@ -1441,8 +1631,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     height: 28,
     padding: const EdgeInsets.all(2),
     decoration: ShapeDecoration(
-      color: const Color(0x33000000),
-      shape: FoE.facet(radius: 14),
+      color: _vox ? Voxel.tone(_elem, 0) : const Color(0x33000000),
+      shape: _sh(radius: 14),
     ),
     child: Row(
       children: [
@@ -1455,7 +1645,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 alignment: Alignment.center,
                 decoration: ShapeDecoration(
                   color: i == selected ? Colors.white : Colors.transparent,
-                  shape: FoE.facet(radius: 12),
+                  shape: _sh(radius: 12),
                 ),
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
@@ -1521,6 +1711,10 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                   ),
                 ),
                 const SizedBox(width: 14),
+                // The ready-to-evolve signal is the Evolution TAB's own badge
+                // now (user 2026-09-29: the arrow on this button was removed
+                // again — one live indicator, not two saying the same thing
+                // right next to each other on the same open tab).
                 SizedBox(
                   width: 240,
                   child: _pillBtn(
@@ -1570,7 +1764,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           ),
           if (s < 2)
             const Center(
-              child: Icon(Icons.chevron_right, color: _inkDim, size: 40),
+              child: PixelIcon(Icons.chevron_right, color: _inkDim, size: 40),
             ),
         ],
       ],
@@ -1589,7 +1783,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       decoration: current
           ? ShapeDecoration(
               color: const Color(0x1FFFFFFF),
-              shape: FoE.facet(
+              shape: _sh(
                 radius: 14,
                 side: const BorderSide(color: Color(0x40FFFFFF)),
               ),
@@ -1599,7 +1793,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         children: [
           Expanded(
             child: url == null
-                ? Center(child: Icon(Icons.pets, color: dim, size: 60))
+                ? Center(child: PixelIcon(Icons.pets, color: dim, size: 60))
                 : LayoutBuilder(
                     builder: (context, cons) {
                       // Same disk-cached loader as [_art] — see the comment
@@ -1611,7 +1805,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                         width: cons.maxWidth,
                         height: cons.maxHeight,
                         fallback: Center(
-                          child: Icon(Icons.pets, color: dim, size: 60),
+                          child: PixelIcon(Icons.pets, color: dim, size: 60),
                         ),
                       );
                       // Not seen yet → every opaque pixel flat dark, so only the
@@ -1677,6 +1871,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         ],
       ],
     );
+    // Release moved to the tab rail itself, right under the Abilities tile
+    // (user 2026-09-29) — see [_tabRail].
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1715,7 +1911,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           alignment: Alignment.center,
           decoration: ShapeDecoration(
             color: const Color(0x14FFFFFF),
-            shape: FoE.facet(
+            shape: _sh(
               radius: 14,
               side: const BorderSide(color: Color(0x66FFFFFF), width: 1.4),
             ),
@@ -1723,7 +1919,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.add, size: 34, color: Color(0xB3FFFFFF)),
+              const PixelIcon(Icons.add, size: 34, color: Color(0xB3FFFFFF)),
               Text(
                 canEdit ? 'Add ability' : 'Empty slot',
                 style: const TextStyle(color: _inkDim, fontSize: 11),
@@ -1771,7 +1967,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               Color.lerp(base, Colors.black, 0.5)!,
             ],
           ),
-          shape: FoE.facet(
+          shape: _sh(
             radius: 14,
             side: const BorderSide(color: Color(0x33FFFFFF)),
           ),
@@ -1805,7 +2001,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                   ),
                   decoration: ShapeDecoration(
                     color: const Color(0x59000000),
-                    shape: FoE.facet(radius: 9),
+                    shape: _sh(radius: 9),
                   ),
                   child: Text(
                     '${CombatEngine.abilityApCost(a)} AP',
@@ -1817,25 +2013,25 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Icon(icon, size: 16, color: const Color(0xCCFFFFFF)),
+                PixelIcon(icon, size: 16, color: const Color(0xCCFFFFFF)),
               ],
             ),
             const SizedBox(height: 2),
             Text(
               _kindLine(a),
-              style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 10.5),
+              style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 11.5),
             ),
             if (a.description.isNotEmpty)
               Flexible(
                 child: Padding(
                   padding: const EdgeInsets.only(top: 3),
                   child: Text(
-                    a.description,
+                    shortAbilityDescription(a.description),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xEBFFFFFF),
-                      fontSize: 10.5,
+                      fontSize: 11.5,
                       height: 1.25,
                     ),
                   ),
@@ -1853,18 +2049,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
 
   /// What an ability's effects do, one line each, in the same words the
   /// battle-prep long-press sheet uses (user 2026-09-08).
-  List<String> _effectTexts(AbilityDef a) => [
-    if (a.extraHitChance > 0)
-      a.extraHitSameTarget
-          ? 'May hit the SAME target again: 2nd hit '
-                '${(a.extraHitChance * 100).round()} % chance, 3rd '
-                '${(a.extraHitChance * a.extraHitChance * 100).round()} %.'
-          : 'May also hit ANOTHER enemy: 2nd hit '
-                '${(a.extraHitChance * 100).round()} % chance, 3rd '
-                '${(a.extraHitChance * a.extraHitChance * 100).round()} % '
-                '— does nothing extra alone.',
-    for (final e in a.effects) describeAbilityEffect(e).join('\n'),
-  ];
+  List<String> _effectTexts(AbilityDef a) => abilityNotes(a);
 
   /// THE SWAP DIALOG. A filled slot shows what the ability does in full and the
   /// other abilities the monster has learned; tap one to put it in this slot. An
@@ -1896,7 +2081,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       builder: (ctx) => Dialog(
         backgroundColor: CreamPalette.paperTop,
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        shape: FoE.facet(radius: 14, side: BorderSide(color: CreamPalette.tan)),
+        shape: _sh(radius: 14, side: BorderSide(color: CreamPalette.tan)),
         child: Stack(
           children: [
             ConstrainedBox(
@@ -1947,7 +2132,9 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                                         if (current.description.isNotEmpty) ...[
                                           const SizedBox(height: 6),
                                           Text(
-                                            current.description,
+                                            shortAbilityDescription(
+                                              current.description,
+                                            ),
                                             style: FoE.label(
                                               size: 12.5,
                                             ).copyWith(color: _dlgInk),
@@ -2078,7 +2265,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
           decoration: ShapeDecoration(
             color: base.withValues(alpha: 0.14),
-            shape: FoE.facet(
+            shape: _sh(
               radius: 10,
               side: BorderSide(color: base.withValues(alpha: 0.7), width: 1.4),
             ),
@@ -2106,7 +2293,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                     ),
                     if (a.description.isNotEmpty)
                       Text(
-                        a.description,
+                        shortAbilityDescription(a.description),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: FoE.dim(size: 11).copyWith(color: _dlgDim),
@@ -2160,7 +2347,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: ShapeDecoration(
         color: CreamPalette.gold,
-        shape: FoE.facet(radius: 12),
+        shape: _sh(radius: 12),
       ),
       child: const Text(
         '📖 Learn new',
@@ -2207,7 +2394,9 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           ],
         ),
         const SizedBox(height: 5),
-        RecessBar(value: frac, color: color, height: 12),
+        _vox
+            ? VoxelBar(value: frac, color: color, height: 12)
+            : RecessBar(value: frac, color: color, height: 12),
       ],
     ),
   );
@@ -2229,7 +2418,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           alignment: Alignment.center,
           decoration: ShapeDecoration(
             color: filled ? color : Colors.transparent,
-            shape: FoE.facet(
+            shape: _sh(
               radius: 15,
               side: BorderSide(color: color, width: 1.6),
             ),
@@ -2272,7 +2461,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: ShapeDecoration(
               color: canPay ? element : _track,
-              shape: FoE.facet(radius: 12),
+              shape: _sh(radius: 12),
             ),
             child: Text(
               '🪙 $cost',
@@ -2341,7 +2530,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: ShapeDecoration(
           color: element,
-          shape: FoE.facet(radius: 12),
+          shape: _sh(radius: 12),
         ),
         // "(N)" for how many are in storage now, not "×N" (user 2026-08-29:
         // "Anzahl nicht xn sondern die Anzahl im Lager befindlichen als (n)

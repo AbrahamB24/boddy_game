@@ -27,24 +27,28 @@ Map<String, dynamic> _row(List<Map<String, dynamic>> effects) => {
 void main() {
   group('every authorable effect type survives a DB round-trip', () {
     test('trade is parsed, not dropped (the bug this test exists for)', () {
-      final def = BuildingDef.fromDefRow(_row([
-        {'type': 'trade', 'value': 5.0, 'era': 1},
-      ]));
+      final def = BuildingDef.fromDefRow(
+        _row([
+          {'type': 'trade', 'value': 5.0, 'era': 1},
+        ]),
+      );
       expect(def.tradePercentAt(1), 5);
       expect(def.tradePercentAt(3), 10); // global +50%/level curve
     });
 
     test('a workshop role round-trips with its per-level slot steps', () {
-      final def = BuildingDef.fromDefRow(_row([
-        {
-          'type': 'workshop',
-          'stat': 'woodcutting',
-          'resource': 'wood',
-          'mult': 0.5,
-          'slots': 4,
-          'slotSteps': {'3': 2},
-        },
-      ]));
+      final def = BuildingDef.fromDefRow(
+        _row([
+          {
+            'type': 'workshop',
+            'stat': 'woodcutting',
+            'resource': 'wood',
+            'mult': 0.5,
+            'slots': 4,
+            'slotSteps': {'3': 2},
+          },
+        ]),
+      );
       expect(def.workshops, hasLength(1));
       expect(effectiveSlots(def.workshops.first, 2), 4);
       expect(effectiveSlots(def.workshops.first, 3), 6);
@@ -78,7 +82,9 @@ void main() {
       // And each one really comes back out of fromDefRow.
       for (final t in authorable) {
         final def = BuildingDef.fromDefRow(
-          _row([{'type': t, 'value': 1.0, 'era': 1}]),
+          _row([
+            {'type': t, 'value': 1.0, 'era': 1},
+          ]),
         );
         expect(def.hasEffect(t, 1), isTrue, reason: '$t was dropped on load');
       }
@@ -86,20 +92,25 @@ void main() {
   });
 
   group('the per-level preview shows the runtime numbers', () {
-    Future<void> pump(WidgetTester tester, Map<String, dynamic> effect,
-        {int maxLevel = 8}) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: EffectsEditor(
-              initialEffects: [effect],
-              mode: EffectsMode.building,
-              maxLevel: maxLevel,
-              onChanged: (_) {},
+    Future<void> pump(
+      WidgetTester tester,
+      Map<String, dynamic> effect, {
+      int maxLevel = 8,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: EffectsEditor(
+                initialEffects: [effect],
+                mode: EffectsMode.building,
+                maxLevel: maxLevel,
+                onChanged: (_) {},
+              ),
             ),
           ),
         ),
-      ));
+      );
     }
 
     testWidgets('production follows the +50%/level curve', (tester) async {
@@ -110,8 +121,9 @@ void main() {
       expect(find.text('L8'), findsOneWidget);
     });
 
-    testWidgets('an authored per-level % overrides the default curve',
-        (tester) async {
+    testWidgets('an authored per-level % overrides the default curve', (
+      tester,
+    ) async {
       await pump(tester, {
         'type': 'production',
         'key': 'wood',
@@ -122,8 +134,9 @@ void main() {
       expect(find.text('121 wood/h'), findsOneWidget); // L3 = 100 × 1.1²
     });
 
-    testWidgets('a workshop shows slots and a fully-staffed hourly figure',
-        (tester) async {
+    testWidgets('a workshop shows slots and a fully-staffed hourly figure', (
+      tester,
+    ) async {
       await pump(tester, {
         'type': 'workshop',
         'stat': 'woodcutting',
@@ -150,8 +163,9 @@ void main() {
       expect(find.textContaining('at Healing'), findsOneWidget);
     });
 
-    testWidgets('the reference stat is editable and recomputes the line',
-        (tester) async {
+    testWidgets('the reference stat is editable and recomputes the line', (
+      tester,
+    ) async {
       // The shared lens must not leak into the tests that follow.
       addTearDown(() => debugSetPreviewStat(30));
       await pump(tester, {
@@ -168,8 +182,9 @@ void main() {
       expect(find.text('90 wood/h'), findsNothing); // the old lens is gone
     });
 
-    testWidgets('a half-typed stat keeps the last usable value',
-        (tester) async {
+    testWidgets('a half-typed stat keeps the last usable value', (
+      tester,
+    ) async {
       addTearDown(() => debugSetPreviewStat(30));
       await pump(tester, {
         'type': 'workshop',
@@ -184,8 +199,9 @@ void main() {
       expect(find.text('90 wood/h'), findsOneWidget);
     });
 
-    testWidgets('a flat type says so instead of inventing a curve',
-        (tester) async {
+    testWidgets('a flat type says so instead of inventing a curve', (
+      tester,
+    ) async {
       await pump(tester, {'type': 'resource', 'key': 'all', 'value': 0.2});
       // resource is read via effectEntry: same +20% on every level.
       expect(find.text('+20 %'), findsNWidgets(8));
@@ -195,8 +211,9 @@ void main() {
       );
     });
 
-    testWidgets('explicit level steps are summed, not multiplied',
-        (tester) async {
+    testWidgets('explicit level steps are summed, not multiplied', (
+      tester,
+    ) async {
       await pump(tester, {
         'type': 'housing',
         'value': 4,
@@ -211,8 +228,9 @@ void main() {
     // ich auch bei jedem level angeben können, wieviel dazukommen"). The
     // runtime already preferred levelSteps over the percent factor — this is
     // the preview agreeing with it, which is the half that was missing.
-    testWidgets('an expedition-slot ladder is summed, not multiplied',
-        (tester) async {
+    testWidgets('an expedition-slot ladder is summed, not multiplied', (
+      tester,
+    ) async {
       // The numbers are chosen so nothing else on screen can match them: the
       // preview prints the LEVEL in its own column, and the editor now prints
       // every authored step in an input field. Only the SUMS (18 and 24) are
@@ -243,10 +261,12 @@ void main() {
         'slots': 2,
       };
 
-      testWidgets('a breeder post shows the MATING duration only',
-          (tester) async {
+      testWidgets('a breeder post shows the MATING duration only', (
+        tester,
+      ) async {
         addTearDown(() {
           debugSetPreviewRarity(CreatureRarity.rare);
+          debugSetPreviewStat(30);
           kSpeciesBalance = defaultSpeciesBalance();
         });
         // Distinct bases so a line from the wrong phase would be obvious.
@@ -258,11 +278,15 @@ void main() {
                   .copyWith(breedHours: 8, hatchHours: 12),
           },
         );
+        // kBreedingK was raised 2026-09-28 (a lone stat-114 breeder was
+        // already −66 %); the preview's own reference stat is bumped to
+        // match, so this still lands exactly on the half-time point.
+        debugSetPreviewStat(130);
         await pump(tester, post(WorkshopRole.kBreeding), maxLevel: 1);
 
-        // Power = 2 slots × 1.0 × 1.0 × stat 30 = 60 = kBreedingK, the
+        // Power = 2 slots × 1.0 × stat 130 = 260 = kBreedingK, the
         // half-time point.
-        expect(find.text('60'), findsOneWidget);
+        expect(find.text('260'), findsOneWidget);
         expect(find.text('−50 %'), findsOneWidget);
         expect(find.text('💞 Mating time'), findsOneWidget);
         expect(find.text('4h'), findsOneWidget); // 8h × 0.5
@@ -272,10 +296,12 @@ void main() {
         expect(find.textContaining('breeding/h'), findsNothing);
       });
 
-      testWidgets('a hatcher post shows the INCUBATION duration only',
-          (tester) async {
+      testWidgets('a hatcher post shows the INCUBATION duration only', (
+        tester,
+      ) async {
         addTearDown(() {
           debugSetPreviewRarity(CreatureRarity.rare);
+          debugSetPreviewStat(30);
           kSpeciesBalance = defaultSpeciesBalance();
         });
         kSpeciesBalance = SpeciesBalance(
@@ -286,6 +312,7 @@ void main() {
                   .copyWith(breedHours: 8, hatchHours: 12),
           },
         );
+        debugSetPreviewStat(130); // 2 slots × 130 = kBreedingK — see above.
         await pump(tester, post(WorkshopRole.kHatching), maxLevel: 1);
         expect(find.text('🐣 Incubation time'), findsOneWidget);
         expect(find.text('6h'), findsOneWidget); // 12h × 0.5
@@ -293,9 +320,14 @@ void main() {
         expect(find.text('4h'), findsNothing);
       });
 
-      testWidgets('the rarity lens picks which base duration is shown',
-          (tester) async {
-        addTearDown(() => debugSetPreviewRarity(CreatureRarity.rare));
+      testWidgets('the rarity lens picks which base duration is shown', (
+        tester,
+      ) async {
+        addTearDown(() {
+          debugSetPreviewRarity(CreatureRarity.rare);
+          debugSetPreviewStat(30);
+        });
+        debugSetPreviewStat(130); // 2 slots × 130 = kBreedingK — see above.
         await pump(tester, post(WorkshopRole.kBreeding), maxLevel: 1);
         expect(find.text('32h'), findsOneWidget); // rare 64h × 0.5
 
@@ -308,8 +340,9 @@ void main() {
         expect(find.text('2.7d'), findsOneWidget); // epic 128h × 0.5 = 64h
       });
 
-      testWidgets('the level factor is spelled out, not left implicit',
-          (tester) async {
+      testWidgets('the level factor is spelled out, not left implicit', (
+        tester,
+      ) async {
         // The confusion it exists for (user 2026-07-26): 2 slots × mult 2 ×
         // stat 70 reads as 280 at L2, but the game also applies the default
         // +50 %/level to each worker's output — so it is 420.
@@ -329,8 +362,9 @@ void main() {
         expect(find.text('420'), findsOneWidget); // L2: 2 × 2 × 70 × 1.5
       });
 
-      testWidgets('an authored 0 %/level makes the factor flat',
-          (tester) async {
+      testWidgets('an authored 0 %/level makes the factor flat', (
+        tester,
+      ) async {
         addTearDown(() => debugSetPreviewStat(30));
         await pump(tester, {
           'type': 'workshop',
@@ -383,8 +417,9 @@ void main() {
         expect(find.text('+24 %'), findsOneWidget);
       });
 
-      testWidgets('a combined scout post previews all three dials apart',
-          (tester) async {
+      testWidgets('a combined scout post previews all three dials apart', (
+        tester,
+      ) async {
         // User 2026-07-29: "exp carry capacity, exp goods und exp speed in
         // einem Effekt … welchen ich aber separat einstellen kann". One row,
         // three lines — each read from ITS own dial, so a preview that folded
@@ -402,8 +437,9 @@ void main() {
         expect(find.text('−60 %'), findsOneWidget);
       });
 
-      testWidgets('a builder post states the build-time CUT, not a factor',
-          (tester) async {
+      testWidgets('a builder post states the build-time CUT, not a factor', (
+        tester,
+      ) async {
         // User 2026-07-26: "nicht Bau-Tempo Beschleuniger, sondern um wieviel
         // Prozent wird die Bauzeit reduziert, wie bei anderen Menüs auch".
         await pump(tester, {
@@ -414,14 +450,16 @@ void main() {
           'slots': 2,
         }, maxLevel: 1);
         // 2 slots × mult 1 × stat 30 = 60 points, and points buy a percentage
-        // off the authored time: 60/(60+100) = −37.5 %.
+        // off the authored time: 60/(60+140) = −30 % (K raised 2026-09-28 —
+        // see kBuildPointsForHalfTime).
         expect(find.text('60'), findsOneWidget);
-        expect(find.text('−37.5 %'), findsOneWidget);
+        expect(find.text('−30 %'), findsOneWidget);
         expect(find.textContaining('×3'), findsNothing);
       });
 
-      testWidgets('a weak builder post still CUTS — it can never add time',
-          (tester) async {
+      testWidgets('a weak builder post still CUTS — it can never add time', (
+        tester,
+      ) async {
         // User 2026-07-26: points are a cut off the authored time, so the
         // authored time is the ceiling. The preview used to print "+233 %" for
         // a post below the old 20-point anchor; there is no anchor anymore.
@@ -432,13 +470,14 @@ void main() {
           'mult': 0.1,
           'slots': 2,
         }, maxLevel: 1);
-        // 2 × 0.1 × 30 = 6 points → 6/106.
-        expect(find.text('−5.7 %'), findsOneWidget);
+        // 2 × 0.1 × 30 = 6 points → 6/146.
+        expect(find.text('−4.1 %'), findsOneWidget);
         expect(find.text('+233 %'), findsNothing);
       });
 
-      testWidgets('the builder mult COUNTS — it used to be inert',
-          (tester) async {
+      testWidgets('the builder mult COUNTS — it used to be inert', (
+        tester,
+      ) async {
         // User 2026-07-26: "Bau-Punkte soll eine Wirkung haben, da ich dies
         // beim Hauptgebäude einfügen will". The runtime ignored both mult and
         // the building level for construction; now neither is a special case.
@@ -451,12 +490,13 @@ void main() {
         }, maxLevel: 2);
         expect(find.text('24'), findsOneWidget); // L1: 2 × 0.4 × stat 30
         expect(find.text('36'), findsOneWidget); // L2: ×1.5 level curve
-        expect(find.text('−19.4 %'), findsOneWidget); // L1: 24/(24+100)
-        expect(find.text('−26.5 %'), findsOneWidget); // L2: 36/(36+100)
+        expect(find.text('−14.6 %'), findsOneWidget); // L1: 24/(24+140)
+        expect(find.text('−20.5 %'), findsOneWidget); // L2: 36/(36+140)
       });
 
-      testWidgets('a legendary slot says the level does not scale it',
-          (tester) async {
+      testWidgets('a legendary slot says the level does not scale it', (
+        tester,
+      ) async {
         await pump(tester, {
           'type': 'workshop',
           'stat': 'production',
@@ -470,8 +510,9 @@ void main() {
       });
     });
 
-    testWidgets('passive construction is points, not units per hour',
-        (tester) async {
+    testWidgets('passive construction is points, not units per hour', (
+      tester,
+    ) async {
       // User 2026-07-26: "das soll die passive Construction sein … wie wenn ein
       // Monster mit dieser Stufe dort arbeiten würde" — so a building's own
       // points and a stationed builder's land in the same pot, 1:1, and read
@@ -482,15 +523,16 @@ void main() {
         'value': 20.0,
       }, maxLevel: 3);
       expect(find.text('20 points'), findsOneWidget); // L1 — not "20 /h"
-      expect(find.text('−16.7 %'), findsOneWidget); // 20/(20+100)
+      expect(find.text('−12.5 %'), findsOneWidget); // 20/(20+140)
       // L3 on the default +50 %/level curve: 40 points.
       expect(find.text('40 points'), findsOneWidget);
-      expect(find.text('−28.6 %'), findsOneWidget); // 40/(40+100)
+      expect(find.text('−22.2 %'), findsOneWidget); // 40/(40+140)
       expect(find.textContaining('count exactly the same'), findsOneWidget);
     });
 
-    testWidgets('a work post states the XP it pays, and that it is global',
-        (tester) async {
+    testWidgets('a work post states the XP it pays, and that it is global', (
+      tester,
+    ) async {
       // The rate is not editable per building any more (user 2026-07-30), so
       // the preview is where the author reads it off — and it must say WHERE the
       // one number lives, or the missing field looks like a bug.
@@ -505,39 +547,44 @@ void main() {
         find.text('${kXpBalance.workXpAt(1).round()} XP/h'),
         findsOneWidget,
       );
-      expect(find.textContaining('EVERY building with a work post'),
-          findsOneWidget);
+      expect(
+        find.textContaining('EVERY building with a work post'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('a STORE post gets one dial and one preview line per resource',
-        (tester) async {
+    testWidgets('a STORE post gets one dial and one preview line per resource', (
+      tester,
+    ) async {
       // User 2026-07-30: "Ich muss den output pro worker für jede Ressource
       // einzeln einstellen können." The keys come from the building's OWN
       // storage effects, so the form cannot offer a dial for something the
       // store does not hold — nor miss one it does.
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: EffectsEditor(
-              initialEffects: [
-                {
-                  'type': 'workshop',
-                  'stat': 'logistics',
-                  'resource': WorkshopRole.kStorageRoom,
-                  'mult': 10.0,
-                  'mults': {'wood': 10.0, 'fish': 4.0},
-                  'slots': 1,
-                },
-                {'type': 'storage', 'key': 'wood', 'value': 500.0, 'era': 1},
-                {'type': 'storage', 'key': 'fish', 'value': 500.0, 'era': 1},
-              ],
-              mode: EffectsMode.building,
-              maxLevel: 1,
-              onChanged: (_) {},
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: EffectsEditor(
+                initialEffects: [
+                  {
+                    'type': 'workshop',
+                    'stat': 'logistics',
+                    'resource': WorkshopRole.kStorageRoom,
+                    'mult': 10.0,
+                    'mults': {'wood': 10.0, 'fish': 4.0},
+                    'slots': 1,
+                  },
+                  {'type': 'storage', 'key': 'wood', 'value': 500.0, 'era': 1},
+                  {'type': 'storage', 'key': 'fish', 'value': 500.0, 'era': 1},
+                ],
+                mode: EffectsMode.building,
+                maxLevel: 1,
+                onChanged: (_) {},
+              ),
             ),
           ),
         ),
-      ));
+      );
       // One editable dial per stored resource…
       expect(find.textContaining('Room per stat point · wood'), findsOneWidget);
       expect(find.textContaining('Room per stat point · Fish'), findsOneWidget);

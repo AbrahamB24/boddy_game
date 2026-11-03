@@ -25,6 +25,8 @@ import 'services/gold_economy.dart';
 import 'services/trade_caravan.dart';
 import 'services/trade_center.dart';
 import 'settlement_controller.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 /// The Market (user 2026-09-20, "Variante 3, Handelskacheln", with every
 /// resource of an ERA side by side and a tappable amount field).
@@ -231,23 +233,20 @@ class _MarketScreenState extends State<MarketScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
           color: CreamPalette.tan.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: vr(9),
         ),
         child: Text(
           '🪙 ${_ctrl.gold.toInt()}',
           style: FoE.value(size: 12).copyWith(color: _ink),
         ),
       ),
+      // No card of its own any more (user 2026-09-30, "hier und andernorts
+      // sind noch die alten Kästchen vorhanden") — MenuScaffold is already
+      // the one card on screen.
       child: Padding(
         padding: const EdgeInsets.only(bottom: 10),
-        child: creamCard(
-          child: Column(
-            children: [
-              _tiles(),
-              Expanded(child: _body()),
-              _caravanBar(),
-            ],
-          ),
+        child: Column(
+          children: [_tiles(), Expanded(child: _body()), _caravanBar()],
         ),
       ),
     ),
@@ -540,7 +539,7 @@ class _MarketScreenState extends State<MarketScreen> {
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
           color: CreamPalette.tan.withValues(alpha: 0.2),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: vr(12),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -554,7 +553,7 @@ class _MarketScreenState extends State<MarketScreen> {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: i == index ? CreamPalette.gold : Colors.transparent,
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: vr(9),
                     border: i == index
                         ? Border.all(color: CreamPalette.goldDeep)
                         : null,
@@ -813,7 +812,7 @@ class _MarketScreenState extends State<MarketScreen> {
         padding: const EdgeInsets.only(left: 9, right: 7),
         decoration: BoxDecoration(
           color: _ink.withValues(alpha: live ? 0.07 : 0.04),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: vr(10),
           border: Border.all(
             color: CreamPalette.tan.withValues(alpha: live ? 1 : 0.35),
             width: 1.5,
@@ -851,7 +850,7 @@ class _MarketScreenState extends State<MarketScreen> {
             if (live)
               const Padding(
                 padding: EdgeInsets.only(left: 4),
-                child: Icon(Icons.edit, size: 13, color: CreamPalette.tan),
+                child: PixelIcon(Icons.edit, size: 13, color: CreamPalette.tan),
               ),
           ],
         ),
@@ -999,7 +998,7 @@ class _MarketScreenState extends State<MarketScreen> {
                             ),
                             decoration: BoxDecoration(
                               color: CreamPalette.accent,
-                              borderRadius: BorderRadius.circular(7),
+                              borderRadius: vr(7),
                             ),
                             child: Text(
                               '$owned',
@@ -1182,9 +1181,9 @@ class _MarketScreenState extends State<MarketScreen> {
                   height: 15,
                   decoration: const BoxDecoration(
                     color: CreamPalette.accent,
-                    shape: BoxShape.circle,
+                    shape: BoxShape.rectangle,
                   ),
-                  child: const Icon(Icons.close, size: 10, color: Colors.white),
+                  child: const PixelIcon(Icons.close, size: 10, color: Colors.white),
                 ),
               ),
             ],
@@ -1200,7 +1199,7 @@ class _MarketScreenState extends State<MarketScreen> {
         width: size,
         height: size,
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
+          shape: BoxShape.rectangle,
           color: next
               ? CreamPalette.gold.withValues(alpha: 0.28)
               : CreamPalette.tan.withValues(alpha: 0.1),
@@ -1211,7 +1210,7 @@ class _MarketScreenState extends State<MarketScreen> {
             width: 1.5,
           ),
         ),
-        child: Icon(
+        child: PixelIcon(
           Icons.add,
           size: 20,
           color: next ? kBoxAccent : CreamPalette.tan.withValues(alpha: 0.7),
@@ -1658,14 +1657,14 @@ class _AmountDialogState extends State<_AmountDialog> {
                     fillColor: Colors.white.withValues(alpha: 0.55),
                     contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: vr(12),
                       borderSide: const BorderSide(
                         color: CreamPalette.tan,
                         width: 1.5,
                       ),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: vr(12),
                       borderSide: const BorderSide(
                         color: CreamPalette.goldDeep,
                         width: 2,
@@ -1808,14 +1807,14 @@ class _NameDialogState extends State<_NameDialog> {
                   fillColor: Colors.white.withValues(alpha: 0.55),
                   hintText: 'Name it',
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: vr(12),
                     borderSide: const BorderSide(
                       color: CreamPalette.tan,
                       width: 1.5,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: vr(12),
                     borderSide: const BorderSide(
                       color: CreamPalette.goldDeep,
                       width: 2,

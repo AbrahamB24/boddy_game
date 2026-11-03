@@ -8,6 +8,7 @@ import '../models/creature_enums.dart';
 import '../models/creature_instance.dart';
 import 'battle_scene.dart' show TypePodium;
 import 'creature_sprite.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 // ── THE MONSTER FAMILY (user 2026-09-20: "Monsterkacheln müssen vereinheitlicht
 // werden. Aktuell gibt es sehr viele verschiedene Darstellungen") ──
@@ -84,7 +85,7 @@ class CreatureFigure extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = imageUrl;
     if (url == null) {
-      return const Center(child: Icon(Icons.pets, color: FoE.gold, size: 40));
+      return const Center(child: PixelIcon(Icons.pets, color: FoE.gold, size: 40));
     }
     return Stack(
       fit: StackFit.expand,
@@ -115,7 +116,7 @@ class CreatureFigure extends StatelessWidget {
             height: decodeSize,
             alignment: Alignment.bottomCenter,
             fallback: const Center(
-              child: Icon(Icons.pets, color: FoE.gold, size: 40),
+              child: PixelIcon(Icons.pets, color: FoE.gold, size: 40),
             ),
           ),
         ),

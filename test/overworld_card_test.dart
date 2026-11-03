@@ -32,6 +32,7 @@ void main() {
     int foes = 2,
     List<RewardLine> rewards = const [],
     VoidCallback? onFight,
+    bool noTeam = false,
   }) async {
     t.view.physicalSize = const Size(932, 430);
     t.view.devicePixelRatio = 1;
@@ -54,6 +55,7 @@ void main() {
                 ],
                 rewards: rewards,
                 onFight: onFight ?? () {},
+                noTeam: noTeam,
               ),
             ),
           ),
@@ -168,9 +170,22 @@ void main() {
     expect(fought, 0);
   });
 
-  testWidgets('a cleared battle offers a rematch for XP only', (t) async {
+  testWidgets('a cleared battle offers a rematch, and says more stars pay more XP', (t) async {
     await show(t, state: OverworldNodeState.done);
     expect(find.text('Fight again'), findsOneWidget);
-    expect(find.text('Nothing new — a rematch earns XP only.'), findsOneWidget);
+    expect(find.textContaining('better result earns more XP'), findsOneWidget);
   });
+
+  testWidgets(
+    'with no battle-ready monster, an unlocked battle says so and cannot be fought',
+    (t) async {
+      var fought = 0;
+      await show(t, noTeam: true, onFight: () => fought++);
+      expect(find.text('Catch a monster first'), findsOneWidget);
+      expect(find.text('Fight'), findsNothing);
+      await t.tap(find.text('Catch a monster first'));
+      await t.pumpAndSettle();
+      expect(fought, 0);
+    },
+  );
 }

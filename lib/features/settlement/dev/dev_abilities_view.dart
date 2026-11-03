@@ -5,6 +5,7 @@ import '../../creatures/models/ability_def.dart';
 import '../../creatures/models/creature_enums.dart';
 import '../../creatures/models/species_def.dart';
 import 'dev_lists.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
 
 /// THE ABILITIES, TO READ (user 2026-09-20: "Abilities anzeigen lassen mit
 /// Erklärung — und ich gebe dir den Auftrag, falls etwas geändert werden muss").
@@ -219,7 +220,7 @@ class _Explanation extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: CreamPalette.tan.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: vr(10),
             ),
             child: Text(
               'Zum Ändern: sag mir, welche Ability und was — ich passe sie an.',
@@ -239,7 +240,7 @@ class _Explanation extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
     decoration: BoxDecoration(
       color: gold ? CreamPalette.gold : CreamPalette.tan.withValues(alpha: 0.2),
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: vr(9),
     ),
     child: Text(
       t,

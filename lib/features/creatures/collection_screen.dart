@@ -1,9 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
-import '../../core/ui/duration_format.dart';
-import '../../core/ui/number_format.dart';
 import '../../core/ui/pressable.dart';
 import '../common/widgets/filter_pills.dart';
 import '../common/widgets/monster_tile_grid.dart' show kMonsterTileAspect;
@@ -19,9 +19,9 @@ import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'starter_preview_screen.dart';
 import 'teams_screen.dart';
-import 'widgets/creature_backdrop.dart';
 import 'widgets/creature_card.dart';
-import 'widgets/creature_sprite.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 /// Sort orders for the collection grid (user request 2026-07-17). `newest`
 /// is the controller's own order — catch order — so the default costs no
@@ -93,6 +93,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
   /// The pills' own palette on a cream card — the shared look the egg picker and
   /// the breeding screen wear.
   static final PillPalette _pills = PillPalette.cream;
+
+  /// Starter preview drafts, one per species, cached so the picker's tile
+  /// doesn't reroll a new gender/genes on every rebuild — see [_starterDraft].
+  final Map<String, CreatureInstance> _starterDrafts = {};
 
   /// The grid's list: filtered, then sorted. A creature whose species def
   /// was removed has no element/rarity to match, so any active filter hides
@@ -166,45 +170,67 @@ class _CollectionScreenState extends State<CollectionScreen> {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([_ctrl, _breeding, _settlement]),
-    builder: (context, _) => MenuScaffold(
-      title: 'Monsters',
-      trailing: _housingReadout(),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 10),
+    builder: (context, _) {
+      // No "Monsters · housing" header while there is nothing to count yet
+      // and nowhere earlier to close back to (user 2026-10-01: "der ganze
+      // Header kannst du bei diesem Screen löschen") — exactly the branch
+      // below that renders [_starterPicker] instead of the grid.
+      final showingStarterPicker =
+          !_ctrl.isLoading && _ctrl.creatures.isEmpty;
+      return MenuScaffold(
+        showHeader: !showingStarterPicker,
+        title: 'Monsters',
+        trailing: _housingReadout(),
+        // No card of its own any more (user 2026-09-30, spotting the outer
+        // card still wrapping the grid+hubs Row: "die grosse Kachel...
+        // braucht es nicht" — MenuScaffold is already the one card on
+        // screen). Grid and hubs ARE different Gebiete — browsing versus
+        // where else to go — so the hubs keep a [zoneBox] of their own; the
+        // three hubs inside it are all the same KIND of thing (a shortcut),
+        // so they're plain [raisedTile] rows, not a card each.
+        // No bottom Padding around this Row any more (used to add a dead
+        // 10px strip below both the grid and the hubs panel, on top of
+        // MenuScaffold's own card padding) — trimmed so the grid gets that
+        // space too, see [_collectionGrid].
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // The whole collection on one cream card.
             Expanded(
-              child: creamCard(
-                child: Column(
-                  children: [
-                    if (_ctrl.creatures.isNotEmpty) _sortFilterBar(),
-                    Expanded(
-                      child: _ctrl.isLoading && _ctrl.creatures.isEmpty
-                          ? const Center(
-                              child: CircularProgressIndicator(
-                                color: CreamPalette.gold,
-                              ),
-                            )
-                          : _ctrl.creatures.isEmpty
-                          ? _starterPicker()
-                          : _collectionGrid(),
-                    ),
-                  ],
-                ),
+              child: Column(
+                children: [
+                  if (_ctrl.creatures.isNotEmpty) _sortFilterBar(),
+                  Expanded(
+                    child: _ctrl.isLoading && _ctrl.creatures.isEmpty
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: CreamPalette.gold,
+                            ),
+                          )
+                        : _ctrl.creatures.isEmpty
+                        ? _starterPicker()
+                        : _collectionGrid(),
+                  ),
+                ],
               ),
             ),
-            // The three doors, with their state. Nothing to show until there is
-            // a first monster.
+            // The three doors, with their state. Nothing to show until
+            // there is a first monster.
             if (_ctrl.creatures.isNotEmpty) ...[
-              const SizedBox(width: 12),
-              SizedBox(width: 204, child: _hubs()),
+              const SizedBox(width: 10),
+              SizedBox(
+                // Narrower still (user 2026-09-30: "können noch schmaler
+                // werden, so dass noch ein Monster mehr Platz hat pro
+                // Zeile") — the hubs' own text already ellipsized at 176, so
+                // shaving more off here just hands the grid another column's
+                // worth of room instead of sitting unused in this panel.
+                width: 132,
+                child: zoneBox(padding: const EdgeInsets.all(7), child: _hubs()),
+              ),
             ],
           ],
         ),
-      ),
-    ),
+      );
+    },
   );
 
   /// "14 · housing 12/16" at the right of the title card — how many monsters
@@ -213,7 +239,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
     decoration: BoxDecoration(
       color: CreamPalette.tan.withValues(alpha: 0.18),
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: vr(9),
     ),
     child: Text(
       '${_ctrl.creatures.length} · housing '
@@ -223,27 +249,18 @@ class _CollectionScreenState extends State<CollectionScreen> {
   );
 
   // ── The three hubs ─────────────────────────────────────────
+  // All three read down to ONE stat now (user 2026-09-30: "n Teams" /
+  // "n/n" / "13%", nothing else written) — each sits in the SAME slot
+  // (line1, beside the title) so the three cards read as one family at a
+  // glance instead of each inventing its own second line.
   Widget _hubs() {
-    final team = _ctrl.activeTeam;
-    final members = team == null
-        ? const <CreatureInstance>[]
-        : [
-            for (final id in team.memberIds)
-              ..._ctrl.creatures.where((c) => c.id == id),
-          ];
-    final teamPower = members.fold<int>(0, (s, c) => s + totalPower(c));
-
+    final teams = _ctrl.battleTeams;
     final mating = _breeding.matingJobs;
-    final eggs = _breeding.eggs;
     final ready = mating.where((j) => j.isReady).length;
-    final soonest = mating
-        .where((j) => !j.isReady)
-        .fold<Duration?>(
-          null,
-          (best, j) => best == null || j.remaining < best ? j.remaining : best,
-        );
-
     final bestiary = bestiaryProgress(_ctrl.creatures);
+    final bestiaryPct = bestiary.total == 0
+        ? 0
+        : (bestiary.seen / bestiary.total * 100).round();
 
     return Column(
       children: [
@@ -251,12 +268,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
           child: _hub(
             icon: Icons.shield,
             title: 'Teams',
-            line1: team == null
-                ? 'No team yet'
-                : '${team.name} · ${members.length}/${_ctrl.teamSizeCap}',
-            line2: team == null
-                ? 'Tap to set one up'
-                : 'Power ${shortNumber(teamPower)}',
+            // Shows once the first team exists — before that there is
+            // nothing to count.
+            line1: teams.isEmpty ? 'No team yet' : '${teams.length} Teams',
             onTap: () async {
               await pushMenu(context, const TeamsScreen());
               if (mounted) setState(() {});
@@ -268,17 +282,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
           child: _hub(
             icon: Icons.egg,
             title: 'Breeding',
-            line1: mating.isEmpty
-                ? 'Nothing running'
-                : '${mating.length} mating${mating.length == 1 ? '' : 's'} running',
-            line2: ready > 0
-                ? 'Ready — collect it'
-                : soonest != null
-                ? 'Ready in ${fmtDuration(soonest.inSeconds.toDouble())}'
-                : eggs.isNotEmpty
-                ? '${eggs.length} egg${eggs.length == 1 ? '' : 's'} waiting'
-                : 'Pair two monsters',
-            // Something to collect is what the amber is for.
+            line1: '${mating.length}/${_breeding.breedingSlots}',
+            // Something to collect is what the amber rim is for — no text
+            // needed alongside it any more.
             highlight: ready > 0,
             onTap: () => pushMenu(
               context,
@@ -291,10 +297,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
           child: _hub(
             icon: Icons.menu_book,
             title: 'Bestiary',
-            line1: '${bestiary.seen} of ${bestiary.total} seen',
-            line2: bestiary.total == 0
-                ? ''
-                : '${(bestiary.seen / bestiary.total * 100).round()} % complete',
+            line1: '$bestiaryPct%',
+            // Directly under the "13%" now that line2 is gone — same slot
+            // the other two hubs' progress bar would sit in, if they had one.
             progress: bestiary.total == 0
                 ? null
                 : bestiary.seen / bestiary.total,
@@ -308,19 +313,25 @@ class _CollectionScreenState extends State<CollectionScreen> {
   /// One hub: a round amber glyph, the door's name and a line of state, a
   /// chevron, and under it the number that matters (and, for the Bestiary, how
   /// far along it is). The whole card is the tap target.
+  /// One hub: a round amber glyph, the door's name and its ONE stat beside
+  /// it — same slot for all three hubs (2026-09-30 redesign, narrower boxes),
+  /// so "n Teams" / "n/n" / "13%" line up at the same height. The Bestiary's
+  /// progress bar sits directly under that row; the other two have none.
   Widget _hub({
     required IconData icon,
     required String title,
     required String line1,
-    required String line2,
     required VoidCallback onTap,
     double? progress,
     bool highlight = false,
   }) => Pressable(
     onTap: onTap,
-    child: creamCard(
-      deep: highlight ? CreamPalette.goldDeep : null,
-      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+    // A raised tile, not a card of its own — the three hubs are all the
+    // same kind of thing (a shortcut), standing on the shared [zoneBox]
+    // the way a trip or a target tile stands on its page.
+    child: Container(
+      decoration: raisedTile(lit: highlight, radius: 12),
+      padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -328,10 +339,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
           Row(
             children: [
               Container(
-                width: 34,
-                height: 34,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+                  shape: BoxShape.rectangle,
                   color: CreamPalette.gold,
                   boxShadow: [
                     BoxShadow(
@@ -340,47 +351,40 @@ class _CollectionScreenState extends State<CollectionScreen> {
                     ),
                   ],
                 ),
-                child: Icon(icon, size: 18, color: CreamPalette.ink),
+                child: PixelIcon(icon, size: 15, color: CreamPalette.ink),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 7),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
-                      style: FoE.title(size: 14).copyWith(color: kBoxInk),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: FoE.title(size: 12).copyWith(color: kBoxInk),
                     ),
                     Text(
                       line1,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+                      style: FoE.label(size: 11).copyWith(
+                        color: highlight ? kBoxAccent : kBoxInkSoft,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, size: 20, color: kBoxAccent),
             ],
           ),
-          const SizedBox(height: 7),
-          if (line2.isNotEmpty)
-            Text(
-              line2,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: FoE.label(size: 11.5).copyWith(
-                color: highlight ? kBoxAccent : kBoxInk,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
           if (progress != null) ...[
-            const SizedBox(height: 5),
+            const SizedBox(height: 6),
             ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: vr(4),
               child: LinearProgressIndicator(
                 value: progress.clamp(0.0, 1.0),
-                minHeight: 8,
+                minHeight: 7,
                 color: CreamPalette.gold,
                 backgroundColor: kBoxInk.withValues(alpha: 0.15),
               ),
@@ -392,6 +396,28 @@ class _CollectionScreenState extends State<CollectionScreen> {
   );
 
   // ── Starter pick (empty collection) ────────────────────────
+  /// An unsaved, rolled stand-in for a not-yet-adopted species — the same
+  /// trick [StarterPreviewScreen]'s own `_draft` uses — so the picker's tile
+  /// can go through the real [CreatureCard] like every other monster tile in
+  /// the app, instead of a one-off display. Cached per species: a fresh
+  /// draft every build would reroll gender and genes each time, flickering
+  /// the tile's ⚡ power and gender mark as the picker animates.
+  CreatureInstance _starterDraft(SpeciesDef species) =>
+      _starterDrafts.putIfAbsent(species.id, () {
+        final rng = math.Random();
+        return CreatureInstance(
+          id: '',
+          userId: '',
+          speciesId: species.id,
+          gender: rng.nextBool() ? CreatureGender.male : CreatureGender.female,
+          level: 1,
+          statBase: CreatureInstance.rollBaseGenes(species, rng),
+          statSlope: CreatureInstance.rollSlopeGenes(species, rng),
+          isStarter: true,
+          learnedAbilityIds: null,
+        )..backfillAbilities();
+      });
+
   Widget _starterPicker() {
     final species = starterChoices();
     if (species.isEmpty) {
@@ -413,71 +439,92 @@ class _CollectionScreenState extends State<CollectionScreen> {
         ),
       );
     }
+    // Triptych (user 2026-10-01, picked from 10 mockups): three fanned
+    // cards rather than a plain grid — the centre one stands forward, the
+    // outer two tilt and sit back a little. Every card is tappable, not
+    // just the centre one; "forward" is a visual cue, not a selection
+    // state the player has to set up first.
+    final centerIndex = (species.length - 1) / 2;
+    // Centred, not left-aligned (user 2026-10-01, once the header above it
+    // was gone: "dafür den Text zentrieren") — with no title row left to
+    // line up against, a left-stuck headline just reads as stray.
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
           child: Text(
             'Choose your starter!',
+            textAlign: TextAlign.center,
             style: FoE.title(size: 18).copyWith(color: kBoxInk),
           ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
           child: Text(
-            'Your first creature — it starts at Level 5. The three starters '
-            'are fire, water and plant; pick your element.',
+            'Your first creature — the three starters are fire, water and '
+            'plant; pick your element.',
+            textAlign: TextAlign.center,
             style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
           ),
         ),
         Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 170,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 0.82,
+          child: Center(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < species.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: _triptychCard(species[i], i - centerIndex),
+                    ),
+                ],
+              ),
             ),
-            itemCount: species.length,
-            itemBuilder: (_, i) => _speciesCard(species[i]),
           ),
         ),
       ],
     );
   }
 
-  Widget _speciesCard(SpeciesDef species) {
-    return Pressable(
-      onTap: () => _previewStarter(species),
-      child: Container(
-        // A raised tile with the rarity's colour as its rim.
-        decoration: raisedTile().copyWith(
-          border: Border.all(color: species.rarity.color, width: 2.5),
-        ),
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          children: [
-            Expanded(
-              child: CreatureBackdrop(
-                element: species.element,
-                child: _creatureImage(species.stageAt(0).imageUrl),
+  /// One fanned card. [offset] is this card's distance from the centre of
+  /// the fan (0 = centre, ±1 = one step out) — tilt, lift and scale all
+  /// read off it, so the fan still makes sense whatever [species] turns out
+  /// to hold (today always 3, see [starterChoices]).
+  ///
+  /// The monster itself is the shared [CreatureCard] tile — the Monsters
+  /// screen's own — in place of a one-off display built for this screen
+  /// alone (user 2026-10-01: "nimm hier die Monsterkacheln, welche bereits
+  /// bestehen"). No frame around it any more (user, same day: "mach die
+  /// Kacheln noch grösser, dafür braucht es keinen Rahmen" — bigger, the
+  /// fan's own scale/lift/opacity already carries the centre card forward
+  /// without a border drawn on top of the tile's own element-coloured foot).
+  Widget _triptychCard(SpeciesDef species, double offset) {
+    final center = offset == 0;
+    final dist = offset.abs().clamp(0.0, 2.0);
+    final draft = _starterDraft(species);
+    return Transform.translate(
+      offset: Offset(0, center ? -14 : 8.0 * dist),
+      child: Transform.rotate(
+        angle: offset.clamp(-1.4, 1.4) * 0.08,
+        child: Transform.scale(
+          scale: center ? 1.0 : (1 - 0.07 * dist).clamp(0.8, 1.0),
+          child: Opacity(
+            opacity: center ? 1 : 0.88,
+            child: SizedBox(
+              width: 230,
+              child: AspectRatio(
+                aspectRatio: kMonsterTileAspect,
+                child: CreatureCard(
+                  creature: draft,
+                  onTap: () => _previewStarter(species),
+                ),
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              species.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: FoE.label(size: 13).copyWith(color: kBoxInk),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '${species.element.emoji} ${species.element.label} · ${species.rarity.label}',
-              style: FoE.dim(size: 10).copyWith(color: species.rarity.color),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -485,7 +532,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   // ── Search + filter + sort bar ─────────────────────────────
   Widget _sortFilterBar() => Padding(
-    padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+    padding: const EdgeInsets.fromLTRB(14, 3, 14, 0),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -553,7 +600,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: kBoxInk),
+              PixelIcon(icon, size: 18, color: kBoxInk),
               if (badge != null) ...[
                 const SizedBox(width: 4),
                 Text(
@@ -615,7 +662,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
           position: PopupMenuPosition.under,
           padding: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: vr(12),
             side: BorderSide(color: CreamPalette.tan, width: 1.5),
           ),
           onSelected: (name) => setState(() {
@@ -659,7 +706,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
             height: 34,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: engaged ? goldButton() : raisedTile(radius: 12),
-            child: const Icon(Icons.swap_vert, size: 18, color: kBoxInk),
+            child: const PixelIcon(Icons.swap_vert, size: 18, color: kBoxInk),
           ),
         ),
       ),
@@ -799,7 +846,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       child: Row(
         children: [
-          Icon(
+          PixelIcon(
             active ? Icons.check_box : Icons.check_box_outline_blank,
             size: 16,
             color: active ? (color ?? kBoxAccent) : kBoxInkFaint,
@@ -822,6 +869,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
   );
 
   // ── Collection grid ────────────────────────────────────────
+  static const _gridSpacing = 10.0;
+  static const _gridHPad = 14.0;
+  static const _gridVPad = 8.0;
+
   Widget _collectionGrid() {
     final list = _visibleCreatures();
     if (list.isEmpty) {
@@ -832,36 +883,61 @@ class _CollectionScreenState extends State<CollectionScreen> {
         ),
       );
     }
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
-      // Auto-flowing (2026-09-18, landscape) — see this file's own doc
-      // comment on why the shared monsterTileWidth/kMonsterTileCols
-      // convention doesn't fit here any more.
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 112,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: kMonsterTileAspect,
-      ),
-      itemCount: list.length,
-      itemBuilder: (_, i) => CreatureCard(
-        creature: list[i],
-        onTap: () =>
-            pushMenu(context, CreatureDetailScreen(creatureId: list[i].id)),
-      ),
-    );
-  }
-
-  Widget _creatureImage(
-    String? url, {
-    Alignment alignment = Alignment.center,
-  }) => url == null
-      ? const Center(child: Icon(Icons.pets, color: CreamPalette.tan, size: 40))
-      : CreatureSprite(
-          url: url,
-          alignment: alignment,
-          fallback: const Center(
-            child: Icon(Icons.pets, color: CreamPalette.tan, size: 40),
+    // Auto-flowing (2026-09-18, landscape) — see this file's own doc comment
+    // on why the shared monsterTileWidth/kMonsterTileCols convention doesn't
+    // fit here any more.
+    //
+    // Row height is worked out by hand, not left to [childAspectRatio] (user
+    // 2026-10-04: "Monsterkacheln bis zum unteren Bildschirmrand anzeigen"
+    // — the fixed aspect ratio made the last row run past the bottom of a
+    // short landscape window and get clipped mid-tile, since GridView just
+    // crops to its viewport). If the rows a full collection needs are only
+    // a little taller than the space available, shrink them just enough
+    // that the last one lands flush on the edge instead of being cut off; a
+    // collection too big for that stays at the natural tile size and
+    // scrolls normally — a cut-off row while actively scrolling is normal,
+    // only the UNSCROLLED first screen showing one is the bug.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availW = constraints.maxWidth - _gridHPad * 2;
+        final columns = math.max(1, (availW / 112).ceil());
+        final tileW = (availW - _gridSpacing * (columns - 1)) / columns;
+        final naturalH = tileW / kMonsterTileAspect;
+        final availH = constraints.maxHeight - _gridVPad * 2;
+        final rowsNeeded = (list.length / columns).ceil();
+        final rowsThatFit = math.max(
+          1,
+          ((availH + _gridSpacing) / (naturalH + _gridSpacing)).floor(),
+        );
+        var tileH = naturalH;
+        if (rowsNeeded > rowsThatFit) {
+          final fitted =
+              (availH - _gridSpacing * (rowsNeeded - 1)) / rowsNeeded;
+          if (fitted >= naturalH * 0.82) tileH = fitted;
+        }
+        return GridView.builder(
+          padding: const EdgeInsets.fromLTRB(
+            _gridHPad,
+            _gridVPad,
+            _gridHPad,
+            _gridVPad,
+          ),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: _gridSpacing,
+            crossAxisSpacing: _gridSpacing,
+            mainAxisExtent: tileH,
+          ),
+          itemCount: list.length,
+          itemBuilder: (_, i) => CreatureCard(
+            creature: list[i],
+            onTap: () => pushMenu(
+              context,
+              CreatureDetailScreen(creatureId: list[i].id),
+            ),
           ),
         );
+      },
+    );
+  }
 }

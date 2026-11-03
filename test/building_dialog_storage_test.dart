@@ -18,18 +18,19 @@ import 'package:boddygame/features/settlement/sheets/building_detail_dialog.dart
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
-  PlacedBuilding store(int level) => PlacedBuilding(
-    id: 'b_store',
-    settlementId: 's',
-    buildingTypeId: 'storehouse',
-    gridX: 0,
-    gridY: 0,
-    level: level,
-    constructionSecondsRequired: 0,
-    constructionSecondsBuilt: 0,
-    isComplete: true,
-    placedAt: DateTime.utc(2026),
-  );
+  PlacedBuilding store(int level, {String type = 'storehouse'}) =>
+      PlacedBuilding(
+        id: 'b_store',
+        settlementId: 's',
+        buildingTypeId: type,
+        gridX: 0,
+        gridY: 0,
+        level: level,
+        constructionSecondsRequired: 0,
+        constructionSecondsBuilt: 0,
+        isComplete: true,
+        placedAt: DateTime.utc(2026),
+      );
 
   CreatureInstance logistician(String id) {
     final c = CreatureInstance(
@@ -114,5 +115,72 @@ void main() {
     await open(t);
     expect(find.textContaining('👷'), findsNothing);
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets('a store has a Crew card', (t) async {
+    await open(t);
+    expect(find.text('CREW'), findsOneWidget);
+  });
+
+  testWidgets('the Castle has no Crew card — its Effects take the row', (
+    t,
+  ) async {
+    ctrl.buildings = [store(1, type: 'castle')];
+    await open(t);
+    expect(find.text('CREW'), findsNothing);
+    expect(find.text('EFFECTS'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets(
+    'a single-purpose post says what it improves, not just a bare number '
+    '(user 2026-09-29)',
+    (t) async {
+      // Every OTHER building in this file has exactly one workshop role, so
+      // its group header never shows (it only appears with a SECOND role) —
+      // this caption is the only place the effect is named at all.
+      ctrl.buildings = [store(1, type: 'healing_hut')];
+      final c = CreatureInstance(
+        id: 'medic',
+        userId: 'u',
+        speciesId: 'medic',
+        gender: CreatureGender.male,
+        statBase: {CreatureStat.medicine: 30},
+        statSlope: const {},
+      )..assignedBuildingId = 'b_store';
+      c.assignedStat = CreatureStat.medicine;
+      CreaturesController().creatures.add(c);
+      await open(t);
+      expect(find.textContaining('Improves'), findsOneWidget);
+      expect(find.textContaining('Healing time'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets('a plain production post says the exact rate per stat point '
+      '(user 2026-09-29)', (t) async {
+    ctrl.buildings = [store(1, type: 'small_wood_camp')];
+    await open(t);
+    // small_wood_camp's role mult is 2, flat at level 1. The Effects card's
+    // own row (user 2026-09-29: "production pro Statpoint muss bei Effects
+    // stehen, da dies der Haupteffekt des Gebäudes ist") — label and value
+    // are separate Text widgets there, same as every other Effects row.
+    expect(find.text('EFFECTS'), findsOneWidget);
+    expect(find.text('Production'), findsOneWidget);
+    expect(find.text('Wood Production'), findsOneWidget);
+    expect(find.text('2 per Statpoint'), findsOneWidget);
+    // The Crew card's own caption still says it too, as one line.
+    expect(find.text('Wood Production per Statpoint   2'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('a tall picture keeps the hero on screen', (t) async {
+    // The scout post's art is 2.2× as tall as wide: it has to be scaled into the
+    // room above the hero, not left to rise past the top of the screen.
+    ctrl.buildings = [store(1, type: 'scout_post')];
+    await open(t);
+    expect(t.takeException(), isNull);
+    final hero = t.getTopLeft(find.byType(FittedBox).first);
+    expect(hero.dy, greaterThanOrEqualTo(0));
   });
 }

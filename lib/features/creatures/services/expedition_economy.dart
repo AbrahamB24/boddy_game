@@ -10,11 +10,13 @@ import 'gather_math.dart';
 // the targets in docs/balancing.md (~60% of income should come from here).
 //
 // Deliberately built ON TOP of the real trip math (planGather, perilRatio,
-// captureDuration, groupCatchPower) via synthetic creatures instead of
-// re-deriving formulas, so these numbers can't silently drift from what the
-// game actually does. Simplifications (documented, fine for balancing):
-// every trip starts at full spot stock (real depletion makes later trips
-// smaller), and the player re-dispatches after [reactionHours].
+// groupCatchPower) via synthetic creatures instead of re-deriving formulas,
+// so these numbers can't silently drift from what the game actually does.
+// Simplifications (documented, fine for balancing): every trip starts at
+// full spot stock (real depletion makes later trips smaller), the gather
+// player re-dispatches after [reactionHours], and the capture estimator
+// assumes a fixed steps/day rate ([kAssumedStepsPerDay]) since hunts run on
+// real steps now and a day-rate simulator can't observe those.
 
 /// A stand-in creature with exact stats (level 1, growth 0) so estimators can
 /// feed the real group math. One synthetic carrying the GROUP's summed stats
@@ -94,8 +96,15 @@ GatherDayEstimate estimateGatherDay({
 
 // ── Capturing ───────────────────────────────────────────────
 
+/// Assumed real-world steps a player walks in a day — for THIS ESTIMATOR
+/// only (user 2026-10-02: hunts moved from a wall clock to real steps,
+/// which a pure day-rate simulator has no way to observe by itself). Never
+/// used to gate or pace anything live; tune freely without touching
+/// gameplay.
+const double kAssumedStepsPerDay = 6000;
+
 class CaptureDayEstimate {
-  final Duration huntDuration;
+  final int huntSteps;
   final double huntsPerDay;
   final double findsPerDay;
 
@@ -103,7 +112,7 @@ class CaptureDayEstimate {
   final double catchesPerDay;
 
   const CaptureDayEstimate({
-    required this.huntDuration,
+    required this.huntSteps,
     required this.huntsPerDay,
     required this.findsPerDay,
     required this.catchesPerDay,
@@ -113,14 +122,13 @@ class CaptureDayEstimate {
 CaptureDayEstimate estimateCaptureDay({
   required CaptureHuntOption option,
   double qteSuccess = 0.85,
-  double reactionHours = 1,
 }) {
-  final duration = captureDuration(option);
-  final cycleHours = duration.inSeconds / 3600.0 + reactionHours;
-  final huntsPerDay = cycleHours > 0 ? 24 / cycleHours : 0.0;
+  final huntsPerDay = option.steps > 0
+      ? kAssumedStepsPerDay / option.steps
+      : 0.0;
   final findsPerDay = huntsPerDay * option.finds;
   return CaptureDayEstimate(
-    huntDuration: duration,
+    huntSteps: option.steps,
     huntsPerDay: huntsPerDay,
     findsPerDay: findsPerDay,
     catchesPerDay: findsPerDay * qteSuccess.clamp(0.0, 1.0),

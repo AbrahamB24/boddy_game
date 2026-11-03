@@ -120,7 +120,12 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
   IntroStep.pickStarter => const IntroCard(
     title: 'Choose your first monster',
     body: 'You get to pick your starter monster — choose the one you like.',
-    ctaLabel: 'Choose starter',
+    // No CTA of its own any more (user 2026-09-30: "Direkt den Button
+    // anzeigen und den Text mit 'tap monsters to choose'") — the quick
+    // menu's own Monsters tile is the lit target from the moment this step
+    // begins, same hand-off firstNode gives the Map tile, rather than
+    // needing an extra tap on this card first (see
+    // SettlementScreen._soloQuickPadAnchor).
     destination: IntroDestination.collection,
   ),
   IntroStep.firstNode => const IntroCard(
@@ -139,10 +144,19 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     destination: IntroDestination.map,
   ),
   IntroStep.buildHealingHut => const IntroCard(
-    title: 'Patch it up',
+    // Renamed from "Patch it up" (user 2026-09-30) — names the exact
+    // building the step is actually about, the same way every other step's
+    // title does.
+    title: 'Heal your Monster',
+    // Trimmed to the one fact this step needs (user 2026-09-30: "hier nur
+    // kurz erklären, dass du verletzte Monster im Healing Hut behandeln
+    // kannst und du dieses nun bauen sollst") — the Gold-speeds-construction
+    // line this used to carry is gone; the site's own "Finish now" button
+    // (building_detail_dialog's gold-rush action) still works, just
+    // undocumented here now, by the same request.
     body:
-        'That fight cost your monster some HP — and HP never comes back on '
-        'its own. Healing is what the Healing Hut is for. Build one now.',
+        'Injured monsters can be treated at the Healing Hut. Build one '
+        'now.',
     // No CTA of its own (user 2026-09-06, same reasoning as firstNode) —
     // the bottom build carousel itself is the lit target now (2026-09-18:
     // it replaced the quick menu's old Build tile), and it appears the
@@ -152,16 +166,14 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
   ),
   IntroStep.buildRoad => const IntroCard(
     title: 'Connect it with a road',
+    // Shortened to just the rule itself (user 2026-09-30: "Nur schreiben,
+    // dass Gebäude über Strassen mit dem Castle verbunden sein müssen,
+    // damit diese funktionieren") — where exactly to place the road is no
+    // longer this card's job now that the spot itself is fixed for the
+    // player (see SettlementScreen's own placement lock for this step).
     body:
-        'Right now every building works without one — that is only true '
-        'while this tutorial runs. From here on, a building needs a road '
-        // "Castle", not "Main Hall" (user 2026-09-06) — that is the
-        // building's own name everywhere else in the game (see
-        // kBuildingDefs['castle']); "Main Hall" was this card's own leftover
-        // term for the same building.
-        'linking it back to your Castle to do anything at all. Open '
-        'Build, find the road among its own category, and lay one from the '
-        'Castle to the Healing Hut before that rule catches you out.',
+        'Buildings only work while a road links them back to your Castle. '
+        'Lay one now.',
     // No CTA of its own (user 2026-09-06, same reasoning as buildHealingHut)
     // — the build carousel's own category-row spotlight is the lit target
     // now (2026-09-18), pointing at the Roads category specifically.
@@ -169,10 +181,13 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
   ),
   IntroStep.assignHealer => const IntroCard(
     title: 'Station a monster there',
+    // Leads with the general rule, not just this one hut (user 2026-09-30:
+    // "schreiben, dass Gebäude meistens nur dann arbeiten, wenn Monster
+    // darin arbeiten und sonst nicht funktionieren").
     body:
-        'The hut works faster with someone tending it. Open the Healing Hut '
-        'and post a monster to its medicine role — a stationed worker keeps '
-        'the hut running even while you are away.',
+        'Most buildings only work once a monster is stationed inside — '
+        'without one, they sit idle. Open the Healing Hut and post a '
+        'monster to its medicine role.',
     // No CTA of its own (user 2026-09-06, same reasoning as buildHealingHut):
     // the Healing Hut ON THE MAP is the lit target instead — see
     // SettlementScreen._soloQuickPadAnchor.
@@ -180,23 +195,37 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
   ),
   IntroStep.healStarter => const IntroCard(
     title: 'Heal your monster',
+    // Now names the resource cost as its own fact, not just folded into
+    // "treatment costs goods" (user 2026-09-30: "erklären, dass Healing
+    // immer Ressourcen verbraucht"). "Heal", not "Treat" (user 2026-09-30,
+    // same request as the button it describes). No longer promises an
+    // INSTANT finish (user 2026-10-01: "soll es zunächst geheilt werden wie
+    // normal, d.h es braucht zeit. Aber ich muss es wieder mit gold
+    // beschleunigen") — treatment now takes its real time even here, same as
+    // the Healing Hut's own construction did, with the same gold pill to
+    // skip the wait.
     body:
-        'The hut is ready. Treatment costs goods, scaled to the missing HP — '
-        'a K.O. costs double. While the tutorial runs it finishes instantly; '
-        'later it takes real time, so retreating beats fainting.',
-    ctaLabel: '🌿 Treat it now',
+        'The hut is ready. Healing always consumes resources, scaled to '
+        'the missing HP — a K.O. costs double. It takes real time to '
+        'finish — gold can speed it up, same as the hut itself did.',
+    ctaLabel: '🌿 Heal it now',
     destination: IntroDestination.healingHut,
   ),
   IntroStep.firstCapture => const IntroCard(
     title: 'Catch a second monster',
-    body:
-        'One monster cannot fight and run a settlement at the same time. '
-        'Hunt in Verdant Hollow: fight the wild down — the lower its HP, the '
-        'bigger the golden band — then take the catch window and tap as the '
-        'ring crosses the band. Right now it cannot faint and will not flee: '
-        'take as many tries as you need.',
-    ctaLabel: '🗺 Open the map',
-    destination: IntroDestination.map,
+    // User's own line (2026-09-30): "Now its time to grow your Population.
+    // Go out and catch your second Monster." Truncated there (user
+    // 2026-10-01: "nur bis 'go out and catch your second monster'. Den
+    // Rest löschen") — the mechanical how-a-hunt-works explanation that
+    // used to follow is gone.
+    body: "Now it's time to grow your population — go out and catch your "
+        'second monster.',
+    // No CTA of its own any more (user 2026-09-30: "Hier bereits den Trips
+    // Button sichtbar machen und nur dieser darf anwählbar sein") — the
+    // bottom quick pad's own Expedition button is the lit target instead,
+    // same hand-off firstNode gives the Map tile (see
+    // SettlementScreen._soloQuickPadAnchor).
+    destination: IntroDestination.trips,
   ),
   IntroStep.secondNode => const IntroCard(
     title: 'Push on',
@@ -253,10 +282,12 @@ const double kJumpstartEnemyStatMult = 0.2;
 // exactly its authored time — and kJumpstartTimeScale still collapses that
 // to seconds. Nothing left to prop up.
 
-/// Hunt trips are capped at this during the tutorial. Even scaled by
-/// kJumpstartTimeScale a hunt is ~40s of dead waiting; the tutorial's catch
-/// should be reachable immediately.
-const int kIntroMaxTripSeconds = 12;
+// kIntroMaxTripSeconds was DELETED 2026-10-02 — hunts no longer run on a
+// clock at all (see Expedition.isStepGated), so there is no duration left
+// to clamp. The tutorial's first hunt is shrunk in STEPS instead, by the
+// same kJumpstartTimeScale below (see capture_math.dart's
+// effectiveHuntSteps) — small enough that the gold-skip beat right after it
+// (ExpeditionsScreen's 'hunt-skip-gold' spotlight) stays cheap.
 
 /// Fish handed to a brand-new player. Buildings make it deliberately slowly
 /// (workshop mult 0.12) because it is the region-dungeon entry cost — this is
@@ -267,6 +298,13 @@ const int kIntroMaxTripSeconds = 12;
 /// FISH ONLY (user 2026-09-20: "der Spieler startet mit Fisch und nicht mit
 /// Fleisch, da Fleisch später erst kommt") — meat is region 2's luxury.
 const double kJumpstartGiftFish = 20.0;
+
+/// Gold handed to a brand-new player, so the Healing Hut step's own
+/// "Gold speeds up construction — finish it now" button (1 gold) is
+/// actually usable the moment it's shown (user 2026-10-01, screenshot of
+/// that button next to "you have 0": "es braucht 1 gold, ich habe aber
+/// keins. Bitte mit 20 Gold starten") — 20 leaves room beyond that one tap.
+const double kJumpstartGiftGold = 20.0;
 
 // The jumpstart's free "second monster" (kJumpstartFreeTechId = 'team_size_2')
 // was REMOVED (user 2026-07-24): party size is now set by position on the

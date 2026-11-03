@@ -18,6 +18,8 @@ import 'services/work_overview.dart';
 import 'settlement_controller.dart';
 import 'sheets/building_detail_dialog.dart';
 import 'widgets/building_icon.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 /// THE WORKFORCE PAGE (user 2026-09-19, "Variante 6, Besetzung im Blick", with
 /// two additions the user asked for: good SORTING, and what is PRODUCED — in
@@ -104,35 +106,33 @@ class _WorkScreenState extends State<WorkScreen> {
       // ganz klein scrollbar").
       return MenuScaffold(
         title: 'Work & Housing',
+        // The rail is just the switch for what's beside it, not a Gebiet of
+        // its own (user 2026-09-29, "Trennlinien und Zonen gemischt",
+        // app-wide), so a plain gap is enough — the same "sonst … gar
+        // nichts" half of the rule crafting_screen's rail-to-list gap
+        // already uses. (MenuScaffold is the one card now — no [pageCard]
+        // here.)
         child: Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                width: 108,
-                child: creamCard(
-                  padding: const EdgeInsets.all(8),
-                  child: _tabs(summary, used, cap),
-                ),
-              ),
-              const SizedBox(width: 10),
+              SizedBox(width: 108, child: _tabs(summary, used, cap)),
+              const SizedBox(width: 12),
               Expanded(
-                child: creamCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_tab == WorkTab.work) ...[
-                        _header(summary, free.length, plan),
-                        _sortBar(),
-                        Expanded(child: _list(shown, unlinked, sites.isEmpty)),
-                      ] else ...[
-                        _housingHeader(used, cap),
-                        _houseSortBar(houses.length),
-                        Expanded(child: _houseList(houses, used, cap)),
-                      ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_tab == WorkTab.work) ...[
+                      _header(summary, free.length, plan),
+                      _sortBar(),
+                      Expanded(child: _list(shown, unlinked, sites.isEmpty)),
+                    ] else ...[
+                      _housingHeader(used, cap),
+                      _houseSortBar(houses.length),
+                      Expanded(child: _houseList(houses, used, cap)),
                     ],
-                  ),
+                  ],
                 ),
               ),
             ],
@@ -182,7 +182,7 @@ class _WorkScreenState extends State<WorkScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 22, color: kBoxInk),
+                PixelIcon(icon, size: 22, color: kBoxInk),
                 const SizedBox(height: 3),
                 Text(
                   title,
@@ -239,7 +239,7 @@ class _WorkScreenState extends State<WorkScreen> {
   Widget _housingHeader(int used, int cap) {
     final full = used >= cap;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
       child: SizedBox(
         height: 58,
         child: Row(
@@ -270,7 +270,7 @@ class _WorkScreenState extends State<WorkScreen> {
                 'Build a house',
                 height: 40,
                 fontSize: 12.5,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 // Closes back to the map and opens the build strip on Housing.
                 onTap: () => BuildMenuRequest.open(
                   context,
@@ -284,8 +284,11 @@ class _WorkScreenState extends State<WorkScreen> {
     );
   }
 
+  // Side paddings are 10, not 16, since the menu card got its 6 px timber
+  // frame (Fachwerk 2026-11-02) — the same visible margin as before, and the
+  // sort pills fit again.
   Widget _houseSortBar(int count) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+    padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
     child: Row(
       children: [
         Text(
@@ -327,7 +330,7 @@ class _WorkScreenState extends State<WorkScreen> {
       (m, h) => h.rooms > m ? h.rooms : m,
     );
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 14),
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 14),
       children: [
         // What "full" means, in the words of what it stops.
         if (full) ...[
@@ -359,7 +362,7 @@ class _WorkScreenState extends State<WorkScreen> {
     decoration: warn
         ? BoxDecoration(
             color: CreamPalette.warn.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: vr(12),
             border: Border.all(color: CreamPalette.warn.withValues(alpha: 0.4)),
           )
         : null,
@@ -434,7 +437,7 @@ class _WorkScreenState extends State<WorkScreen> {
             'rooms',
             style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
           ),
-          Icon(Icons.chevron_right_rounded, size: 18, color: kBoxInkFaint),
+          PixelIcon(Icons.chevron_right_rounded, size: 18, color: kBoxInkFaint),
         ],
       ),
     ),
@@ -444,7 +447,7 @@ class _WorkScreenState extends State<WorkScreen> {
 
   Widget _header(WorkSummary s, int freeCount, List<PlannedSeat> plan) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
       child: SizedBox(
         height: 58,
         child: Row(
@@ -476,7 +479,7 @@ class _WorkScreenState extends State<WorkScreen> {
                     : 'Fill ${plan.length} seat${plan.length == 1 ? '' : 's'}',
                 height: 40,
                 fontSize: 12.5,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 onTap: plan.isEmpty ? null : () => _fill(plan),
               ),
             ),
@@ -498,7 +501,7 @@ class _WorkScreenState extends State<WorkScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: CreamPalette.tan.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: vr(12),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -529,7 +532,7 @@ class _WorkScreenState extends State<WorkScreen> {
     width: width,
     height: 7,
     child: ClipRRect(
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: vr(4),
       child: Stack(
         children: [
           ColoredBox(color: kBoxInk.withValues(alpha: 0.15)),
@@ -585,7 +588,7 @@ class _WorkScreenState extends State<WorkScreen> {
   // ── Sorting ──────────────────────────────────────────────────────────
 
   Widget _sortBar() => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+    padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
     child: Row(
       children: [
         Text(
@@ -663,7 +666,7 @@ class _WorkScreenState extends State<WorkScreen> {
       );
     }
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 14),
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 14),
       children: [
         if (shown.isEmpty && !noWorkshops)
           Padding(
@@ -766,7 +769,7 @@ class _WorkScreenState extends State<WorkScreen> {
               ],
             ),
           ),
-          Icon(Icons.chevron_right_rounded, size: 18, color: kBoxInkFaint),
+          PixelIcon(Icons.chevron_right_rounded, size: 18, color: kBoxInkFaint),
         ],
       ),
     ),
@@ -785,7 +788,7 @@ class _WorkScreenState extends State<WorkScreen> {
               height: 30,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
+                shape: BoxShape.rectangle,
                 color: CreamPalette.gold.withValues(alpha: 0.3),
                 border: Border.all(color: CreamPalette.goldDeep, width: 2),
               ),
@@ -840,7 +843,7 @@ class _WorkScreenState extends State<WorkScreen> {
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     decoration: BoxDecoration(
       color: CreamPalette.warn.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: vr(12),
       border: Border.all(color: CreamPalette.warn.withValues(alpha: 0.4)),
     ),
     child: Row(

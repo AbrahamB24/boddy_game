@@ -6,6 +6,7 @@ import '../../../core/theme/foe_theme.dart';
 import '../../settlement/widgets/scroll_paper.dart'
     show kParchmentInk, kParchmentLight;
 import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 /// ONE LOOK FOR EVERY SEARCH / FILTER / SORT CONTROL (user 2026-07-27: "alle
 /// filter und sortierfunktionien sollen so aussehen wie bei den eggs").
@@ -110,7 +111,7 @@ class SearchPill extends StatelessWidget {
       decoration: palette.skin(engaged),
       child: Row(
         children: [
-          Icon(
+          PixelIcon(
             Icons.search,
             size: 16,
             color: engaged ? palette.accent : palette.inkFaint,
@@ -151,7 +152,7 @@ class SearchPill extends StatelessWidget {
                 controller.clear();
                 onChanged('');
               },
-              child: Icon(Icons.close, size: 16, color: palette.accent),
+              child: PixelIcon(Icons.close, size: 16, color: palette.accent),
             ),
         ],
       ),
@@ -239,7 +240,7 @@ class MenuPill<T> extends StatelessWidget {
       decoration: palette.skin(engaged),
       child: Row(
         children: [
-          Icon(
+          PixelIcon(
             icon,
             size: 16,
             color: engaged ? palette.accent : palette.inkFaint,
@@ -254,7 +255,7 @@ class MenuPill<T> extends StatelessWidget {
             ),
           ),
           trailing ??
-              Icon(Icons.expand_more, size: 16, color: palette.inkFaint),
+              PixelIcon(Icons.expand_more, size: 16, color: palette.inkFaint),
         ],
       ),
     ),
@@ -291,7 +292,7 @@ class ActionPill extends StatelessWidget {
       decoration: palette.skin(engaged),
       child: Row(
         children: [
-          Icon(
+          PixelIcon(
             icon,
             size: 16,
             color: engaged ? palette.accent : palette.inkFaint,
@@ -305,7 +306,7 @@ class ActionPill extends StatelessWidget {
               style: FoE.label(size: 12).copyWith(color: palette.ink),
             ),
           ),
-          Icon(Icons.expand_more, size: 16, color: palette.inkFaint),
+          PixelIcon(Icons.expand_more, size: 16, color: palette.inkFaint),
         ],
       ),
     ),

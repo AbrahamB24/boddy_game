@@ -336,7 +336,10 @@ class ParchmentDialog extends StatelessWidget {
           ),
           maxHeight: size.height * maxHeightFraction,
         ),
+        // Fachwerk (2026-11-02): a dialog is a framed wall under a roof.
         child: creamCard(
+          framed: true,
+          roof: true,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

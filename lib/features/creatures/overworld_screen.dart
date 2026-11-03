@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/pressable.dart';
+import '../../core/ui/feel.dart';
 import '../../core/ui/snack.dart';
 import '../common/widgets/parchment_page.dart';
 import '../onboarding/intro_flow.dart';
@@ -12,11 +13,15 @@ import '../onboarding/intro_spotlight.dart';
 import '../settlement/settlement_controller.dart';
 import 'models/area.dart';
 import 'models/combatant.dart';
+import 'models/creature_enums.dart' show creatureLevelCap;
 import 'models/creature_instance.dart';
 import 'models/path_node.dart' show regionForBattle;
 import 'models/species_def.dart' show kSpeciesDefs;
-import 'widgets/creature_sprite.dart' show decodeWidthFor;
+import 'widgets/creature_card.dart';
 import 'widgets/overworld_card.dart';
+import 'widgets/star_row.dart';
+import 'widgets/stars_overview.dart';
+import 'services/star_overview.dart' show starTotals;
 import 'battle_prep_screen.dart';
 import 'battle_screen.dart';
 import 'services/battle_rewards.dart';
@@ -27,6 +32,11 @@ import 'services/overworld_layout.dart';
 import 'services/overworld_path.dart';
 import 'services/region_dungeon.dart'
     show spawnPathBattle, scriptedFirstBattleEnemy;
+import '../../core/theme/voxel_icons.dart';
+
+/// The Overworld's ground picture — shared with the loading screen, which
+/// precaches it under this exact key.
+const String kOverworldGrassAsset = 'assets/images/overworld_grass.png';
 
 // ── The Overworld ───────────────────────────────────────────
 // ONE straight line you climb (linear rebuild 2026-07-24). Numbered BATTLES run
@@ -263,7 +273,12 @@ class _OverworldScreenState extends State<OverworldScreen>
             if (_tutorialLocksThisScreen)
               const IntroSpotlightOverlay(
                 anchorName: 'overworld-node-1',
-                hint: 'Click on the first battle to unlock the next one.',
+                // Names what the screen IS, not just what to tap (user
+                // 2026-09-30: "kurz erklären, dass es die Kampagnenkarte
+                // ist und du jetzt den ersten Kampf bestreiten sollst").
+                hint:
+                    "This is your path of battles — tap the first one to "
+                    'begin.',
                 circular: true,
               ),
           ],
@@ -316,15 +331,17 @@ class _OverworldScreenState extends State<OverworldScreen>
           children: [
             Positioned.fill(
               child: RepaintBoundary(
+                // NO decode cap (2026-11-03). The cap this had was
+                // `decodeWidthFor(canvasW)`, which on every real screen
+                // comes out ABOVE the picture's own 1080 px, so it never
+                // shrank anything — it only filed the decode under a
+                // per-screen-size cache key the loading screen could not
+                // predict. Uncapped, the key is the plain asset, and
+                // SettlementScreen precaches exactly that behind its bar.
                 child: Image.asset(
-                  'assets/images/overworld_grass.png',
+                  kOverworldGrassAsset,
                   fit: BoxFit.cover,
                   filterQuality: FilterQuality.medium,
-                  // Capped, not native 1080x1080 (user 2026-09-06:
-                  // "performance deutlich verbessern") — a 4.4 MB
-                  // RGBA decode for a texture that only ever tiles
-                  // BoxFit.cover across the canvas's own width.
-                  cacheWidth: decodeWidthFor(context, canvasW),
                 ),
               ),
             ),
@@ -393,6 +410,12 @@ class _OverworldScreenState extends State<OverworldScreen>
             ),
           ),
           const Spacer(),
+          // ALL the stars at a glance (user 2026-09-28) — a tap opens the
+          // region-by-region overview. Hidden in the tutorial like Survival.
+          if (!_tutorialLocksThisScreen) ...[
+            _starsChip(),
+            const SizedBox(width: 8),
+          ],
           if (!_tutorialLocksThisScreen)
             Pressable(
               onTap: () => openSurvivalMode(context),
@@ -403,7 +426,7 @@ class _OverworldScreenState extends State<OverworldScreen>
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    PixelIcon(
                       Icons.whatshot_rounded,
                       size: 16,
                       color: CreamPalette.warn,
@@ -432,6 +455,41 @@ class _OverworldScreenState extends State<OverworldScreen>
     ),
   );
 
+  /// "★ 23 / 60": every star earned over every star there is; opens the overview.
+  Widget _starsChip() {
+    final t = starTotals(
+      stars: _settlement.battleStars,
+      battlesCleared: _settlement.battlesCleared,
+    );
+    return Pressable(
+      onTap: () => showStarsOverview(
+        context,
+        stars: _settlement.battleStars,
+        battlesCleared: _settlement.battlesCleared,
+      ),
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: raisedTile(radius: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const PixelIcon(Icons.star_rounded, size: 17, color: CreamPalette.gold),
+            const SizedBox(width: 4),
+            Text(
+              '${t.earned} / ${t.max}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: kBoxInk,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// The card beside the road, on the same wood ground the battle's deck stands
   /// on.
   Widget _card(double width) {
@@ -447,6 +505,7 @@ class _OverworldScreenState extends State<OverworldScreen>
               battleNumber: node.battleNumber,
               isBoss: node.isBoss,
               state: node.state,
+              stars: _settlement.starsFor(node.battleNumber),
               enemies: _foesFor(node),
               // Only the current battle grants its unlocks (a re-fight is XP
               // only, see [_launchBattle]); the ones still ahead show what they
@@ -455,6 +514,7 @@ class _OverworldScreenState extends State<OverworldScreen>
                   ? const []
                   : battleRewardsFor(node.battleNumber),
               onFight: () => _launchBattle(node),
+              noTeam: CreaturesController().battleReadyCreatures.isEmpty,
             ),
     );
   }
@@ -474,6 +534,7 @@ class _OverworldScreenState extends State<OverworldScreen>
       size: size,
       pulse: _pulse,
       picked: picked,
+      stars: _settlement.starsFor(node.battleNumber),
       onTap: () => _onNodeTap(node),
     );
     return Positioned(
@@ -598,6 +659,8 @@ class _OverworldScreenState extends State<OverworldScreen>
           team: team,
           enemies: resolvedEnemies,
           title: title,
+          // Judged for stars (see battle_stars.dart).
+          battleNumber: node.battleNumber,
           victoryRewards: rewards,
           // WHERE the fight happens — the battlefield's art comes from here
           // (user 2026-07-31).
@@ -606,6 +669,19 @@ class _OverworldScreenState extends State<OverworldScreen>
       ),
     );
     if (!mounted) return;
+    // Straight back to the settlement after the tutorial's FIRST fight (user
+    // 2026-09-06) rather than staying on this map — node 2 would otherwise
+    // sit right there, tappable before the buildHealingHut → buildRoad →
+    // assignHealer → healStarter → firstCapture steps in between have run.
+    //
+    // Popped BEFORE the awaited bookkeeping below, not after (user report
+    // 2026-09-30: "Nach dem Kampf kommt ganz kurz noch der Weg, bevor es zum
+    // Homescreen geht" — the awaits are real network round-trips, and this
+    // screen sat fully visible for however long they took before the old
+    // code finally popped). SettlementController is a singleton the
+    // settlement screen already reacts to, so advancing it after leaving
+    // this route still lands correctly; nothing here needs `context` again.
+    if (introNodeStep == IntroStep.firstNode) Navigator.pop(context);
     // Only clearing the CURRENT node moves the line forward.
     if (outcome == CombatOutcome.victory && isFrontier) {
       await _settlement.advanceBattlesCleared(toBattle: node.battleNumber);
@@ -614,15 +690,8 @@ class _OverworldScreenState extends State<OverworldScreen>
       // The card moves on to the next battle.
       _selected = null;
     }
+    if (introNodeStep == IntroStep.firstNode) return;
     if (!mounted) return;
-    // Straight back to the settlement after the tutorial's FIRST fight (user
-    // 2026-09-06) rather than staying on this map — node 2 would otherwise
-    // sit right there, tappable before the buildHealingHut → buildRoad →
-    // assignHealer → healStarter → firstCapture steps in between have run.
-    if (introNodeStep == IntroStep.firstNode) {
-      Navigator.pop(context);
-      return;
-    }
     setState(() {});
   }
 
@@ -648,10 +717,57 @@ class _OverworldScreenState extends State<OverworldScreen>
       force: true,
     );
     if (!mounted) return;
-    context.snack(
-      caught != null
-          ? '👑 ${caught.displayName} joins you! The next region is open.'
-          : 'The next region is open!',
+    // THE milestone of a region — boss down, a legendary joins, the level cap
+    // rises. It used to be announced only through a snack, and snacks have
+    // been silent since 2026-08-29, so the biggest reward in the game landed
+    // without a word. A ceremony, not a toast: one dialog, closed by hand.
+    Feel.fanfare();
+    final cap = creatureLevelCap(_settlement.dungeonMaxStage);
+    await showDialog<void>(
+      context: context,
+      barrierColor: CreamPalette.dim,
+      builder: (_) => ParchmentDialog(
+        title: '👑 ${area.name} cleared!',
+        closeLabel: 'Onwards',
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (caught != null)
+                SizedBox(
+                  width: 110,
+                  child: CreatureCard(creature: caught, showHp: false),
+                ),
+              if (caught != null) const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (caught != null)
+                      Text(
+                        '${caught.displayName} joins you!',
+                        style: FoE.title(size: 16).copyWith(color: kBoxInk),
+                      ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'The next region is open, with new monsters and new '
+                      'buildings.',
+                      style: FoE.label(size: 12).copyWith(color: kBoxInk),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Your monsters can now grow to level $cap.',
+                      style: FoE.label(size: 12).copyWith(color: kBoxInk),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -667,6 +783,9 @@ class _MapNode extends StatelessWidget {
   final VoidCallback onTap;
   final bool picked;
 
+  /// The best stars earned here (0–3), drawn under a cleared node.
+  final int stars;
+
   /// Drives the current node's breathing glow.
   final Animation<double> pulse;
 
@@ -676,9 +795,10 @@ class _MapNode extends StatelessWidget {
     required this.onTap,
     required this.pulse,
     required this.picked,
+    this.stars = 0,
   });
 
-  static const Color _wood = Color(0xFF5C3B22);
+  static const Color _wood = CreamPalette.groundTop;
 
   @override
   Widget build(BuildContext context) {
@@ -716,7 +836,7 @@ class _MapNode extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        shape: BoxShape.rectangle,
         gradient: face,
         boxShadow: [
           BoxShadow(color: rim, spreadRadius: current ? 3 : 2),
@@ -735,7 +855,7 @@ class _MapNode extends StatelessWidget {
           final t = pulse.value;
           return DecoratedBox(
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              shape: BoxShape.rectangle,
               boxShadow: [
                 BoxShadow(
                   color: CreamPalette.gold.withValues(alpha: 0.30 + 0.35 * t),
@@ -777,13 +897,30 @@ class _MapNode extends StatelessWidget {
                 child: IgnorePointer(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
+                      shape: BoxShape.rectangle,
                       border: Border.all(color: Colors.white, width: 3),
                     ),
                   ),
                 ),
               ),
             disc,
+            // What the battle was worth (user 2026-09-28): its best result,
+            // under the medallion, on the wood.
+            if (done)
+              Positioned(
+                left: -12,
+                right: -12,
+                bottom: boss ? -24 : -17,
+                child: IgnorePointer(
+                  child: Center(
+                    child: StarRow(
+                      count: stars,
+                      size: 13,
+                      empty: Colors.white.withValues(alpha: 0.32),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -800,10 +937,10 @@ class _MapNode extends StatelessWidget {
       );
     }
     if (locked) {
-      return Icon(Icons.lock, size: size * 0.4, color: kBoxInkFaint);
+      return PixelIcon(Icons.lock, size: size * 0.4, color: kBoxInkFaint);
     }
     if (done) {
-      return Icon(Icons.check_rounded, size: size * 0.52, color: kBoxInk);
+      return PixelIcon(Icons.check_rounded, size: size * 0.52, color: kBoxInk);
     }
     return Text(
       '${node.battleNumber}',

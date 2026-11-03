@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -6,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../data/building_art.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 // Shared icon renderer for BuildingDef (and the handful of non-building
 // "source" rows that still use a literal emoji, e.g. resource_detail_screen
@@ -111,18 +113,31 @@ class BuildingIcon extends StatelessWidget {
   /// network picture's BYTES are warmed through its cache manager instead,
   /// since decoding one ahead of time buys nothing and spends the whole
   /// texture budget doing it.
+  ///
+  /// With [imageUrl], a building WITHOUT bundled art gets the exact network
+  /// provider this widget's [CachedNetworkImage] resolves at that width (its
+  /// `memCacheWidth` wraps the provider in the same [ResizeImage]) — for the
+  /// buildings actually standing on the map, which the first frame needs
+  /// (user 2026-11-03: "alle Assets beim Ladescreen vorladen").
   static ImageProvider? providerFor(
     BuildContext context,
     String defId,
-    double logicalWidth,
-  ) {
+    double logicalWidth, {
+    String? imageUrl,
+  }) {
     final asset = buildingAsset(defId);
-    if (asset == null) return null;
-    return ResizeImage.resizeIfNeeded(
-      decodeWidthFor(context, logicalWidth),
-      null,
-      AssetImage(asset),
-    );
+    final width = decodeWidthFor(context, logicalWidth);
+    if (asset != null) {
+      return ResizeImage.resizeIfNeeded(width, null, AssetImage(asset));
+    }
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return ResizeImage.resizeIfNeeded(
+        width,
+        null,
+        CachedNetworkImageProvider(imageUrl),
+      );
+    }
+    return null;
   }
 
   int? _decodeWidth(BuildContext context) => decodeWidthFor(context, _w);
@@ -233,7 +248,7 @@ class BuildingIcon extends StatelessWidget {
       width: _w,
       height: _h,
       child: Center(
-        child: Icon(
+        child: PixelIcon(
           Icons.image_not_supported_outlined,
           size: glyphSize,
           color: Colors.white24,
@@ -256,6 +271,15 @@ class _Cast {
   const _Cast(this.mask, this.srcW, this.srcH);
   double get aspect => srcH / srcW;
 }
+
+/// THE shadow tint, shared by every standing thing the map draws a cast
+/// shadow for — buildings via [BuildingGroundShadow], trees and stones via
+/// `TerrainLayer` — so there is exactly one colour to keep in sync rather
+/// than two independently-tuned ones (user 2026-09-29: "die Schattenfarbe
+/// der Gebäude bitte 1:1 übernehmen für die Schatten der Bäume. Diese haben
+/// aktuell 2 verschiedene Farben").
+const Color kShadowTint = Color(0xFF06170F);
+const double kShadowOpacity = 0.24;
 
 /// The result of [castShadowMask]: one alpha byte per pixel.
 class ShadowMask {
@@ -298,19 +322,37 @@ ShadowMask castShadowMask(
   /// would cast a second, higher shadow beside the trunk's (user 2026-09-22: "es
   /// scheint als gäbe es 2 Schatten, einer gegen Osten und einer gegen Nordosten").
   bool perRun = true,
+
+  /// Only with `perRun: false`. How DEEP the shadow lies on the ground, as a
+  /// fraction of the picture's width (user 2026-09-28: "der Schatten der Bäume
+  /// stimmt so noch nicht"). Thrown from one foot at the ground's 2:1 slope a
+  /// canopy lands as a hair-thin horizontal strip — its depth is only
+  /// [squash] × its height. A real tree's crown covers a ROUND patch of ground,
+  /// about half as deep as it is wide, so the shadow is widened up and down into
+  /// an ellipse instead. 0 keeps the plain projection.
+  double groundDepth = 0,
 }) {
+  final depth = perRun ? 0 : (w * groundDepth).round();
   final mw = w + (shear * h).ceil() + 2;
-  final mh = h + (squash * h).ceil() + 2;
+  final mh = h + (squash * h).ceil() + 2 + depth;
   final alpha = Uint8List(mw * mh);
 
   void throwRun(int x, int y0, int y1) {
     // y1 is the run's lowest solid row: the foot, so the shadow starts on the
     // row BELOW it.
+    //
+    // The shadow FADES with the height it was thrown from (user 2026-09-28:
+    // "hier sind 2 Kanten sichtbar"): the tip of a roof or a chimney lands far
+    // away as a long, evenly dark smear that ended in a hard straight edge across
+    // the lawn. A real shadow softens with distance, so the far end thins out.
+    final span = y1 - y0 + 1;
     for (var y = y0; y <= y1; y++) {
       final d = y1 - y;
       final tx = (x + d * shear).round();
       final ty = (y1 + 1 + d * squash).round();
-      if (tx >= 0 && tx < mw && ty >= 0 && ty < mh) alpha[ty * mw + tx] = 255;
+      if (tx < 0 || tx >= mw || ty < 0 || ty >= mh) continue;
+      final v = (255 * (1 - _kTipFade * d / span)).round();
+      if (v > alpha[ty * mw + tx]) alpha[ty * mw + tx] = v;
     }
   }
 
@@ -335,6 +377,8 @@ ShadowMask castShadowMask(
         if (tx >= 0 && tx < mw && ty >= 0 && ty < mh) alpha[ty * mw + tx] = 255;
       }
     }
+    if (depth > 0) _swellIntoEllipse(alpha, mw, mh, depth);
+    _fillSpecks(alpha, mw, mh);
     return ShadowMask(alpha, mw, mh);
   }
 
@@ -354,25 +398,119 @@ ShadowMask castShadowMask(
     }
     if (start >= 0) throwRun(x, start, last);
   }
+  _fillSpecks(alpha, mw, mh);
   return ShadowMask(alpha, mw, mh);
 }
 
-/// The cast shadow of an already decoded picture, as a ready-to-paint image in
-/// the picture's own pixel grid (same top-left; it reaches past the right and
-/// bottom edges). Used for the rest of the map — trees, stones — so they throw
-/// the SAME shadow the buildings do: one sun, one length, one direction (user
-/// 2026-09-22: "den Schatten jetzt auch auf den Rest der Map umsetzen").
+/// How much of a shadow's darkness is gone at the very tip of what threw it (0 =
+/// none, 1 = all): 0.7 leaves the tip at 30 %, so long tails thin out smoothly.
+const double _kTipFade = 0.7;
+
+/// Fills the single-pixel HOLES a thrown shadow is left with (user 2026-09-28:
+/// "Trennstriche im Rasen"). Every pixel is thrown to exactly one place, and
+/// where the picture's edge runs on a diagonal the throw is not gap-free: a
+/// dotted line of unshaded pixels ran through the shadow, which on the grass
+/// read as light stitches. An empty pixel with shadow on BOTH sides — left and
+/// right, or above and below — is part of the shadow.
+void _fillSpecks(Uint8List alpha, int mw, int mh) {
+  for (var pass = 0; pass < 2; pass++) {
+    final add = <int>[];
+    final fills = <int>[];
+    for (var y = 1; y < mh - 1; y++) {
+      for (var x = 1; x < mw - 1; x++) {
+        final i = y * mw + x;
+        if (alpha[i] != 0) continue;
+        if (alpha[i - 1] != 0 && alpha[i + 1] != 0) {
+          add.add(i);
+          fills.add(((alpha[i - 1] + alpha[i + 1]) / 2).round());
+        } else if (alpha[i - mw] != 0 && alpha[i + mw] != 0) {
+          add.add(i);
+          fills.add(((alpha[i - mw] + alpha[i + mw]) / 2).round());
+        }
+      }
+    }
+    if (add.isEmpty) return;
+    for (var k = 0; k < add.length; k++) {
+      alpha[add[k]] = fills[k];
+    }
+  }
+}
+
+/// Widens a thin projected shadow into a ground patch: every column is grown up
+/// and down by up to [depth] pixels, most in the middle of the shadow's
+/// horizontal extent and tapering to nothing at both ends — an ellipse, the
+/// footprint a round crown really covers.
+void _swellIntoEllipse(Uint8List alpha, int mw, int mh, int depth) {
+  var x0 = -1, x1 = -1;
+  final top = List<int>.filled(mw, -1);
+  final bottom = List<int>.filled(mw, -1);
+  for (var x = 0; x < mw; x++) {
+    for (var y = 0; y < mh; y++) {
+      if (alpha[y * mw + x] == 0) continue;
+      if (top[x] < 0) top[x] = y;
+      bottom[x] = y;
+    }
+    if (top[x] >= 0) {
+      if (x0 < 0) x0 = x;
+      x1 = x;
+    }
+  }
+  if (x0 < 0 || x1 <= x0) return;
+  final span = (x1 - x0).toDouble();
+  for (var x = x0; x <= x1; x++) {
+    if (top[x] < 0) continue;
+    final t = 2 * (x - x0) / span - 1; // -1 … 1 across the shadow
+    // NOT a symmetric oval (user 2026-09-28: "weniger rund … und unförmiger"):
+    // the swell peaks towards the TRUNK side (the west, where the shadow starts)
+    // and thins out slowly to the east, and its edge wobbles from column to
+    // column, like a crown's outline rather than a drawn ellipse.
+    const peak = -0.3;
+    final u = t < peak ? (t - peak) / (1 + peak) : (t - peak) / (1 - peak);
+    // Three and seven lobes ALONG the shadow, whatever its length — a fixed
+    // per-pixel frequency turned the edge into grass blades on a wide picture.
+    final phase = (x - x0) / span;
+    final wobble =
+        0.85 +
+        0.20 * math.sin(2 * math.pi * 3 * phase + 1.3) +
+        0.09 * math.sin(2 * math.pi * 7 * phase + 0.4);
+    final grow =
+        (depth * math.sqrt(math.max(0.0, 1 - u * u)) * wobble).round();
+    // Down only (plus a little up): the patch lies BEHIND the trunk as much as
+    // in front of it, but what is behind is hidden by the crown anyway.
+    final from = math.max(0, top[x] - grow ~/ 2);
+    final to = math.min(mh - 1, bottom[x] + grow);
+    for (var y = from; y <= to; y++) {
+      alpha[y * mw + x] = 255;
+    }
+  }
+}
+
+/// The cast shadow of an already decoded picture, as a ready-to-paint ALPHA
+/// MASK in the picture's own pixel grid (same top-left; it reaches past the
+/// right and bottom edges) — RGB is 0 throughout, only the alpha channel
+/// carries the silhouette. Used for the rest of the map — trees, stones — so
+/// they throw the SAME shadow the buildings do: one sun, one length, one
+/// direction, one COLOUR (user 2026-09-22: "den Schatten jetzt auch auf den
+/// Rest der Map umsetzen"; user 2026-09-29, pointing out trees still read a
+/// different colour from buildings: "die Schattenfarbe der Gebäude bitte 1:1
+/// übernehmen für die Schatten der Bäume").
 ///
-/// The colour is baked in at [alpha] (of 255), so thousands of them are drawn
-/// with a plain paint — no colour filter per draw. Null for a picture that casts
-/// nothing (fully transparent) or cannot be read.
+/// No colour is baked in here any more — a caller tints it at paint time with
+/// a `ColorFilter.mode(kShadowTint.withValues(alpha: kShadowOpacity),
+/// BlendMode.srcIn)`, exactly [BuildingGroundShadow]'s own `_ShadowPainter`,
+/// so a tree's shadow and a house's are the same handful of bytes read
+/// through the same filter rather than two independently baked tints that
+/// only APPROXIMATELY agreed. Null for a picture that casts nothing (fully
+/// transparent) or cannot be read.
 Future<ui.Image?> castShadowImage(
   ui.Image image, {
-  int alpha = 61,
-
   /// A tree or a stone is ONE standing thing: thrown from one foot, so its
   /// canopy does not cast a second shadow from its own underside.
   bool perRun = false,
+
+  /// See [castShadowMask]'s `groundDepth` — how deep the patch on the ground is,
+  /// as a fraction of the picture's width.
+  double groundDepth = 0,
 }) async {
   try {
     final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
@@ -382,15 +520,12 @@ Future<ui.Image?> castShadowImage(
       image.width,
       image.height,
       perRun: perRun,
+      groundDepth: groundDepth,
     );
     if (!mask.alpha.any((a) => a != 0)) return null;
     final rgba = Uint8List(mask.width * mask.height * 4);
     for (var i = 0; i < mask.alpha.length; i++) {
-      if (mask.alpha[i] == 0) continue;
-      rgba[i * 4] = 0x06;
-      rgba[i * 4 + 1] = 0x17;
-      rgba[i * 4 + 2] = 0x0F;
-      rgba[i * 4 + 3] = alpha;
+      rgba[i * 4 + 3] = mask.alpha[i];
     }
     final done = Completer<ui.Image>();
     ui.decodeImageFromPixels(
@@ -453,10 +588,6 @@ class BuildingGroundShadow extends StatefulWidget {
   /// nach osten/rechts" turned it on to about 10°, the length growing only a little.
   static const double _squash = 0.06;
 
-  /// The map's ground is busy (trees, stones, flowers), so the shadow stays
-  /// light, close to the build menu's own 22 %.
-  static const double _opacity = 0.24;
-
   /// Pixels fainter than this (of 255) are not "the object": a soft baked-in
   /// shadow or an antialiased fringe must not count as part of it.
   static const int _solid = 80;
@@ -481,6 +612,19 @@ class BuildingGroundShadow extends StatefulWidget {
     return null;
   }
 
+  /// Works out this picture's shadow ahead of time — the loading screen does
+  /// it for every building on the map, so the first frame has every shadow
+  /// instead of each one popping in a moment later. Never throws.
+  static Future<void> preload({String? defId, String? imageUrl}) {
+    final asset = buildingAsset(defId);
+    final key = asset ?? (imageUrl != null && imageUrl.isNotEmpty ? imageUrl : null);
+    final provider = _providerFor(defId, imageUrl);
+    if (key == null || provider == null || _done.containsKey(key)) {
+      return Future.value();
+    }
+    return _measure(key, provider).then<void>((_) {}, onError: (Object _) {});
+  }
+
   static Future<_Cast?> _measure(String key, ImageProvider provider) =>
       _pending.putIfAbsent(key, () {
         final done = Completer<_Cast?>();
@@ -502,7 +646,11 @@ class BuildingGroundShadow extends StatefulWidget {
                 return;
               }
               final w = image.width, h = image.height;
-              final mask = castShadowMask(data.buffer.asUint8List(), w, h);
+              final mask = castShadowMask(
+                data.buffer.asUint8List(),
+                w,
+                h,
+              );
               // An empty mask (a fully transparent picture) casts nothing.
               if (!mask.alpha.any((a) => a != 0)) {
                 done.complete(null);
@@ -621,9 +769,7 @@ class _ShadowPainter extends CustomPainter {
         ..filterQuality = FilterQuality.medium
         // An opaque tint = a true silhouette; its alpha sets how dark it lands.
         ..colorFilter = ColorFilter.mode(
-          const Color(
-            0xFF06170F,
-          ).withValues(alpha: BuildingGroundShadow._opacity),
+          kShadowTint.withValues(alpha: kShadowOpacity),
           BlendMode.srcIn,
         ),
     );

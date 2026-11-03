@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'core/theme/voxel_kit.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/diagnostics/crash_reporting.dart';
 import 'core/ui/feel.dart';
 import 'core/supabase/supabase_client.dart';
 import 'core/theme/parchment_theme.dart';
 import 'core/ui/phone_frame.dart';
 import 'core/ui/app_navigator.dart';
 import 'features/auth/auth_screens.dart';
+import 'features/creatures/services/breeding_controller.dart';
+import 'features/creatures/services/creatures_controller.dart';
+import 'features/creatures/services/expedition_controller.dart';
 import 'features/settlement/settlement_screen.dart';
 import 'features/social/services/alert_prefs.dart';
 import 'features/social/services/message_notifier.dart';
@@ -58,6 +63,9 @@ Future<void> main() async {
     Feel.load(),
     AlertPrefs.load(),
     Supabase.initialize(url: supabaseUrl, publishableKey: supabaseAnonKey),
+    // Off in the browser, in debug builds and without a Firebase project — see
+    // CrashReporting. Never throws.
+    CrashReporting.init(),
   ]);
   runApp(const BoddyGameApp());
 }
@@ -77,10 +85,15 @@ class BoddyGameApp extends StatelessWidget {
     // the phone viewport rather than around it.
     // The PvP banner hangs above the navigator, so a lobby invitation shows on
     // whatever screen the player is on.
-    builder: (context, child) => PhoneFrame(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [child!, const PvpBannerHost()],
+    builder: (context, child) => MediaQuery(
+      // The pixel face is small for its size; one app-wide step up keeps every
+      // line as readable as the old face was (user 2026-11-03: voxel UI).
+      data: MediaQuery.of(context).copyWith(textScaler: const VoxelTextScaler()),
+      child: PhoneFrame(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [child!, const PvpBannerHost()],
+        ),
       ),
     ),
     home: const _AuthGate(),
@@ -110,6 +123,19 @@ class _AuthGate extends StatefulWidget {
 class _AuthGateState extends State<_AuthGate> {
   bool _recovering = false;
 
+  /// The last account this gate saw signed in — null before the first
+  /// sign-in, or after a sign-out. Used only to spot a SWITCH to a different
+  /// account (sign out, then sign back in as someone else) without a full
+  /// app restart: `CreaturesController`/`BreedingController`/
+  /// `ExpeditionController` are singletons that fetch once per app run (see
+  /// their own `_loadedOnce` guard), so without resetting them here they keep
+  /// serving the PREVIOUS account's data under the new one's session — user
+  /// report 2026-09-30, "bei meinem anderen Account wurden die Monster
+  /// zurückgesetzt" (the other account's monsters looked wiped; they were
+  /// never touched, the collection screen was just still showing the first
+  /// account's post-reset list).
+  String? _lastUserId;
+
   @override
   Widget build(BuildContext context) => StreamBuilder<AuthState>(
     stream: supabase.auth.onAuthStateChange,
@@ -118,9 +144,29 @@ class _AuthGateState extends State<_AuthGate> {
         _recovering = true;
       }
       final session = supabase.auth.currentSession;
+      final uid = session?.user.id;
+      final switchedAccount =
+          uid != null && _lastUserId != null && uid != _lastUserId;
+      // Only overwritten on a real sign-in, never cleared back to null on
+      // sign-out — the normal switch-profile flow is sign out (session goes
+      // null momentarily) THEN sign back in as someone else, and clearing
+      // this on the null step would erase the very memory this exists to
+      // keep, making `switchedAccount` above never fire (bug found live,
+      // 2026-09-30: the reset added for this never actually ran).
+      if (uid != null) _lastUserId = uid;
       // PvP is watched for as long as somebody is signed in — challenges and
       // lobby arrivals are announced wherever the player happens to be.
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Same deferral as the calls below: the controllers' notifyListeners
+        // must not fire while the outgoing (previous account's) screen is
+        // still mid-build.
+        if (switchedAccount) {
+          CreaturesController().resetForAccountSwitch();
+          BreedingController().resetForAccountSwitch();
+          ExpeditionController().resetForAccountSwitch();
+        }
+        // Crash reports carry the account id (never a name or address).
+        CrashReporting.setUser(session?.user.id);
         if (session == null) {
           PvpNotifier.instance.stop();
           MessageNotifier.instance.stop();

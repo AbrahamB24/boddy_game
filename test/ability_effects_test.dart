@@ -148,6 +148,10 @@ void main() {
       final t = _mob(speed: 100);
       t.applySelfBuff(SelfBuffKind.haste, turns: 4, value: 1.0);
       expect(t.effectiveSpeed, closeTo(200, 1e-9));
+      // The upkeep of the turn it was CAST on does not count (2026-11-02:
+      // a 1-turn buff used to expire before any opponent acted).
+      t.tickStatusEndOfRound();
+      expect(t.effectiveSpeed, closeTo(200, 1e-9));
       for (var i = 0; i < 3; i++) {
         t.tickStatusEndOfRound();
       }
@@ -367,41 +371,39 @@ void main() {
       priority: priority,
     ).withEffects(effects);
 
-    test(
-      'Attack is pinned to its own AP cost, no longer auto-derived from '
-      'power',
-      () {
-        // Until 2026-09-08 this scale was anchored so raw power 40 (Attack's
-        // own power) auto-priced at exactly kBasicAttackApCost — the two
-        // were the same number purely by calibration (40 ÷ 13 ≈ 3). The
-        // user then asked for Attack to cost 2 AP specifically WITHOUT
-        // touching its damage (power stays 40, so the rest of the damage
-        // scale is untouched too) — which breaks that coincidence on
-        // purpose: a GENERIC power-40 move still auto-prices via the normal
-        // formula, while Attack itself now carries an EXPLICIT apCost that
-        // always matches the dial regardless of what power/powerPerAp do.
-        expect(
-          move(power: CombatEngine.basicAttackPower).resolvedApCost,
-          isNot(kBasicAttackApCost),
-          reason: 'a generic power-40 move still prices off the normal '
-              'formula, not the Attack-specific pin',
-        );
-        final attack = AbilityDef(
-          id: 'attack',
-          name: 'Attack',
-          element: CreatureElement.neutral,
-          kind: AbilityKind.damage,
-          target: AbilityTarget.enemy,
-          power: CombatEngine.basicAttackPower,
-          apCost: kBasicAttackApCost,
-        );
-        expect(
-          attack.resolvedApCost,
-          kBasicAttackApCost,
-          reason: 'Attack itself is pinned, so it always matches the dial',
-        );
-      },
-    );
+    test('Attack is pinned to its own AP cost, no longer auto-derived from '
+        'power', () {
+      // Until 2026-09-08 this scale was anchored so raw power 40 (Attack's
+      // own power) auto-priced at exactly kBasicAttackApCost — the two
+      // were the same number purely by calibration (40 ÷ 13 ≈ 3). The
+      // user then asked for Attack to cost 2 AP specifically WITHOUT
+      // touching its damage (power stays 40, so the rest of the damage
+      // scale is untouched too) — which breaks that coincidence on
+      // purpose: a GENERIC power-40 move still auto-prices via the normal
+      // formula, while Attack itself now carries an EXPLICIT apCost that
+      // always matches the dial regardless of what power/powerPerAp do.
+      expect(
+        move(power: CombatEngine.basicAttackPower).resolvedApCost,
+        isNot(kBasicAttackApCost),
+        reason:
+            'a generic power-40 move still prices off the normal '
+            'formula, not the Attack-specific pin',
+      );
+      final attack = AbilityDef(
+        id: 'attack',
+        name: 'Attack',
+        element: CreatureElement.neutral,
+        kind: AbilityKind.damage,
+        target: AbilityTarget.enemy,
+        power: CombatEngine.basicAttackPower,
+        apCost: kBasicAttackApCost,
+      );
+      expect(
+        attack.resolvedApCost,
+        kBasicAttackApCost,
+        reason: 'Attack itself is pinned, so it always matches the dial',
+      );
+    });
 
     test('twice the magnitude is twice the power', () {
       final weak = const AbilityEffect(
@@ -803,21 +805,18 @@ void main() {
       expect(move(50, ap: 1).resolvedApCost, 1);
     });
 
-    test(
-      'a generic power-40 move auto-prices off the formula, not the '
-      'Attack-specific pin (user 2026-09-08)',
-      () {
-        // Attack used to BE this exact case (power 40, apCost 0/auto), which
-        // is why the two numbers used to match by calibration. Since Attack
-        // now carries an explicit apCost (kBasicAttackApCost, pinned so it
-        // can be tuned to 2 without touching its own power/damage), a plain
-        // move that merely SHARES Attack's power auto-prices via the normal
-        // formula instead — round(40 ÷ kPowerPerAp).
-        expect(
-          move(CombatEngine.basicAttackPower).resolvedApCost,
-          isNot(kBasicAttackApCost),
-        );
-      },
-    );
+    test('a generic power-40 move auto-prices off the formula, not the '
+        'Attack-specific pin (user 2026-09-08)', () {
+      // Attack used to BE this exact case (power 40, apCost 0/auto), which
+      // is why the two numbers used to match by calibration. Since Attack
+      // now carries an explicit apCost (kBasicAttackApCost, pinned so it
+      // can be tuned to 2 without touching its own power/damage), a plain
+      // move that merely SHARES Attack's power auto-prices via the normal
+      // formula instead — round(40 ÷ kPowerPerAp).
+      expect(
+        move(CombatEngine.basicAttackPower).resolvedApCost,
+        isNot(kBasicAttackApCost),
+      );
+    });
   });
 }

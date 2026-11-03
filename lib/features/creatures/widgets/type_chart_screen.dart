@@ -6,6 +6,7 @@ import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../models/creature_enums.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
 
 /// THE TYPE CHART — "Ring, auswählbar" (user 2026-09-22, replacing the German
 /// "Typen-Kreis" dialog): the ring of six types with Light and Shadow inside it,
@@ -16,8 +17,14 @@ import '../models/creature_enums.dart';
 ///
 /// Every number is [CreatureElement.multiplierVs] itself — the diagram draws no
 /// value of its own, so it cannot disagree with the fight.
-Future<void> showTypeChart(BuildContext context, {CreatureElement? initial}) =>
-    pushMenu(context, TypeChartScreen(initial: initial));
+Future<void> showTypeChart(
+  BuildContext context, {
+  CreatureElement? initial,
+  bool tutorialBanner = false,
+}) => pushMenu(
+  context,
+  TypeChartScreen(initial: initial, tutorialBanner: tutorialBanner),
+);
 
 /// The eight real types, in the order the ring and the matrix use.
 final List<CreatureElement> kChartTypes = [
@@ -55,7 +62,16 @@ List<CreatureElement> _sorted(
 class TypeChartScreen extends StatefulWidget {
   /// The type selected when the page opens — in a fight, the enemy's own.
   final CreatureElement? initial;
-  const TypeChartScreen({super.key, this.initial});
+
+  /// The tutorial's own one-line explainer at the top (user 2026-09-30: "die
+  /// Kamera... nachschauen kann, was gegen was effektiv ist") — reached by
+  /// tapping the battle screen's spotlit type-chart key after the "Not very
+  /// effective" beat. Closing this screen (however it happens — there is no
+  /// separate dismiss for the banner itself) is what the tutorial is
+  /// actually waiting on, so the banner never blocks the ring underneath it.
+  final bool tutorialBanner;
+
+  const TypeChartScreen({super.key, this.initial, this.tutorialBanner = false});
 
   @override
   State<TypeChartScreen> createState() => _TypeChartScreenState();
@@ -74,21 +90,44 @@ class _TypeChartScreenState extends State<TypeChartScreen> {
       'tap a type · green hits, red is hit',
       style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
     ),
-    child: Row(
+    // The ring is a different Gebiet from the words explaining the type it
+    // has selected (user 2026-09-29, "Trennlinien und Zonen gemischt",
+    // app-wide), so it gets a [zoneBox] of its own. (MenuScaffold is the
+    // one card now — no [pageCard] here.)
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          width: 392,
-          child: creamCard(
-            padding: const EdgeInsets.all(6),
-            child: _Ring(
-              selected: _sel,
-              onPick: (e) => setState(() => _sel = e),
+        if (widget.tutorialBanner) ...[
+          creamCard(
+            padding: const EdgeInsets.all(10),
+            deep: CreamPalette.goldDeep,
+            child: Text(
+              'Look up what beats what here any time you need to. Close '
+              'this once you are done.',
+              style: FoE.label(size: 11).copyWith(color: kBoxInk),
             ),
           ),
+          const SizedBox(height: 10),
+        ],
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 392,
+                child: zoneBox(
+                  padding: const EdgeInsets.all(6),
+                  child: _Ring(
+                    selected: _sel,
+                    onPick: (e) => setState(() => _sel = e),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(child: _InfoCard(type: _sel)),
+            ],
+          ),
         ),
-        const SizedBox(width: 12),
-        Expanded(child: _InfoCard(type: _sel)),
       ],
     ),
   );
@@ -124,7 +163,7 @@ Widget _badge(CreatureElement e, double size) => Container(
   height: size,
   alignment: Alignment.center,
   decoration: BoxDecoration(
-    shape: BoxShape.circle,
+    shape: BoxShape.rectangle,
     gradient: LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -192,7 +231,7 @@ class _Ring extends StatelessWidget {
         child: Container(
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            shape: BoxShape.rectangle,
             color: on ? CreamPalette.gold : null,
           ),
           child: Container(
@@ -200,7 +239,7 @@ class _Ring extends StatelessWidget {
             height: r * 2,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              shape: BoxShape.rectangle,
               color: e.color,
               border: Border.all(color: e.shadowColor, width: 2.5),
             ),
@@ -305,7 +344,7 @@ class _InfoCard extends StatelessWidget {
   const _InfoCard({required this.type});
 
   @override
-  Widget build(BuildContext context) => creamCard(
+  Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
     child: SingleChildScrollView(
       child: Column(
@@ -390,7 +429,7 @@ class _InfoCard extends StatelessWidget {
                 height: 10,
                 decoration: BoxDecoration(
                   color: dot,
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: vr(3),
                 ),
               ),
               const SizedBox(width: 6),
@@ -432,7 +471,7 @@ class _InfoCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
             decoration: BoxDecoration(
               color: bg,
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: vr(9),
             ),
             child: Text(
               _mult(v),
@@ -453,7 +492,7 @@ class _InfoCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(5),
+            borderRadius: vr(5),
           ),
           child: Text(_mult(v), style: FoE.value(size: 10).copyWith(color: fg)),
         ),

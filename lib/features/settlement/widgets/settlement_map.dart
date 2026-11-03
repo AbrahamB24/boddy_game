@@ -21,10 +21,16 @@ import '../sheets/building_detail_dialog.dart';
 import '../models/placed_building.dart';
 import '../settlement_controller.dart';
 import '../../social/social_actions.dart' show confirmDialog;
+import 'building_carousel.dart' show buildingCarouselHeight;
 import 'building_icon.dart';
 import 'building_life.dart';
+import 'road_walkers.dart';
 import 'terrain_layer.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
+import '../../creatures/services/creatures_controller.dart';
 import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 class SettlementMap extends StatefulWidget {
   final SettlementController ctrl;
@@ -97,7 +103,7 @@ class SettlementMap extends StatefulWidget {
 // GlobalKey<SettlementMapState> and route the tutorial's CTAs straight into
 // a building's dialog — see openBuildingByType.
 class SettlementMapState extends State<SettlementMap>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   /// Opens the detail dialog of the first placed building of [typeId], as if
   /// the player had tapped it. The guided intro's cards use this so "tap the
   /// Castle" is a lit button, not a search across the map.
@@ -133,6 +139,32 @@ class SettlementMapState extends State<SettlementMap>
   int? _aimX, _aimY; // the cell the ghost's north-west corner sits on
 
   bool get _aiming => _aimType != null;
+
+  /// True while the ghost being aimed must not move — the tutorial's own
+  /// Healing Hut and the one road tile that has to connect it to the Castle
+  /// (user 2026-09-30: "gib die Position ... vor, so dass ich immer genau am
+  /// gleichen Ort bauen muss und es auch nicht schieben kann", same ask for
+  /// the road). Only the road's FIRST tile — once it is confirmed, the
+  /// session becomes a chain the player extends with the arrow brush, not a
+  /// draggable ghost any more.
+  bool get _tutorialPlacementLocked {
+    final step = widget.ctrl.introStep;
+    if (_aimType == kHealingHutBuildingId) {
+      return step == IntroStep.buildHealingHut;
+    }
+    if (_aimType == 'road' && !_chaining) return step == IntroStep.buildRoad;
+    return false;
+  }
+
+  /// The fixed cell [typeId] must open on while [_tutorialPlacementLocked]
+  /// would apply to it, or null outside those two cases.
+  (int, int)? _lockedSpotFor(String typeId) => switch (typeId) {
+    kHealingHutBuildingId when widget.ctrl.introStep == IntroStep.buildHealingHut =>
+      (kTutorialHealingHutX, kTutorialHealingHutY),
+    'road' when widget.ctrl.introStep == IntroStep.buildRoad =>
+      (kTutorialRoadX, kTutorialRoadY),
+    _ => null,
+  };
 
   // ── ROAD CHAINS ─────────────────────────────────────────────
   // "Wenn ich eine Strasse Platziere und auf bestätigen drücke, dann werden die
@@ -219,31 +251,163 @@ class SettlementMapState extends State<SettlementMap>
     );
   }
 
-  /// Pans (never zooms) so [b] sits in the middle, clamped to the map's edges so
-  /// the move can never reveal the void beyond it. Keeping the zoom is
-  /// deliberate: a camera that also re-scaled would take away the view the player
-  /// had chosen.
-  void focusBuilding(PlacedBuilding b) {
+  /// Pans so [b] — its full ART, not just the ground tile — sits in the
+  /// middle, clamped to the map's edges so the move can never reveal the void
+  /// beyond it. Keeps whatever zoom the player already had unless
+  /// [targetScale] says otherwise — a camera that also re-scaled on its own
+  /// would ordinarily take away the view the player had chosen; the guided
+  /// intro is the one caller that overrides it (see its own call site).
+  ///
+  /// Centers [isoArtBounds], not [isoBounds] (user 2026-10-01, "noch mehr
+  /// schieben" on a screenshot of the Healing Hut's roof still hidden under
+  /// the tutorial card even after the camera WAS centering on it): a
+  /// building's picture rises above its own ground tile — that is the whole
+  /// point of [isoArtBounds] vs. the footprint alone, see its doc comment —
+  /// so centering the FOOTPRINT leaves the art's top edge sitting however far
+  /// above the centre line its own height happens to be, which for a
+  /// roofed building is well past halfway into whatever chrome sits above
+  /// the view. Roads/plots have no art above their tile, so they fall back to
+  /// the ground box, same as the non-art branch [_artRect] already uses for
+  /// them.
+  void focusBuilding(
+    PlacedBuilding b, {
+    double? targetScale,
+    double topInset = 0,
+    double bottomInset = 0,
+  }) {
     final def = kBuildingDefs[b.buildingTypeId];
     if (def == null) return;
-    _focusCell(b.gridX, b.gridY, def.gridW, def.gridH);
+    final bounds = _artRect(def, b.gridX, b.gridY);
+    _focusPoint(
+      bounds.center,
+      targetScale: targetScale,
+      topInset: topInset,
+      bottomInset: bottomInset,
+    );
   }
 
-  /// [focusBuilding] for a footprint that is not (yet) a building — the ghost.
-  void _focusCell(int gx, int gy, int w, int h) {
+  /// Zooms AND pans onto the Healing Hut the moment the map opens fresh on
+  /// assignHealer/healStarter — whatever the home transform just picked (user
+  /// 2026-10-01, screenshot of a zoomed-right-out map: "hier kann ich das
+  /// healing hut gar nicht anwählen wegen der Kameraperspektive, bitte auf
+  /// das Healing Hut einzoomen"). [isHealAnchor] already spotlights the hut
+  /// wherever it sits, but a hole drawn off-screen at [minMapScale] is just
+  /// as unreachable as no hole at all. The one caller of [focusBuilding] that
+  /// overrides the player's own zoom on purpose — see its own doc comment.
+
+  /// Which intro step [_focusHealAnchorForTutorial] has already zoomed the
+  /// camera for — sticky per STEP rather than per initial layout. The first
+  /// version of this fix only ever tried once, from the `!_txInitialized`
+  /// block below: on an account where [widget.ctrl.buildings] was still
+  /// mid-load on that very first frame, the Healing Hut wasn't in the list
+  /// yet, [_focusHealAnchorForTutorial] no-opped, and nothing ever asked
+  /// again — the camera was stuck on the zoomed-right-out home transform for
+  /// the rest of the step (user 2026-10-01, a second screenshot of exactly
+  /// that: "jetzt wieder auf das healing hut zoomen"). Calling it again on
+  /// every build (see the unconditional postFrameCallback below) costs one
+  /// cheap list scan and this guard, and keeps the one-shot "zoom once, then
+  /// leave the player's own pan/zoom alone" behaviour once it DOES find the
+  /// hut.
+  IntroStep? _healFocusedStep;
+
+  void _focusHealAnchorForTutorial() {
+    final step = widget.ctrl.introStep;
+    if (step != IntroStep.assignHealer && step != IntroStep.healStarter) {
+      return;
+    }
+    if (_healFocusedStep == step) return;
+    final hut = widget.ctrl.buildings
+        .where((b) => b.buildingTypeId == kHealingHutBuildingId)
+        .firstOrNull;
+    if (hut == null) return;
+    _healFocusedStep = step;
+    focusBuilding(
+      hut,
+      targetScale: kMaxMapZoom,
+      topInset: _introTopCardInset(),
+      bottomInset: buildingCarouselHeight(context),
+    );
+  }
+
+  /// How much of THIS widget's own top the pinned narration card covers right
+  /// now, in the map's own local coordinates — measured off the card's real
+  /// render box ([SettlementScreen] keys it with the same
+  /// [IntroSpotlightAnchors] registry the map's own anchors use) rather than a
+  /// guessed constant, since the card's height follows its body text (user
+  /// 2026-10-01, screenshot of the Healing Hut hidden behind the card: "bitte
+  /// die kamera so schieben, dass ich mehr von dem Healing hut sehe"). Falls
+  /// back to a conservative estimate for the one frame before the card has
+  /// been laid out.
+  double _introTopCardInset() {
+    const fallback = 190.0;
+    final cardBox =
+        IntroSpotlightAnchors.of('intro-top-card').currentContext
+                ?.findRenderObject()
+            as RenderBox?;
+    final mapBox = context.findRenderObject() as RenderBox?;
+    if (cardBox == null || mapBox == null || !cardBox.hasSize) {
+      return fallback;
+    }
+    final bottomLocal = mapBox.globalToLocal(
+      cardBox.localToGlobal(Offset(0, cardBox.size.height)),
+    );
+    return bottomLocal.dy.clamp(0.0, double.infinity);
+  }
+
+  /// [focusBuilding] for a footprint that is not (yet) a building — the
+  /// ghost, which has no art loaded to measure, only its own diamond.
+  void _focusCell(
+    int gx,
+    int gy,
+    int w,
+    int h, {
+    double? targetScale,
+    double topInset = 0,
+    double bottomInset = 0,
+  }) {
+    // The footprint's own point on the diamond, not the middle of a rectangle.
+    _focusPoint(
+      gridToScreen(gx + w / 2, gy + h / 2),
+      targetScale: targetScale,
+      topInset: topInset,
+      bottomInset: bottomInset,
+    );
+  }
+
+  /// Pans/zooms so map-space point [centre] lands in the middle of the free
+  /// band between [topInset] and [bottomInset] — the shared maths behind
+  /// [_focusCell] (a footprint's own centre) and [focusBuilding] (a real
+  /// building's full art bounds).
+  ///
+  /// [topInset]/[bottomInset] carve chrome that floats OVER the map (the
+  /// tutorial's pinned narration card, the build tray) out of the vertical
+  /// centering: without them this centers on the full viewport, which is not
+  /// what the player can actually SEE when a card or tray covers part of it
+  /// (user 2026-10-01: "bitte die kamera so schieben, dass ich mehr von dem
+  /// Healing hut sehe").
+  void _focusPoint(
+    Offset centre, {
+    double? targetScale,
+    double topInset = 0,
+    double bottomInset = 0,
+  }) {
     final view = _viewport;
     if (view == null) return;
-    final scale = _txCtrl.value.getMaxScaleOnAxis();
+    final scale = targetScale ?? _txCtrl.value.getMaxScaleOnAxis();
     final mapW = isoCanvasSize.width * scale;
     final mapH = isoCanvasSize.height * scale;
-    // The footprint's own point on the diamond, not the middle of a rectangle.
-    final centre = gridToScreen(gx + w / 2, gy + h / 2);
     final cx = centre.dx * scale;
     final cy = centre.dy * scale;
+    // The free band left between the chrome, clamped so a tutorial step on a
+    // very short viewport never inverts it (insets this big would leave no
+    // room at all).
+    final freeTop = math.min(topInset, view.height / 2);
+    final freeBottom = math.min(bottomInset, view.height / 2);
+    final targetCy = freeTop + (view.height - freeTop - freeBottom) / 2;
     final tx = (view.width / 2 - cx)
         .clamp(math.min(0.0, view.width - mapW), 0.0)
         .toDouble();
-    final ty = (view.height / 2 - cy)
+    final ty = (targetCy - cy)
         .clamp(math.min(0.0, view.height - mapH), 0.0)
         .toDouble();
     final target = mapTransform(scale, tx, ty);
@@ -295,11 +459,44 @@ class SettlementMapState extends State<SettlementMap>
     }
   }
 
+  // ── Monsters on the roads (user 2026-11-03) — see road_walkers.dart ──
+  final RoadWalkers _walkers = RoadWalkers();
+  late final Ticker _walkTicker = createTicker(_onWalkTick);
+  Duration _walkLast = Duration.zero;
+
+  void _onWalkTick(Duration elapsed) {
+    final dt = (elapsed - _walkLast).inMicroseconds / 1e6;
+    _walkLast = elapsed;
+    // A long gap (the route was covered, the app was away) is not a sprint.
+    _walkers.step(dt.clamp(0.0, 0.1));
+  }
+
+  /// Runs the walkers' clock only while there is someone to walk and the
+  /// map is in its plain viewing state — while a building or road is being
+  /// placed, a monster crossing the cursor would only get in the way.
+  void _syncWalkers(bool show) {
+    if (show) {
+      _walkers.sync(
+        widget.ctrl.roadCells,
+        CreaturesController().battleReadyCreatures,
+      );
+    }
+    final run = show && _walkers.walkers.isNotEmpty;
+    if (run && !_walkTicker.isActive) {
+      _walkLast = Duration.zero;
+      _walkTicker.start();
+    } else if (!run && _walkTicker.isActive) {
+      _walkTicker.stop();
+    }
+  }
+
   @override
   void dispose() {
     _edgeTimer?.cancel();
     _panCtrl.dispose();
     _txCtrl.dispose();
+    _walkTicker.dispose();
+    _walkers.dispose();
     super.dispose();
   }
 
@@ -351,7 +548,14 @@ class SettlementMapState extends State<SettlementMap>
     // this build is about to report.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _aimType != typeId || _aimMoveId != moveId) return;
-      if (b != null && !fromStorage) {
+      final locked = moveId == null ? _lockedSpotFor(typeId) : null;
+      if (locked != null) {
+        setState(() {
+          _aimX = locked.$1;
+          _aimY = locked.$2;
+        });
+        _focusCell(locked.$1, locked.$2, def.gridW, def.gridH);
+      } else if (b != null && !fromStorage) {
         focusBuilding(b);
       } else {
         _dropGhostAtCentre(def);
@@ -440,12 +644,20 @@ class SettlementMapState extends State<SettlementMap>
     }
     Feel.place();
     final isNewRoad = moveId == null && (kBuildingDefs[type]?.isRoad ?? false);
+    // Captured before advanceIntro moves the step past buildRoad (user
+    // 2026-10-01: "wenn ich die Strasse baue, dann bitte nur eine bauen
+    // lassen und mit dem Bestätigen wird diese sofort gebaut, das
+    // Weiterziehmenü bleibt beim Tutorial aus") — the tutorial's one road
+    // tile places and the session closes outright, with no hand-off to the
+    // chain brush below.
+    final isTutorialRoad =
+        isNewRoad && widget.ctrl.introStep == IntroStep.buildRoad;
     if (isNewRoad) {
       unawaited(widget.ctrl.advanceIntro(IntroStep.buildRoad));
     }
     final chainHead = widget.ctrl.lastPlacedId;
     _clearAim();
-    if (isNewRoad && chainHead != null) {
+    if (isNewRoad && chainHead != null && !isTutorialRoad) {
       // Hand straight over to the chain — the session does NOT close, it
       // changes shape (user 2026-08-09).
       setState(() {
@@ -585,6 +797,7 @@ class SettlementMapState extends State<SettlementMap>
   (int, int) _cellAt(Offset local) => screenToGrid(_txCtrl.toScene(local));
 
   void _moveGhostTo(Offset local) {
+    if (_tutorialPlacementLocked) return;
     final type = _aimType;
     final def = type == null ? null : kBuildingDefs[type];
     if (def == null) return;
@@ -600,6 +813,7 @@ class SettlementMapState extends State<SettlementMap>
   }
 
   void _ghostDragStart(Offset globalPosition) {
+    if (_tutorialPlacementLocked) return;
     final type = _aimType;
     final def = type == null ? null : kBuildingDefs[type];
     if (def == null || _aimX == null || _aimY == null) return;
@@ -811,7 +1025,11 @@ class SettlementMapState extends State<SettlementMap>
       if (hit != null) _startAim(hit.buildingTypeId, moveId: hit.id);
       return;
     }
-    if (hit != null) _showDetail(hit);
+    // A road has no detail screen (user 2026-09-22) — it's ground, not a
+    // building with stats/upgrades to show.
+    if (hit != null && !(kBuildingDefs[hit.buildingTypeId]?.isRoad ?? false)) {
+      _showDetail(hit);
+    }
   }
 
   // ── Long-press inside InteractiveViewer (normal mode only) ─
@@ -1076,17 +1294,52 @@ class SettlementMapState extends State<SettlementMap>
     int? gx,
     int? gy,
     required Set<String> faded,
+    List<RoadWalker> walkers = const [],
   }) {
+    // A ROAD ghost rides on TOP of the buildings layer, not in the roads layer
+    // under it (user 2026-09-28: "wenn ein Gebäude davor ist, sehe ich die
+    // Strasse kaum, auch wenn das Gebäude transparent wird"). Down there it sat
+    // beneath everything that stands in front of it — a building faded to 30 %
+    // still covers it. A road has no height to be hidden BEHIND anything, so it
+    // is judged against the whole town.
+    final roadOnTop = ghostDef != null && ghostDef.isRoad;
     final withGhost =
         ghostDef != null &&
         gx != null &&
         gy != null &&
-        ghostDef.isRoad == roads;
+        (roadOnTop ? !roads : ghostDef.isRoad == roads);
     final out = <Widget>[];
     var pending = withGhost;
+    // Walkers, back to front, each slotted in before the first building that
+    // stands in front of its cell — the same rule the ghost uses below.
+    final queue = [...walkers]
+      ..sort((a, b) {
+        final (ax, ay) = a.drawCell;
+        final (bx, by) = b.drawCell;
+        return isoDrawOrder(ax, ay, 1, 1, bx, by, 1, 1);
+      });
+    var wi = 0;
     for (final b in _sortedForPainting(roads: roads)) {
       final d = kBuildingDefs[b.buildingTypeId];
+      while (wi < queue.length) {
+        final (wx, wy) = queue[wi].drawCell;
+        if (isoDrawOrder(
+              wx,
+              wy,
+              1,
+              1,
+              b.gridX,
+              b.gridY,
+              d?.gridW ?? 1,
+              d?.gridH ?? 1,
+            ) >=
+            0) {
+          break;
+        }
+        out.add(_walkerView(queue[wi++]));
+      }
       if (pending &&
+          !roadOnTop &&
           isoDrawOrder(
                 gx!,
                 gy!,
@@ -1098,14 +1351,44 @@ class SettlementMapState extends State<SettlementMap>
                 d?.gridH ?? 1,
               ) <
               0) {
-        out.add(_ghost(ghostDef.id, gx, gy));
+        out.add(
+          KeyedSubtree(
+            key: const ValueKey('ghost'),
+            child: _ghost(ghostDef.id, gx, gy),
+          ),
+        );
         pending = false;
       }
-      out.add(_buildingTile(b, faded: faded.contains(b.id)));
+      // KEYED by building, so a walker slotting in between two tiles MOVES
+      // the tiles after it instead of handing every one of them its
+      // neighbour's widget (which would rebuild and repaint the whole town
+      // each time a monster stepped onto a new cell).
+      out.add(
+        KeyedSubtree(
+          key: ValueKey(b.id),
+          child: _buildingTile(b, faded: faded.contains(b.id)),
+        ),
+      );
     }
-    if (pending) out.add(_ghost(ghostDef!.id, gx!, gy!));
+    while (wi < queue.length) {
+      out.add(_walkerView(queue[wi++]));
+    }
+    if (pending) {
+      out.add(
+        KeyedSubtree(
+          key: const ValueKey('ghost'),
+          child: _ghost(ghostDef!.id, gx!, gy!),
+        ),
+      );
+    }
     return out;
   }
+
+  Widget _walkerView(RoadWalker w) => RoadWalkerView(
+    key: ValueKey('walker:${w.creature.id}'),
+    walker: w,
+    walkers: _walkers,
+  );
 
   /// Buildings that STAND IN FRONT of the ghost and overlap it on screen.
   ///
@@ -1172,6 +1455,9 @@ class SettlementMapState extends State<SettlementMap>
     final faded = showGhost
         ? _fadedBehindGhost(ghostDef, gx, gy)
         : const <String>{};
+    final walkersShown =
+        !showGhost && !_chaining && !widget.editMode && !widget.roadMode;
+    _syncWalkers(walkersShown);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1197,6 +1483,7 @@ class SettlementMapState extends State<SettlementMap>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             _txCtrl.value = _homeTransform(minScale, view);
+            _focusHealAnchorForTutorial();
           });
         } else if (resized) {
           // The viewport can change under a transform that was legal when it
@@ -1214,6 +1501,13 @@ class SettlementMapState extends State<SettlementMap>
             _txCtrl.value = _homeTransform(minScale, view);
           });
         }
+
+        // Retried every build, not just the first one — see
+        // [_healFocusedStep]'s own doc comment on why the one-shot attempt
+        // above is not enough by itself.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _focusHealAnchorForTutorial();
+        });
 
         return Stack(
           children: [
@@ -1283,13 +1577,28 @@ class SettlementMapState extends State<SettlementMap>
                         gy: gy,
                         faded: faded,
                       ),
-                      // BACK TO FRONT among themselves.
-                      ..._layer(
-                        roads: false,
-                        ghostDef: ghostDef,
-                        gx: gx,
-                        gy: gy,
-                        faded: faded,
+                      // BACK TO FRONT among themselves — and the monsters
+                      // walking the roads among them (user 2026-11-03), so a
+                      // building in front of a walker hides it. Its own
+                      // Stack under a listener: a walker stepping onto a new
+                      // cell re-sorts THIS layer only, not the whole map.
+                      Positioned.fill(
+                        child: ValueListenableBuilder<int>(
+                          valueListenable: _walkers.order,
+                          builder: (context, _, _) => Stack(
+                            clipBehavior: Clip.none,
+                            children: _layer(
+                              roads: false,
+                              ghostDef: ghostDef,
+                              gx: gx,
+                              gy: gy,
+                              faded: faded,
+                              walkers: walkersShown
+                                  ? _walkers.walkers
+                                  : const [],
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -1435,6 +1744,7 @@ class SettlementMapState extends State<SettlementMap>
             // the tile because only the map can see the neighbours, and it
             // has the controller's cached cell set to see them cheaply.
             roadMask: roadMask,
+            isDisconnected: isDisconnected,
           ),
         ),
         // ── SIGNS OF LIFE (user 2026-08-04) ──
@@ -1447,22 +1757,32 @@ class SettlementMapState extends State<SettlementMap>
           Positioned.fill(
             child: _LifeOverlay(def: def, seed: b.id.hashCode),
           ),
+        // DISCONNECTED (user 2026-09-30: "sieht man dies noch nicht gut"):
+        // the ground-footprint wash this used to be dropped — now that the
+        // art itself is tinted red (see [_BuildingTile]), a second red wash
+        // under it added noise, not clarity. A white-backed badge instead,
+        // big enough to read at map scale and visible against ground OR
+        // the now-red art alike. A crossed-out road (user 2026-09-30: "den
+        // Badge durch eine durchgestrichene Strasse ersetzen"), not a generic
+        // no-entry sign — [Icons.remove_road] already names exactly what's
+        // missing, and it's the same glyph the chain-erase button uses.
         if (isDisconnected)
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _FootprintPainter(
-                w: def.gridW,
-                h: def.gridH,
-                color: FoE.danger,
-                outline: false,
-              ),
-            ),
-          ),
-        if (isDisconnected)
-          const Positioned(
+          Positioned(
             top: 1,
             left: 1,
-            child: Text('🚫', style: TextStyle(fontSize: 12)),
+            child: Container(
+              width: 16,
+              height: 16,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                shape: BoxShape.rectangle,
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(color: Color(0x99000000), blurRadius: 2),
+                ],
+              ),
+              child: const PixelIcon(Icons.remove_road, size: 11, color: FoE.danger),
+            ),
           ),
         // PAUSED, on the map (user 2026-08-01): a switch you cannot see
         // from the outside is one you forget you flipped — and a building
@@ -1611,7 +1931,7 @@ class SettlementMapState extends State<SettlementMap>
           height: size,
           decoration: BoxDecoration(
             color: fill,
-            shape: BoxShape.circle,
+            shape: BoxShape.rectangle,
             boxShadow: [
               BoxShadow(
                 color: erase
@@ -1623,7 +1943,7 @@ class SettlementMapState extends State<SettlementMap>
           ),
           child: Transform.rotate(
             angle: angle,
-            child: Icon(
+            child: PixelIcon(
               Icons.arrow_forward_rounded,
               size: size * 0.58,
               color: erase ? CreamPalette.paperTop : CreamPalette.ink,
@@ -1655,7 +1975,7 @@ class SettlementMapState extends State<SettlementMap>
           width: size,
           height: size,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            shape: BoxShape.rectangle,
             gradient: primary && enabled
                 ? null
                 : LinearGradient(
@@ -1680,7 +2000,7 @@ class SettlementMapState extends State<SettlementMap>
               ),
             ],
           ),
-          child: Icon(
+          child: PixelIcon(
             icon,
             size: 22,
             color: !enabled
@@ -1696,7 +2016,7 @@ class SettlementMapState extends State<SettlementMap>
   Widget _tagFact(IconData icon, String text, {Color? colour}) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Icon(icon, size: 12, color: colour ?? kBoxInkSoft),
+      PixelIcon(icon, size: 12, color: colour ?? kBoxInkSoft),
       const SizedBox(width: 3),
       Text(
         text,
@@ -1747,7 +2067,12 @@ class SettlementMapState extends State<SettlementMap>
     required String? status,
     required bool ok,
     required VoidCallback? onOk,
-    required VoidCallback onCancel,
+    // Null hides the button entirely rather than just disabling it (user
+    // 2026-09-30, the tutorial's locked Healing Hut/road placement: "nur
+    // den ok Button ist drückbar, der X wird hier gar nicht angezeigt") —
+    // there is nothing to cancel BACK to once the spot is fixed, so
+    // offering the choice at all would be a dead end wearing a live button.
+    VoidCallback? onCancel,
     String cancelLabel = 'Cancel',
     VoidCallback? onDelete,
     double gap = 14,
@@ -1785,7 +2110,7 @@ class SettlementMapState extends State<SettlementMap>
                   color: above
                       ? CreamPalette.paperBottom
                       : CreamPalette.paperTop,
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: vr(3),
                   boxShadow: [
                     BoxShadow(
                       color: CreamPalette.tanShadow,
@@ -1842,7 +2167,7 @@ class SettlementMapState extends State<SettlementMap>
                                 width: 8,
                                 height: 8,
                                 decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
+                                  shape: BoxShape.rectangle,
                                   color: ok
                                       ? CreamPalette.better
                                       : CreamPalette.warn,
@@ -1879,12 +2204,14 @@ class SettlementMapState extends State<SettlementMap>
                     ),
                     const SizedBox(width: 6),
                   ],
-                  _tagButton(
-                    icon: Icons.close_rounded,
-                    label: cancelLabel,
-                    onTap: onCancel,
-                  ),
-                  const SizedBox(width: 6),
+                  if (onCancel != null) ...[
+                    _tagButton(
+                      icon: Icons.close_rounded,
+                      label: cancelLabel,
+                      onTap: onCancel,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   _tagButton(
                     icon: Icons.check_rounded,
                     label: 'Confirm',
@@ -1989,10 +2316,24 @@ class SettlementMapState extends State<SettlementMap>
         // A spot the game would refuse gets a grey ✓ — pressing it would only
         // bring up the reason the tag already states.
         onOk: status.ok ? _confirmAim : null,
-        onCancel: _cancelAim,
+        onCancel: _tutorialPlacementLocked ? null : _cancelAim,
         onDelete: canDelete ? _deleteAimed : null,
       ),
     ];
+  }
+
+  /// While erasing, an arrow toward empty ground or a non-road building has
+  /// nothing left to pull up — leaving it on screen (user 2026-09-22: "wenn
+  /// die letzte angrenzende Strasse gelöscht wurde, sollen die Pfeile
+  /// verschwinden") would only invite a tap that just buzzes, see
+  /// [_chainStep]'s own guard. Laying has no such restriction: any in-bounds
+  /// tile is a legal next tile.
+  bool _chainCanStep(int dx, int dy) {
+    final nx = _chainX + dx, ny = _chainY + dy;
+    if (nx < 0 || ny < 0 || nx >= kGridCols || ny >= kGridRows) return false;
+    if (!_chainErase) return true;
+    final hit = _hitTest(nx, ny);
+    return hit != null && (kBuildingDefs[hit.buildingTypeId]?.isRoad ?? false);
   }
 
   /// The chain's arrows: bigger than the aiming ones ("dann werden die Pfeile
@@ -2007,14 +2348,15 @@ class SettlementMapState extends State<SettlementMap>
     final laying = widget.ctrl.introStep == IntroStep.buildRoad;
     return [
       for (final (dx, dy) in const [(1, 0), (-1, 0), (0, 1), (0, -1)])
-        _arrowButton(
-          at: _edgeAnchor(_chainX, _chainY, 1, 1, dx, dy),
-          dx: dx,
-          dy: dy,
-          size: 40,
-          erase: _chainErase,
-          onTap: () => _chainStep(dx, dy),
-        ),
+        if (_chainCanStep(dx, dy))
+          _arrowButton(
+            at: _edgeAnchor(_chainX, _chainY, 1, 1, dx, dy),
+            dx: dx,
+            dy: dy,
+            size: 40,
+            erase: _chainErase,
+            onTap: () => _chainStep(dx, dy),
+          ),
       _nameTag(
         anchor: rect,
         // Clears the arrow above the head tile.
@@ -2086,7 +2428,7 @@ class SettlementMapState extends State<SettlementMap>
         children: [
           Row(
             children: [
-              Icon(Icons.open_with, size: 18, color: kBoxAccent),
+              PixelIcon(Icons.open_with, size: 18, color: kBoxAccent),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -2196,7 +2538,7 @@ class SettlementMapState extends State<SettlementMap>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: kBoxAccent),
+          PixelIcon(icon, size: 15, color: kBoxAccent),
           const SizedBox(width: 6),
           Text(label, style: FoE.label(size: 12).copyWith(color: kBoxInk)),
         ],
@@ -2228,10 +2570,17 @@ class _BuildingTile extends StatelessWidget {
   /// Ignored for anything else.
   final int roadMask;
 
+  /// Not reached by any road (user 2026-09-30) — tints the art itself red,
+  /// see [kDisconnectedFilter]. Paused wins when both apply: only one filter
+  /// can draw the picture, and "asleep" is the building's own decision while
+  /// "disconnected" is just a fact about the road network around it.
+  final bool isDisconnected;
+
   const _BuildingTile({
     required this.def,
     required this.building,
     this.roadMask = 0,
+    this.isDisconnected = false,
   });
 
   @override
@@ -2351,6 +2700,19 @@ class _BuildingTile extends StatelessWidget {
                 // loses its colour and a little of its light — see [kPausedFilter].
                 ? ColorFiltered(
                     colorFilter: kPausedFilter,
+                    child: BuildingIcon(
+                      imageUrl: def.imageUrl,
+                      defId: def.id,
+                      width: art.width,
+                      anchorBottomOverflowTop: true,
+                      dimmed: !done,
+                    ),
+                  )
+                // DISCONNECTED (user 2026-09-30): the whole sprite goes red,
+                // not just the ground tile under it — see [kDisconnectedFilter].
+                : isDisconnected
+                ? ColorFiltered(
+                    colorFilter: kDisconnectedFilter,
                     child: BuildingIcon(
                       imageUrl: def.imageUrl,
                       defId: def.id,
@@ -2548,23 +2910,17 @@ class _SleepOverlay extends StatelessWidget {
 }
 
 /// The footprint diamond, filled and outlined — the ghost preview's "can I
-/// build here" mark (2026-08-01).
+/// build here" mark (2026-08-01). The disconnected-building wash this used to
+/// double as (no outline, so it read as a flat area rather than a frame) is
+/// gone now that a disconnected building's own art carries the warning — see
+/// [kDisconnectedFilter] — so this is back to its one remaining job and the
+/// outline is no longer optional.
 class _FootprintPainter extends CustomPainter {
   final int w;
   final int h;
   final Color color;
 
-  /// The crisp edge a PLACEMENT preview needs. Off for a selected building:
-  /// there the answer is which cells it stands on, and an outline around them
-  /// is the frame the user asked to be rid of.
-  final bool outline;
-
-  const _FootprintPainter({
-    required this.w,
-    required this.h,
-    required this.color,
-    this.outline = true,
-  });
+  const _FootprintPainter({required this.w, required this.h, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2584,20 +2940,18 @@ class _FootprintPainter extends CustomPainter {
     for (final (from, to) in footprintSeams(w, h)) {
       canvas.drawLine(from, to, seam);
     }
-    if (outline) {
-      canvas.drawPath(
-        footprintPathLocal(w, h),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..color = color,
-      );
-    }
+    canvas.drawPath(
+      footprintPathLocal(w, h),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = color,
+    );
   }
 
   @override
   bool shouldRepaint(_FootprintPainter old) =>
-      old.w != w || old.h != h || old.color != color || old.outline != outline;
+      old.w != w || old.h != h || old.color != color;
 }
 
 /// A road without art: its cell, filled flat, with the lit near edge every

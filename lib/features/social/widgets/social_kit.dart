@@ -4,6 +4,8 @@ import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../models/pvp_match.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 /// The small parts every Social pane is built from, in the cream kit: a round
 /// avatar (there are no profile pictures — the initial on a colour the name
@@ -38,7 +40,7 @@ class SocialAvatar extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        shape: BoxShape.rectangle,
         gradient: RadialGradient(
           center: const Alignment(-0.3, -0.45),
           colors: [Color.lerp(color, Colors.white, 0.3)!, color],
@@ -76,7 +78,7 @@ class CountBadge extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: CreamPalette.warn,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: vr(9),
       ),
       child: Text(
         '$count',
@@ -159,7 +161,7 @@ class SocialTileButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: fontSize + 3, color: kBoxInk),
+            PixelIcon(icon, size: fontSize + 3, color: kBoxInk),
             const SizedBox(width: 6),
           ],
           Text(
@@ -211,10 +213,10 @@ class SocialGlyphButton extends StatelessWidget {
             alignment: Alignment.center,
             decoration: gold
                 ? goldButton().copyWith(
-                    borderRadius: BorderRadius.circular(size),
+                    borderRadius: vr(size),
                   )
                 : raisedTile(radius: size),
-            child: Icon(icon, size: size * 0.56, color: kBoxInk),
+            child: PixelIcon(icon, size: size * 0.56, color: kBoxInk),
           ),
           if (badge > 0)
             Positioned(right: -6, top: -6, child: CountBadge(badge)),
@@ -240,7 +242,7 @@ Widget socialRow({
     padding: padding,
     decoration: warm
         ? BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: vr(12),
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -322,7 +324,7 @@ class StageChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: fill,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: vr(8),
         border: Border.all(color: edge),
       ),
       child: Text(

@@ -70,6 +70,9 @@ class _TripsStatusBuilderState extends State<TripsStatusBuilder> {
     final away = _trips.travelling(now);
     Duration? soonest;
     for (final e in away) {
+      // A hunt runs on real steps now — it has no ETA to contribute here
+      // (see Expedition.isStepGated).
+      if (e.isStepGated) continue;
       final left = e.remaining(now);
       if (soonest == null || left < soonest) soonest = left;
     }

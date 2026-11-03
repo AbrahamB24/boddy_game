@@ -433,16 +433,29 @@ void main() {
     });
   });
 
-  // ── Das Spielfeld ist die Grenze (user 2026-08-09) ─────────
+  // ── Das Spielfeld ist die Grenze (user 2026-08-09), eingefasst
+  //    (user 2026-10-01) ──────────────────────────────────────
   // "Ich will nicht ganz so nahe heranzoomen können wie aktuell. Es darf
-  //  niemals aus dem Spielfeld hinausgezoomt/gescrollt werden."
+  //  niemals aus dem Spielfeld hinausgezoomt/gescrollt werden." — and later,
+  // pointing at the jagged water/grass seam right where the procedural
+  // coastline runs out of real data at the canvas's own rim: "die Karte
+  // erweitern auf alle Seiten und dann nicht ganz alles anzeigen."
   //
-  // Panning is bounded by the transform clamp, which needs no help once the
-  // SCALE is bounded — but if the minimum scale is a hair too small the map no
-  // longer covers the viewport and there is nothing left to clamp against. So
-  // the covering property is what is pinned, not the formula.
+  // So "the map" the camera is bounded by is no longer the full
+  // [isoCanvasSize] — it's that box held in by [kMapEdgeInset] on every
+  // side. The covering property now targets that smaller, inset box; the
+  // raw canvas is still bigger than it (checked below), which is exactly
+  // the point — there is real terrain just past the edge the camera will
+  // ever show.
   group('the map is the boundary', () {
-    test('at the minimum scale the map covers the viewport, every shape', () {
+    Size insetView() => Size(
+      isoCanvasSize.width * (1 - 2 * kMapEdgeInset),
+      isoCanvasSize.height * (1 - 2 * kMapEdgeInset),
+    );
+
+    test('at the minimum scale the INSET view covers the viewport, every '
+        'shape', () {
+      final view = insetView();
       for (final v in const [
         Size(430, 932),   // a phone, portrait
         Size(932, 430),   // the same phone, turned
@@ -451,21 +464,30 @@ void main() {
         Size(2400, 400),  // absurdly wide — the case one ratio gets wrong
       ]) {
         final s = minMapScale(v);
-        expect(isoCanvasSize.width * s, greaterThanOrEqualTo(v.width - 0.001),
+        expect(view.width * s, greaterThanOrEqualTo(v.width - 0.001),
             reason: '$v leaves a gap across');
-        expect(isoCanvasSize.height * s, greaterThanOrEqualTo(v.height - 0.001),
+        expect(view.height * s, greaterThanOrEqualTo(v.height - 0.001),
             reason: '$v leaves a gap down');
       }
     });
 
-    test('and it is the SMALLEST scale that does — no wasted zoom', () {
+    test('and it is the SMALLEST scale that does — no wasted zoom beyond '
+        'the inset', () {
+      final view = insetView();
       for (final v in const [Size(430, 932), Size(1600, 900)]) {
         final s = minMapScale(v) * 0.98;
-        final coversW = isoCanvasSize.width * s >= v.width;
-        final coversH = isoCanvasSize.height * s >= v.height;
+        final coversW = view.width * s >= v.width;
+        final coversH = view.height * s >= v.height;
         expect(coversW && coversH, isFalse,
-            reason: '$v could zoom out further and still be covered');
+            reason: '$v could zoom out further and still cover the inset view');
       }
+    });
+
+    test('the raw canvas is bigger than the inset view — there really is '
+        'unseen terrain past the rim', () {
+      final view = insetView();
+      expect(isoCanvasSize.width, greaterThan(view.width));
+      expect(isoCanvasSize.height, greaterThan(view.height));
     });
 
     test('zooming IN stops where the player asked it to', () {
@@ -522,16 +544,24 @@ void main() {
   // pixel of the viewport. The page under the map is a dark parchment, so a gap
   // reads as a black band, which is exactly what was reported.
   group('the clamp leaves no gap, whatever it is given', () {
+    // The guaranteed-covered box is [isoCanvasSize] held in by
+    // [kMapEdgeInset] on every side (user 2026-10-01) — so the near edge may
+    // sit up to one inset-margin's worth of scaled pixels INSIDE the
+    // viewport (that margin is real canvas, never a void), not just at 0.
     void coversEverything(Matrix4 m, Size v) {
       final f = clampMapTransform(m, v);
       final s = f.getMaxScaleOnAxis();
       final t = f.getTranslation();
-      expect(t.x, lessThanOrEqualTo(1e-6), reason: 'gap on the left: $m in $v');
-      expect(t.y, lessThanOrEqualTo(1e-6), reason: 'gap on top: $m in $v');
-      expect(isoCanvasSize.width * s + t.x,
+      final marginX = isoCanvasSize.width * kMapEdgeInset;
+      final marginY = isoCanvasSize.height * kMapEdgeInset;
+      expect(t.x, lessThanOrEqualTo(-marginX * s + 1e-6),
+          reason: 'gap on the left: $m in $v');
+      expect(t.y, lessThanOrEqualTo(-marginY * s + 1e-6),
+          reason: 'gap on top: $m in $v');
+      expect((isoCanvasSize.width - marginX) * s + t.x,
           greaterThanOrEqualTo(v.width - 1e-6),
           reason: 'gap on the right: $m in $v');
-      expect(isoCanvasSize.height * s + t.y,
+      expect((isoCanvasSize.height - marginY) * s + t.y,
           greaterThanOrEqualTo(v.height - 1e-6),
           reason: 'gap at the bottom: $m in $v');
       expect(s, greaterThanOrEqualTo(minMapScale(v) - 1e-9));
@@ -564,8 +594,12 @@ void main() {
 
     test('a transform already inside is left alone', () {
       // Otherwise the listener that applies this would fight every gesture.
+      // Comfortably past [kMapEdgeInset]'s own margin on every side — right
+      // at the old, un-inset edge (e.g. tx = -100) now falls OUTSIDE the
+      // allowed range and would legitimately get pulled in, which is not
+      // what this test is pinning.
       const v = Size(430, 932);
-      final good = clampMapTransform(mapTransform(0.5, -100, -80), v);
+      final good = clampMapTransform(mapTransform(0.5, -2000, -800), v);
       final again = clampMapTransform(good, v);
       expect(again.getMaxScaleOnAxis(), closeTo(good.getMaxScaleOnAxis(), 1e-12));
       expect(again.getTranslation().x, closeTo(good.getTranslation().x, 1e-9));

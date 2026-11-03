@@ -52,9 +52,9 @@ class EggDetailScreen extends StatefulWidget {
 
 class _EggDetailScreenState extends State<EggDetailScreen> {
   // The parchment palette every page reached from a building wears.
-  static const Color _ink = CreamPalette.ink;
-  static final Color _inkSoft = CreamPalette.ink.withValues(alpha: 0.78);
-  static final Color _inkFaint = CreamPalette.ink.withValues(alpha: 0.55);
+  static const Color _ink = kBoxInk;
+  static final Color _inkSoft = kBoxInk.withValues(alpha: 0.78);
+  static final Color _inkFaint = kBoxInk.withValues(alpha: 0.55);
 
   final _breeding = BreedingController();
 
@@ -123,17 +123,18 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
             : kSpeciesDefs[job.speciesId]?.name ?? job.speciesId,
         child: job == null
             ? Center(
-                child: creamCard(
-                  padding: const EdgeInsets.all(22),
-                  child: Text(
-                    'This egg has left your bag.',
-                    style: FoE.dim(size: 12).copyWith(color: _inkSoft),
-                  ),
+                child: Text(
+                  'This egg has left your bag.',
+                  style: FoE.dim(size: 12).copyWith(color: _inkSoft),
                 ),
               )
             // LANDSCAPE (2026-09-18): the egg + its one action on the left,
             // the fourteen-gene table on the right — both visible at once
-            // instead of one long portrait scroll. Two cream cards.
+            // instead of one long portrait scroll. The egg itself is a
+            // different Gebiet from the gene table reading it out (user
+            // 2026-09-29, "Trennlinien und Zonen gemischt", app-wide), so
+            // it gets a [zoneBox] of its own. (MenuScaffold is the one
+            // card now — no [pageCard] here.)
             : Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(
@@ -141,22 +142,19 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
                   children: [
                     SizedBox(
                       width: 264,
-                      child: creamCard(
-                        padding: const EdgeInsets.all(14),
+                      child: zoneBox(
+                        padding: const EdgeInsets.all(6),
                         child: ListView(
                           padding: EdgeInsets.zero,
                           children: _leftPanel(job),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 14),
                     Expanded(
-                      child: creamCard(
-                        padding: const EdgeInsets.all(14),
-                        child: ListView(
-                          padding: EdgeInsets.zero,
-                          children: [EggGeneTable(job: job)],
-                        ),
+                      child: ListView(
+                        padding: EdgeInsets.zero,
+                        children: [EggGeneTable(job: job)],
                       ),
                     ),
                   ],

@@ -100,21 +100,16 @@ void main() {
   });
 
   group('estimateCaptureDay', () {
-    // Redesign (user 2026-07-17): six FIXED-duration variants. A longer
-    // variant is no longer the throughput king — its draw is more finds PER
-    // TRIP, better rare odds, and running unattended (AFK). Many short trips,
-    // watched closely, out-catch one long trip per day. So the invariant is
+    // Redesign (user 2026-07-17, moved from a wall clock to real steps
+    // 2026-10-02): five FIXED-step variants. A longer variant is no longer
+    // the throughput king — its draw is more finds PER TRIP, better rare
+    // odds, and running unattended (AFK). Many short trips, watched
+    // closely, out-catch one long trip per day. So the invariant is
     // per-TRIP finds, not per-day.
     test('a longer variant brings more monsters per trip', () {
-      final short = estimateCaptureDay(
-        option: kCaptureHuntOptions.first,
-        reactionHours: 1,
-      );
-      final long = estimateCaptureDay(
-        option: kCaptureHuntOptions.last,
-        reactionHours: 1,
-      );
-      expect(long.huntDuration, greaterThan(short.huntDuration));
+      final short = estimateCaptureDay(option: kCaptureHuntOptions.first);
+      final long = estimateCaptureDay(option: kCaptureHuntOptions.last);
+      expect(long.huntSteps, greaterThan(short.huntSteps));
       expect(
         kCaptureHuntOptions.last.finds,
         greaterThan(kCaptureHuntOptions.first.finds),
@@ -128,7 +123,6 @@ void main() {
       final est = estimateCaptureDay(
         option: kCaptureHuntOptions.first,
         qteSuccess: 0.85,
-        reactionHours: 1,
       );
       expect(est.catchesPerDay, greaterThanOrEqualTo(5));
     });

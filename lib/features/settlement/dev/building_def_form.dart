@@ -15,6 +15,7 @@ import '../widgets/building_icon.dart';
 import 'dev_theme.dart';
 import 'effects_editor.dart';
 import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 // Create/edit form for a single BuildingDef. `existing == null` means
 // creating a new one. Three tabs — Basis, Bau, Kosten & Effekte.
@@ -524,7 +525,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                     ),
                   )
                 : IconButton(
-                    icon: const Icon(
+                    icon: const PixelIcon(
                       Icons.save_outlined,
                       color: FoE.goldBright,
                     ),
@@ -533,7 +534,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
                   ),
             if (!_isNew)
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                icon: const PixelIcon(Icons.delete_outline, color: Colors.redAccent),
                 tooltip: 'Delete',
                 onPressed: _delete,
               ),
@@ -727,7 +728,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(c.icon, size: 16, color: FoE.gold),
+                PixelIcon(c.icon, size: 16, color: FoE.gold),
                 const SizedBox(width: 8),
                 Flexible(child: Text(c.label, overflow: TextOverflow.ellipsis)),
               ],
@@ -978,7 +979,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
             ),
           ),
           IconButton(
-            icon: const Icon(
+            icon: const PixelIcon(
               Icons.delete_outline,
               color: Colors.redAccent,
               size: 20,
@@ -1205,7 +1206,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.info_outline, color: FoE.gold),
+                icon: const PixelIcon(Icons.info_outline, color: FoE.gold),
                 tooltip: 'How are construction points calculated?',
                 onPressed: _showPowerInfo,
               ),
@@ -1300,7 +1301,7 @@ class _BuildingDefFormState extends State<BuildingDefForm>
             ),
           ),
           IconButton(
-            icon: const Icon(
+            icon: const PixelIcon(
               Icons.delete_outline,
               color: Colors.redAccent,
               size: 20,
@@ -1714,7 +1715,7 @@ class _SearchPickerDialogState extends State<_SearchPickerDialog> {
                 style: FoE.label(size: 14).copyWith(color: FoE.parchment),
                 decoration: const InputDecoration(
                   hintText: 'Suchen…',
-                  prefixIcon: Icon(Icons.search, color: FoE.gold),
+                  prefixIcon: PixelIcon(Icons.search, color: FoE.gold),
                   isDense: true,
                 ),
                 onChanged: (v) => setState(() => _query = v),
@@ -1754,7 +1755,7 @@ class _SearchPickerDialogState extends State<_SearchPickerDialog> {
       color: selected ? FoE.panelMid : null,
       child: Row(
         children: [
-          Icon(
+          PixelIcon(
             selected ? Icons.radio_button_checked : Icons.radio_button_off,
             color: selected ? FoE.gold : FoE.textDim,
             size: 18,

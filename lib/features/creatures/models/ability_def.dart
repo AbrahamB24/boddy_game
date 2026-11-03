@@ -556,3 +556,34 @@ List<AbilityDef> learnableAbilitiesFor(CreatureElement element, int stage) =>
         )
         .where((a) => a.unlockStage <= stage)
         .toList();
+
+// ── What the PLAYER reads about a move (user 2026-09-28) ─────────────────────
+// "Angriffsbeschreibungen vereinfachen und kürzen." The long, rule-by-rule
+// sentences ([describeAbilityEffect]) stay for Dev Mode, where an author needs
+// every rule; a player in a fight needs one short line per thing the move does.
+
+/// One short line per extra thing [a] does: a second hit, each effect (through
+/// [summariseAbilityEffect]), the priority. Empty for a plain damage move.
+List<String> abilityNotes(AbilityDef a) {
+  String pct(double v) => '${(v * 100).round()} %';
+  return [
+    if (a.extraHitChance > 0)
+      '${a.extraHitSameTarget ? 'Can hit again' : 'Can also hit another enemy'} '
+          '(${pct(a.extraHitChance)}, then ${pct(a.extraHitChance * a.extraHitChance)})',
+    for (final e in a.effects) summariseAbilityEffect(e),
+    if (a.priority > 0) 'Acts first',
+  ];
+}
+
+/// A description cut down to its first sentence, and to [max] characters at a
+/// word boundary — enough to say what a move IS, not everything about it.
+String shortAbilityDescription(String text, {int max = 64}) {
+  var t = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+  final end = t.indexOf(RegExp(r'[.!?](\s|$)'));
+  if (end >= 0) t = t.substring(0, end + 1);
+  if (t.length <= max) return t;
+  t = t.substring(0, max - 1);
+  final space = t.lastIndexOf(' ');
+  if (space > max ~/ 2) t = t.substring(0, space);
+  return '${t.trimRight()}…';
+}

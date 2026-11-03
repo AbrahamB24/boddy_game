@@ -12,6 +12,8 @@ import 'dev_lists.dart';
 import 'dev_theme.dart';
 import 'gather_defs_tab.dart';
 import 'path_editor_tab.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 /// The menus, top to bottom on the rail.
 enum _Menu {
@@ -117,7 +119,7 @@ class _DevModeScreenState extends State<DevModeScreen> {
               width: 30,
               height: 30,
               decoration: const BoxDecoration(
-                shape: BoxShape.circle,
+                shape: BoxShape.rectangle,
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -130,7 +132,7 @@ class _DevModeScreenState extends State<DevModeScreen> {
                   ),
                 ],
               ),
-              child: const Icon(
+              child: const PixelIcon(
                 Icons.chevron_left_rounded,
                 size: 22,
                 color: kBoxInk,
@@ -159,7 +161,7 @@ class _DevModeScreenState extends State<DevModeScreen> {
     padding: const EdgeInsets.all(3),
     decoration: BoxDecoration(
       color: Colors.black.withValues(alpha: 0.22),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: vr(12),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -174,7 +176,7 @@ class _DevModeScreenState extends State<DevModeScreen> {
               decoration: i == _sub
                   ? BoxDecoration(
                       color: CreamPalette.gold,
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: vr(9),
                       boxShadow: const [
                         BoxShadow(
                           color: CreamPalette.goldDeep,
@@ -223,7 +225,7 @@ class _DevModeScreenState extends State<DevModeScreen> {
                   decoration: m == _menu
                       ? BoxDecoration(
                           color: CreamPalette.gold,
-                          borderRadius: BorderRadius.circular(11),
+                          borderRadius: vr(11),
                           boxShadow: const [
                             BoxShadow(
                               color: CreamPalette.goldDeep,
@@ -233,7 +235,7 @@ class _DevModeScreenState extends State<DevModeScreen> {
                         )
                       : BoxDecoration(
                           color: CreamPalette.paperTop.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(11),
+                          borderRadius: vr(11),
                         ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -302,7 +304,7 @@ class _DevModeScreenState extends State<DevModeScreen> {
   /// A full-width page on one cream card (the forms that are not list + pane).
   Widget _card(Widget child) => creamCard(
     child: ClipRRect(
-      borderRadius: BorderRadius.circular(13),
+      borderRadius: vr(13),
       child: Material(color: Colors.transparent, child: child),
     ),
   );

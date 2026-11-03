@@ -116,8 +116,16 @@ int itemBuyCost(ItemDef def, {double discount = 0}) {
 
 /// Gold you get for selling [def] back — never more than [itemBuyCost] − 1, so
 /// a levelled Trade Center can't turn the shop into an infinite money loop.
+///
+/// A CRAFTABLE item sells for nothing (gold balance pass 2026-11-02). Goods
+/// themselves sell for a thousandth of their value on purpose (§9 of
+/// docs/balancing.md), but crafting them first laundered that: 1 fish made a
+/// Cleanse worth 🪙 4, and one bench turned ~110 fish a day into ~🪙 430 —
+/// four times the daily tasks. Selling stays what the shop says it is: a
+/// way out of a bad bag for found items, never an income.
 int itemSellValue(ItemDef def, {double discount = 0}) {
   if (def.sellPrice <= 0) return 0;
+  if (def.ingredients.isNotEmpty || def.supplyCost > 0) return 0;
   final raw = (def.sellPrice * (1 + _d(discount))).floor();
   final buy = itemBuyCost(def, discount: discount);
   final capped = buy > 0 ? math.min(raw, buy - 1) : raw;

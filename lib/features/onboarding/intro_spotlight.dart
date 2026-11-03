@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
-import '../../core/ui/pressable.dart';
+import '../../core/ui/pressable.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 // ── Tutorial spotlight ────────────────────────────────────────
 // The guided intro (user design 2026-07-17) highlights exactly ONE control at
@@ -11,12 +14,13 @@ import '../../core/ui/pressable.dart';
 // where to tap still lets a new player wander into screens the script hasn't
 // explained yet, and then the script is narrating a state it isn't in.
 //
-// Mechanically this is four opaque scrims AROUND the target's rect rather
-// than one scrim with a punched hole: the gap between the scrims IS the
-// hole, so target hit-testing needs no custom render object — pointers over
-// the target never meet the overlay at all. The scrims absorb taps AND
-// drags (opaque hit test, no recognizers), so nothing under them scrolls,
-// pans or taps.
+// Two layers do two different jobs now (2026-09-30 rework): a single
+// CustomPainter draws the DIMMING, as one seamless fill-with-a-hole so there
+// is no seam for two abutting rectangles to show (user report: "teilweise
+// sieht man die Übergänge von den Boxen") — and four INVISIBLE rects around
+// the hole still do the actual tap-blocking, so target hit-testing still
+// needs no custom render object: the gap between them IS the interactive
+// hole, and pointers over the target never meet the overlay at all.
 
 /// Registry of spotlight anchors. Screens hang a [GlobalKey] per highlight
 /// target on their widgets and look it up here by a stable name, so the
@@ -64,14 +68,21 @@ class IntroSpotlightOverlay extends StatefulWidget {
   /// original behaviour: the scrim only ever blocks.
   final VoidCallback? onScrimTap;
 
-  /// False makes the scrim fully TRANSPARENT instead of the usual ~70%
-  /// black — everywhere outside the hole is still dead (taps absorbed,
-  /// nothing pressable), just not visually darkened. For a screen where
-  /// there's something worth WATCHING outside the one lit control (user
-  /// 2026-09-03, the battle screen specifically: "ich möchte aber, dass der
-  /// gesamte screen erhellt ist, damit ich das Kampfgeschehen verfolgen
-  /// kann" — HP bars dropping, hit reactions, floating numbers) rather than
-  /// a screen that's genuinely just one button and a lot of nothing.
+  /// False draws no gold glow ring around the hole at all — only the hint
+  /// text near it. For an explainer that has no real target to point at
+  /// (battle_screen.dart's "Miss" concept explainer, anchored to
+  /// 'battle-hp' purely so the text has somewhere to sit near, not because
+  /// the player's own monster is actually relevant — user 2026-09-30: "Hier
+  /// musst du nicht das eigene Monster highlighten"): a glow ring around it
+  /// would wrongly suggest the monster itself is what the text is about.
+  final bool showRing;
+
+  /// False makes the dimming fully transparent — everywhere outside the
+  /// hole is still dead (taps absorbed), just not visually darkened. For
+  /// the same "Miss" explainer as [showRing] (user 2026-09-30: "nur der
+  /// Text ist gehighlighted, sonst nichts") — with nothing to ring, darkening
+  /// the whole screen just to show one line of text has nothing to justify
+  /// it either.
   final bool dim;
 
   const IntroSpotlightOverlay({
@@ -81,6 +92,7 @@ class IntroSpotlightOverlay extends StatefulWidget {
     this.padding = 6,
     this.circular = false,
     this.onScrimTap,
+    this.showRing = true,
     this.dim = true,
   });
 
@@ -90,6 +102,19 @@ class IntroSpotlightOverlay extends StatefulWidget {
 
 class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
   Rect? _hole;
+
+  /// This overlay's OWN box, re-measured alongside [_hole] — [_hintLabel]
+  /// positions the bubble against this, not [MediaQuery]'s screen size (user
+  /// 2026-10-01, screenshot of the healing-hut-heal-action hint cut off at
+  /// the real screen edge): this overlay sits inside the building dialog's
+  /// own `Stack`, which is WIDTH-CAPPED well short of the screen
+  /// (building_detail_dialog.dart's `SizedBox(width: ...clamp(360, 728))`),
+  /// so `Positioned.fill` here only ever spans that narrower box. Clamping
+  /// the bubble's `left` against the full screen width let it sit past this
+  /// box's own right edge — still a valid position in the Stack's unclipped
+  /// coordinate space, just one the dialog never actually occupies on
+  /// screen.
+  Size? _overlaySize;
 
   @override
   void initState() {
@@ -114,95 +139,90 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
   @override
   Widget build(BuildContext context) {
     final hole = _hole;
-    // Dim, not blind — and the KIT's dim (warm ink at 62 %), the same veil
-    // every cream dialog drops behind itself, rather than the flat 70 %
-    // black this used before the redesign (2026-09-21). Fully transparent
-    // when [dim] is false; the scrim rects still absorb every tap either
-    // way.
-    final scrim = widget.dim ? CreamPalette.dim : const Color(0x00000000);
+    const transparent = Color(0x00000000);
 
     return Positioned.fill(
-      child: hole == null
-          ? _Scrim(rect: null, color: scrim, onTap: widget.onScrimTap)
-          : Stack(
-              children: [
-                // Four scrims around the hole; the gap between them is the
-                // one place a pointer reaches the real UI.
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  right: 0,
-                  height: hole.top,
-                  child: _Scrim(
-                    rect: null,
-                    color: scrim,
-                    onTap: widget.onScrimTap,
-                  ),
+      child: Stack(
+        children: [
+          // THE DIMMING — one painted mask, hole and all, so there is no
+          // seam between two abutting pieces the way four separately
+          // coloured Positioned rects could show one.
+          if (widget.dim)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _HolePainter(hole: hole, circular: widget.circular),
                 ),
-                Positioned(
-                  left: 0,
-                  top: hole.bottom,
-                  right: 0,
-                  bottom: 0,
-                  child: _Scrim(
-                    rect: null,
-                    color: scrim,
-                    onTap: widget.onScrimTap,
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  top: hole.top,
-                  width: hole.left,
-                  height: hole.height,
-                  child: _Scrim(
-                    rect: null,
-                    color: scrim,
-                    onTap: widget.onScrimTap,
-                  ),
-                ),
-                Positioned(
-                  left: hole.right,
-                  top: hole.top,
-                  right: 0,
-                  height: hole.height,
-                  child: _Scrim(
-                    rect: null,
-                    color: scrim,
-                    onTap: widget.onScrimTap,
-                  ),
-                ),
-                // Glow frame around the hole — draws attention without
-                // intercepting the pointer. The kit's gold, and a rounded
-                // rectangle rather than FoE's facet: nothing else in the
-                // redesigned UI is bevelled any more, so a facet read as a
-                // leftover from the old chrome (2026-09-21).
-                Positioned.fromRect(
-                  rect: hole,
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: ShapeDecoration(
-                        shape: widget.circular
-                            ? const CircleBorder(
-                                side: BorderSide(
-                                  color: CreamPalette.gold,
-                                  width: 2.5,
-                                ),
-                              )
-                            : RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                side: const BorderSide(
-                                  color: CreamPalette.gold,
-                                  width: 2.5,
-                                ),
+              ),
+            ),
+          // THE TAP-BLOCKING — invisible, and still four rects around the
+          // hole rather than one painted region: the gap between them is
+          // what makes the hole genuinely interactive with no custom
+          // hit-testing at all.
+          if (hole == null)
+            _Scrim(color: transparent, onTap: widget.onScrimTap)
+          else ...[
+            Positioned(
+              left: 0,
+              top: 0,
+              right: 0,
+              height: hole.top,
+              child: _Scrim(color: transparent, onTap: widget.onScrimTap),
+            ),
+            Positioned(
+              left: 0,
+              top: hole.bottom,
+              right: 0,
+              bottom: 0,
+              child: _Scrim(color: transparent, onTap: widget.onScrimTap),
+            ),
+            Positioned(
+              left: 0,
+              top: hole.top,
+              width: hole.left,
+              height: hole.height,
+              child: _Scrim(color: transparent, onTap: widget.onScrimTap),
+            ),
+            Positioned(
+              left: hole.right,
+              top: hole.top,
+              right: 0,
+              height: hole.height,
+              child: _Scrim(color: transparent, onTap: widget.onScrimTap),
+            ),
+            // Glow frame around the hole — draws attention without
+            // intercepting the pointer. The kit's gold, and a rounded
+            // rectangle rather than FoE's facet: nothing else in the
+            // redesigned UI is bevelled any more, so a facet read as a
+            // leftover from the old chrome (2026-09-21).
+            if (widget.showRing)
+              Positioned.fromRect(
+                rect: hole,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: ShapeDecoration(
+                      shape: widget.circular
+                          ? const CircleBorder(
+                              side: BorderSide(
+                                color: CreamPalette.gold,
+                                width: 2.5,
                               ),
-                      ),
+                            )
+                          : RoundedRectangleBorder(
+                              borderRadius: vr(12),
+                              side: const BorderSide(
+                                color: CreamPalette.gold,
+                                width: 2.5,
+                              ),
+                            ),
                     ),
                   ),
                 ),
-                if (widget.hint != null) _hintLabel(context, hole),
-              ],
-            ),
+              ),
+            if (widget.hint != null) _hintLabel(context, hole),
+          ],
+        ],
+      ),
     );
   }
 
@@ -233,37 +253,54 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
       );
       next = Rect.fromPoints(topLeft, bottomRight).inflate(widget.padding);
     }
-    if (next != _hole) setState(() => _hole = next);
+    final nextSize = overlayBox != null && overlayBox.hasSize
+        ? overlayBox.size
+        : null;
+    if (next != _hole || nextSize != _overlaySize) {
+      setState(() {
+        _hole = next;
+        _overlaySize = nextSize;
+      });
+    }
   }
 
   /// Hint below the hole, or above it when the hole is in the bottom half —
-  /// wherever there's room to read.
+  /// wherever there's room to read. PINNED to the hole horizontally (user
+  /// 2026-09-30: "an den Button anheften (mit etwas space) und nicht
+  /// zentriert") rather than centred across the full screen width — for a
+  /// target off to one side (the Map tile in a bottom corner, say) a
+  /// screen-centred bubble used to float nowhere near what it's talking
+  /// about.
   Widget _hintLabel(BuildContext context, Rect hole) {
-    final screenH = MediaQuery.sizeOf(context).height;
-    final below = hole.bottom < screenH * 0.6;
+    // This overlay's OWN box, not the screen's — see [_overlaySize]'s doc
+    // comment on why the two differ for an overlay drawn inside a
+    // width-capped dialog.
+    final size = _overlaySize ?? MediaQuery.sizeOf(context);
+    final below = hole.bottom < size.height * 0.6;
+    const margin = 16.0;
+    final maxWidth = math.min(260.0, size.width - margin * 2);
+    final left = (hole.center.dx - maxWidth / 2).clamp(
+      margin,
+      size.width - maxWidth - margin,
+    );
     return Positioned(
-      left: 16,
-      right: 16,
-      top: below ? hole.bottom + 12 : null,
-      bottom: below ? null : screenH - hole.top + 12,
+      left: left,
+      width: maxWidth,
+      top: below ? hole.bottom + 10 : null,
+      bottom: below ? null : size.height - hole.top + 10,
       child: IgnorePointer(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            // The same paper the guide card is made of, so the hint reads as
-            // the card still talking rather than as a second voice
-            // (2026-09-21). A [raisedTile] and not a full [creamCard]: it is
-            // one line, and the card's iso-grid pattern under that much
-            // whitespace looks like a card that failed to fill.
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-              decoration: raisedTile(lit: true, radius: 12),
-              child: Text(
-                widget.hint!,
-                textAlign: TextAlign.center,
-                style: FoE.label(size: 12).copyWith(color: kBoxInk),
-              ),
-            ),
+        // The same paper the guide card is made of, so the hint reads as
+        // the card still talking rather than as a second voice
+        // (2026-09-21). A [raisedTile] and not a full [creamCard]: it is
+        // one line, and the card's iso-grid pattern under that much
+        // whitespace looks like a card that failed to fill.
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: raisedTile(lit: true, radius: 12),
+          child: Text(
+            widget.hint!,
+            textAlign: TextAlign.center,
+            style: FoE.label(size: 12).copyWith(color: kBoxInk),
           ),
         ),
       ),
@@ -271,20 +308,100 @@ class _IntroSpotlightOverlayState extends State<IntroSpotlightOverlay> {
   }
 }
 
+/// A screen-wide dead zone with NO hole and NO darkening — blocks every tap
+/// without hiding anything underneath. For a moment with nothing to press
+/// and nothing to point at (user 2026-09-30, battle_screen's own enemy-turn
+/// window while its scripted fight runs: "während den Attacken soll der
+/// ganze Screen frei sein (nicht abgedunkelt) aber ich kann nichts anwählen,
+/// bis der nächste Tutorialschritt kommt") — [IntroSpotlightOverlay] would
+/// have nothing to anchor a hole to here, and darkening the screen just to
+/// show nothing would hide the very animation the player is meant to watch.
+class IntroBlockOverlay extends StatelessWidget {
+  const IntroBlockOverlay({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const Positioned.fill(child: _Scrim(color: Color(0x00000000)));
+}
+
+/// Paints [CreamPalette.dim] everywhere in the widget's bounds EXCEPT [hole]
+/// (a plain rect, or a circle when [circular]) — ONE fill with a hole erased
+/// out of it via `saveLayer` + `BlendMode.clear`, so there is no seam for two
+/// separately-drawn pieces to ever show at their shared edge the way the
+/// previous four-rectangle scrim could.
+///
+/// NOT `Path.combine(PathOperation.difference, …)` — tried first, since it's
+/// the obvious one-call way to cut a hole in a path. It compiles and runs
+/// with no error, but on this Flutter/CanvasKit web build it does not
+/// reliably return "outer minus hole": across otherwise-identical runs it
+/// was observed to return the unmodified outer path (hole not cut, like
+/// there were no hole at all) AND, separately, something that painted
+/// nothing at all — confirmed with a debugPrint of the actual masked path
+/// landing in Chrome's own console, not just inferred from the screenshot.
+/// `saveLayer`/`BlendMode.clear` needs no path-ops support at all — it is
+/// the standard, broadly-supported technique for this exact "dim everything
+/// except a hole" shape, used by most spotlight/coach-mark packages.
+class _HolePainter extends CustomPainter {
+  final Rect? hole;
+  final bool circular;
+  const _HolePainter({required this.hole, required this.circular});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.saveLayer(rect, Paint());
+    canvas.drawRect(rect, Paint()..color = CreamPalette.dim);
+    final h = hole;
+    if (h != null) {
+      final erase = Paint()..blendMode = BlendMode.clear;
+      if (circular) {
+        canvas.drawOval(h, erase);
+      } else {
+        canvas.drawRect(h, erase);
+      }
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _HolePainter oldDelegate) =>
+      oldDelegate.hole != hole || oldDelegate.circular != circular;
+}
+
 /// One dimming rectangle that eats every pointer that lands on it. A bare
 /// colored box would let taps fall through to the UI beneath; an
 /// [AbsorbPointer] would need a gesture arena entry to win drags. Opaque
 /// hit-test behavior with no recognizers swallows both.
 class _Scrim extends StatelessWidget {
-  final Rect? rect; // unused, kept for readability at call sites
   final Color color;
   final VoidCallback? onTap;
-  const _Scrim({required this.rect, required this.color, this.onTap});
+  const _Scrim({required this.color, this.onTap});
 
   @override
-  Widget build(BuildContext context) => Pressable(
-    behavior: HitTestBehavior.opaque,
-    onTap: onTap ?? () {},
-    child: ColoredBox(color: color),
-  );
+  Widget build(BuildContext context) {
+    // A pure dead zone (no real [onTap] — most spotlit steps) must not
+    // animate as if it did something. `Pressable` keys its press feedback on
+    // "onTap != null", and the old `onTap ?? () {}` here always satisfied
+    // that, so tapping anywhere in the dimmed area played the same
+    // darken+depth animation a real button gives, whether or not anything
+    // happened (user report 2026-09-30: "Ich kann die abgedunkelten
+    // Flächen anwählen. Es passiert nichts, ausser dass es einen Klickeffekt
+    // gibt."). A bare GestureDetector still swallows the tap — nothing under
+    // the scrim is reachable either way — it just gives no feedback when
+    // there is nothing to give feedback ABOUT. Only the battle screen's
+    // sequential callouts and its info hints pass a real [onTap], and keep
+    // Pressable's animation, since tapping there genuinely advances them.
+    if (onTap == null) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {},
+        child: ColoredBox(color: color),
+      );
+    }
+    return Pressable(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap!,
+      child: ColoredBox(color: color),
+    );
+  }
 }

@@ -76,7 +76,7 @@ class WorkSite {
     for (final e in resources.entries)
       if (e.value > 0)
         e.key == WorkshopRole.kConstruction
-            ? '+${e.value.toStringAsFixed(0)} points 🔨'
+            ? '${buildPointsLabel(e.value)} 🔨'
             : '+${e.value.toStringAsFixed(1)}/h ${resourceEmoji(e.key)}',
     if (xpPerHour > 0) '+${xpPerHour.toStringAsFixed(0)} XP/h 🏋️',
     for (final e in system.entries)
@@ -150,7 +150,7 @@ class WorkSummary {
     return (figure: '+${kTrainingXpPerHour.toStringAsFixed(0)} XP/h', score: 0);
   }
   if (role.resource == WorkshopRole.kConstruction) {
-    return (figure: '+${contrib.toStringAsFixed(0)} points 🔨', score: contrib);
+    return (figure: '${buildPointsLabel(contrib)} 🔨', score: contrib);
   }
   if (role.resource == WorkshopRole.kStorageRoom) {
     final keys = def.effectKeys('storage').toList();
@@ -191,7 +191,7 @@ List<WorkSite> buildWorkSites({
   final lookup = defOf ?? (id) => kBuildingDefs[id];
   final sites = <WorkSite>[];
   for (final b in buildings) {
-    if (!b.isComplete || !connectedIds.contains(b.id)) continue;
+    if (!b.isComplete || b.isStored || !connectedIds.contains(b.id)) continue;
     final def = lookup(b.buildingTypeId);
     if (def == null || def.workshops.isEmpty) continue;
 
@@ -254,14 +254,14 @@ List<WorkSite> buildWorkSites({
       }
     }
 
-    // Today's energy scales every rate, exactly as the building dialog's Total
-    // and the header's own numbers do.
+    // Today's energy scales what is PRODUCED — the stockpile resources — exactly
+    // as the building dialog's Total and the header's own numbers do. It does NOT
+    // touch build points or the time cuts of the system roles: timers run in real
+    // time (user 2026-09-28: "10h sind nicht wirklich 10h").
     if (energy != 1.0) {
       for (final k in resources.keys.toList()) {
+        if (k == WorkshopRole.kConstruction) continue;
         resources[k] = resources[k]! * energy;
-      }
-      for (final k in system.keys.toList()) {
-        system[k] = system[k]! * energy;
       }
     }
     sites.add(
@@ -288,7 +288,7 @@ List<({PlacedBuilding building, BuildingDef def})> disconnectedWorkshops({
   final lookup = defOf ?? (id) => kBuildingDefs[id];
   return [
     for (final b in buildings)
-      if (b.isComplete && !connectedIds.contains(b.id))
+      if (b.isComplete && !b.isStored && !connectedIds.contains(b.id))
         if (lookup(b.buildingTypeId) case final def?)
           if (def.workshops.isNotEmpty) (building: b, def: def),
   ];

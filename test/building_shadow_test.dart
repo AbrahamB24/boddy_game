@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -141,6 +142,74 @@ void main() {
     expect(rowsWithShadow(many, fromX: 0, toX: many.width - 1), 31);
   });
 
+  test('a ground depth turns the thin strip into an ellipse (trees, stones)', () {
+    // The same canopy on a trunk: thrown at the 2:1 slope its shadow is a strip
+    // a few rows deep; with a depth it becomes a patch as deep as a fraction of
+    // the picture's width — widest in the middle, tapering to nothing at the ends.
+    final tree = picture(60, 80, [
+      [8, 10, 31, 30],
+      [18, 31, 21, 60],
+    ]);
+    final flat = castShadowMask(tree, 60, 80, perRun: false);
+    final deep = castShadowMask(tree, 60, 80, perRun: false, groundDepth: 0.25);
+    int thickness(ShadowMask m, int x) {
+      var n = 0;
+      for (var y = 0; y < m.height; y++) {
+        if (m.alpha[y * m.width + x] != 0) n++;
+      }
+      return n;
+    }
+
+    // Find the shadow's horizontal extent, then compare its middle and its ends.
+    var x0 = -1, x1 = -1;
+    for (var x = 0; x < deep.width; x++) {
+      if (thickness(deep, x) > 0) {
+        if (x0 < 0) x0 = x;
+        x1 = x;
+      }
+    }
+    final mid = (x0 + x1) ~/ 2;
+    expect(thickness(deep, mid), greaterThan(thickness(flat, mid) + 8));
+    expect(thickness(deep, mid), greaterThan(thickness(deep, x0 + 1)));
+    // A depth of 0 is the plain projection, so buildings are untouched.
+    final same = castShadowMask(tree, 60, 80, perRun: false, groundDepth: 0);
+    expect(same.alpha, flat.alpha);
+  });
+
+
+  testWidgets('a real building throws a shadow with no single-pixel holes '
+      '(the "stitches" in the grass)', (t) async {
+    // The healing hut, at the size the map works its shadow out at: its foot
+    // runs on the iso diagonal, which left a dotted line of unshaded pixels
+    // through the shadow (user 2026-09-28: "Trennstriche im Rasen").
+    await t.runAsync(() async {
+      final codec = await ui.instantiateImageCodec(
+        File('assets/images/buildings/healing_hut.webp').readAsBytesSync(),
+        targetWidth: 128,
+      );
+      final image = (await codec.getNextFrame()).image;
+      final data = (await image.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      ))!;
+      final m = castShadowMask(
+        data.buffer.asUint8List(),
+        image.width,
+        image.height,
+      );
+      var holes = 0;
+      for (var y = 1; y < m.height - 1; y++) {
+        for (var x = 1; x < m.width - 1; x++) {
+          final i = y * m.width + x;
+          if (m.alpha[i] != 0) continue;
+          final sideways = m.alpha[i - 1] != 0 && m.alpha[i + 1] != 0;
+          final upDown =
+              m.alpha[i - m.width] != 0 && m.alpha[i + m.width] != 0;
+          if (sideways || upDown) holes++;
+        }
+      }
+      expect(holes, 0);
+    });
+  });
   test('a fully transparent picture casts nothing', () {
     final m = castShadowMask(Uint8List(40 * 40 * 4), 40, 40);
     expect(m.alpha.any((a) => a != 0), isFalse);
@@ -191,6 +260,58 @@ void main() {
       // It reaches past the picture's right and bottom edges, where it falls.
       expect(shadow!.width, greaterThan(40));
       expect(shadow.height, greaterThan(50));
+      // No colour is baked in any more (user 2026-09-29: a tree's shadow used
+      // to bake its OWN copy of the tint, which is how it drifted from a
+      // building's — see [kShadowTint]/[kShadowOpacity]) — only the alpha
+      // channel carries the silhouette, RGB stays 0.
+      final raw = (await shadow.toByteData(
+        format: ui.ImageByteFormat.rawStraightRgba,
+      ))!.buffer.asUint8List();
+      var checked = 0;
+      for (var i = 0; i < raw.length; i += 4) {
+        expect(raw[i], 0);
+        expect(raw[i + 1], 0);
+        expect(raw[i + 2], 0);
+        if (raw[i + 3] > 0) checked++;
+      }
+      expect(checked, greaterThan(0));
+      // Tinted through the SAME filter a building's own ground shadow uses
+      // (`BuildingGroundShadow`'s `_ShadowPainter`), it reads back the exact
+      // near-black #06170F a building's shadow wears — one colour for both,
+      // not two independently-tuned ones.
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      final full = ui.Rect.fromLTWH(
+        0,
+        0,
+        shadow.width.toDouble(),
+        shadow.height.toDouble(),
+      );
+      canvas.drawImageRect(
+        shadow,
+        full,
+        full,
+        ui.Paint()
+          ..colorFilter = ui.ColorFilter.mode(
+            kShadowTint.withValues(alpha: kShadowOpacity),
+            ui.BlendMode.srcIn,
+          ),
+      );
+      final tinted = await recorder
+          .endRecording()
+          .toImage(shadow.width, shadow.height);
+      final tintedPx = (await tinted.toByteData(
+        format: ui.ImageByteFormat.rawStraightRgba,
+      ))!.buffer.asUint8List();
+      var tintedChecked = 0;
+      for (var i = 0; i < tintedPx.length; i += 4) {
+        if (tintedPx[i + 3] < 30) continue; // too faint to read the colour back
+        expect(tintedPx[i], closeTo(0x06, 3));
+        expect(tintedPx[i + 1], closeTo(0x17, 3));
+        expect(tintedPx[i + 2], closeTo(0x0F, 3));
+        tintedChecked++;
+      }
+      expect(tintedChecked, greaterThan(0));
       // A picture with nothing in it casts nothing.
       expect(
         await castShadowImage(await image(Uint8List(16 * 16 * 4), 16, 16)),

@@ -155,7 +155,7 @@ class ParchmentInfoButton extends StatelessWidget {
       height: 20,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        shape: BoxShape.rectangle,
         border: Border.all(color: kAccent.withValues(alpha: 0.6)),
       ),
       child: Text('i', style: FoE.label(size: 11).copyWith(color: kAccent)),

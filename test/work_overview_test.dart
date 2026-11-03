@@ -144,6 +144,32 @@ void main() {
       );
       expect(lost.map((x) => x.def.id), ['stone']);
     });
+
+    test('a building in storage is neither listed nor "cut off"', () {
+      final buildings = [
+        placed('b1', 'wood'),
+        placed('b2', 'stone').copyWith(isStored: true),
+      ];
+      final listed = buildWorkSites(
+        buildings: buildings,
+        creatures: const [],
+        connectedIds: {'b1', 'b2'},
+        isWorking: (_) => false,
+        absenceOf: (_) => null,
+        era: 1,
+        energy: 1,
+        defOf: lookup,
+      );
+      expect(listed.map((s) => s.def.id), ['wood']);
+      expect(
+        disconnectedWorkshops(
+          buildings: buildings,
+          connectedIds: {'b1'},
+          defOf: lookup,
+        ),
+        isEmpty,
+      );
+    });
   });
 
   group('the summary adds every site up', () {

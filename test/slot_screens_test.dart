@@ -73,7 +73,7 @@ void main() {
     expect(find.text('Breeding & Hatchery'), findsOneWidget);
     expect(find.textContaining('EGGS IN THE BAG'), findsOneWidget);
     // The Breeding half is one tap away.
-    await t.tap(find.text('Breeding').first);
+    await t.tap(find.text('Breeding Hut').first);
     await t.pumpAndSettle();
     expect(find.text('MATING'), findsWidgets);
     expect(find.textContaining('EGGS IN THE BAG'), findsNothing);

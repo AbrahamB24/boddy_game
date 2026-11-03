@@ -4,6 +4,7 @@ import 'package:boddygame/core/theme/cream_kit.dart' show KitCloseButton;
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:boddygame/core/theme/parchment_theme.dart';
+import 'package:boddygame/core/theme/voxel_kit.dart';
 import 'package:boddygame/features/common/widgets/parchment_page.dart';
 import 'package:boddygame/features/settlement/widgets/parchment_sheet.dart';
 
@@ -85,10 +86,10 @@ void main() {
         ),
       ),
     );
-    expect(t.cardTheme.shape, isA<RoundedRectangleBorder>());
-    expect(t.dialogTheme.shape, isA<RoundedRectangleBorder>());
-    expect(t.popupMenuTheme.shape, isA<RoundedRectangleBorder>());
-    expect(t.snackBarTheme.shape, isA<RoundedRectangleBorder>());
+    expect(t.cardTheme.shape, isA<VoxelShape>());
+    expect(t.dialogTheme.shape, isA<VoxelShape>());
+    expect(t.popupMenuTheme.shape, isA<VoxelShape>());
+    expect(t.snackBarTheme.shape, isA<VoxelShape>());
   });
 
   testWidgets('a sheet wears the band, but no grab handle', (tester) async {

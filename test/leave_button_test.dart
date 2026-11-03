@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:boddygame/core/theme/voxel_kit.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:boddygame/core/theme/cream_kit.dart';
@@ -48,20 +49,20 @@ void main() {
     );
     await t.tap(find.text('open'));
     await t.pumpAndSettle();
-    expect(find.byIcon(Icons.close), findsOneWidget);
-    expect(find.byIcon(Icons.arrow_back_rounded), findsNothing);
+    expect(_glyph(VoxelGlyph.close), findsOneWidget);
+    expect(_glyph(VoxelGlyph.back), findsNothing);
     final first = t.getCenter(find.byType(KitCloseButton));
 
     await t.tap(find.text('deeper'));
     await t.pumpAndSettle();
     // Two menus are mounted now; the top one wears the arrow.
-    expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
-    final second = t.getCenter(find.byIcon(Icons.arrow_back_rounded));
+    expect(_glyph(VoxelGlyph.back), findsOneWidget);
+    final second = t.getCenter(_glyph(VoxelGlyph.back));
     expect(second.dx, moreOrLessEquals(first.dx, epsilon: 1));
     expect(second.dy, moreOrLessEquals(first.dy, epsilon: 1));
 
     // The arrow goes back one step: to the first menu, which still has its cross.
-    await t.tap(find.byIcon(Icons.arrow_back_rounded));
+    await t.tap(_glyph(VoxelGlyph.back));
     await t.pumpAndSettle();
     expect(find.text('Second'), findsNothing);
     expect(find.text('First'), findsOneWidget);
@@ -103,3 +104,6 @@ void main() {
     expect(find.text('body'), findsNothing);
   });
 }
+
+Finder _glyph(VoxelGlyph g) =>
+    find.byWidgetPredicate((w) => w is VoxelIcon && w.glyph == g);

@@ -113,6 +113,11 @@ class Feel {
 
   static Future<void> setSoundOn(bool on) async {
     _soundOn = on;
+    // SAVED FIRST (user 2026-09-28: "wenn ich Musik und Sounds ausschalte, bleibt
+    // dies nicht gespeichert"). Stopping the players used to come before this
+    // write, and an audioplayers `stop()` that never completes — it can, in a
+    // browser — meant the switch was never stored at all.
+    await _write(_soundKey, on);
     if (!on) {
       for (final p in _players.values) {
         try {
@@ -129,7 +134,6 @@ class Feel {
         } catch (_) {}
       }
     }
-    await _write(_soundKey, on);
   }
 
   static Future<void> setHapticsOn(bool on) async {
@@ -214,6 +218,27 @@ class Feel {
     // No clip of its own yet: the success chime is the closest to "look here".
     FeelEvent.alert => 'sfx/success.wav',
   };
+
+  /// Every bundled clip, readied before the game shows (user 2026-11-03:
+  /// "alle Assets beim Ladescreen vorladen"). On a phone an [AssetSource] is
+  /// first copied out of the app bundle into a temp file the native player
+  /// can open — the first tap or the first hit of a battle paid that copy
+  /// as an audible delay. [AudioCache] does the copy now, behind the loading
+  /// bar; the players then find the file already there. Never throws.
+  static Future<void> preloadClips() async {
+    if (kIsWeb == false && _muteForTests) return;
+    final clips = <String>{
+      for (final e in FeelEvent.values) _asset(e),
+      for (final el in CreatureElement.values) 'sfx/${el.name}_attack.mp3',
+      'music/battle_theme.mp3',
+    };
+    await Future.wait([
+      for (final clip in clips)
+        // One at a time per clip, so a missing one (not every element has
+        // its own attack clip yet) cannot fail the rest.
+        AudioCache.instance.load(clip).then<void>((_) {}, onError: (Object _) {}),
+    ]);
+  }
 
   static void _sound(FeelEvent event) {
     if (!_soundOn) return;

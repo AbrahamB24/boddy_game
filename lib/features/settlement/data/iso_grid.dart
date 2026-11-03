@@ -88,17 +88,39 @@ Matrix4 mapTransform(double scale, double tx, double ty) => Matrix4.identity()
   ..translateByDouble(tx, ty, 0, 1)
   ..scaleByDouble(scale, scale, scale, 1);
 
+/// How far the camera's own view is held back from [isoCanvasSize]'s true
+/// outer edge, on every side, as a fraction of that edge's length (user
+/// 2026-10-01, pointing at the jagged water/grass seam right at the map's top
+/// corner: "die Karte erweitern auf alle Seiten und dann nicht ganz alles
+/// anzeigen"). The terrain the canvas paints out there — the procedural
+/// coastline continued past [kWaterRuns]'s own real data, see
+/// terrain_layer.dart's `_coastAt` — gets less reliable the further it runs
+/// from the authored grid; rather than chase every artifact at that rim, the
+/// camera simply never zooms or pans far enough to reach it. The terrain
+/// itself is unchanged and still paints all the way to the canvas edge —
+/// nothing out there needs to look right, because nothing can ever bring it
+/// on screen.
+const double kMapEdgeInset = 0.08;
+
+/// [isoCanvasSize] shrunk by [kMapEdgeInset] on every side — what the camera
+/// treats as "the whole map" for both [minMapScale] and [clampMapTransform].
+Size get _isoViewSize => Size(
+  isoCanvasSize.width * (1 - 2 * kMapEdgeInset),
+  isoCanvasSize.height * (1 - 2 * kMapEdgeInset),
+);
+
 /// The furthest the map may be zoomed OUT in a [viewport]: the scale at which
-/// the map already covers it (user 2026-08-09: "Es darf niemals aus dem
-/// Spielfeld hinausgezoomt/gescrollt werden. Das Spielfeld ist die Grenze").
+/// the map's own VIEWABLE area ([_isoViewSize], not the raw canvas) already
+/// covers it (user 2026-08-09: "Es darf niemals aus dem Spielfeld
+/// hinausgezoomt/gescrollt werden. Das Spielfeld ist die Grenze").
 ///
 /// The LARGER of the two ratios, and that is the whole rule. The smaller one
 /// covers the tighter axis and leaves the other short, which is a viewport with
 /// the void down one side — and it is the easy mistake, because either ratio
 /// "fits the map to the screen" in the loose sense.
 double minMapScale(Size viewport) => math.max(
-  viewport.width / isoCanvasSize.width,
-  viewport.height / isoCanvasSize.height,
+  viewport.width / _isoViewSize.width,
+  viewport.height / _isoViewSize.height,
 );
 
 /// The nearest transform to [m] that keeps the map over the whole [viewport].
@@ -124,13 +146,21 @@ Matrix4 clampMapTransform(Matrix4 m, Size viewport) {
     ty = viewport.height / 2 - (viewport.height / 2 - ty) * k;
   }
   // Never a gap: the map's near edge may not come inside the viewport, and its
-  // far edge may not come short of it.
-  tx = tx
-      .clamp(math.min(0.0, viewport.width - isoCanvasSize.width * want), 0.0)
-      .toDouble();
-  ty = ty
-      .clamp(math.min(0.0, viewport.height - isoCanvasSize.height * want), 0.0)
-      .toDouble();
+  // far edge may not come short of it — both measured against [_isoViewSize],
+  // [kMapEdgeInset] in from the canvas's own true edge.
+  final marginX = isoCanvasSize.width * kMapEdgeInset;
+  final marginY = isoCanvasSize.height * kMapEdgeInset;
+  // The lower/upper bounds below are provably equal, not just close, when
+  // `want` sits exactly on the ratio that set it (lo) — but each is its own
+  // chain of multiplications, so they can land a float ULP apart. `math.max`
+  // here is a tolerance for that ULP, not a real second case: without it,
+  // that one-in-a-billion ordering flip makes `clamp` throw outright.
+  final loX = viewport.width - (isoCanvasSize.width - marginX) * want;
+  final hiX = -marginX * want;
+  tx = tx.clamp(loX, math.max(loX, hiX)).toDouble();
+  final loY = viewport.height - (isoCanvasSize.height - marginY) * want;
+  final hiY = -marginY * want;
+  ty = ty.clamp(loY, math.max(loY, hiY)).toDouble();
   return mapTransform(want, tx, ty);
 }
 

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/foe_theme.dart';
 
-import '../../../core/theme/cream_kit.dart' show kBoxInk;
+import '../../../core/theme/voxel_kit.dart';
 
 /// EVERY BAR IN THE GAME (user 2026-07-29: "jetzt alle Balken im gleichen
 /// Effekt gestalten" + "ev. etwas dicker machen, damit es sichtbar ist").
@@ -57,111 +56,22 @@ class RecessBar extends StatelessWidget {
     this.animationDuration = const Duration(milliseconds: 350),
   });
 
+  /// VOXEL (2026-11-03): every bar in the game is a row of blocks now â€” see
+  /// [VoxelBar]. The value still glides to its new level ([animationDuration]),
+  /// block by block.
   @override
   Widget build(BuildContext context) {
     final v = value.isNaN ? 0.0 : value.clamp(0.0, 1.0);
-    final r = height / 2;
-    // Navy walls: the trough sits on cream cards in the building-dialog template.
-    final wallInk = onDark ? Colors.black : kBoxInk;
-    return SizedBox(
-      height: height,
-      child: LayoutBuilder(
-        builder: (context, c) {
-          // A bead narrower than the trough is round is a sliver, not a bar —
-          // so a non-zero value always shows at least a full dot.
-          final w = v <= 0
-              ? 0.0
-              : (c.maxWidth * v).clamp(height, c.maxWidth).toDouble();
-          return ClipPath(
-            clipper: ShapeBorderClipper(shape: FoE.facet(radius: r)),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: wallInk.withValues(alpha: onDark ? 0.32 : 0.11),
-                    ),
-                  ),
-                ),
-                // The groove's top lip, falling inward.
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: height * 0.6,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          wallInk.withValues(alpha: 0.28),
-                          wallInk.withValues(alpha: 0),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                // The far wall, in the light.
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: height * 0.4,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [
-                          Colors.white.withValues(alpha: onDark ? 0.14 : 0.22),
-                          Colors.white.withValues(alpha: 0),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                if (w > 0)
-                  // Directional, not `left`: the breeding screen mirrors one of
-                  // its two comparison bars with a [Directionality], and an
-                  // absolute left would have pinned the bead to the wrong end.
-                  // ANIMATED, not plain — see [animationDuration]'s own doc.
-                  AnimatedPositionedDirectional(
-                    duration: animationDuration,
-                    curve: Curves.easeOut,
-                    start: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: w,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(r),
-                        // Lit on top, darkening into its own colour at the
-                        // foot — a bead lying in the groove, not a fill.
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Color.lerp(color, Colors.white, 0.35)!,
-                            color,
-                            Color.lerp(color, Colors.black, 0.16)!,
-                          ],
-                          stops: const [0, 0.55, 1],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: wallInk.withValues(alpha: 0.35),
-                            blurRadius: 0,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          );
-        },
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: v),
+      duration: animationDuration,
+      curve: Curves.easeOut,
+      builder: (context, shown, _) => VoxelBar(
+        value: shown,
+        color: color,
+        height: height,
+        block: height < 10 ? 6 : 8,
+        onDark: onDark,
       ),
     );
   }

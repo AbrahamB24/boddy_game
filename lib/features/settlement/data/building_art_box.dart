@@ -21,7 +21,7 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'castle': (1.00000, 0.50000, 0.00000),
   'church': (1.00000, 0.50000, 0.00250),
   'gold_vault': (0.96024, 0.51988, 0.00000),
-  'hatchery': (0.99404, 0.50298, 0.00000),
+  'hatchery': (0.91279, 0.48656, 0.03704),
   'healing_hut': (1.00000, 0.50000, 0.00000),
   'large_house': (1.00000, 0.50000, 0.00000),
   'large_stone_camp': (1.00000, 0.50000, 0.00000),
@@ -31,7 +31,9 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'marketplace': (1.00000, 0.50000, 0.00250),
   'refinery_e2': (1.00000, 0.50000, 0.00000),
   'scout_post': (1.00000, 0.50000, 0.00000),
-  'small_house': (0.98674, 0.50000, 0.00000),
+  // Recomputed 2026-09-29 for the 2x2 footprint (was 3x3) after the
+  // door/torch/window normalization pass.
+  'small_house': (0.98002, 0.50000, 0.01117),
   'small_quarry': (1.00000, 0.50000, 0.00000),
   'small_wood_camp': (1.00000, 0.50000, 0.00000),
   'storehouse': (1.00000, 0.50000, 0.00000),

@@ -31,7 +31,16 @@ enum ItemKind {
   /// the same day; before that it was ignored entirely.
   buff,
 
-  /// Eases the NEXT capture — widens the QTE window by [magnitude] fraction.
+  /// A capture tool thrown in the Balkenjagd fang screen (see
+  /// capture_bar_screen.dart). [magnitude] is the STARTING fraction of the
+  /// catch chance before the minigame adds anything — eight tiers now
+  /// (user 2026-10-02), one per region/era, in clean 5% steps from 0.05 up
+  /// to 0.40 — deliberately kept under 50% even for the best tier (user
+  /// 2026-10-01: "auch die besten Bälle geben keine 50% Chance"), since the
+  /// minigame's own skill contribution (capped at [kBarSkillMax] percentage
+  /// points, the SAME ceiling for every tier) is meant to carry the
+  /// majority of the final chance. One is consumed per throw regardless of
+  /// outcome (classic catch-item economy) — see CaptureBarScreen.
   catchBoost,
 
   /// +[magnitude] fraction to an expedition's haul.
@@ -255,17 +264,115 @@ const _kHandWrittenItems = <String, ItemDef>{
     buyPrice: 70,
     sellPrice: 20,
   ),
+  // ── Capture tools (Balkenjagd, user 2026-10-01, expanded to 8 tiers and
+  // reframed as BAIT 2026-10-02) — thrown one at a time in CaptureBarScreen.
+  // Each sets the minigame's STARTING catch chance, in clean 5% steps
+  // (5%..40% — see ItemKind.catchBoost's own doc for why none reach 50%
+  // alone): one new tier per region/era, each named after AND keyed to
+  // THAT era's own fresh luxury good (fish·meat·wine·spices·salt·coffee·
+  // tea·perfume — see goods_definitions.dart's region ladder) scented onto
+  // it, plus a pinch of the era before's — the same "mostly fresh, a
+  // little of the last one" shape every other recipe in this file already
+  // uses. catch_lure/cage_iron/cage_master predate the 8-tier ladder and
+  // keep their id for backward compatibility with existing bags/rewards —
+  // their numbers just happen to already land exactly on tiers 1, 5 and 8.
   'catch_lure': ItemDef(
     id: 'catch_lure',
-    name: 'Catch Lure',
-    emoji: '🎏',
-    description: 'Widens the catch window on your next encounter (+25%).',
+    name: 'Fish Bait',
+    emoji: '🐟',
+    description: 'Fish-scented lure (Region I). Starting catch chance: 5%.',
+    kind: ItemKind.catchBoost,
+    magnitude: 0.05,
+    ingredients: {'fish': 2},
+    craftSeconds: 900,
+    buyPrice: 20,
+    sellPrice: 6,
+  ),
+  'bait_meat': ItemDef(
+    id: 'bait_meat',
+    name: 'Meat Bait',
+    emoji: '🥩',
+    description: 'Smoked-meat lure (Region II). Starting catch chance: 10%.',
+    kind: ItemKind.catchBoost,
+    magnitude: 0.10,
+    ingredients: {'meat': 2, 'fish': 1},
+    craftSeconds: 1400,
+    buyPrice: 33,
+    sellPrice: 10,
+  ),
+  'bait_wine': ItemDef(
+    id: 'bait_wine',
+    name: 'Wine Bait',
+    emoji: '🍷',
+    description: 'Wine-soaked lure (Region III). Starting catch chance: 15%.',
+    kind: ItemKind.catchBoost,
+    magnitude: 0.15,
+    ingredients: {'wine': 2, 'meat': 1},
+    craftSeconds: 2200,
+    buyPrice: 54,
+    sellPrice: 17,
+  ),
+  'bait_spices': ItemDef(
+    id: 'bait_spices',
+    name: 'Spice Bait',
+    emoji: '🌶️',
+    description: 'Spice-laced lure (Region IV). Starting catch chance: 20%.',
+    kind: ItemKind.catchBoost,
+    magnitude: 0.20,
+    ingredients: {'spices': 2, 'wine': 1},
+    craftSeconds: 3400,
+    buyPrice: 87,
+    sellPrice: 27,
+  ),
+  'cage_iron': ItemDef(
+    id: 'cage_iron',
+    name: 'Salt Bait',
+    emoji: '🧂',
+    description: 'Salt-cured lure (Region V). Starting catch chance: 25%.',
     kind: ItemKind.catchBoost,
     magnitude: 0.25,
-    ingredients: {'fish': 2, 'meat': 1},
-    craftSeconds: 1800,
-    buyPrice: 40,
-    sellPrice: 12,
+    ingredients: {'salt': 2, 'spices': 1},
+    craftSeconds: 5400,
+    buyPrice: 140,
+    sellPrice: 45,
+  ),
+  'bait_coffee': ItemDef(
+    id: 'bait_coffee',
+    name: 'Coffee Bait',
+    emoji: '☕',
+    description: 'Coffee-roasted lure (Region VI). Starting catch chance: 30%.',
+    kind: ItemKind.catchBoost,
+    magnitude: 0.30,
+    ingredients: {'coffee': 2, 'salt': 1},
+    craftSeconds: 7500,
+    buyPrice: 200,
+    sellPrice: 65,
+  ),
+  'bait_tea': ItemDef(
+    id: 'bait_tea',
+    name: 'Tea Bait',
+    emoji: '🍵',
+    description: 'Tea-steeped lure (Region VII). Starting catch chance: 35%.',
+    kind: ItemKind.catchBoost,
+    magnitude: 0.35,
+    ingredients: {'tea': 2, 'coffee': 1},
+    craftSeconds: 10400,
+    buyPrice: 290,
+    sellPrice: 95,
+  ),
+  'cage_master': ItemDef(
+    id: 'cage_master',
+    name: 'Perfume Bait',
+    emoji: '🌸',
+    description:
+        'Perfume-scented lure (Region VIII). Starting catch chance: 40% — '
+        'the maximum; the rest to 100% has to come from a near-perfect run.',
+    kind: ItemKind.catchBoost,
+    magnitude: 0.40,
+    ingredients: {'perfume': 2, 'tea': 1},
+    craftSeconds: 14400,
+    buyPrice: 420,
+    sellPrice: 150,
   ),
 };
 

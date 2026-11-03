@@ -21,6 +21,8 @@ import 'models/settlement.dart' show CraftJob;
 import 'services/crafting.dart';
 import 'settlement_controller.dart';
 import 'work_screen.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 /// THE WORKBENCH (user 2026-09-20, "Variante 4, Kategorien + Detail").
 ///
@@ -154,7 +156,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
           decoration: BoxDecoration(
             color: CreamPalette.tan.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: vr(9),
           ),
           child: Text(
             '⚒️ $crafters ${crafters == 1 ? 'crafter' : 'crafters'}',
@@ -170,22 +172,28 @@ class _CraftingScreenState extends State<CraftingScreen> {
                   style: FoE.dim(size: 12).copyWith(color: Colors.white70),
                 ),
               )
+            // The rail and the list are two halves of the same picker (user
+            // 2026-09-29, "Trennlinien und Zonen gemischt", app-wide) — a
+            // group filters the list right beside it — so a plain gap is
+            // enough between them; Detail is a different Gebiet entirely
+            // (committing resources to a craft, not browsing), so it gets a
+            // [zoneBox] of its own. (MenuScaffold is the one card now — no
+            // [pageCard] here.)
             : Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(
-                      width: 74,
-                      child: creamCard(child: _rail(groups, group!)),
-                    ),
+                    SizedBox(width: 74, child: _rail(groups, group!)),
                     const SizedBox(width: 10),
-                    SizedBox(
-                      width: 318,
-                      child: creamCard(child: _list(group, recipes, def)),
+                    SizedBox(width: 318, child: _list(group, recipes, def)),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: zoneBox(
+                        padding: EdgeInsets.zero,
+                        child: _detail(def, crafters),
+                      ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(child: creamCard(child: _detail(def, crafters))),
                   ],
                 ),
               ),
@@ -224,7 +232,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(_groupIcons[g], size: 20, color: _ink),
+                        PixelIcon(_groupIcons[g], size: 20, color: _ink),
                         const SizedBox(height: 2),
                         Text(
                           g.label,
@@ -362,7 +370,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               decoration: BoxDecoration(
                 color: CreamPalette.accent,
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: vr(7),
               ),
               child: Text(
                 '$owned',
@@ -410,7 +418,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: CreamPalette.tan.withValues(alpha: 0.18),
-                          shape: BoxShape.circle,
+                          shape: BoxShape.rectangle,
                         ),
                         child: Text(
                           def.emoji,
@@ -578,7 +586,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
     decoration: BoxDecoration(
       color: CreamPalette.tan.withValues(alpha: 0.18),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: vr(12),
     ),
     child: Column(
       mainAxisSize: MainAxisSize.min,
@@ -610,7 +618,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
           width: 28,
           height: 28,
           decoration: raisedTile(radius: 9),
-          child: Icon(icon, size: 16, color: _ink),
+          child: PixelIcon(icon, size: 16, color: _ink),
         ),
       ),
     );
@@ -787,7 +795,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
             ),
           ),
           const SizedBox(width: 4),
-          Icon(
+          PixelIcon(
             ok ? Icons.check : Icons.close,
             size: 14,
             color: ok ? CreamPalette.better : CreamPalette.warn,
@@ -811,7 +819,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
             padding: const EdgeInsets.only(left: 10, right: 4),
             decoration: BoxDecoration(
               color: CreamPalette.warn.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: vr(10),
               border: Border.all(
                 color: CreamPalette.warn.withValues(alpha: 0.6),
               ),
@@ -957,7 +965,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                     horizontal: 4,
                     vertical: 2,
                   ),
-                  child: Icon(Icons.close, size: 14, color: _inkFaint),
+                  child: PixelIcon(Icons.close, size: 14, color: _inkFaint),
                 ),
               ),
             ],

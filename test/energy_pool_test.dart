@@ -86,11 +86,23 @@ void main() {
     });
 
     test('the window is priced at the FALLING rate, not the starting one', () {
-      // 100 % → 0 over 24 h. The rate is the pool's fraction down to the 25 %
-      // floor (18 h, averaging 62.5 %), then the floor rate for the last 6 h.
+      // 100 % → 0 over 24 h with no floor (the default): the rate falls
+      // linearly from 1 to 0, so the day is worth half of its 24 hours.
+      final r = energyDrain(100, 24);
+      expect(r.effectiveHours, closeTo(12, 1e-9));
+      expect(r.effectiveHours, lessThan(24));
+    });
+
+    test('a floor keeps the settlement crawling once the pool is empty', () {
+      // The dial (default 0) set to 25 %: the pool's fraction down to the floor
+      // (18 h, averaging 62.5 %), then the floor rate for the last 6 h.
+      GameTuning.i.set(Dials.energyFloorMultiplier, 0.25);
       final r = energyDrain(100, 24);
       expect(r.effectiveHours, closeTo(18 * 0.625 + 6 * 0.25, 1e-9));
-      expect(r.effectiveHours, lessThan(24));
+    });
+
+    test('an empty pool does no work by default', () {
+      expect(energyDrain(0, 10).effectiveHours, 0);
     });
 
     test('a short window is about the starting rate', () {

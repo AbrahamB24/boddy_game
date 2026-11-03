@@ -6,6 +6,7 @@ import 'models/activity.dart';
 import 'models/pvp_match.dart';
 import 'social_controller.dart';
 import 'widgets/social_kit.dart';
+import '../../core/theme/voxel_icons.dart';
 
 /// The friends leaderboard (you among them) next to the activity feed.
 class RankingPane extends StatelessWidget {
@@ -109,7 +110,7 @@ class RankingPane extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(_iconFor(a.kind), size: 16, color: kBoxAccent),
+          PixelIcon(_iconFor(a.kind), size: 16, color: kBoxAccent),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

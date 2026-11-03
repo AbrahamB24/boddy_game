@@ -13,6 +13,7 @@ import '../services/creature_defs_service.dart';
 import '../services/stat_budget.dart';
 import '../widgets/creature_sprite.dart' show decodeWidthFor;
 import '../../../core/ui/pressable.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 // Create/edit form for one SpeciesDef: element/rarity/role, per-species
 // evolution levels, the 6 stat curves (3-stage base + one shared growth
@@ -350,7 +351,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                     ),
                   )
                 : IconButton(
-                    icon: const Icon(
+                    icon: const PixelIcon(
                       Icons.save_outlined,
                       color: FoE.goldBright,
                     ),
@@ -359,7 +360,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                   ),
             if (!_isNew)
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                icon: const PixelIcon(Icons.delete_outline, color: Colors.redAccent),
                 tooltip: 'Delete',
                 onPressed: _delete,
               ),
@@ -765,7 +766,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
             alignment: Alignment.center,
             decoration: FoE.panel(radius: 8),
             child: url == null
-                ? const Icon(Icons.pets, color: FoE.gold, size: 22)
+                ? const PixelIcon(Icons.pets, color: FoE.gold, size: 22)
                 : Image.network(
                     url,
                     filterQuality: FilterQuality.none,
@@ -774,7 +775,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                     cacheWidth: decodeWidthFor(context, 40),
                     fit: BoxFit.contain,
                     errorBuilder: (_, _, _) =>
-                        const Icon(Icons.broken_image, color: FoE.gold),
+                        const PixelIcon(Icons.broken_image, color: FoE.gold),
                   ),
           ),
           const SizedBox(width: 8),
@@ -974,7 +975,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                     decoration: const InputDecoration(
                       labelText: 'Ability',
                       isDense: true,
-                      suffixIcon: Icon(Icons.search, color: FoE.gold, size: 18),
+                      suffixIcon: PixelIcon(Icons.search, color: FoE.gold, size: 18),
                     ),
                     child: Text(
                       def?.name ?? 'Pick an ability…',
@@ -1009,7 +1010,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
                 ),
               ),
               IconButton(
-                icon: const Icon(
+                icon: const PixelIcon(
                   Icons.close,
                   color: Colors.redAccent,
                   size: 18,
@@ -1178,7 +1179,7 @@ class _AbilityPickerDialogState extends State<_AbilityPickerDialog> {
                 style: FoE.label(size: 14).copyWith(color: FoE.parchment),
                 decoration: const InputDecoration(
                   hintText: 'Search name, type or species…',
-                  prefixIcon: Icon(Icons.search, color: FoE.gold),
+                  prefixIcon: PixelIcon(Icons.search, color: FoE.gold),
                   isDense: true,
                 ),
                 onChanged: (v) => setState(() => _query = v),
@@ -1214,7 +1215,7 @@ class _AbilityPickerDialogState extends State<_AbilityPickerDialog> {
                                       if (selected)
                                         const Padding(
                                           padding: EdgeInsets.only(right: 6),
-                                          child: Icon(
+                                          child: PixelIcon(
                                             Icons.check,
                                             color: FoE.gold,
                                             size: 16,

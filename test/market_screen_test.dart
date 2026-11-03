@@ -47,6 +47,10 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byType(CreatureCard).first);
     await t.pumpAndSettle();
+    // Preview-then-confirm since the 2026-10-05 picker unification: the tap
+    // above only previews; the panel's gold button commits the pick.
+    await t.tap(find.text('Add this hauler'));
+    await t.pumpAndSettle();
   }
 
   testWidgets('an era is one row: wood, stone and fish side by side', (

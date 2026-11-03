@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/cream_kit.dart' show CreamPalette;
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../models/creature_enums.dart';
@@ -8,7 +7,8 @@ import '../models/creature_instance.dart';
 import '../services/creature_power.dart';
 import 'creature_backdrop.dart';
 import 'creature_family.dart' show CreatureFigure, creatureHpColor;
-import 'creature_sprite.dart';
+import 'creature_sprite.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 /// One extra figure a screen wants on the tile — the stat this seat or trip is
 /// judged on, the level-1 power a breeding parent passes on. It hangs from the
@@ -49,12 +49,18 @@ class CreatureCard extends StatelessWidget {
   /// Up to three extra figures, as flags at the top right.
   final List<TileValue> extras;
 
+  /// Show the level AND work the ⚡ power out AT this level instead of the monster's own (user
+  /// 2026-09-28: the Breeding page switches between Now, Lv 1 and Max). Null = its own
+  /// level, as everywhere else.
+  final int? atLevel;
+
   const CreatureCard({
     super.key,
     required CreatureInstance this.creature,
     this.onTap,
     this.showHp = true,
     this.extras = const [],
+    this.atLevel,
   }) : shrouded = false,
        shroudImageUrl = null;
 
@@ -62,7 +68,8 @@ class CreatureCard extends StatelessWidget {
     : shrouded = true,
       creature = null,
       showHp = false,
-      extras = const [];
+      extras = const [],
+      atLevel = null;
 
   // The tile's geometry, from the design: everything below the foot's top edge
   // is anchored to the BOTTOM, so the text keeps its place whatever height the
@@ -198,7 +205,23 @@ class CreatureCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Extra figures, as flags in the free upper right.
+              // Can evolve: a green arrow on the upper right — INSIDE the
+              // foot (user 2026-09-29: "sollte noch im blauen Kästchen sein …
+              // so dass es nicht verdeckt werden kann"). It used to sit at
+              // the cell's own top edge, above the foot entirely, in the free
+              // strip a neighbouring row's tile can overlap in a tight grid —
+              // exactly where it could be clipped or covered. Anchored to
+              // [footTop] instead, it always paints on the tile's own
+              // coloured card, never past its edge.
+              if (!shrouded && inst!.canEvolve)
+                Positioned(
+                  top: footTop + 4,
+                  right: 2,
+                  child: Semantics(label: 'Can evolve', child: _evolveStamp()),
+                ),
+              // Extra figures, as flags in the free upper right. The evolve
+              // arrow moved into the foot below (2026-09-29), so it no longer
+              // shares this strip and flags need no push-down for it.
               if (!shrouded)
                 for (var i = 0; i < extras.length && i < _maxExtras; i++)
                   Positioned(
@@ -241,8 +264,12 @@ class CreatureCard extends StatelessWidget {
         _nameRow(inst),
         SizedBox(
           height: 14,
+          // Level and power sit TOGETHER in the middle, on the name's own inset
+          // (user 2026-09-28: "lvl und energie näher zusammen / gleiches Padding
+          // wie der Name") — spread to the two edges they read as two unrelated
+          // corners.
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Each side scales down rather than overflowing if a font runs wide.
@@ -250,7 +277,7 @@ class CreatureCard extends StatelessWidget {
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
-                    'Lv ${inst.level}',
+                    'Lv ${atLevel ?? inst.level}',
                     style: FoE.value(size: 11).copyWith(
                       color: _ink.withValues(alpha: 0.9),
                       shadows: _shadowLine,
@@ -258,12 +285,12 @@ class CreatureCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 12),
               Flexible(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
-                    '⚡${totalPower(inst)}',
+                    '⚡${atLevel == null ? totalPower(inst) : powerAtLevel(inst, atLevel!)}',
                     style: FoE.value(
                       size: 11,
                     ).copyWith(color: _ink, shadows: _shadowLine),
@@ -350,21 +377,22 @@ class CreatureCard extends StatelessWidget {
             shadows: _shadowLine,
           ),
         ),
-        if (inst.canEvolve) ...[
-          const SizedBox(width: 4),
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              color: CreamPalette.better,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 1),
-            ),
-            child: const Icon(Icons.arrow_upward, size: 8, color: Colors.white),
-          ),
-        ],
       ],
     ),
+  );
+
+  /// "This one can evolve" (user 2026-09-28: "nur grüner Pfeil nach oben, oben
+  /// rechts in der Kachel"): JUST a green arrow pointing up, on the tile's upper
+  /// right — no disc, no ring. A soft dark edge keeps it readable on a pale
+  /// monster or backdrop.
+  Widget _evolveStamp() => const PixelIcon(
+    Icons.arrow_upward_rounded,
+    size: 26,
+    color: Color(0xFF2FD37A),
+    shadows: [
+      Shadow(color: Color(0xCC000000), blurRadius: 3),
+      Shadow(color: Color(0x99000000), offset: Offset(0, 1.5)),
+    ],
   );
 
   /// The undiscovered foot: just "???" where the name would be.
@@ -464,7 +492,7 @@ class CreatureCard extends StatelessWidget {
 
   /// The undiscovered species as a near-black silhouette.
   Widget _silhouette(String? url) => url == null
-      ? const Center(child: Icon(Icons.pets, color: Colors.black87, size: 40))
+      ? const Center(child: PixelIcon(Icons.pets, color: Colors.black87, size: 40))
       : ColorFiltered(
           colorFilter: const ColorFilter.mode(
             Color(0xE6000000),
@@ -474,7 +502,7 @@ class CreatureCard extends StatelessWidget {
             url: url,
             alignment: Alignment.bottomCenter,
             fallback: const Center(
-              child: Icon(Icons.pets, color: Colors.black87, size: 40),
+              child: PixelIcon(Icons.pets, color: Colors.black87, size: 40),
             ),
           ),
         );

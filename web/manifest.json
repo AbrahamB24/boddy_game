@@ -1,12 +1,12 @@
 {
-    "name": "boddygame",
-    "short_name": "boddygame",
+    "name": "Bøddy Game",
+    "short_name": "Bøddy",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#2A1A0C",
+    "theme_color": "#2A1A0C",
+    "description": "Bøddy Game - settlement and creature game.",
+    "orientation": "landscape",
     "prefer_related_applications": false,
     "icons": [
         {

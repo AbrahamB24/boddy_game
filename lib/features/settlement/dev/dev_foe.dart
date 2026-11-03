@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/cream_kit.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
 
 /// THE DEV FORMS' PALETTE, in the cream kit (user 2026-09-20, "Dev Mode
 /// Variante 3").
@@ -59,7 +60,7 @@ abstract final class FoE {
     double radius = FoE.radius,
     BorderSide side = BorderSide.none,
   }) => RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(radius),
+    borderRadius: vr(radius),
     side: side,
   );
 

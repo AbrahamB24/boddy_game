@@ -83,6 +83,23 @@ List<Combatant> buildFloorSquad(int floor, {math.Random? rng}) {
 /// wiped or retreated before clearing even the first floor). Triangular
 /// (1+2+…+N, not N) so a deeper run pays disproportionately more than N
 /// times a shallow one — see Dials.survivalGoldPerFloor's help text.
-double goldRewardForFloors(int floorsCleared) => floorsCleared <= 0
-    ? 0
-    : kSurvivalGoldPerFloor * floorsCleared * (floorsCleared + 1) / 2;
+///
+/// Gold balance pass (user 2026-11-02: "Gold … damit es wirklich eine
+/// wichtige Ressource wird"): the triangular pay is now for RECORD floors
+/// only — each floor pays `dial × floor` the FIRST time any run gets past
+/// it, i.e. beyond [previousBest]. A floor already reached before pays
+/// [kSurvivalRepeatGoldPerFloor]. Unlimited, entry-free runs used to pay the
+/// full triangle every time: one 20-floor run was 🪙 3150, about a month of
+/// daily tasks, repeatable at will. With [previousBest] 0 (a first run) the
+/// result is exactly the old triangle.
+double goldRewardForFloors(int floorsCleared, {int previousBest = 0}) {
+  if (floorsCleared <= 0) return 0;
+  final best = previousBest.clamp(0, floorsCleared);
+  double tri(int n) => n * (n + 1) / 2;
+  final record = kSurvivalGoldPerFloor * (tri(floorsCleared) - tri(best));
+  final repeat = kSurvivalRepeatGoldPerFloor * best;
+  return record + repeat;
+}
+
+/// What a floor pays when an earlier run already cleared it.
+const double kSurvivalRepeatGoldPerFloor = 1;

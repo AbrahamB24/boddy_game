@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
-import 'tap_button.dart';
+import 'tap_button.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 // Chrome-less icon button — just the icon with the shared hover/press
 // feedback, no floating circle. Used for header/toolbar icons and, via
@@ -32,6 +33,6 @@ class PlainIconButton extends StatelessWidget {
     background: Colors.transparent,
     radius: FoE.radiusSmall,
     padding: const EdgeInsets.all(6),
-    child: Icon(icon, color: color, size: size, shadows: shadows),
+    child: PixelIcon(icon, color: color, size: size, shadows: shadows),
   );
 }

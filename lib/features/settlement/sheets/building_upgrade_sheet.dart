@@ -255,7 +255,7 @@ class _BuildingUpgradeSheet extends StatelessWidget {
         _resEmoji(e.key),
         _resName(e.key),
         e.key == WorkshopRole.kConstruction
-            ? '+${e.value.toStringAsFixed(0)} points'
+            ? buildPointsLabel(e.value)
             : '+${e.value.toStringAsFixed(1)}/h',
         labelColor: _ink,
         indent: 12,

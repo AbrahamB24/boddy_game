@@ -7,6 +7,7 @@ import 'package:boddygame/features/creatures/models/ability_def.dart';
 import 'package:boddygame/features/creatures/models/creature_enums.dart';
 import 'package:boddygame/features/creatures/models/creature_instance.dart';
 import 'package:boddygame/features/creatures/models/species_def.dart';
+import 'package:boddygame/features/creatures/services/creatures_controller.dart';
 
 // The monster detail screen, "Glas auf Farbe" (user 2026-09-21, variant 11 with
 // the tab rail of variant 3): the element colour over the whole page, the monster
@@ -222,4 +223,64 @@ void main() {
     expect(expedition.bottom, moreOrLessEquals(work.bottom, epsilon: 1));
     expect(t.takeException(), isNull);
   });
+
+  // An OWNED creature (creatureId, not previewCreature) — Release and the
+  // evolve-ready badge only ever show for one of these (user 2026-09-02):
+  // neither makes sense on a starter preview.
+  Future<void> showOwned(WidgetTester t, CreatureInstance c) async {
+    CreaturesController().creatures = [c];
+    addTearDown(() => CreaturesController().creatures = []);
+    t.view.physicalSize = const Size(932, 430);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(
+      MaterialApp(home: CreatureDetailScreen(creatureId: c.id)),
+    );
+    await t.pump(const Duration(milliseconds: 200));
+  }
+
+  CreatureInstance owned({required int level, required int stage}) =>
+      CreatureInstance(
+        id: 'owned1',
+        userId: 'u',
+        speciesId: species.id,
+        gender: CreatureGender.female,
+        level: level,
+        stage: stage,
+        statBase: {for (final s in CreatureStat.values) s: 30.0},
+        statSlope: {for (final s in CreatureStat.values) s: 1.5},
+        currentHp: 40,
+      );
+
+  testWidgets('the Evolution tile itself shows the ready-to-evolve arrow '
+      '(user 2026-09-29)', (t) async {
+    // Stage 0, past the species' default evoLevel1 (25).
+    await showOwned(t, owned(level: 26, stage: 0));
+    expect(find.bySemanticsLabel('Evolution ready'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('a level too low for its stage shows no badge on the tile', (
+    t,
+  ) async {
+    await showOwned(t, owned(level: 5, stage: 0));
+    expect(find.bySemanticsLabel('Evolution ready'), findsNothing);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Release sits below Strengths, on the General tab (user 2026-09-29)',
+    (t) async {
+      await showOwned(t, owned(level: 5, stage: 0));
+      final strengths = t.getRect(find.text('STRENGTHS'));
+      final release = t.getRect(find.text('Release'));
+      expect(release.top, greaterThan(strengths.bottom));
+      // In the same (right) column, not off in some other corner.
+      expect(
+        release.center.dx,
+        moreOrLessEquals(strengths.center.dx, epsilon: 40),
+      );
+      expect(t.takeException(), isNull);
+    },
+  );
 }

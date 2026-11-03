@@ -167,32 +167,22 @@ class BuildingLife extends StatefulWidget {
 
 class _BuildingLifeState extends State<BuildingLife>
     with _AmbientClockUser<BuildingLife> {
-  /// Six seconds for one puff's whole life. Slower than it sounds: with four
-  /// puffs staggered across it, one leaves the chimney every second and a half.
-  static const double _smokeLifeSeconds = 6;
-
-  /// One breath in (or out), in seconds — the glow swells over 4.2 s and
-  /// fades back over the next 4.2.
-  static const double _glowHalfPeriod = 4.2;
-
+  // REPAINT, NOT REBUILD (2026-11-03, "alles für die Performance"): the
+  // painter listens to the clock itself and reads the time inside paint().
+  // The AnimatedBuilder this used to be rebuilt a widget and a painter for
+  // every lit building eleven times a second; now a tick is one paint per
+  // layer and no build at all.
   @override
   Widget build(BuildContext context) => IgnorePointer(
     child: RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: AmbientClock.instance,
-        builder: (context, _) {
-          final seconds = AmbientClock.instance.seconds;
-          return CustomPaint(
-            painter: _LifePainter(
-              smokeT: (seconds / _smokeLifeSeconds) % 1.0,
-              glowT: (seconds / _glowHalfPeriod) % 2.0,
-              chimney: widget.chimney,
-              glow: widget.glow,
-              seed: widget.phaseSeed,
-            ),
-            size: Size.infinite,
-          );
-        },
+      child: CustomPaint(
+        painter: _LifePainter(
+          clock: AmbientClock.instance,
+          chimney: widget.chimney,
+          glow: widget.glow,
+          seed: widget.phaseSeed,
+        ),
+        size: Size.infinite,
       ),
     ),
   );
@@ -238,8 +228,7 @@ class LampGlow extends StatelessWidget {
 }
 
 class _LifePainter extends CustomPainter {
-  final double smokeT;
-  final double glowT;
+  final AmbientClock clock;
   final (double, double)? chimney;
   final bool glow;
   final int seed;
@@ -250,13 +239,23 @@ class _LifePainter extends CustomPainter {
   static final Paint _puffPaint = Paint();
   static final Paint _glowPaint = Paint();
 
-  const _LifePainter({
-    required this.smokeT,
-    required this.glowT,
+  _LifePainter({
+    required this.clock,
     required this.chimney,
     required this.glow,
     required this.seed,
-  });
+  }) : super(repaint: clock);
+
+  /// Six seconds for one puff's whole life. Slower than it sounds: with four
+  /// puffs staggered across it, one leaves the chimney every second and a half.
+  static const double _smokeLifeSeconds = 6;
+
+  /// One breath in (or out), in seconds — the glow swells over 4.2 s and
+  /// fades back over the next 4.2.
+  static const double _glowHalfPeriod = 4.2;
+
+  double get smokeT => (clock.seconds / _smokeLifeSeconds) % 1.0;
+  double get glowT => (clock.seconds / _glowHalfPeriod) % 2.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -338,8 +337,7 @@ class _LifePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_LifePainter old) =>
-      old.smokeT != smokeT ||
-      old.glowT != glowT ||
+      !identical(old.clock, clock) ||
       old.glow != glow ||
       old.chimney != chimney ||
       old.seed != seed;
@@ -369,6 +367,42 @@ List<double> pausedColorMatrix({double keep = 0.15, double light = 0.92}) {
   ];
 }
 
+// ── A building not reached by any road reads as broken (user 2026-09-30:
+// "wenn ein Gebäude nicht an eine Strasse angeschlossen ist, sieht man dies
+// noch nicht gut"). The old cue — a faint red wash over just the GROUND
+// footprint, plus a 12 px 🚫 — sat mostly behind the building's own art
+// (the art hangs from the footprint's bottom edge and rises past its top,
+// see [_BuildingTile]), so on anything but a flat single-tile building it
+// barely showed. This tints the ART ITSELF, the same way a paused building's
+// picture is drawn through [kPausedFilter] — full luminance kept, green and
+// blue pulled down so what remains reads as a warning.
+//
+// The FIRST pass crushed green/blue almost to zero, which read as a harsh,
+// near-primary red — much more "auffällig" than the rest of this app's
+// alerts (user 2026-09-30: "das Rot bitte etwas weniger auffällig machen").
+// [FoE.danger], the colour everything else here warns with, is a soft
+// peach-orange (0xFFFD9B6C — roughly 1 : 0.6 : 0.4 red:green:blue), not a
+// stop-sign red, so the defaults below now land near that same ratio instead.
+
+/// What a disconnected building's picture is drawn through: luminance kept
+/// (so the silhouette and its shading stay legible), green and blue pulled
+/// down toward [FoE.danger]'s own warm, muted ratio rather than crushed to
+/// near-zero.
+final ColorFilter kDisconnectedFilter = ColorFilter.matrix(
+  disconnectedColorMatrix(),
+);
+
+List<double> disconnectedColorMatrix({double keepGreen = 0.55}) {
+  const r = 0.2126, g = 0.7152, b = 0.0722; // Rec. 709, same weights as above.
+  final keepBlue = keepGreen * 0.7; // FoE.danger's own green:blue ratio.
+  return [
+    r, g, b, 0, 0, // R' = full luminance — keeps the sprite bright.
+    r * keepGreen, g * keepGreen, b * keepGreen, 0, 0,
+    r * keepBlue, g * keepBlue, b * keepBlue, 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+}
+
 /// Zs rising from [anchorX]/[anchorY] (fractions of this box): a small z, then two
 /// bigger ones, each drifting up and right, growing and fading. One slow cycle on
 /// the shared [AmbientClock], out of step between buildings.
@@ -394,35 +428,38 @@ class _SleepZState extends State<SleepZ> with _AmbientClockUser<SleepZ> {
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
+    // Repaint, not rebuild — see [_BuildingLifeState.build].
     child: RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: AmbientClock.instance,
-        builder: (context, _) => CustomPaint(
-          painter: _SleepZPainter(
-            t: (AmbientClock.instance.seconds / _lifeSeconds) % 1.0,
-            anchorX: widget.anchorX,
-            anchorY: widget.anchorY,
-            seed: widget.phaseSeed,
-          ),
-          size: Size.infinite,
+      child: CustomPaint(
+        painter: _SleepZPainter(
+          clock: AmbientClock.instance,
+          lifeSeconds: _lifeSeconds,
+          anchorX: widget.anchorX,
+          anchorY: widget.anchorY,
+          seed: widget.phaseSeed,
         ),
+        size: Size.infinite,
       ),
     ),
   );
 }
 
 class _SleepZPainter extends CustomPainter {
-  final double t;
+  final AmbientClock clock;
+  final double lifeSeconds;
   final double anchorX;
   final double anchorY;
   final int seed;
 
-  const _SleepZPainter({
-    required this.t,
+  _SleepZPainter({
+    required this.clock,
+    required this.lifeSeconds,
     required this.anchorX,
     required this.anchorY,
     required this.seed,
-  });
+  }) : super(repaint: clock);
+
+  double get t => (clock.seconds / lifeSeconds) % 1.0;
 
   static const double _base = 22;
   static const List<String> _letters = ['z', 'Z', 'Z'];
@@ -489,5 +526,9 @@ class _SleepZPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SleepZPainter old) => old.t != t;
+  bool shouldRepaint(_SleepZPainter old) =>
+      !identical(old.clock, clock) ||
+      old.anchorX != anchorX ||
+      old.anchorY != anchorY ||
+      old.seed != seed;
 }

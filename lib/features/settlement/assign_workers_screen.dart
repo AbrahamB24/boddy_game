@@ -3,18 +3,26 @@ import 'package:flutter/material.dart';
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/feel.dart';
+import '../../core/ui/snack.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/ui/scroll_cue.dart';
 import '../common/widgets/filter_pills.dart';
 import '../creatures/models/creature_enums.dart';
 import '../creatures/models/creature_instance.dart';
 import '../creatures/services/creatures_controller.dart';
+import '../creatures/widgets/creature_card.dart';
 import '../creatures/widgets/creature_family.dart' show CreatureAvatar;
+import '../creatures/widgets/picker_detail_panel.dart';
+import '../creatures/widgets/roster_row.dart';
+import '../onboarding/intro_flow.dart';
+import '../onboarding/intro_spotlight.dart';
 import 'data/building_definitions.dart';
 import 'data/resource_icons.dart';
 import 'data/workshop_role_effects.dart';
 import 'models/placed_building.dart';
 import 'settlement_controller.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_icons.dart';
 
 /// Posting monsters to a work post — "Sitze + Liste" (user 2026-09-22, picked from
 /// ten; it replaces the bottom sheet `AssignWorkersSheet`).
@@ -84,6 +92,10 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
   String _query = '';
   CreatureElement? _filterElement;
 
+  /// Tapping a roster row only PREVIEWS it here (user 2026-10-05, "Konzept
+  /// 4") — the detail panel's own button is what actually posts or swaps it.
+  CreatureInstance? _preview;
+
   @override
   void initState() {
     super.initState();
@@ -98,6 +110,16 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
 
   WorkshopRole get _role => widget.role;
   bool get _training => _role.resource == WorkshopRole.kTraining;
+
+  /// The tutorial's own step for this screen (user 2026-09-30: "muss auch
+  /// wieder nur das Starter möglich sein anzuwählen und nichts anderes") —
+  /// a fresh account only ever OWNS the starter at this point, so
+  /// [_candidates] can never actually hold anyone else; what this locks
+  /// down is the search/sort/filter pills and the seats column, not the
+  /// roster's contents.
+  bool get _isTutorial =>
+      widget.ctrl.introStep == IntroStep.assignHealer &&
+      widget.building.buildingTypeId == kHealingHutBuildingId;
 
   /// The live building — the one handed in is a snapshot and goes stale when it
   /// is upgraded.
@@ -179,7 +201,14 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
           in _role
               .contribution((s) => c.statValue(s).toDouble(), _building.level)
               .entries)
-        e.key: e.value * energy,
+        // Energy scales what is PRODUCED only — not build points and not the time
+        // cuts of the system roles, which run in real time (user 2026-09-28).
+        e.key:
+            e.value *
+            (e.key == WorkshopRole.kConstruction ||
+                    workshopRoleFeedsSystem(e.key)
+                ? 1.0
+                : energy),
     };
   }
 
@@ -192,7 +221,7 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
       return '+${v.toStringAsFixed(1)}/h ${resourceEmoji(_role.resource)}';
     }
     if (_role.resource == WorkshopRole.kConstruction) {
-      return '+${(power[_role.resource] ?? 0).toStringAsFixed(0)} points';
+      return buildPointsLabel(power[_role.resource] ?? 0);
     }
     return workshopPowerLabel(power, withGlyph: _role.isCombined);
   }
@@ -222,11 +251,19 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
         : await widget.ctrl.assignCreatureToWorkshop(c.id, null, null);
     if (!mounted) return;
     if (err != null) {
-      // The buzz alone (user 2026-08-29: no pop-up messages).
       Feel.deny();
+      context.snack(err, error: true);
       return;
     }
     Feel.success();
+    // The preview has done its job — leaving the just-posted monster in the
+    // panel kept a live "Post here" button for a monster already posted.
+    if (post && _preview?.id == c.id) setState(() => _preview = null);
+    // Straight back to the Healing Hut's own detail dialog (user 2026-09-30:
+    // "soll ich direkt wieder auf den Healing Hut Detailscreen kommen") —
+    // this screen was pushed FROM that dialog's "+" tile, so popping lands
+    // right back on it, already showing the posted worker.
+    if (post && _isTutorial) Navigator.pop(context);
   }
 
   /// A pick made while a seat is being swapped: the outgoing monster is freed
@@ -253,106 +290,134 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
     builder: (context, _) {
       final posted = _posted;
       final free = _slots - posted.length;
-      return MenuScaffold(
-        title:
-            kBuildingDefs[widget.building.buildingTypeId]?.name ??
-            widget.building.buildingTypeId,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _training ? 'Training' : _role.stat.label,
-              style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+      return Stack(
+        children: [
+          MenuScaffold(
+            title:
+                kBuildingDefs[widget.building.buildingTypeId]?.name ??
+                widget.building.buildingTypeId,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _training ? 'Training' : _role.stat.label,
+                  style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${posted.length} / $_slots',
+                  style: FoE.value(
+                    size: 13,
+                  ).copyWith(color: free <= 0 ? kBoxAccent : kBoxInk),
+                ),
+              ],
             ),
-            const SizedBox(width: 6),
-            Text(
-              '${posted.length} / $_slots',
-              style: FoE.value(
-                size: 13,
-              ).copyWith(color: free <= 0 ? kBoxAccent : kBoxInk),
+            // TWO COLUMNS (user 2026-09-28: "Die Liste der Monster ist zu
+            // klein"): the seats and their total on the left, the roster on
+            // the right over the FULL height. Stacked, the seats card ate
+            // ~130 px of a 430 px screen and left the list about two rows.
+            //
+            // Seats (who works here now) and the roster (who else could) ARE
+            // different Gebiete (user 2026-09-29, "Trennlinien und Zonen
+            // gemischt", app-wide), so Seats gets a [zoneBox] of its own.
+            // (MenuScaffold is the one card now — no [pageCard] here.)
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: _kSeatsColumnW,
+                  child: zoneBox(
+                    padding: EdgeInsets.zero,
+                    child: _seatsCard(posted),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(child: _rosterCard()),
+              ],
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _seatsCard(posted),
-            const SizedBox(height: 12),
-            Expanded(child: _rosterCard()),
-          ],
-        ),
+          ),
+          // Sibling of MenuScaffold, not nested in its `child` (same fix as
+          // battle_prep_screen.dart's two tutorial overlays, user
+          // 2026-10-01: "hier auch" — nested, the dim only reached
+          // MenuScaffold's content slot, leaving the title/count header and
+          // its hairline undimmed). Names WHY the choice matters (user
+          // 2026-09-30: "erklären, dass Monster unterschiedliche Stats
+          // haben, welche sich auf die Effektivität ihrer Arbeit auswirken
+          // können") — dead-zones the seats column and the search/sort/
+          // filter pills too, though a fresh account only ever owns the one
+          // candidate this points at.
+          if (_isTutorial)
+            const IntroSpotlightOverlay(
+              anchorName: 'assignworkers-candidate',
+              hint:
+                  'Tap to station it. Different monsters have different '
+                  'stats, which changes how well they work here.',
+            ),
+        ],
       );
     },
   );
 
+  /// The seats column: three 88 px seats side by side, with the card's padding.
+  static const double _kSeatsColumnW = 320;
+
   // ── The seats ─────────────────────────────────────────────
   Widget _seatsCard(List<CreatureInstance> posted) {
     final total = _figureOf(_sum(posted));
-    return creamCard(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: SizedBox(
-        height: 104,
-        child: Row(
-          children: [
-            Expanded(
-              child: ScrollCue(
-                axis: Axis.horizontal,
-                builder: (context, controller) => SingleChildScrollView(
-                  controller: controller,
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (var i = 0; i < _slots; i++) ...[
-                        i < posted.length
-                            ? _filledSeat(posted[i])
-                            : _emptySeat(),
-                        const SizedBox(width: 16),
-                      ],
-                    ],
-                  ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The total first: it is what the seats add up to.
+          Text(
+            'TOTAL HERE',
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+              color: kBoxInkFaint,
+            ),
+          ),
+          if (posted.isEmpty)
+            Text(
+              'Nobody works here. This building produces nothing.',
+              style: FoE.dim(size: 11).copyWith(color: FoE.danger),
+            )
+          else ...[
+            Text(
+              total ?? '—',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: FoE.value(size: 20).copyWith(color: kBoxInk),
+            ),
+            Text(
+              'Lv ${_building.level} · energy '
+              '×${widget.ctrl.energyMultiplier.toStringAsFixed(2)}',
+              style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Container(height: 1, color: CreamPalette.tan.withValues(alpha: 0.4)),
+          // Seats wrap into rows and scroll when a building has many.
+          Expanded(
+            child: ScrollCue(
+              builder: (context, controller) => SingleChildScrollView(
+                controller: controller,
+                // Room for the ✕ that hangs off a seat's top-right corner.
+                padding: const EdgeInsets.only(top: 12, bottom: 4),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 12,
+                  children: [
+                    for (var i = 0; i < _slots; i++)
+                      i < posted.length ? _filledSeat(posted[i]) : _emptySeat(),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 170,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'TOTAL HERE',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.1,
-                      color: kBoxInkFaint,
-                    ),
-                  ),
-                  if (posted.isEmpty)
-                    Text(
-                      'Nobody works here.\nThis building produces nothing.',
-                      textAlign: TextAlign.end,
-                      style: FoE.dim(size: 11).copyWith(color: FoE.danger),
-                    )
-                  else ...[
-                    Text(
-                      total ?? '—',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: FoE.value(size: 20).copyWith(color: kBoxInk),
-                    ),
-                    Text(
-                      'Lv ${_building.level} · energy '
-                      '×${widget.ctrl.energyMultiplier.toStringAsFixed(2)}',
-                      style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -380,7 +445,7 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
                   padding: const EdgeInsets.all(3),
                   decoration: swapping
                       ? BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: vr(14),
                           border: Border.all(
                             color: CreamPalette.gold,
                             width: 2.5,
@@ -430,9 +495,9 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
                 height: 20,
                 decoration: const BoxDecoration(
                   color: CreamPalette.warn,
-                  shape: BoxShape.circle,
+                  shape: BoxShape.rectangle,
                 ),
-                child: const Icon(Icons.close, size: 13, color: Colors.white),
+                child: const PixelIcon(Icons.close, size: 13, color: Colors.white),
               ),
             ),
           ),
@@ -473,7 +538,7 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
   Widget _rosterCard() {
     final candidates = _candidates;
     final swapping = _swapTarget;
-    return creamCard(
+    return Padding(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -502,7 +567,7 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
                   ),
                   Pressable(
                     onTap: () => setState(() => _swapTargetId = null),
-                    child: Icon(Icons.close, size: 16, color: kBoxInkSoft),
+                    child: PixelIcon(Icons.close, size: 16, color: kBoxInkSoft),
                   ),
                 ],
               ),
@@ -511,35 +576,97 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(
-                'Tap a monster to post it',
+                'Tap a monster to see its details',
                 style: FoE.dim(size: 11).copyWith(color: kBoxInkFaint),
               ),
             ),
           Expanded(
-            child: candidates.isEmpty
-                ? Center(
-                    child: Text(
-                      'No other monsters.',
-                      style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
-                    ),
-                  )
-                : ScrollCue(
-                    builder: (context, controller) => ListView(
-                      controller: controller,
-                      padding: const EdgeInsets.only(bottom: 4),
-                      children: [for (final c in candidates) _rosterRow(c)],
-                    ),
-                  ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _detail(),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: candidates.isEmpty
+                      ? RosterRow.emptyState('No other monsters.')
+                      : ScrollCue(
+                          builder: (context, controller) => ListView(
+                            controller: controller,
+                            padding: const EdgeInsets.only(bottom: 4),
+                            children: [
+                              for (var i = 0; i < candidates.length; i++)
+                                _isTutorial && i == 0
+                                    ? KeyedSubtree(
+                                        key: IntroSpotlightAnchors.of(
+                                          'assignworkers-candidate',
+                                        ),
+                                        child: _rosterRow(candidates[i]),
+                                      )
+                                    : _rosterRow(candidates[i]),
+                            ],
+                          ),
+                        ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// One row: face, name, the stat THIS post reads (bar and number — that number
-  /// is the whole reason to sort the list), a status pill, what the monster would
-  /// make here, and the honest action icon (a TRANSFER arrow when it means taking
-  /// the monster off another post).
+  /// The left panel: the stat THIS post reads, status (free / posted
+  /// elsewhere / away / unfit) and what it would make here — the detail
+  /// panel every monster picker now shares. [action] is the only thing that
+  /// actually posts or swaps a worker now; tapping a roster row just fills
+  /// this in first.
+  Widget _detail() {
+    final c = _preview;
+    if (c == null) {
+      return const PickerDetailPanel(
+        placeholder: 'Tap a monster to see its details.',
+      );
+    }
+    final creatures = CreaturesController();
+    final away = creatures.isOnExpedition(c.id);
+    final idle = c.isKo || creatures.isBreeding(c.id);
+    final elsewhere = _postedElsewhere(c);
+    final taken = elsewhere != null && !away && !idle;
+    final unavailable = away || idle;
+    final (status, statusColor) = away
+        ? ('Away', CreamPalette.warn)
+        : idle
+        ? ('Unfit', CreamPalette.warn)
+        : taken
+        ? ('At $elsewhere', CreamPalette.warn)
+        : ('Free', CreamPalette.better);
+    final gain = unavailable ? null : _figureOf(_power(c));
+    return PickerDetailPanel(
+      art: CreatureCard(creature: c, showHp: false),
+      title: c.displayName,
+      subtitle: _training ? 'Lv ${c.level}' : null,
+      rows: [
+        pickerStatRow(
+          _training ? 'Level' : _role.stat.label,
+          '${_training ? c.level : c.statValue(_role.stat)}',
+        ),
+        pickerStatRow('Status', status, valueColor: statusColor),
+        if (gain != null) pickerStatRow('Yield here', gain),
+      ],
+      action: pickerChooseButton(
+        label: _swapTargetId != null ? 'Swap in' : 'Post here',
+        onTap: () => _swapTargetId == null ? _set(c, true) : _swapWith(c),
+      ),
+    );
+  }
+
+  /// One row via the shared [RosterRow] (user 2026-10-05: "wirklich überall
+  /// den gleichen [Monsterpicker] nehmen") — the stat THIS post reads (bar
+  /// and number — that number is the whole reason to sort the list), a
+  /// status pill, what the monster would make here, and the honest action
+  /// icon (a TRANSFER arrow when it means taking the monster off another
+  /// post). A tap only PREVIEWS it in [_detail] now — that panel's own
+  /// button is what actually posts or swaps it.
   Widget _rosterRow(CreatureInstance c) {
     final creatures = CreaturesController();
     final away = creatures.isOnExpedition(c.id);
@@ -548,150 +675,45 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
     final taken = elsewhere != null && !away && !idle;
     final unavailable = away || idle;
     final (status, pill) = away
-        ? ('🎒 Away', _Pill.no)
+        ? ('🎒 Away', RosterPillKind.no)
         : idle
-        ? ('💤 Unfit', _Pill.no)
+        ? ('💤 Unfit', RosterPillKind.no)
         : taken
-        ? ('At $elsewhere', _Pill.warn)
-        : ('Free', _Pill.free);
+        ? ('At $elsewhere', RosterPillKind.warn)
+        : ('Free', RosterPillKind.free);
     final statValue = _training ? c.level : c.statValue(_role.stat);
-    // Stat bars read against the largest value in the collection.
-    final gain = unavailable ? null : _figureOf(_power(c));
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
-      child: Pressable(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _swapTargetId == null ? _set(c, true) : _swapWith(c),
-        child: Opacity(
-          opacity: unavailable ? 0.6 : 1,
-          child: Container(
-            height: 42,
-            padding: const EdgeInsets.symmetric(horizontal: 9),
-            decoration: raisedTile(radius: 11),
-            child: Row(
-              children: [
-                CreatureAvatar.of(c, size: 28, showHp: false),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    c.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: FoE.label(size: 13).copyWith(color: kBoxInk),
-                  ),
-                ),
-                SizedBox(
-                  width: 90,
-                  child: Row(
-                    children: [
-                      Expanded(child: _statBar(statValue)),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$statValue',
-                        style: FoE.value(size: 13).copyWith(color: kBoxAccent),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: 128,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: _statusPill(status, pill),
-                  ),
-                ),
-                SizedBox(
-                  width: 84,
-                  child: Text(
-                    gain ?? '—',
-                    textAlign: TextAlign.right,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: FoE.value(size: 12.5).copyWith(
-                      color: gain == null ? kBoxInkFaint : CreamPalette.better,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // The honest icon (user 2026-07-26): a TRANSFER arrow in the
-                // warning colour instead of the plus, because that is what the tap
-                // does.
-                Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: taken ? _takenInk : CreamPalette.gold,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    taken ? Icons.swap_horiz : Icons.add,
-                    size: 15,
-                    color: taken ? Colors.white : CreamPalette.ink,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _statBar(int value) {
-    final top = CreaturesController().creatures.fold<int>(
+    final statMax = creatures.creatures.fold<int>(
       1,
-      (m, c) => (_training ? c.level : c.statValue(_role.stat)) > m
-          ? (_training ? c.level : c.statValue(_role.stat))
+      (m, o) => (_training ? o.level : o.statValue(_role.stat)) > m
+          ? (_training ? o.level : o.statValue(_role.stat))
           : m,
     );
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
-      child: SizedBox(
-        height: 7,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(color: kBoxInk.withValues(alpha: 0.16)),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: (value / top).clamp(0.0, 1.0),
-                child: const ColoredBox(color: CreamPalette.gold),
-              ),
-            ),
-          ],
-        ),
+    // Stat bars read against the largest value in the collection.
+    final gain = unavailable ? null : _figureOf(_power(c));
+    return pickerPreviewFrame(
+      active: _preview?.id == c.id,
+      child: RosterRow(
+        creature: c,
+        statValue: statValue,
+        statMax: statMax,
+        status: status,
+        statusKind: pill,
+        figureText: gain,
+        dimmed: unavailable,
+        // The honest icon (user 2026-07-26): a TRANSFER arrow in the warning
+        // colour instead of the plus, because that is what the tap does.
+        actionIcon: taken ? Icons.swap_horiz : Icons.add,
+        actionColor: taken ? _takenInk : CreamPalette.gold,
+        actionIconColor: taken ? Colors.white : CreamPalette.ink,
+        // The tutorial's one candidate still posts on a single tap (user
+        // 2026-09-30: its spotlight hint literally says "Tap to station
+        // it") — everywhere else, a tap only previews.
+        onTap: () => _isTutorial
+            ? (_swapTargetId == null ? _set(c, true) : _swapWith(c))
+            : setState(() => _preview = c),
       ),
     );
   }
-
-  Widget _statusPill(String text, _Pill kind) => Container(
-    constraints: const BoxConstraints(maxWidth: 128),
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-    decoration: BoxDecoration(
-      color: switch (kind) {
-        _Pill.free => CreamPalette.better.withValues(alpha: 0.18),
-        _Pill.warn => CreamPalette.warn.withValues(alpha: 0.18),
-        _Pill.no => kBoxInk.withValues(alpha: 0.12),
-      },
-      borderRadius: BorderRadius.circular(9),
-    ),
-    child: Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w800,
-        color: switch (kind) {
-          _Pill.free => CreamPalette.better,
-          _Pill.warn => CreamPalette.warn,
-          _Pill.no => kBoxInkSoft,
-        },
-      ),
-    ),
-  );
 
   // ── Search, sort, filter ──────────────────────────────────
   Widget _searchPill() => SearchPill(
@@ -719,7 +741,7 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
         if (!_training) const MapEntry('level', 'Level'),
         const MapEntry('name', 'Name'),
       ],
-      trailing: Icon(
+      trailing: PixelIcon(
         _sortDescending ? Icons.arrow_downward : Icons.arrow_upward,
         size: 14,
         color: kBoxAccent,
@@ -754,5 +776,3 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
     ),
   );
 }
-
-enum _Pill { free, warn, no }

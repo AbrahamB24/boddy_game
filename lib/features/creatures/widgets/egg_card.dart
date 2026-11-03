@@ -8,6 +8,7 @@ import '../models/creature_enums.dart';
 import '../models/species_def.dart';
 import '../services/creature_power.dart';
 import 'creature_sprite.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 /// The parchment screens' accent gold — the same value the Hatchery, the
 /// breeding page and the building dialog each declare for their own readouts.
@@ -97,7 +98,7 @@ class EggCard extends StatelessWidget {
                   const Positioned(
                     top: 0,
                     left: 0,
-                    child: Icon(
+                    child: PixelIcon(
                       Icons.check_circle,
                       size: 18,
                       color: CreamPalette.better,
@@ -330,7 +331,7 @@ class _Egg extends StatelessWidget {
               child: const DecoratedBox(
                 decoration: BoxDecoration(
                   // A rectangle box makes the radial gradient an ELLIPSE
-                  // stretched to it — the streak shape. BoxShape.circle would
+                  // stretched to it — the streak shape. BoxShape.rectangle would
                   // force it back to round.
                   gradient: RadialGradient(
                     colors: [_shellBody, _shellBody, Color(0x00F2EBE0)],

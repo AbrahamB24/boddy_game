@@ -2,18 +2,51 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:boddygame/features/creatures/models/area.dart';
+import 'package:boddygame/features/creatures/models/creature_enums.dart';
+import 'package:boddygame/features/creatures/models/creature_instance.dart';
+import 'package:boddygame/features/creatures/models/species_def.dart';
 import 'package:boddygame/features/creatures/overworld_screen.dart';
+import 'package:boddygame/features/creatures/services/creatures_controller.dart';
 import 'package:boddygame/features/creatures/widgets/overworld_card.dart';
 
 // The Overworld (user 2026-09-20, "Variante 4"): the road beside a fight card.
 // A tap PICKS a battle and the card follows. The map's pulse never settles, so
 // these step the clock instead of pumpAndSettle.
 void main() {
+  final species = SpeciesDef(
+    id: 'overworld_test',
+    name: 'Testling',
+    element: CreatureElement.fire,
+    rarity: CreatureRarity.common,
+    stats: {
+      for (final s in CreatureStat.values)
+        s: const StatCurve(stageBase: [20, 24, 28], growth: 1),
+    },
+    stages: const [SpeciesStage(name: 'Kit')],
+  );
+  setUpAll(() => kSpeciesDefs[species.id] = species);
+
   setUp(() {
     kAreaDefs
       ..clear()
       ..addAll({for (final a in kFallbackAreaDefs) a.id: a});
+    // A battle-ready monster — what any player past the intro's starter step
+    // actually has. Without one the Fight button reads "Catch a monster
+    // first" and is inert (see OverworldFightCard.noTeam), which is its own
+    // narrow edge case, not what these layout/navigation tests are about.
+    CreaturesController().creatures = [
+      CreatureInstance(
+        id: 'm0',
+        userId: 'u',
+        speciesId: species.id,
+        nickname: 'Mine',
+        gender: CreatureGender.male,
+        statBase: {for (final s in CreatureStat.values) s: 20},
+        statSlope: const {},
+      ),
+    ];
   });
+  tearDown(() => CreaturesController().creatures = []);
 
   Future<void> open(WidgetTester t) async {
     t.view.physicalSize = const Size(932, 430);

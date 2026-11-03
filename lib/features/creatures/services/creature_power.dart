@@ -122,3 +122,12 @@ List<CreatureStat> topStats(
         });
   return ranked.take(count).toList();
 }
+
+/// The same sum read at an arbitrary [level] — what a monster's genes are worth
+/// at level 1 or at the maximum, without touching [CreatureInstance.level]
+/// (user 2026-09-28: the Breeding tiles switch between "Lv 1" and "Max", like the
+/// detail screen). At the monster's own level it equals [totalPower].
+int powerAtLevel(CreatureInstance c, int level) => CreatureStat.values.fold(
+  0,
+  (sum, s) => sum + c.statValueAtLevel(s, level),
+);

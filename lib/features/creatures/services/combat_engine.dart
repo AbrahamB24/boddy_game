@@ -1057,6 +1057,17 @@ class CombatEngine extends ChangeNotifier {
       parts.add('misses ${t.name}');
       return;
     }
+    // A POWER-0 "damage" move (Intimidate, Trip — "No real hit, just a
+    // glare") is a pure status/debuff carrier. The damage formula's flat +2
+    // floor used to make these chip 2 HP anyway, float a number, and even
+    // roll crits — contradicting their own description. Skip the hit itself
+    // and only roll what the move carries.
+    if (ability.power <= 0) {
+      final before = parts.length;
+      _applyHitRiders(actor, ability, t, parts);
+      if (parts.length == before) parts.add('no effect on ${t.name}');
+      return;
+    }
     final roll = _rollDamage(
       actor: actor,
       target: t,
@@ -1107,6 +1118,17 @@ class CombatEngine extends ChangeNotifier {
         parts.add('${actor.name} takes $back recoil');
       }
     }
+    _applyHitRiders(actor, ability, t, parts);
+  }
+
+  /// The main-status / secondary-debuff rolls a landed hit carries — shared by
+  /// a real damaging hit and a power-0 status move.
+  void _applyHitRiders(
+    Combatant actor,
+    AbilityDef ability,
+    Combatant t,
+    List<String> parts,
+  ) {
     if (t.alive) {
       if (ability.inflictMain != null &&
           t.mainStatus == null &&
@@ -1271,10 +1293,20 @@ class CombatEngine extends ChangeNotifier {
         : allies.reduce((a, b) => a.hp / a.maxHp <= b.hp / b.maxHp ? a : b);
 
     // 1. Emergency heal for whoever on the field is worst off, below 45%.
+    // A SELF-only heal can only ever land on the actor — casting it because
+    // a DIFFERENT ally is bleeding healed nobody, and since the turn stays
+    // open while AP remain, the AI used to burn its whole pool re-casting a
+    // 0-HP heal on itself.
     final heal = _affordableHeal(actor);
-    if (heal != null && ally.hp / ally.maxHp < 0.45) {
-      useAbility(actor, heal, ally);
-      return;
+    if (heal != null) {
+      final selfOnly =
+          heal.target == AbilityTarget.self ||
+          (heal.target == AbilityTarget.ally && allies.length <= 1);
+      final patient = selfOnly ? actor : ally;
+      if (patient.hp / patient.maxHp < 0.45) {
+        useAbility(actor, heal, patient);
+        return;
+      }
     }
 
     // 2. Set up with a buff/debuff EARLY in the turn — but only when there's

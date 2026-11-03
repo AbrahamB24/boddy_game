@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/foe_theme.dart';
 
-import '../models/creature_enums.dart';
+import '../models/creature_enums.dart';
+import '../../../core/theme/voxel_icons.dart';
 
 /// Card backdrop for a creature's art (user 2026-07-17): a smooth diagonal
 /// gradient in the creature's ELEMENT colour (lighter top-left → deeper
@@ -112,7 +113,7 @@ class CreatureBackdrop extends StatelessWidget {
     Widget face(Color c) => ColorFiltered(
       colorFilter: ColorFilter.mode(c, BlendMode.srcIn),
       child: iconSymbol != null
-          ? Icon(iconSymbol, size: fontSize, color: Colors.white)
+          ? PixelIcon(iconSymbol, size: fontSize, color: Colors.white)
           : Text(glyph, style: TextStyle(fontSize: fontSize)),
     );
     return Stack(

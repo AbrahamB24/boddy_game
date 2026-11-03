@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'voxel_kit.dart';
 
 /// Design tokens for the whole game. **This file IS the design system** — the
 /// class name and member API are deliberately frozen so a restyle lands
@@ -63,14 +63,16 @@ class FoE {
   // (battle chrome, the dev tools) matches the cream kit around it. Names and
   // roles are unchanged; only the values moved. Element colours (water, ice) and
   // the energy bar's 100–125 % cyan stay: they carry meaning.
-  static const bg = Color(0xFF2A1A0C); // the page
+  static const bg = Color(
+    0xFF12313C,
+  ); // the page (Fachwerk 2026-11-02: timber in shade)
 
   static const panelDark = Color(
-    0xFF3A2513,
+    0xFF1B4756,
   ); // recessed / bars — bg→panelMid, closer to bg
-  static const panelMid = Color(0xFF5C3B22); // the card surface
+  static const panelMid = Color(0xFF25596B); // the card surface
 
-  static const panelLight = Color(0xFF8A5C33); // raised / active
+  static const panelLight = Color(0xFF3A7F96); // raised / active
   static const border = Color(0x33EDE3CB); // hairline
 
   /// Dim accent hairline — the accent taken down, so an accented edge belongs
@@ -87,20 +89,20 @@ class FoE {
   // hue family instead of a warm one, but distinct in saturation/lightness
   // rather than in hue. [danger] is unaffected either time — still its own
   // red-orange, for alerts only.
-  static const gold = Color(0xFFF5B83A); // the kit's gold (was cyan-blue)
-  static const goldBright = Color(0xFFFFD46B); // lit version of gold
-  static const accentBlue = Color(0xFFF5B83A); // name kept; it is gold now
+  static const gold = Color(0xFF3FD0D0); // the kit's gold (was cyan-blue)
+  static const goldBright = Color(0xFF7FE8E8); // lit version of gold
+  static const accentBlue = Color(0xFF3FD0D0); // name kept; it is gold now
 
   /// Primary body text. Named `parchment` from the old fantasy palette, then the
   /// ink of the light theme, and now the cream that ink was written on — the
   /// name has outlived two palettes and is kept for API stability. It has always
   /// meant "the colour text is".
-  static const parchment = Color(0xFFEDE3CB);
-  static const textDim = Color(0xFFA79B82); // faded — secondary text
-  static const textMuted = Color(0xFF7A7263); // dimmer — disabled
+  static const parchment = Color(0xFFF1F6F8);
+  static const textDim = Color(0xFFB4CEDB); // faded — secondary text
+  static const textMuted = Color(0xFF8FAEBD); // lifted for the pixel face (2026-11-03) // dimmer — disabled
 
-  static const mapBase = Color(0xFF3A2513); // == panelDark
-  static const mapAlt = Color(0xFF4A2F1A); // panelDark→panelMid midpoint
+  static const mapBase = Color(0xFF1B4756); // == panelDark
+  static const mapAlt = Color(0xFF21505F); // panelDark→panelMid midpoint
   static const mapGrid = Color(0x14FFFFFF);
   // Coral now (user 2026-09-06: "alle Warnhinweise sollen in der Farbe
   // Koralle sein"), not its own red-orange — every alert in the app reads
@@ -108,11 +110,11 @@ class FoE {
   // Same hex as [coral] below (0xFFFD9B6C); written out rather than aliased
   // to it because [coral] is declared later in this file and a `const`
   // can't forward-reference.
-  static const danger = Color(0xFFFD9B6C);
+  static const danger = Color(0xFFFF8A5C);
 
   /// "Good" — full HP, gains, ready states: green (was the accent's cyan-blue).
   /// The same green the type chart's bonus arrows use.
-  static const positive = Color(0xFF3BAE78);
+  static const positive = Color(0xFF2FCB86);
 
   /// A resource sitting AT or OVER its storage cap — not [positive]/[gold] (a
   /// ready/active state): a full store is neither, it is a ceiling worth
@@ -125,7 +127,7 @@ class FoE {
   /// apart from real alerts the moment [danger] itself became this colour;
   /// the two names now just mark two different REASONS to reach for the
   /// identical value.
-  static const coral = Color(0xFFFD9B6C);
+  static const coral = Color(0xFFFF8A5C);
 
   // A warm cream→tan pair (user 2026-09-05), for surfaces that want to read
   // as a light card against the navy/teal chrome rather than another step of
@@ -133,8 +135,8 @@ class FoE {
   // Wood, grey for Stone, gold for Gold) before this; now every tile shares
   // this same pair regardless of what it targets. Dark ink ([bg]) belongs on
   // both, the same rule [parchmentButtonInk] uses for a fill this light.
-  static const cream = Color(0xFFF5EFEB);
-  static const tan = Color(0xFFA88C6C);
+  static const cream = Color(0xFF1F4E63);
+  static const tan = Color(0xFF4C8CA6);
 
   // ── Shape & metrics ───────────────────────────────────────
   // ── LOW POLY (user 2026-07-31) ──
@@ -167,18 +169,23 @@ class FoE {
   /// The app's one shape. Pass it to [ShapeDecoration] or any Material
   /// `shape:`. Still called `facet` because every caller says `FoE.facet(...)`
   /// and the name is about WHICH shape, not about its corners.
-  static RoundedRectangleBorder facet({
+  static OutlinedBorder facet({
     double radius = FoE.radius,
     BorderSide side = BorderSide.none,
-  }) => RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(radius),
-    side: side,
+  }) => VoxelShape(
+    notch: radius >= 14 ? 3 : (radius >= 8 ? 2 : 1),
+    // A near-opaque side (a selection ring, a gold edge) keeps its colour as
+    // the block outline; a faint hairline just means "an edge" and gets the
+    // kit's dark outline, which is what reads on both cream and navy.
+    edge: (side.style != BorderStyle.none && side.color.a >= 0.85)
+        ? side.color
+        : null,
   );
 
   /// The same corner as a [BorderRadius], for the many places that take one
   /// directly (ClipRRect, InkWell, BoxDecoration). Keeps the RADIUS consistent
   /// so a clip lines up with the shape under it.
-  static BorderRadius cut([double r = FoE.radius]) => BorderRadius.circular(r);
+  static BorderRadius cut([double r = FoE.radius]) => vr(r);
 
   /// ── THE FACET STEPS ──
   /// A faceted object is shaded by ITS NEIGHBOURS: one plane catches the light,
@@ -296,7 +303,8 @@ class FoE {
   // every call site has to remember to override for itself.
   static final Map<double, TextStyle> _titleCache = {};
   static TextStyle title({double size = 14}) =>
-      _titleCache[size] ??= GoogleFonts.outfit(
+      _titleCache[size] ??= TextStyle(
+        fontFamily: Voxel.font,
         color: parchment,
         fontSize: size + 2,
         fontWeight: FontWeight.w700,
@@ -307,7 +315,8 @@ class FoE {
 
   static final Map<double, TextStyle> _valueCache = {};
   static TextStyle value({double size = 13}) =>
-      _valueCache[size] ??= GoogleFonts.outfit(
+      _valueCache[size] ??= TextStyle(
+        fontFamily: Voxel.font,
         color: parchment, // ink on the parchment (was white on the dark theme)
         fontSize: size + 1,
         fontWeight: FontWeight.w600,
@@ -317,7 +326,8 @@ class FoE {
 
   static final Map<double, TextStyle> _labelCache = {};
   static TextStyle label({double size = 11}) =>
-      _labelCache[size] ??= GoogleFonts.outfit(
+      _labelCache[size] ??= TextStyle(
+        fontFamily: Voxel.font,
         color: parchment,
         fontSize: size + 1,
         fontWeight: FontWeight.w400,
@@ -327,7 +337,8 @@ class FoE {
 
   static final Map<double, TextStyle> _dimCache = {};
   static TextStyle dim({double size = 10}) =>
-      _dimCache[size] ??= GoogleFonts.outfit(
+      _dimCache[size] ??= TextStyle(
+        fontFamily: Voxel.font,
         color: textDim,
         fontSize: size + 1,
         fontWeight: FontWeight.w400,

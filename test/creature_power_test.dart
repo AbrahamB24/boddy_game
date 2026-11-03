@@ -28,7 +28,10 @@ void main() {
       // If a stat were counted twice (or not at all), total would drift from
       // the budget targets and the numbers would stop meaning anything.
       final c = _mob({for (final s in CreatureStat.values) s: 7});
-      final manual = CreatureStat.values.fold(0, (sum, s) => sum + c.statValue(s));
+      final manual = CreatureStat.values.fold(
+        0,
+        (sum, s) => sum + c.statValue(s),
+      );
       expect(totalPower(c), manual);
     });
 
@@ -60,22 +63,24 @@ void main() {
       expect(levelOnePower(fresh), totalPower(fresh));
     });
 
-    test('a fighter and a worker are told apart by the split, not the total',
-        () {
-      final fighter = _mob({
-        CreatureStat.hp: 90,
-        CreatureStat.attack: 70,
-        CreatureStat.defense: 60,
-      });
-      final worker = _mob({
-        CreatureStat.carry: 90,
-        CreatureStat.production: 70,
-        CreatureStat.gathering: 60,
-      });
-      expect(combatPower(fighter), greaterThan(combatPower(worker)));
-      expect(civilPower(worker), greaterThan(civilPower(fighter)));
-      expect(combatShare(fighter), greaterThan(combatShare(worker)));
-    });
+    test(
+      'a fighter and a worker are told apart by the split, not the total',
+      () {
+        final fighter = _mob({
+          CreatureStat.hp: 90,
+          CreatureStat.attack: 70,
+          CreatureStat.defense: 60,
+        });
+        final worker = _mob({
+          CreatureStat.carry: 90,
+          CreatureStat.production: 70,
+          CreatureStat.gathering: 60,
+        });
+        expect(combatPower(fighter), greaterThan(combatPower(worker)));
+        expect(civilPower(worker), greaterThan(civilPower(fighter)));
+        expect(combatShare(fighter), greaterThan(combatShare(worker)));
+      },
+    );
 
     test('combatShare is bounded, and a blank creature reads as balanced', () {
       for (final c in [
@@ -103,9 +108,7 @@ void main() {
         speciesId: 's',
         gender: CreatureGender.male,
         level: 1,
-        statBase: {
-          for (final e in curves.entries) e.key: e.value.baseAt(0),
-        },
+        statBase: {for (final e in curves.entries) e.key: e.value.baseAt(0)},
         statSlope: const {},
       );
       final b = defaultBudget(rarity: CreatureRarity.common);
@@ -176,24 +179,23 @@ void main() {
         statBase: {CreatureStat.hp: 10},
         statSlope: {CreatureStat.hp: 2.5},
       );
-      expect(
-        bestOwnedGrowth([slowGrower, fastGrower], CreatureStat.hp),
-        2.5,
-      );
+      expect(bestOwnedGrowth([slowGrower, fastGrower], CreatureStat.hp), 2.5);
     });
 
-    test('a missing gene reads as 0, matching the Stats tab\'s own display',
-        () {
-      final noGeneYet = CreatureInstance(
-        id: 'a',
-        userId: 'u',
-        speciesId: 's',
-        gender: CreatureGender.male,
-        statBase: const {},
-        statSlope: const {},
-      );
-      expect(bestOwnedGrowth([noGeneYet], CreatureStat.hp), 0);
-    });
+    test(
+      'a missing gene reads as 0, matching the Stats tab\'s own display',
+      () {
+        final noGeneYet = CreatureInstance(
+          id: 'a',
+          userId: 'u',
+          speciesId: 's',
+          gender: CreatureGender.male,
+          statBase: const {},
+          statSlope: const {},
+        );
+        expect(bestOwnedGrowth([noGeneYet], CreatureStat.hp), 0);
+      },
+    );
   });
 
   group('topStats', () {
@@ -259,14 +261,14 @@ void main() {
 
     test('fighting overtakes training, but only past the early levels', () {
       // XP comes from fights — that was the point of deleting the passive
-      // floor. With the 2026-07-29 curve (9 · L^1.3 against 250 XP/h of
-      // training) that is no longer true at EVERY level: a same-level kill
-      // at Lv 10 is worth ~180 and an hour of training 250, and the two
-      // cross at about Lv 13. Pinned as a crossover rather than a blanket
-      // 'fights always win', because the blanket claim is now false and a
-      // test that asserts it would just be wrong about the game.
-      expect(kXpBalance.killXp(10), lessThan(kTrainingXpPerHour));
-      expect(kXpBalance.killXp(20), greaterThan(kTrainingXpPerHour));
+      // floor. With the 2026-11-02 curve (9 · L^1.8 against 250 XP/h of
+      // training) that is not true at EVERY level: a same-level kill at
+      // Lv 5 is worth ~163 and an hour of training 250, and the two cross at
+      // about Lv 6. Pinned as a crossover rather than a blanket 'fights
+      // always win', because the blanket claim is false at the very start
+      // and a test that asserts it would just be wrong about the game.
+      expect(kXpBalance.killXp(5), lessThan(kTrainingXpPerHour));
+      expect(kXpBalance.killXp(10), greaterThan(kTrainingXpPerHour));
     });
 
     test('a boss is worth a multiple of an ordinary kill', () {
@@ -328,11 +330,10 @@ void main() {
           at: DateTime.now().subtract(const Duration(days: 1)),
         )
         ..add(GameEventKind.expedition, 'from tonight');
-      expect(
-        log.unreadEvents.map((e) => e.message),
-        ['from tonight', 'from yesterday'],
-        reason: 'age does not decide what is new — being read does',
-      );
+      expect(log.unreadEvents.map((e) => e.message), [
+        'from tonight',
+        'from yesterday',
+      ], reason: 'age does not decide what is new — being read does');
       log.markAllRead();
       expect(log.unreadEvents, isEmpty);
     });

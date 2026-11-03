@@ -44,6 +44,9 @@ class SettlementService {
         // fish is the one good with a LEGACY column (migration 0006 kept it
         // rather than drop it).
         'fish': kJumpstartGiftFish,
+        // Covers the Healing Hut step's own "finish now" gold-rush button (1
+        // gold) with slack — see kJumpstartGiftGold.
+        'gold': kJumpstartGiftGold,
       }),
       // steps_today/steps_day_key default to 0/'' — a fresh settlement
       // simply hasn't walked yet today, which reads as the floor rate until
@@ -346,7 +349,7 @@ class SettlementService {
           // Keep in sync with getOrCreate's starting bill above.
           wood: floor(750),
           stone: floor(300),
-          gold: floor(0),
+          gold: floor(kJumpstartGiftGold),
           goods: const {'fish': kJumpstartGiftFish},
           lastUpdatedAt: now,
         ),
@@ -394,13 +397,32 @@ class SettlementService {
         'dungeon_max_stage': 1,
         'expansions_unlocked': 0,
         'battles_cleared': 0,
-        'survival_best_floor': 0,
-        'intro_step': IntroStep.pickStarter.index,
+        // welcome (step 0), matching _createProfileRow's own seeding for a
+        // genuinely new account — this had drifted to pickStarter (step 1),
+        // silently skipping the "Welcome to Boddy Builder" card on every
+        // reset even though this doc comment already promised "step 0" and
+        // the confirm dialog promises "The intro starts over" (user report
+        // 2026-09-30: resetting progress did not restart the tutorial).
+        'intro_step': IntroStep.welcome.index,
       });
     } catch (_) {
       // Pre-migration deployment: drop the columns that may not exist yet
       // rather than losing the whole profile reset.
       await write({'dungeon_max_stage': 1});
+    }
+    // survival_best_floor (migration 0042) written SEPARATELY (user report
+    // 2026-09-30: reset restarted neither the intro nor the path's cleared
+    // battles). Bundled into the write above, this column's absence on a DB
+    // that hasn't had 0042 applied yet (PGRST204 "Could not find the
+    // 'survival_best_floor' column") failed Postgrest's validation for the
+    // WHOLE request, so it fell to the fallback that writes only
+    // dungeon_max_stage — silently reverting intro_step and battles_cleared
+    // too, even though both columns are fine on their own. Same tolerance
+    // style as saveSurvivalBestFloor's own isMissingSchema guard.
+    try {
+      await write({'survival_best_floor': 0});
+    } catch (e) {
+      if (!isMissingSchema(e)) rethrow;
     }
   }
 
@@ -517,6 +539,39 @@ class SettlementService {
       await supabase.from('profiles').upsert({
         'id': userId,
         'battles_cleared': count,
+      });
+    } catch (e) {
+      if (!isMissingSchema(e)) rethrow;
+    }
+  }
+
+  /// The best stars per campaign battle ({battle number: 1–3}). Empty when the
+  /// column is not migrated yet (migration 0058) or the row has none.
+  Future<Map<int, int>> loadBattleStars(String userId) async {
+    try {
+      final row = await supabase
+          .from('profiles')
+          .select('battle_stars')
+          .eq('id', userId)
+          .maybeSingle();
+      final raw = row?['battle_stars'];
+      if (raw is! Map) return {};
+      return {
+        for (final e in raw.entries)
+          if (int.tryParse('${e.key}') != null && e.value is num)
+            int.parse('${e.key}'): (e.value as num).toInt().clamp(0, 3),
+      };
+    } catch (e) {
+      if (!isMissingSchema(e)) debugPrint('[SettlementService] stars: $e');
+      return {};
+    }
+  }
+
+  Future<void> saveBattleStars(String userId, Map<int, int> stars) async {
+    try {
+      await supabase.from('profiles').upsert({
+        'id': userId,
+        'battle_stars': {for (final e in stars.entries) '${e.key}': e.value},
       });
     } catch (e) {
       if (!isMissingSchema(e)) rethrow;

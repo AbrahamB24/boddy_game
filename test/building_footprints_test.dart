@@ -44,8 +44,8 @@ void main() {
       // silently dropped.
     });
 
-    test('only buildings that need no YARD take less ground than a dwelling',
-        () {
+    test('only buildings that need no YARD take no more ground than a '
+        'dwelling', () {
       // ── This rule was "the hut is the smallest building" (2026-08-09) ──
       // It stopped being true when footprints stopped being fixed and the
       // The Small House grew to 3 × 3 to hold a den, a fungus and a nest. What
@@ -63,11 +63,23 @@ void main() {
       // chain, the padlock and the hoard have a yard to be guarded in. That
       // is a building with something outside it, so it belongs with the
       // dwellings rather than with the boxes.
+      //
+      // ── Small House back to 2x2 (user 2026-09-29) ──
+      // Part of rescaling every building's door/window/torch hardware to the
+      // Castle's own proportions; the model (and its door) were rescaled to
+      // fit 2x2 without going back to being "a dark lump with no yard"
+      // (2026-08-09, the reason it had grown to 3x3 in the first place). That
+      // ties it with Scout Post, Warehouse and Smokehouse's own 2x2
+      // footprints instead of beating them, so those three move out of the
+      // strict "smaller" set into their own tie check below.
       final smaller = kFallbackBuildingDefs.values
           .where((d) => d.gridW * d.gridH < _cells('small_house'))
           .map((d) => d.id)
           .toSet();
-      expect(smaller, {'road', 'scout_post', 'warehouse', 'smokehouse'});
+      expect(smaller, {'road'});
+      for (final id in ['scout_post', 'warehouse', 'smokehouse']) {
+        expect(_cells(id), equals(_cells('small_house')), reason: id);
+      }
       expect(_cells('road'), lessThan(_cells('small_house')));
     });
 

@@ -714,12 +714,44 @@ List<String> describeAbilityEffect(AbilityEffect e) {
 }
 
 /// The one-line form of [describeAbilityEffect] — for a list row or a tooltip.
+///
+/// Plain words, not a string of numbers (user 2026-09-28: "die Beschreibung der
+/// Attacken ist immer noch schwer zu verstehen"): WHAT the number is, for how
+/// long, and how likely it is to land — "🔥 Burn: 10 % of max HP each turn for
+/// 3 turns · 50 % chance", not "🔥 Burn 10 % · 3 turns · 50 %".
 String summariseAbilityEffect(AbilityEffect e) {
   final v = _pct(e.resolvedValue);
   final t = e.resolvedTurns;
+  final turns = _turns(t);
+  final what = switch (e.kind) {
+    AbilityEffectKind.burn => '$v of max HP each turn for $turns',
+    AbilityEffectKind.poison => '$v of max HP, growing each turn, for $turns',
+    AbilityEffectKind.frost || AbilityEffectKind.slow => '−$v speed for $turns',
+    AbilityEffectKind.freeze ||
+    AbilityEffectKind.petrify ||
+    AbilityEffectKind.paralysis ||
+    AbilityEffectKind.fear ||
+    AbilityEffectKind.sleep => '$v chance to lose each turn, for $turns',
+    AbilityEffectKind.soaked ||
+    AbilityEffectKind.attackDown => 'deals $v less damage for $turns',
+    AbilityEffectKind.dazzled ||
+    AbilityEffectKind.blind => '$v more misses for $turns',
+    AbilityEffectKind.confusion =>
+      '$v chance to hit itself each turn, for $turns',
+    AbilityEffectKind.defenseDown => 'takes $v more damage for $turns',
+    AbilityEffectKind.regression => '−$v attack, defense, speed for $turns',
+    AbilityEffectKind.heal => 'restores $v of max HP',
+    AbilityEffectKind.regen => 'heals $v of max HP each turn for $turns',
+    AbilityEffectKind.lifesteal => 'heals $v of the damage dealt',
+    AbilityEffectKind.armor => '+$v defense for $turns',
+    AbilityEffectKind.rage => '+$v attack for $turns',
+    AbilityEffectKind.haste => '+$v speed for $turns',
+    AbilityEffectKind.recoil => 'user takes $v of the damage dealt',
+    AbilityEffectKind.selfDefDown => 'user loses $v defense for $turns',
+    AbilityEffectKind.selfSpeedDown => 'user loses $v speed for $turns',
+  };
   final chance = e.kind.rollsChance && e.resolvedChance < 1
-      ? ' · ${_pct(e.resolvedChance)}'
+      ? ' · ${_pct(e.resolvedChance)} to land'
       : '';
-  final dur = e.kind.isTimed ? ' · ${_turns(t)}' : '';
-  return '${e.kind.emoji} ${e.kind.label} $v$dur$chance';
+  return '${e.kind.emoji} ${e.kind.label}: $what$chance';
 }

@@ -7,6 +7,7 @@ import '../settlement/services/settlement_read_service.dart';
 import '../settlement/sheets/building_info_popup.dart';
 import '../settlement/widgets/visit_settlement_map.dart';
 import 'widgets/social_kit.dart';
+import '../../core/theme/voxel_kit.dart' show vr;
 
 /// A friend's city, read-only (user 2026-09-19, Holz palette): the real map
 /// fills the screen with a dark name plate at the top left — who, and their
@@ -121,7 +122,7 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
     height: 46,
     padding: const EdgeInsets.fromLTRB(8, 0, 16, 0),
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: vr(14),
       gradient: const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
@@ -138,7 +139,7 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
         const SizedBox(width: 10),
         Text(
           "${widget.friendName}'s city",
-          style: FoE.title(size: 15).copyWith(color: const Color(0xFFF6E7CC)),
+          style: FoE.title(size: 15).copyWith(color: CreamPalette.paperTop),
         ),
         if (widget.record != null) ...[
           const SizedBox(width: 10),
@@ -146,7 +147,7 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
             'Rating ${widget.record}',
             style: FoE.dim(
               size: 11,
-            ).copyWith(color: const Color(0xFFF6E7CC).withValues(alpha: 0.66)),
+            ).copyWith(color: CreamPalette.paperTop.withValues(alpha: 0.66)),
           ),
         ],
       ],
@@ -158,11 +159,11 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xD12A1A0C),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: vr(12),
       ),
       child: Text(
         "Tap a building to look inside · visitors can't change anything",
-        style: FoE.label(size: 11.5).copyWith(color: const Color(0xFFF6E7CC)),
+        style: FoE.label(size: 11.5).copyWith(color: CreamPalette.paperTop),
       ),
     ),
   );
@@ -175,7 +176,7 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
           child: Text(
             _error!,
             textAlign: TextAlign.center,
-            style: FoE.label().copyWith(color: const Color(0xFFF6E7CC)),
+            style: FoE.label().copyWith(color: CreamPalette.paperTop),
           ),
         ),
       );

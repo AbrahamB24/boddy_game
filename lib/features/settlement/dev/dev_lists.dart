@@ -17,6 +17,8 @@ import '../widgets/building_icon.dart';
 import 'area_def_form.dart';
 import 'building_def_form.dart';
 import 'item_def_form.dart';
+import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_icons.dart';
 
 // ── The Dev menu's lists, "Variante 3": list left, form right ──────────────
 // (user 2026-09-20). A list on a narrow cream card, and beside it a pane that
@@ -78,7 +80,7 @@ class _DevMasterDetailState extends State<DevMasterDetail> {
       Expanded(
         child: creamCard(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: vr(13),
             child: Navigator(
               key: _nav,
               observers: [_observer],
@@ -131,7 +133,7 @@ class DevSearch extends StatelessWidget {
     alignment: Alignment.center,
     decoration: BoxDecoration(
       color: Colors.white.withValues(alpha: 0.5),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: vr(10),
       border: Border.all(
         color: CreamPalette.tan.withValues(alpha: 0.55),
         width: 1.5,
@@ -139,7 +141,7 @@ class DevSearch extends StatelessWidget {
     ),
     child: Row(
       children: [
-        Icon(Icons.search, size: 15, color: kBoxInkFaint),
+        PixelIcon(Icons.search, size: 15, color: kBoxInkFaint),
         const SizedBox(width: 6),
         Expanded(
           child: TextField(
@@ -179,7 +181,7 @@ class DevDrop<T> extends StatelessWidget {
     padding: const EdgeInsets.only(left: 9, right: 4),
     decoration: BoxDecoration(
       color: Colors.white.withValues(alpha: 0.5),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: vr(10),
       border: Border.all(
         color: CreamPalette.tan.withValues(alpha: 0.55),
         width: 1.5,
@@ -193,7 +195,7 @@ class DevDrop<T> extends StatelessWidget {
         isDense: true,
         isExpanded: true,
         iconSize: 18,
-        icon: Icon(Icons.arrow_drop_down, color: kBoxInkFaint),
+        icon: PixelIcon(Icons.arrow_drop_down, color: kBoxInkFaint),
         dropdownColor: CreamPalette.paperBottom,
         style: const TextStyle(
           fontSize: 11.5,
@@ -280,7 +282,7 @@ Widget devRow({
             ),
           ),
         const SizedBox(width: 2),
-        Icon(Icons.chevron_right, size: 16, color: kBoxInkFaint),
+        PixelIcon(Icons.chevron_right, size: 16, color: kBoxInkFaint),
       ],
     ),
   ),
@@ -291,7 +293,7 @@ const Widget devRedDot = SizedBox(
   width: 8,
   height: 8,
   child: DecoratedBox(
-    decoration: BoxDecoration(color: Color(0xFFC9432B), shape: BoxShape.circle),
+    decoration: BoxDecoration(color: Color(0xFFC9432B), shape: BoxShape.rectangle),
   ),
 );
 

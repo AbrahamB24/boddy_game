@@ -1,0 +1,60 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tidelord animations</title>
+<style>
+  body { margin: 0; background: #1d2530; color: #dbe6ef; font: 14px system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+  canvas { display: block; margin: 12px auto; background: #2a3441; border-radius: 8px; max-width: 100%; }
+  .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 8px 0; align-items: center; }
+  .row span { opacity: .6; min-width: 64px; text-align: right; }
+  button { background: #2f3d4f; color: inherit; border: 1px solid #44566d; border-radius: 6px; padding: 8px 14px; cursor: pointer; font: inherit; }
+  button.on { background: #4aa5da; color: #0b1d3d; border-color: #4aa5da; }
+  small { display: block; text-align: center; opacity: .7; }
+</style>
+<main>
+  <h1 style="text-align:center;font-size:20px">Tidelord, Stufe 0</h1>
+  <canvas id="c"></canvas>
+  <div class="row"><span>Ansicht</span><div id="views" class="row" style="margin:0"></div></div>
+  <div class="row" id="rowdir"><span>Richtung</span><div id="dirs" class="row" style="margin:0"></div></div>
+  <div class="row"><span>Animation</span><div id="anims" class="row" style="margin:0"></div></div>
+  <small id="info"></small>
+</main>
+<script>
+const COLS = 8;
+const mk = (sheet, frames, fps, loop) => ({sheet, frames, fps, loop});
+const MAP = { frame_w: 544, frame_h: 435, anims: {} };
+for (const d of ['se', 'ne', 'nw', 'sw'])
+  MAP.anims[d] = { walk: mk(`${d}_walk.png`, 8, 10, true), idle: mk(`${d}_idle.png`, 8, 8, true) };
+const BATTLE = (v) => ({ frame_w: 560, frame_h: 448, anims: { '-': {
+  idle: mk(`${v}_idle.png`, 16, 12, true), attack: mk(`${v}_attack.png`, 14, 16, false), hurt: mk(`${v}_hurt.png`, 10, 14, false) } } });
+const VIEWS = { 'Karte': MAP, 'Kampf vorne': BATTLE('front'), 'Kampf hinten': BATTLE('back') };
+const cv = document.getElementById('c'), cx = cv.getContext('2d');
+const imgs = {}; let view = 'Karte', dir = 'se', anim = 'walk', frame = 0, acc = 0, last = 0, hold = 0;
+const img = s => imgs[s] || (imgs[s] = Object.assign(new Image(), { src: s }));
+function cur() { const V = VIEWS[view]; const d = V.anims[dir] ? dir : Object.keys(V.anims)[0]; dir = d;
+  const a = V.anims[d][anim] ? anim : Object.keys(V.anims[d])[0]; anim = a; return [V, V.anims[d][a]]; }
+function btns(id, items, get, set) { const el = document.getElementById(id); el.innerHTML = '';
+  items.forEach(k => { const b = document.createElement('button'); b.textContent = k; b.className = get() === k ? 'on' : '';
+    b.onclick = () => { set(k); frame = 0; hold = 0; ui(); }; el.appendChild(b); }); }
+function ui() {
+  btns('views', Object.keys(VIEWS), () => view, v => view = v);
+  const V = VIEWS[view]; cur();
+  document.getElementById('rowdir').style.display = Object.keys(V.anims).length > 1 ? '' : 'none';
+  btns('dirs', Object.keys(V.anims), () => dir, d => dir = d);
+  btns('anims', Object.keys(V.anims[dir]), () => anim, a => anim = a);
+  const [, a] = cur();
+  document.getElementById('info').textContent = `${a.frames} Frames, ${a.fps} fps, ` + (a.loop ? 'Schleife' : 'einmalig, dann Ruhepose');
+  cv.width = V.frame_w; cv.height = V.frame_h;
+}
+function tick(ts) {
+  const [V, a] = cur(); acc += ts - last; last = ts; const step = 1000 / a.fps;
+  while (acc >= step) { acc -= step;
+    if (hold > 0) { if (--hold === 0) { anim = 'idle'; frame = 0; ui(); } continue; }
+    frame++; if (frame >= a.frames) { if (a.loop) frame = 0; else { frame = a.frames - 1; hold = 8; } } }
+  const [V2, a2] = cur(); cx.clearRect(0, 0, cv.width, cv.height);
+  const im = img(a2.sheet), f = Math.min(frame, a2.frames - 1);
+  if (im.complete && im.naturalWidth) cx.drawImage(im, (f % COLS) * V2.frame_w, Math.floor(f / COLS) * V2.frame_h, V2.frame_w, V2.frame_h, 0, 0, V2.frame_w, V2.frame_h);
+  requestAnimationFrame(tick);
+}
+ui(); requestAnimationFrame(tick);
+</script>

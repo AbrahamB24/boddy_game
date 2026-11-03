@@ -1,0 +1,31 @@
+{
+  "monster": "tidelord",
+  "view": "front",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anchor": [
+    274,
+    387
+  ],
+  "anims": {
+    "idle": {
+      "sheet": "front_idle.png",
+      "frames": 16,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "front_attack.png",
+      "frames": 14,
+      "fps": 16,
+      "loop": false
+    },
+    "hurt": {
+      "sheet": "front_hurt.png",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+}

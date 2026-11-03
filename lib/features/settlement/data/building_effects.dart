@@ -41,6 +41,19 @@ import '../../creatures/models/creature_enums.dart' show CreatureStat;
 // stationed monsters that earned nothing, and adding an `xp` line to each would
 // have left fifty numbers to keep equal by hand.
 
+/// What a post's output grows by with every building level: +5 %, compounding
+/// (user 2026-09-28: "Gebäude sollte immer n% durch jede Stufe bei den Effekten
+/// steigen … dadurch soll es sinnvoll sein, die Gebäude upzugraden und nicht
+/// jeweils ein neues zu bauen").
+///
+/// Every worker post uses it — production, build speed, healing, trade, breeding,
+/// hatching, crafting, the trips' amplifiers — on top of the new monster seats a
+/// level unlocks (the seats stay the main gain: they are absolute steps, this is
+/// the percentage on each seat). A resource trickle and a store's room already
+/// carry their own per-level percentages, and housing, queue/build slots and hunt
+/// options stay absolute on purpose: a home for 7 monsters is not "+5 %".
+const double kWorkerLevelGrowth = 1.05;
+
 /// One building's authored effects, split the way BuildingDef stores them.
 class BuildingEffects {
   /// Work posts — creatures stationed here and what their stat produces.
@@ -109,7 +122,13 @@ WorkshopRole _mergeWorkshop(WorkshopRole code, WorkshopRole? db) => db == null
         resource: code.resource,
         mult: db.mult,
         slots: db.slots,
-        levelFactor: db.levelFactor,
+        // A row saved while every post was flat (1) — or with no factor at all —
+        // adopts the code's percentage, or the new growth would never reach a
+        // settlement whose rows predate it. Any OTHER number is a deliberate
+        // Dev-Mode tuning and stays.
+        levelFactor: db.levelFactor == null || db.levelFactor == 1
+            ? code.levelFactor
+            : db.levelFactor,
         slotSteps: db.slotSteps,
         mults: db.mults.isEmpty ? code.mults : db.mults,
       );
@@ -298,7 +317,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: 'wood',
         mult: 2,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1, 9: 1, 10: 1},
       ),
     ],
@@ -310,7 +329,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: 'wood',
         mult: 2,
         slots: 2,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {2: 2, 3: 2, 4: 2, 5: 2, 6: 2, 7: 2, 8: 2, 9: 2, 10: 2},
       ),
     ],
@@ -322,7 +341,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: 'stone',
         mult: 2,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1, 9: 1, 10: 1},
       ),
     ],
@@ -334,7 +353,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: 'stone',
         mult: 2,
         slots: 2,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {2: 2, 3: 2, 4: 2, 5: 2, 6: 2, 7: 2, 8: 2, 9: 2, 10: 2},
       ),
     ],
@@ -342,10 +361,14 @@ final Map<String, BuildingEffects> kBuildingEffects = {
   'small_house': BuildingEffects(
     effects: [
       BuildingEffect(type: 'housing', value: 2, levelSteps: {5: 1, 10: 1}),
+      // Gold 1 → 0.25 /h (gold balance pass 2026-11-02): houses are built by
+      // the dozen, so a flat 1 /h each was a ~250 🪙/day income for doing
+      // nothing — more than every earned source together.
+      // supabase/balance_gold_2026_11.sql carries it to the live rows.
       BuildingEffect(
         type: 'production',
         key: 'gold',
-        value: 1,
+        value: 0.25,
         levelFactor: 1.12,
       ),
     ],
@@ -357,10 +380,11 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         value: 5,
         levelSteps: {4: 7, 7: 9, 10: 11},
       ),
+      // Gold 1 → 0.25 /h — see small_house.
       BuildingEffect(
         type: 'production',
         key: 'gold',
-        value: 1,
+        value: 0.25,
         levelFactor: 1.1,
       ),
     ],
@@ -372,7 +396,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: 'fish',
         mult: 0.5,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1, 9: 1, 10: 1},
       ),
     ],
@@ -384,7 +408,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: 'meat',
         mult: 0.5,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1, 9: 1, 10: 1},
       ),
     ],
@@ -440,7 +464,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: WorkshopRole.kConstruction,
         mult: 0.5,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {
           2: 1,
           4: 1,
@@ -476,7 +500,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: WorkshopRole.kHealSpeed,
         mult: 0.00053,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {
           2: 1,
           4: 1,
@@ -542,7 +566,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: WorkshopRole.kTradeRate,
         mult: 0.002,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {
           2: 1,
           3: 1,
@@ -579,7 +603,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: WorkshopRole.kBreeding,
         mult: 1,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {
           2: 1,
           3: 1,
@@ -618,7 +642,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: WorkshopRole.kHatching,
         mult: 1,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {
           2: 1,
           3: 1,
@@ -672,7 +696,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         stat: CreatureStat.speed,
         resource: WorkshopRole.kExpedition,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         mults: {'travel': 0.0015, 'carry': 0.01, 'goods': 0},
         slotSteps: {
           2: 1,
@@ -743,7 +767,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         stat: CreatureStat.carry,
         resource: WorkshopRole.kCaravan,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         mults: {'carry': 0.003, 'travel': 0.002},
         slotSteps: {
           2: 1,
@@ -843,7 +867,7 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         resource: WorkshopRole.kCrafting,
         mult: 40,
         slots: 1,
-        levelFactor: 1,
+        levelFactor: kWorkerLevelGrowth,
         slotSteps: {
           2: 1,
           3: 1,
