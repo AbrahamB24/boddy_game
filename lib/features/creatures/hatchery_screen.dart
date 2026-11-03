@@ -24,6 +24,7 @@ import 'services/breeding_controller.dart';
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/egg_card.dart';
+import 'widgets/gene_bar_toggle.dart';
 import '../../core/theme/voxel_icons.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 
@@ -185,6 +186,13 @@ class _HatcheryPaneState extends State<HatcheryPane> {
 
   /// The egg whose tile is lit — from the Bag's tap, or the one just looked at.
   String? _selectedEggId;
+
+  /// The gene panel's two switches, as on the Breeding tab: 0 = now, 1 =
+  /// level 1, 2 = the maximum (an egg's "now" IS level 1) …
+  int _refIndex = 1;
+
+  /// … and whether the bars draw the growth gene instead of the value.
+  bool _barsShowGrowth = false;
 
   @override
   void initState() {
@@ -898,13 +906,21 @@ class _HatcheryPaneState extends State<HatcheryPane> {
     }
     const stats = CreatureStat.values;
     final half = (stats.length / 2).ceil();
-    // BARS, as on the Breeding tab (user 2026-11-03: "kannst du hier nicht
-    // auch die Balken nehmen?"). ONE scale for all 14 — this egg's biggest
-    // gene — so a bar reads against every other row, not just its own.
-    final maxGene = stats.fold<double>(
-      0.001,
-      (m, s) => math.max(m, job.childBase[s] ?? 0),
+    // THE BREEDING TAB'S TWO SWITCHES (user 2026-11-03): which level the
+    // values are worked out at, and which gene the bars draw. An egg has not
+    // hatched, so "Now" is level 1.
+    final level = _refIndex == 2 ? kCreatureMaxLevel : 1;
+    int valueOf(CreatureStat s) => math.max(
+      1,
+      ((job.childBase[s] ?? 10) + (job.childSlope[s] ?? 1) * (level - 1))
+          .round(),
     );
+    double barOf(CreatureStat s) =>
+        _barsShowGrowth ? (job.childSlope[s] ?? 0) : valueOf(s).toDouble();
+    // BARS (user 2026-11-03: "kannst du hier nicht auch die Balken nehmen?").
+    // ONE scale for all 14 — this egg's biggest — so a bar reads against
+    // every other row, not just its own.
+    final maxGene = stats.fold<double>(0.001, (m, s) => math.max(m, barOf(s)));
     Widget cell(CreatureStat s) => Container(
       decoration: BoxDecoration(
         border: Border(
@@ -913,61 +929,94 @@ class _HatcheryPaneState extends State<HatcheryPane> {
       ),
       // The bar runs UNDER the name and the numbers, over the cell's whole
       // width — beside them it got barely 10 px of a ~195 px column.
+      // The text row TAKES what the bar leaves, so a cell never overflows
+      // however the panel's height splits seven ways.
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  s.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: FoE.dim(
-                    size: 14,
-                  ).copyWith(color: kBoxInkSoft, height: 1),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    s.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: FoE.dim(
+                      size: 14,
+                    ).copyWith(color: kBoxInkSoft, height: 1),
+                  ),
                 ),
-              ),
-              Text(
-                '${(job.childBase[s] ?? 0).round()}',
-                style: FoE.value(size: 17).copyWith(color: kBoxInk, height: 1),
-              ),
-              SizedBox(
-                width: 40,
-                child: Text(
-                  '+${(job.childSlope[s] ?? 0).toStringAsFixed(1)}',
-                  textAlign: TextAlign.right,
-                  style: FoE.dim(
-                    size: 13,
-                  ).copyWith(color: kBoxInkFaint, height: 1),
+                Text(
+                  '${valueOf(s)}',
+                  style: FoE.value(
+                    size: 17,
+                  ).copyWith(color: kBoxInk, height: 1),
                 ),
-              ),
-            ],
+                SizedBox(
+                  width: 40,
+                  child: Text(
+                    '+${(job.childSlope[s] ?? 0).toStringAsFixed(1)}',
+                    textAlign: TextAlign.right,
+                    style: FoE.dim(
+                      size: 13,
+                    ).copyWith(color: kBoxInkFaint, height: 1),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 3),
           RecessBar(
-            value: ((job.childBase[s] ?? 0) / maxGene).clamp(0.0, 1.0),
+            value: (barOf(s) / maxGene).clamp(0.0, 1.0),
             color: CreamPalette.accent,
             height: 6,
             onDark: false,
           ),
+          const SizedBox(height: 3),
         ],
       ),
     );
     Widget column(Iterable<CreatureStat> list) =>
         Column(children: [for (final s in list) Expanded(child: cell(s))]);
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(child: column(stats.take(half))),
-        const SizedBox(width: 18),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            LevelRefToggle(
+              index: _refIndex,
+              onChanged: (i) => setState(() => _refIndex = i),
+              ink: kBoxInk,
+              inkFaint: kBoxInkFaint,
+              accent: CreamPalette.accent,
+            ),
+            const SizedBox(width: 8),
+            GeneBarToggle(
+              showGrowth: _barsShowGrowth,
+              onChanged: (v) => setState(() => _barsShowGrowth = v),
+              ink: kBoxInk,
+              inkFaint: kBoxInkFaint,
+              accent: CreamPalette.accent,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
         Expanded(
-          child: Column(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final s in stats.skip(half)) Expanded(child: cell(s)),
-              // Keeps both columns' rows the same height when the count is odd.
-              for (var i = stats.length - half; i < half; i++)
-                const Expanded(child: SizedBox()),
+              Expanded(child: column(stats.take(half))),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  children: [
+                    for (final s in stats.skip(half)) Expanded(child: cell(s)),
+                    // Keeps both columns' rows level when the count is odd.
+                    for (var i = stats.length - half; i < half; i++)
+                      const Expanded(child: SizedBox()),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
