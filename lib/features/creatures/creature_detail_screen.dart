@@ -490,7 +490,10 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           }
           final species = creature.species;
           final element = species?.element.color ?? CreamPalette.tan;
-          _vox = species?.id == 'tidelord';
+          // EVERY species now (user 2026-11-03: "der Monsterdetailscreen soll
+          // noch überall angepasst werden wie bei tidelord") — only the art's
+          // own scale-up stays Tidelord's, see [_leftArt].
+          _vox = true;
           _elem = element;
           return Stack(
             fit: StackFit.expand,
@@ -718,7 +721,9 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         element: creature.species?.element ?? CreatureElement.fire,
         decodeSize: constraints.maxHeight,
       );
-      if (!_vox) return figure;
+      // The 1.3× lift is for the baked voxel renders, whose frames leave a
+      // wide margin round the monster; a plain sprite already fills its box.
+      if (!_vox || creature.speciesId != 'tidelord') return figure;
       // The three-step block plinth under the creature was removed (user
       // 2026-11-03: "Diese drei Balken können entfernt werden").
       return Stack(
@@ -828,17 +833,17 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                               color: Color(0xFF2FD37A),
                             )
                           : PixelIcon(
-                        Icons.arrow_upward_rounded,
-                        size: 20,
-                        color: Color(0xFF2FD37A),
-                        shadows: [
-                          Shadow(color: Color(0xCC000000), blurRadius: 3),
-                          Shadow(
-                            color: Color(0x99000000),
-                            offset: Offset(0, 1.5),
-                          ),
-                        ],
-                      ),
+                              Icons.arrow_upward_rounded,
+                              size: 20,
+                              color: Color(0xFF2FD37A),
+                              shadows: [
+                                Shadow(color: Color(0xCC000000), blurRadius: 3),
+                                Shadow(
+                                  color: Color(0x99000000),
+                                  offset: Offset(0, 1.5),
+                                ),
+                              ],
+                            ),
                     ),
                   ),
               ],
@@ -932,7 +937,11 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 child: Padding(
                   padding: EdgeInsets.only(left: 8),
                   child: _vox
-                      ? const VoxelIcon(VoxelGlyph.edit, size: 16, color: _inkDim)
+                      ? const VoxelIcon(
+                          VoxelGlyph.edit,
+                          size: 16,
+                          color: _inkDim,
+                        )
                       : PixelIcon(Icons.edit, size: 15, color: _inkDim),
                 ),
               ),
@@ -977,7 +986,10 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               Container(
                 width: 7,
                 height: 7,
-                decoration: BoxDecoration(color: dot, shape: BoxShape.rectangle),
+                decoration: BoxDecoration(
+                  color: dot,
+                  shape: BoxShape.rectangle,
+                ),
               ),
               const SizedBox(width: 5),
             ],
@@ -1484,7 +1496,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            if (beats) const PixelIcon(Icons.arrow_drop_up, size: 16, color: better),
+            if (beats)
+              const PixelIcon(Icons.arrow_drop_up, size: 16, color: better),
             Text(
               text,
               textAlign: TextAlign.right,
@@ -2418,10 +2431,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           alignment: Alignment.center,
           decoration: ShapeDecoration(
             color: filled ? color : Colors.transparent,
-            shape: _sh(
-              radius: 15,
-              side: BorderSide(color: color, width: 1.6),
-            ),
+            shape: _sh(radius: 15, side: BorderSide(color: color, width: 1.6)),
           ),
           child: Text(
             label,
@@ -2528,10 +2538,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       onTap: () => _usePotion(def, creature),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: ShapeDecoration(
-          color: element,
-          shape: _sh(radius: 12),
-        ),
+        decoration: ShapeDecoration(color: element, shape: _sh(radius: 12)),
         // "(N)" for how many are in storage now, not "×N" (user 2026-08-29:
         // "Anzahl nicht xn sondern die Anzahl im Lager befindlichen als (n)
         // schreiben") — [count] already IS the stored amount ([_settlement]

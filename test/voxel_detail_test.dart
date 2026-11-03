@@ -10,8 +10,8 @@ import 'package:boddygame/features/creatures/models/creature_instance.dart';
 import 'package:boddygame/features/creatures/models/species_def.dart';
 
 // The voxel skin of the monster detail screen (Tidelord): every tab must lay
-// out at the game's landscape size without an overflow, the skin must be on
-// for Tidelord and off for every other species, and the kit's own pieces must
+// out at the game's landscape size without an overflow, the skin is on for
+// every species (since 2026-11-03, was Tidelord only), and the kit's own pieces must
 // paint.
 void main() {
   SpeciesDef species(String id) => SpeciesDef(
@@ -75,7 +75,6 @@ void main() {
     await show(t, 'tidelord');
     expect(find.byType(VoxelBackdrop), findsOneWidget);
     expect(find.byType(VoxelIcon), findsWidgets);
-    expect(find.byType(VoxelPlinth), findsOneWidget);
     for (final tab in ['Stats', 'Evolution', 'Abilities', 'General']) {
       await t.tap(find.text(tab));
       await t.pump(const Duration(milliseconds: 400));
@@ -83,11 +82,16 @@ void main() {
     }
   });
 
-  testWidgets('any other species keeps the normal screen', (t) async {
+  testWidgets('every other species wears the voxel skin too', (t) async {
+    // User 2026-11-03: "der Monsterdetailscreen soll noch überall angepasst
+    // werden wie bei tidelord".
     await show(t, 'plain_one');
-    expect(find.byType(VoxelBackdrop), findsNothing);
-    expect(find.byType(VoxelPlinth), findsNothing);
-    expect(t.takeException(), isNull);
+    expect(find.byType(VoxelBackdrop), findsOneWidget);
+    for (final tab in ['Stats', 'Evolution', 'Abilities', 'General']) {
+      await t.tap(find.text(tab));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(t.takeException(), isNull, reason: tab);
+    }
   });
 
   testWidgets('the kit paints: shape, bar, icons', (t) async {
