@@ -71,17 +71,19 @@ void main() {
     await pump(t, const HatcheryScreen());
     // Opens on the Hatchery half.
     expect(find.text('Breeding & Hatchery'), findsOneWidget);
-    expect(find.textContaining('EGGS IN THE BAG'), findsOneWidget);
+    expect(find.textContaining('In the bag'), findsOneWidget);
     // The Breeding half is one tap away.
     await t.tap(find.text('Breeding Hut').first);
     await t.pumpAndSettle();
-    expect(find.text('MATING'), findsWidgets);
-    expect(find.textContaining('EGGS IN THE BAG'), findsNothing);
+    // The matings are a chip in the foot row now (2026-11-03).
+    expect(find.text('No pair mating'), findsWidgets);
+    expect(find.textContaining('In the bag'), findsNothing);
   });
 
   testWidgets('the Breeding Hut opens the Breeding half', (t) async {
     CreaturesController().creatures = [];
     await pump(t, const HatcheryScreen(startOn: NurseryTab.breeding));
-    expect(find.text('MATING'), findsWidgets);
+    // The matings are a chip in the foot row now (2026-11-03).
+    expect(find.text('No pair mating'), findsWidgets);
   });
 }
