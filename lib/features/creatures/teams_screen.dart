@@ -18,7 +18,7 @@ import 'widgets/creature_card.dart';
 import 'widgets/creature_family.dart';
 import 'widgets/picker_detail_panel.dart';
 import 'widgets/roster_row.dart';
-import '../../core/ui/pressable.dart';
+import '../../core/ui/pressable.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
 
@@ -163,7 +163,9 @@ class _TeamsScreenState extends State<TeamsScreen> {
               child: PixelIcon(
                 team.isActive ? Icons.star_rounded : Icons.star_border_rounded,
                 size: 22,
-                color: team.isActive ? CreamPalette.goldDeep : kBoxInkFaint,
+                // The buttons' light blue (user 2026-11-03), filled when
+                // active, outlined when not.
+                color: CreamPalette.gold,
               ),
             ),
           ),
@@ -213,7 +215,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                         acceptsDrop: true,
                         onDropped: (from) =>
                             _reorderSeat(team, members, from, k),
-                        child: _emptySeatBox(),
+                        child: _emptySeatBox(() => _editTeam(team)),
                       ),
                     )
                   else if (k < members.length)
@@ -241,7 +243,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                       draggable: false,
                       acceptsDrop: true,
                       onDropped: (from) => _reorderSeat(team, members, from, k),
-                      child: _emptySeatBox(),
+                      child: _emptySeatBox(() => _editTeam(team)),
                     ),
                   const SizedBox(width: 9),
                 ],
@@ -293,10 +295,18 @@ class _TeamsScreenState extends State<TeamsScreen> {
   /// The ONE empty-monster-slot look, app-wide (user 2026-08-30, reaffirmed
   /// 2026-10-04) — [EmptySeat] already is that shared widget; this just
   /// gives it the fixed size every seat in this row (filled or not) shares.
-  Widget _emptySeatBox() => SizedBox(
-    width: _kSeatSize,
-    height: _kSeatSize,
-    child: EmptySeat(radius: 10),
+  ///
+  /// A "+" invites a tap (user 2026-11-03: "der plus button ist nicht
+  /// anwählbar"), so it opens this team in the editor, where the seat is
+  /// filled.
+  Widget _emptySeatBox(VoidCallback onTap) => Pressable(
+    behavior: HitTestBehavior.opaque,
+    onTap: onTap,
+    child: SizedBox(
+      width: _kSeatSize,
+      height: _kSeatSize,
+      child: EmptySeat(radius: 10),
+    ),
   );
 
   /// Wraps a seat so it can be dragged (if [draggable], long-press) and/or
