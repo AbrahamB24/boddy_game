@@ -1870,7 +1870,7 @@ class SettlementMapState extends State<SettlementMap>
                   ),
                   fit: BoxFit.fill,
                   filterQuality: FilterQuality.medium,
-                  cacheWidth: 256,
+                  cacheWidth: kRoadDecodeWidth,
                   errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
               ),
@@ -2700,7 +2700,7 @@ class _BuildingTile extends StatelessWidget {
         // size and then drawing it at a tenth of that is the same texture
         // waste the buildings had — and there are far more road cells than
         // buildings. 256 keeps it sharp at the map's maximum zoom.
-        cacheWidth: 256,
+        cacheWidth: kRoadDecodeWidth,
         // The flat diamond is still the floor under this: an asset that failed
         // to load must not leave a hole where a road is, because the road is
         // what the player just paid for and placed.

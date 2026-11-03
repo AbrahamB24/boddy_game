@@ -160,7 +160,7 @@ class _VisitSettlementMapState extends State<VisitSettlementMap> {
         height: kIsoTileH,
         fit: BoxFit.fill,
         filterQuality: FilterQuality.medium,
-        cacheWidth: 256,
+        cacheWidth: kRoadDecodeWidth,
         errorBuilder: (_, _, _) => ColoredBox(color: def.color),
       );
     }

@@ -116,7 +116,7 @@ void main() {
       for (var mask = 0; mask < 16; mask++) {
         final f = File(roadAsset(mask));
         expect(f.existsSync(), isTrue, reason: '${f.path} is missing — '
-            'render it with tool/blender/roads.py');
+            'render it with tool/blender/make_roads.py');
         // A 256x128 quantised render is a few KB; anything tiny is a truncated
         // or empty write, which would show on the map as a hole in the road.
         expect(f.lengthSync(), greaterThan(1024), reason: f.path);

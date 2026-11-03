@@ -9,7 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/ui/feel.dart';
 import '../creatures/services/creatures_controller.dart';
 import '../creatures/widgets/monster_sheet.dart' show precacheMonsterSheets;
-import 'data/road_tiles.dart' show roadAsset;
+import 'data/road_tiles.dart' show roadAsset, kRoadDecodeWidth;
 import 'data/resource_icons.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/theme/cream_kit.dart';
@@ -287,7 +287,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     for (var mask = 0; mask < 16; mask++) {
       local.add(
         precacheImage(
-          ResizeImage(AssetImage(roadAsset(mask)), width: 256),
+          ResizeImage(AssetImage(roadAsset(mask)), width: kRoadDecodeWidth),
           context,
         ),
       );

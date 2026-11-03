@@ -1,4 +1,6 @@
-"""Every road piece, one render each, named by the neighbours it joins.
+"""SUPERSEDED (2026-11-03) by make_roads.py — the Fachwerk-world roads.
+
+Every road piece, one render each, named by the neighbours it joins.
 
     blender --background --python tool/blender/roads.py -- \
         --out docs/renders/roads

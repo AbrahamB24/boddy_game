@@ -11,7 +11,7 @@ import 'building_definitions.dart' show kGridCols, kGridRows;
 //
 // So nothing is authored per junction and nothing can be laid the wrong way
 // round. The player paints cells; the mask falls out of which cells exist, and
-// the mask IS the file name. tool/blender/roads.py renders the same sixteen
+// the mask IS the file name. tool/blender/make_roads.py renders the same sixteen
 // from the same bit order — the two files have to agree, and this comment is
 // the only place that says so.
 
@@ -59,3 +59,10 @@ int roadMask(Set<int> roadCells, int x, int y) {
 /// authored content — no levels, no effects, no per-region variant.
 String roadAsset(int mask) =>
     'assets/images/roads/road_${mask.toString().padLeft(2, '0')}.webp';
+
+/// How wide a road tile is DECODED — its whole shipped width (user
+/// 2026-11-03: the Fachwerk roads ship at 320 px, tool/blender/make_roads.py).
+/// At the map's closest zoom a cell is 160 logical px, 320 device px on a 2x
+/// screen. Every place that decodes a road tile uses this one number, so the
+/// loading screen's precache hits the same cache entry the map draws from.
+const int kRoadDecodeWidth = 320;
