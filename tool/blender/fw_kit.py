@@ -233,9 +233,12 @@ def flowers(face, fixed, a, z, w, cols):
 
 def door(M, face, fixed, a, w, h, z0):
     """A plank door in a timber case, iron straps, ring handle, stone step."""
+    # Every layer stands at least ~1.5 voxels proud of the one behind it:
+    # the voxeliser gives each block the material of the NEAREST surface, and
+    # a door leaf 5 mm in front of the plaster came out as a patchwork of both.
     t = 0.04
-    off = 0.012
-    rbox(P(face, fixed, a, z0 + h / 2, -0.01), D(face, w, 0.03, h), (0, 0, 0),
+    off = 0.016
+    rbox(P(face, fixed, a, z0 + h / 2, 0.006), D(face, w, 0.04, h), (0, 0, 0),
          M['planks'])
     for da in (-w / 2 - t / 2, w / 2 + t / 2):
         beam(P(face, fixed, a + da, z0, off), P(face, fixed, a + da, z0 + h + t / 2, off),
@@ -243,10 +246,10 @@ def door(M, face, fixed, a, w, h, z0):
     beam(P(face, fixed, a - w / 2 - t / 2, z0 + h + t / 2, off),
          P(face, fixed, a + w / 2 + t / 2, z0 + h + t / 2, off), t * 1.1, M['timber'])
     for fz in (0.2, 0.75):
-        beam(P(face, fixed, a - w / 2, z0 + h * fz, 0.006),
-             P(face, fixed, a + w / 2, z0 + h * fz, 0.006), 0.02, M['iron'],
+        beam(P(face, fixed, a - w / 2, z0 + h * fz, 0.03),
+             P(face, fixed, a + w / 2, z0 + h * fz, 0.03), 0.02, M['iron'],
              bevel=0)
-    c = P(face, fixed, a + w * 0.3, z0 + h * 0.5, 0.012)
+    c = P(face, fixed, a + w * 0.3, z0 + h * 0.5, 0.034)
     ellipsoid(c.x, c.y, c.z, 0.012, 0.012, 0.012, M['iron'], seg=8, rings=6)
     rbox(P(face, fixed, a, z0 - 0.012, 0.09), D(face, w + 0.2, 0.18, 0.045),
          (0, 0, 0), M['stone'])
@@ -288,6 +291,25 @@ def gable_roof(M, cx, cy, z0, length, span, axis, mat, oh=0.15, oe=0.16,
     return zr
 
 
+def gable_fill(M, face, fixed, a0, a1, z_base, pitch=PITCH, depth=0.07,
+               mat='plaster'):
+    """The plain plaster triangle of a gable, its sloped edges SUNK a little
+    under the roof's top surface. gable_roof lays the tiles' top exactly on
+    the triangle's edge, and two coincident faces voxelise as a streak of
+    plaster across the roof. face 's' builds inward (+y), 'e' inward (-x)."""
+    tp = math.tan(math.radians(pitch))
+    mid, half = (a0 + a1) / 2, (a1 - a0) / 2
+    sink = 0.04
+    pts = ((a0 + sink / tp, z_base), (a1 - sink / tp, z_base),
+           (mid, z_base + half * tp - sink))
+    if face == 's':
+        tri_prism(*pts, fixed, fixed + depth, M[mat], axis='x')
+    elif face == 'n':
+        tri_prism(*pts, fixed - depth, fixed, M[mat], axis='x')
+    else:
+        tri_prism(*pts, fixed - depth, fixed, M[mat], axis='y')
+
+
 def gable_wall(M, face, fixed, a0, a1, z_base, pitch=PITCH, depth=0.07,
                king=True, emblem_z=None):
     """The plaster triangle of a gable end facing 's' or 'e', with its king
@@ -295,19 +317,20 @@ def gable_wall(M, face, fixed, a0, a1, z_base, pitch=PITCH, depth=0.07,
     tp = math.tan(math.radians(pitch))
     mid, half = (a0 + a1) / 2, (a1 - a0) / 2
     rise = half * tp
-    if face == 's':
-        tri_prism((a0, z_base), (a1, z_base), (mid, z_base + rise), fixed,
-                  fixed + depth, M['plaster'], axis='x')
-    else:
-        tri_prism((a0, z_base), (a1, z_base), (mid, z_base + rise), fixed - depth,
-                  fixed, M['plaster'], axis='y')
+    gable_fill(M, face, fixed, a0, a1, z_base, pitch, depth)
     if king:
+        # The roof slab's TOP runs exactly along the triangle's sloped edge
+        # (gable_roof), so a rafter laid on that edge pokes through the tiles
+        # and voxelises as a dark streak across the roof. Keep the rafters
+        # DZ below the edge, parallel to it.
         apex = z_base + rise
+        dz = 0.10
         beam(P(face, fixed, mid, z_base + rise * 0.45, 0.012),
-             P(face, fixed, mid, apex - 0.03, 0.012), 0.05, M['timber'])
+             P(face, fixed, mid, apex - dz - 0.02, 0.012), 0.05, M['timber'])
+        a_lo = half - (0.03 + dz) / tp
         for sgn in (-1, 1):
-            beam(P(face, fixed, mid + sgn * 0.02, apex - 0.06, 0.012),
-                 P(face, fixed, mid + sgn * half * 0.98, z_base + 0.03, 0.012),
+            beam(P(face, fixed, mid + sgn * 0.02, apex - 0.02 * tp - dz, 0.012),
+                 P(face, fixed, mid + sgn * a_lo, z_base + 0.03, 0.012),
                  0.045, M['timber'])
     return z_base + rise
 

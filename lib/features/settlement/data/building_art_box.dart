@@ -31,9 +31,8 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'marketplace': (1.00000, 0.50000, 0.00250),
   'refinery_e2': (1.00000, 0.50000, 0.00000),
   'scout_post': (1.00000, 0.50000, 0.00000),
-  // Recomputed 2026-09-29 for the 2x2 footprint (was 3x3) after the
-  // door/torch/window normalization pass.
-  'small_house': (0.98002, 0.50000, 0.01117),
+  // Fachwerk rebuild 2026-11-03 (tool/blender/buildings/small_house.py).
+  'small_house': (0.90356, 0.48695, 0.04281),
   'small_quarry': (1.00000, 0.50000, 0.00000),
   'small_wood_camp': (1.00000, 0.50000, 0.00000),
   'storehouse': (1.00000, 0.50000, 0.00000),

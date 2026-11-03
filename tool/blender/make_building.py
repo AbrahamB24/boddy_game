@@ -59,7 +59,15 @@ def lower_to_yard():
 
 
 def voxelize(name):
-    """Join every mesh, remesh into BLOCKS of edge fw_kit.VOX, and give each
+    """The shipped path: the union voxeliser (voxelizer.py) at fw_kit.VOX."""
+    import voxelizer
+    return voxelizer.voxelize(fw_kit.VOX, name + "_voxel")
+
+
+def voxelize_remesh(name):
+    """OLD path (--remesh), kept for comparison: Remesh BLOCKS on the joined
+    scene. Overlapping parts come out hollow (ray parity) — see voxelizer.py.
+    Join every mesh, remesh into BLOCKS of edge fw_kit.VOX, and give each
     block the material of the nearest original surface."""
     for o in [o for o in bpy.data.objects if o.name.startswith('blade')]:
         bpy.data.objects.remove(o)
@@ -211,6 +219,8 @@ def main():
     ap.add_argument('--preview', action='store_true')
     ap.add_argument('--smooth', action='store_true')
     ap.add_argument('--out')
+    ap.add_argument('--remesh', action='store_true',
+                    help='old Remesh voxeliser, for comparison')
     ap.add_argument('--anchors-only', action='store_true',
                     help='build + voxelise + frame, write the art box and the '
                          'chimney anchor, render nothing')
@@ -221,7 +231,9 @@ def main():
     K._mats.clear()
     mod.build()
     lower_to_yard()
-    if not args.smooth:
+    if args.remesh:
+        voxelize_remesh(args.id)
+    elif not args.smooth:
         voxelize(args.id)
     K.lighting()
     samples = min(args.samples, 24) if args.preview else args.samples

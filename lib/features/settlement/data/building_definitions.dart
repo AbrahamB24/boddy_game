@@ -2443,9 +2443,6 @@ const Map<String, (double, double)> kChimneyAnchor = {
   // taller than 1.25x its own width, so its beacon projects to a NEGATIVE
   // anchorY — correct, not a bug: Clip.none all the way up this Stack lets
   // the smoke paint above the box exactly where the beacon really is.
-  // Recomputed 2026-09-29 for the 2x2 footprint (was 3x3) after the
-  // door/torch/window normalization pass.
-  'small_house': (0.769, 0.370),
   'large_house': (0.302, 0.559),
   'small_wood_camp': (0.575, 0.376),
   'thinker_circle': (0.498, 0.334),
@@ -2454,6 +2451,7 @@ const Map<String, (double, double)> kChimneyAnchor = {
   'church': (0.127, 0.726),
   'refinery_e2': (0.231, 0.732),
   'hatchery': (0.531, 0.386),
+  'small_house': (0.548, 0.180),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {
