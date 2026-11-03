@@ -3,7 +3,7 @@
     blender --background --python tool/blender/tidelord_pro.py -- \
         --out docs/renders/tidelord_pro.png --samples 200 --scale 10
 
-Same world as hatchery_pro.py: pro_kit's Cycles setup, the golden-hour sun, AgX,
+Same world as buildings/hatchery.py: pro_kit's Cycles setup, the golden-hour sun, AgX,
 real shadows. build() is also what monster_anim_pro.py animates, so every part
 the animation needs has a stable name: seal_root, body, head, fl_near, fl_far,
 fl_rear_a, fl_rear_b, eye, catch.

@@ -7,7 +7,7 @@
             stone_boulder | flower_heather | flower_gorse | driftwood |
             shell | dirt_patch | all
 
-Same world as hatchery_voxel.py: flat-colour blocks, the pro_kit golden-hour sun
+Same world as make_building.py (the Fachwerk voxel buildings): flat-colour blocks, the pro_kit golden-hour sun
 and sky, AgX, the map's own isometric camera. The ground is a field of columns a
 block or two high; every prop is a little block model.
 
