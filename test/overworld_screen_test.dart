@@ -7,11 +7,9 @@ import 'package:boddygame/features/creatures/models/creature_instance.dart';
 import 'package:boddygame/features/creatures/models/species_def.dart';
 import 'package:boddygame/features/creatures/overworld_screen.dart';
 import 'package:boddygame/features/creatures/services/creatures_controller.dart';
-import 'package:boddygame/features/creatures/widgets/overworld_card.dart';
 
-// The Overworld (user 2026-09-20, "Variante 4"): the road beside a fight card.
-// A tap PICKS a battle and the card follows. The map's pulse never settles, so
-// these step the clock instead of pumpAndSettle.
+// The campaign (user 2026-11-03, concept 5): a strip of every battle over the
+// picked battle in focus. A tap PICKS a battle and the view follows.
 void main() {
   final species = SpeciesDef(
     id: 'overworld_test',
@@ -56,7 +54,7 @@ void main() {
     await t.pump(const Duration(milliseconds: 400));
   }
 
-  testWidgets('opens on the current battle, with the card beside the road', (
+  testWidgets('opens on the current battle: strip, facts, enemies, Fight', (
     t,
   ) async {
     await open(t);
@@ -66,38 +64,47 @@ void main() {
     expect(find.text('ENEMIES'), findsOneWidget);
     expect(find.text('REWARD'), findsOneWidget);
     expect(find.text('Fight'), findsOneWidget);
-  });
-
-  testWidgets('the fight card runs the full height with equal padding, and '
-      'the header (Survival, the way out) sits over the road only', (t) async {
-    await open(t);
-    final card = t.getRect(
-      find.ancestor(
-        of: find.text('ENEMIES'),
-        matching: find.byType(OverworldFightCard),
-      ),
-    );
-    final screen = t.view.physicalSize / t.view.devicePixelRatio;
-    // The same 10 px above and below the card.
-    expect(card.top, moreOrLessEquals(10, epsilon: 0.5));
-    expect(screen.height - card.bottom, moreOrLessEquals(10, epsilon: 0.5));
-    // Survival is left of the card, in the header, and the header ends where the
-    // card's column begins.
-    final survival = t.getRect(find.text('Survival'));
-    expect(survival.right, lessThan(card.left));
-    expect(survival.top, lessThan(46));
-    final title = t.getRect(find.text('Overworld'));
-    expect(title.right, lessThan(card.left));
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('a tap on a locked node picks it: the card names what to win', (
+  testWidgets('the strip shows every battle of the line, in one row', (
+    t,
+  ) async {
+    // Concept 5 (user 2026-11-03): "idealerweise werden alle 20 Kämpfe
+    // gezeigt" — the chips share the width instead of a road you scroll.
+    await open(t);
+    final chips = find.byWidgetPredicate(
+      (w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('battle-chip-'),
+    );
+    expect(chips, findsWidgets);
+    final tops = {
+      for (final e in chips.evaluate())
+        t.getRect(find.byWidget(e.widget)).top.round(),
+    };
+    expect(tops.length, 1, reason: 'all chips sit in one row');
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('a tap on a locked battle picks it: the view names what to win', (
     t,
   ) async {
     await open(t);
-    await t.tap(find.byIcon(Icons.lock).first, warnIfMissed: false);
+    await t.tap(find.byKey(const ValueKey('battle-chip-2')));
     await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('Battle 2'), findsOneWidget);
     expect(find.textContaining('Win battle'), findsOneWidget);
     expect(find.text('Fight'), findsNothing);
+  });
+
+  testWidgets('the arrows step to the next battle and back', (t) async {
+    await open(t);
+    await t.tap(find.bySemanticsLabel('Next battle'));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('Battle 2'), findsOneWidget);
+    await t.tap(find.bySemanticsLabel('Previous battle'));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('Battle 1'), findsOneWidget);
   });
 }

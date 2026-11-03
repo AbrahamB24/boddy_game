@@ -293,11 +293,10 @@ class _SettlementScreenState extends State<SettlementScreen>
       );
     }
     local.add(precacheImage(AssetImage(roadAsset(15)), context));
-    // The Overworld's ground, the animated monster sheets every list and
+    // The animated monster sheets every list and
     // battle draws from, the sound effects and music, and the one runtime
     // font (Outfit, used by the creature detail screen) — so the first
     // visit to any of them is as smooth as the tenth.
-    local.add(precacheImage(const AssetImage(kOverworldGrassAsset), context));
     local.add(precacheMonsterSheets());
     local.add(Feel.preloadClips());
     local.add(_preloadFonts());
@@ -324,8 +323,8 @@ class _SettlementScreenState extends State<SettlementScreen>
             .timeout(const Duration(seconds: 15), onTimeout: () {})
             .catchError((_) {})
             .whenComplete(() {
-          if (mounted) setState(() => _progress += bump);
-        }),
+              if (mounted) setState(() => _progress += bump);
+            }),
       ),
     );
     if (!mounted) return;
@@ -467,9 +466,9 @@ class _SettlementScreenState extends State<SettlementScreen>
       }
     }
     if (urls.isEmpty) return Future.value();
-    return _downloadArt(urls)
-        .then<void>((_) {})
-        .timeout(const Duration(seconds: 8), onTimeout: () {});
+    return _downloadArt(
+      urls,
+    ).then<void>((_) {}).timeout(const Duration(seconds: 8), onTimeout: () {});
   }
 
   /// Outfit, the one face still fetched at runtime (bundled in assets/fonts/,
