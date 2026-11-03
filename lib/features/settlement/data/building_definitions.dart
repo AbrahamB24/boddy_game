@@ -2451,7 +2451,7 @@ const Map<String, (double, double)> kChimneyAnchor = {
   'church': (0.127, 0.726),
   'refinery_e2': (0.231, 0.732),
   'hatchery': (0.548, 0.371),
-  'small_house': (0.551, 0.137),
+  'small_house': (0.555, 0.134),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {

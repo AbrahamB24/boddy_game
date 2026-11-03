@@ -42,7 +42,7 @@ Z_EAVE = G + 1.42               # wall top = eave
 CHX, CHY, CHZ0, CHH = -0.25, 0.52, G + 1.67, 0.62
 CHIMNEY = (CHX, CHY, CHZ0 + CHH + 0.13)
 # the door on the east wall, and the entrance cell its path leads to
-YD = -0.20
+YD = -0.28
 ENTRANCE = ('e', 0)
 
 
@@ -111,8 +111,7 @@ def washing_line(M, a, b, h=0.40):
     d = (top_b - top_a)
     rot = math.atan2(d.y, d.x)
     items = [(0.17, 0.15, 'linen'), (0.09, 0.11, 'shirt_b'),
-             (0.09, 0.11, 'shirt_r'), (0.15, 0.13, 'awning'),
-             (0.07, 0.09, 'mustard')]
+             (0.09, 0.11, 'shirt_r'), (0.15, 0.13, 'awning')]
     total = sum(w for w, _, _ in items) + 0.03 * (len(items) - 1)
     t = (1 - total / d.length) / 2
     for w, hh, key in items:
@@ -254,15 +253,17 @@ def build():
     # The path runs from the door to the middle of the entrance cell's outer
     # edge, where the road has to be.
     ex, ey = entrance_point(W, H, *ENTRANCE)
-    cobble_path(M, [(X1 + 0.10, YD), (0.70, ey + 0.08), (ex, ey)], seed=4)
+    # out of the door, a bend, then STRAIGHT and square onto the middle of the
+    # entrance cell's edge, so it runs on into the road tile in line
+    cobble_path(M, [(X1 + 0.10, YD), (0.56, ey), (ex - 0.02, ey)], seed=4)
     bench(M, X1 + 0.07, 0.18, 0.46)
     cat(M, X1 + 0.07, 0.30, G + m(0.45) + 0.01, rot=math.radians(-110))
     woodpile(M, X1 + 0.09, 0.58, 0.84)
-    barrel(M, X1 + 0.09, -0.52, r=0.07, h=0.17)          # rain butt
+    barrel(M, X1 + 0.09, 0.07, r=0.07, h=0.17)           # rain butt
 
     veg_bed(M, -0.92, -0.32, -0.94, -0.64)
     fence(M, [(-0.97, -0.58), (-0.27, -0.58), (-0.27, -0.98)])
-    washing_line(M, (-0.12, -0.92), (0.50, -0.66))
+    washing_line(M, (-0.20, -0.93), (0.40, -0.80))   # clear of the entrance path
 
     bush(M, 0.80, 0.78, 0.17, 1, ['fl_white', 'fl_pink'])
     bush(M, -0.92, 0.92, 0.14, 2)

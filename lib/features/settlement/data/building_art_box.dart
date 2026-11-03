@@ -32,7 +32,7 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'refinery_e2': (1.00000, 0.50000, 0.00000),
   'scout_post': (1.00000, 0.50000, 0.00000),
   // Fachwerk rebuild 2026-11-03 (tool/blender/buildings/small_house.py).
-  'small_house': (0.96086, 0.48613, 0.03364),
+  'small_house': (0.96854, 0.49001, 0.02991),
   'small_quarry': (1.00000, 0.50000, 0.00000),
   'small_wood_camp': (1.00000, 0.50000, 0.00000),
   'storehouse': (1.00000, 0.50000, 0.00000),
