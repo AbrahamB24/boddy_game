@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -9,6 +10,7 @@ import '../../core/ui/pressable.dart';
 import '../../core/ui/snack.dart';
 import '../settlement/data/item_definitions.dart';
 import '../settlement/settlement_controller.dart';
+import '../common/widgets/recess_bar.dart';
 import '../social/social_actions.dart' show confirmDialog;
 import 'breeding_screen.dart';
 import 'creature_detail_screen.dart';
@@ -793,37 +795,60 @@ class _HatcheryPaneState extends State<HatcheryPane> {
             width: 150,
             child: Column(
               children: [
-                Pressable(
-                  onTap: () => _openEgg(job),
-                  child: SizedBox(
-                    width: 62,
-                    height: 80,
-                    child: EggGlyph(job: job),
+                // The facts take what is left above the button and shrink
+                // rather than push it out (2026-11-03: the parents' line, with
+                // ♂/♀ drawn as tall emoji, wrapped and overflowed it by 6 px).
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: 150,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Pressable(
+                            onTap: () => _openEgg(job),
+                            child: SizedBox(
+                              width: 62,
+                              height: 80,
+                              child: EggGlyph(job: job),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            species?.name ?? job.speciesId,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: FoE.title(size: 18).copyWith(color: kBoxInk),
+                          ),
+                          Text(
+                            [
+                              job.hasChildGenes
+                                  ? '⚡ ${genePower(job.childBase)}'
+                                  : '⚡ ?',
+                              if (species != null) species.rarity.label,
+                            ].join(' · '),
+                            style: FoE.value(
+                              size: 14,
+                            ).copyWith(color: kBoxInkSoft),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${dad?.displayName ?? '?'} ♂ × ${mum?.displayName ?? '?'} ♀',
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            style: FoE.dim(
+                              size: 12,
+                            ).copyWith(color: kBoxInkFaint),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  species?.name ?? job.speciesId,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: FoE.title(size: 18).copyWith(color: kBoxInk),
-                ),
-                Text(
-                  [
-                    job.hasChildGenes ? '⚡ ${genePower(job.childBase)}' : '⚡ ?',
-                    if (species != null) species.rarity.label,
-                  ].join(' · '),
-                  style: FoE.value(size: 14).copyWith(color: kBoxInkSoft),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${dad?.displayName ?? '?'} ♂ × ${mum?.displayName ?? '?'} ♀',
-                  maxLines: 2,
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  style: FoE.dim(size: 12).copyWith(color: kBoxInkFaint),
-                ),
-                const Spacer(),
+                const SizedBox(height: 6),
                 SizedBox(
                   height: 44,
                   width: double.infinity,
@@ -873,33 +898,58 @@ class _HatcheryPaneState extends State<HatcheryPane> {
     }
     const stats = CreatureStat.values;
     final half = (stats.length / 2).ceil();
+    // BARS, as on the Breeding tab (user 2026-11-03: "kannst du hier nicht
+    // auch die Balken nehmen?"). ONE scale for all 14 — this egg's biggest
+    // gene — so a bar reads against every other row, not just its own.
+    final maxGene = stats.fold<double>(
+      0.001,
+      (m, s) => math.max(m, job.childBase[s] ?? 0),
+    );
     Widget cell(CreatureStat s) => Container(
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(color: CreamPalette.tan.withValues(alpha: 0.4)),
         ),
       ),
-      child: Row(
+      // The bar runs UNDER the name and the numbers, over the cell's whole
+      // width — beside them it got barely 10 px of a ~195 px column.
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Expanded(
-            child: Text(
-              s.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: FoE.dim(size: 14).copyWith(color: kBoxInkSoft),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  s.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FoE.dim(
+                    size: 14,
+                  ).copyWith(color: kBoxInkSoft, height: 1),
+                ),
+              ),
+              Text(
+                '${(job.childBase[s] ?? 0).round()}',
+                style: FoE.value(size: 17).copyWith(color: kBoxInk, height: 1),
+              ),
+              SizedBox(
+                width: 40,
+                child: Text(
+                  '+${(job.childSlope[s] ?? 0).toStringAsFixed(1)}',
+                  textAlign: TextAlign.right,
+                  style: FoE.dim(
+                    size: 13,
+                  ).copyWith(color: kBoxInkFaint, height: 1),
+                ),
+              ),
+            ],
           ),
-          Text(
-            '${(job.childBase[s] ?? 0).round()}',
-            style: FoE.value(size: 17).copyWith(color: kBoxInk),
-          ),
-          SizedBox(
-            width: 40,
-            child: Text(
-              '+${(job.childSlope[s] ?? 0).toStringAsFixed(1)}',
-              textAlign: TextAlign.right,
-              style: FoE.dim(size: 13).copyWith(color: kBoxInkFaint),
-            ),
+          const SizedBox(height: 3),
+          RecessBar(
+            value: ((job.childBase[s] ?? 0) / maxGene).clamp(0.0, 1.0),
+            color: CreamPalette.accent,
+            height: 6,
+            onDark: false,
           ),
         ],
       ),
