@@ -86,6 +86,18 @@ void main() {
       }
     });
 
+    test('a database row cannot give a rebuilt building another footprint',
+        () {
+      // The live Small House row was still 3x3 on 2026-11-03.
+      final row = kFallbackBuildingDefs['small_house']!.toDefRow()
+        ..['grid_w'] = 3
+        ..['grid_h'] = 3;
+      final def = BuildingDef.fromDefRow(row);
+      expect((def.gridW, def.gridH), kModelFootprint['small_house']);
+      expect(entranceFor(def.id, def.gridW, def.gridH), isNotNull);
+      expect(animFor(def.id, def.gridW, def.gridH), isNotNull);
+    });
+
     test('a database row with an old footprint gets neither entrance nor '
         'moving parts', () {
       // The live Small House row was still 3x3 on 2026-11-03.

@@ -588,17 +588,17 @@ def entrance_grid(W, H, face, k):
 def flowers(face, fixed, a, z, w, cols):
     p = P(face, fixed, a, z, 0.07)
     with anim(f'box_{face}{fixed:+.2f}{a:+.2f}{z:.2f}', 'sway',
-              pivot=(p.x, p.y, z), amp=0.10, period=3.1):
+              pivot=(p.x, p.y, z), amp=0.25, period=3.1):
         _flowers(face, fixed, a, z, w, cols)
 
 
 def bush(M, x, y, r=0.22, seed=0, flowers_cols=None):
-    with anim(f'bush{x:+.2f}{y:+.2f}', 'sway', pivot=(x, y, G), amp=0.035,
+    with anim(f'bush{x:+.2f}{y:+.2f}', 'sway', pivot=(x, y, G), amp=0.06,
               period=4.4):
         _bush(M, x, y, r, seed, flowers_cols)
 
 
 def flower_patch(M, cx, cy, n, cols, seed, rx=0.18, ry=0.12):
     with anim(f'patch{cx:+.2f}{cy:+.2f}', 'sway', pivot=(cx, cy, G),
-              amp=0.12, period=3.4):
+              amp=0.25, period=3.4):
         _flower_patch(M, cx, cy, n, cols, seed, rx, ry)

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/tuning/game_tuning.dart';
 import '../../creatures/models/creature_enums.dart' show CreatureStat;
 import 'building_effects.dart';
+import 'building_model.dart' show kModelFootprint;
 import '../../creatures/models/path_node.dart' show pathBuildingUnlockBattle;
 import 'goods_definitions.dart';
 
@@ -1389,8 +1390,12 @@ class BuildingDef {
       artAnchorX: (row['art_anchor_x'] as num?)?.toDouble() ?? 0.5,
       artLift: (row['art_lift'] as num?)?.toDouble() ?? 0.0,
       color: Color(int.parse(row['color'] as String? ?? 'FF7C5CBF', radix: 16)),
-      gridW: (row['grid_w'] as num).toInt(),
-      gridH: (row['grid_h'] as num).toInt(),
+      // A REBUILT building's footprint is its model's (user 2026-11-03: the
+      // live Small House row was still 3x3 for a 2x2 model, so its picture
+      // was stretched and its entrance and moving parts were switched off).
+      // The picture is rendered for exactly that ground; no row can change it.
+      gridW: kModelFootprint[row['id']]?.$1 ?? (row['grid_w'] as num).toInt(),
+      gridH: kModelFootprint[row['id']]?.$2 ?? (row['grid_h'] as num).toInt(),
       resourceCost: {
         for (final e in ((row['resource_cost'] as Map?) ?? const {}).entries)
           e.key as String: (e.value as num).toDouble(),
@@ -2450,8 +2455,8 @@ const Map<String, (double, double)> kChimneyAnchor = {
   'caravanserai': (0.116, 0.653),
   'church': (0.127, 0.726),
   'refinery_e2': (0.231, 0.732),
-  'hatchery': (0.548, 0.371),
   'small_house': (0.555, 0.134),
+  'hatchery': (0.548, 0.371),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {

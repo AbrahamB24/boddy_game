@@ -310,7 +310,7 @@ def build():
          M['awning'], bevel=0.006)
     # the scalloped edge flutters
     with anim('awning_edge', 'sway', pivot=(-0.525, -0.31, G + 0.465),
-              amp=0.10, period=2.1):
+              amp=0.30, period=2.1):
         for i in range(10):
             rbox((-0.93 + 0.0 + i * 0.09 + 0.045, -0.31, G + 0.44),
                  (0.085, 0.012, 0.045), (tilt, 0, 0), M['awning'], bevel=0.004)
@@ -359,14 +359,14 @@ def build():
     nest(M, 0.02, -0.82, 0.15, ('gold', 'brown'), 3)
     nest(M, -1.72, -1.0, 0.16, ('violet', 'cream'), 4)
     # a clutch of big eggs, wing corner
-    egg(M, 'cream', 1.50, -1.33, G, 0.11)
-    egg(M, 'gold', 1.74, -1.28, G, 0.09, tilt=0.2)
-    egg(M, 'blue', 1.92, -1.16, G, 0.10, tilt=-0.2)
+    egg(M, 'cream', 1.50, -1.38, G, 0.11)
+    egg(M, 'gold', 1.73, -1.40, G, 0.09, tilt=0.2)
+    egg(M, 'blue', 1.93, -1.34, G, 0.10, tilt=-0.2)
 
     # hay, coop, hens ---------------------------------------
     hay_bale(M, -1.62, -0.18, G, 0.34, 0.24, 0.2, 0.3)
     hay_bale(M, -1.55, -0.2, G + 0.2, 0.3, 0.22, 0.18, -0.1)
-    hay_bale(M, -1.30, 0.04, G, 0.3, 0.2, 0.18, 0.1)
+    hay_bale(M, -1.22, -0.08, G, 0.3, 0.2, 0.18, 0.1)   # clear of the tower
     hay_scatter(M, -1.35, -0.2, 0.45, 70, 9)
     hay_scatter(M, -0.5, -0.5, 0.7, 60, 10)
     # coop
@@ -380,9 +380,9 @@ def build():
     beam((cx + 0.28, cy - 0.05, G), (cx + 0.09, cy - 0.12, G + 0.07), 0.04, M['planks'])
     # the hens peck: each one leans about its feet, at its own pace
     for i, (hx, hy, rot, key) in enumerate(((-1.20, -0.88, 0.5, 'hen_w'),
-                                            (-1.0, -1.18, 2.6, 'hen_r'),
-                                            (-1.45, -0.62, -0.7, 'hen_r'))):
-        with anim(f'hen{i}', 'sway', pivot=(hx, hy, G), amp=0.22,
+                                            (-0.70, -1.32, 2.6, 'hen_r'),
+                                            (-1.62, -0.70, -0.7, 'hen_r'))):
+        with anim(f'hen{i}', 'sway', pivot=(hx, hy, G), amp=0.40,
                   period=1.5 + 0.35 * i):
             hen(M, hx, hy, rot, key)
 
@@ -390,33 +390,30 @@ def build():
     # (the two barrels moved off the entrance path to the back wall)
     barrel(M, 0.40, 1.40)
     barrel(M, 0.56, 1.41, 0.075, 0.17)
-    sack(M, 1.45, -1.33, 1.0, 0.2)
-    sack(M, 1.38, -1.40, 0.9, -0.3, 'sack')
+    sack(M, 1.30, -1.42, 0.85, 0.2)              # off the big eggs
     crate(M, 1.95, -0.7, 0.14, 0.3)
     crate(M, 1.97, -0.55, 0.12, -0.2)
     sack(M, 1.92, -0.05, 1.0)
-    barrel(M, 1.9, 0.5)
-    crate(M, 1.78, -1.4, 0.12, 0.1)
+    barrel(M, 1.90, -0.25)                       # was inside the east wall
 
     # bushes, flowers -----------------------------------------
-    bush(M, 1.93, 0.85, 0.2, 1, ['fl_white', 'fl_pink'])
-    bush(M, -0.2, 1.42, 0.2, 2)
-    bush(M, 1.0, 1.42, 0.18, 3, ['fl_yel'])
-    bush(M, -1.8, 0.2, 0.17, 4, ['fl_red'])
+    # bushes only where there is room: the house stands 0.2 tiles from the
+    # north edge and 0.08 from the east one
+    bush(M, -1.20, 1.30, 0.15, 2, ['fl_white', 'fl_pink'])
+    bush(M, -1.85, 1.22, 0.14, 4, ['fl_red'])
     # flower patches (each sways on its own — fw_kit.flower_patch)
-    for k, (cx, cy, n, cols) in enumerate(((-1.85, -1.3, 8, ['fl_white', 'fl_pink']),
+    for k, (cx, cy, n, cols) in enumerate(((-1.88, -1.40, 8, ['fl_white', 'fl_pink']),
                                            (-0.15, -1.38, 6, ['fl_red', 'fl_yel']),
-                                           (-0.9, 0.35, 7, ['fl_blue', 'fl_white']),
-                                           (1.85, -1.0, 6, ['fl_blue', 'fl_pink']),
                                            (-1.4, -1.4, 5, ['fl_yel']),
-                                           (1.40, 1.42, 6, ['fl_pink', 'fl_white']))):
+                                           (0.95, 1.42, 6, ['fl_pink', 'fl_white']),
+                                           (1.40, 1.42, 6, ['fl_yel', 'fl_white']))):
         flower_patch(M, cx, cy, n, cols, 21 + k)
     # hanging sign (golden egg) on the wing's south-west corner — it swings
     # from its bracket — and lanterns at the wing's door ------------------
     sy_ = wy0 - 0.02
     beam((0.60, sy_, G + 0.86), (0.36, sy_, G + 0.86), 0.03, M['timber'])
     beam((0.60, sy_, G + 0.70), (0.44, sy_, G + 0.84), 0.022, M['timber'])
-    with anim('sign', 'sway', pivot=(0.45, sy_, G + 0.86), amp=0.07,
+    with anim('sign', 'sway', pivot=(0.45, sy_, G + 0.86), amp=0.16,
               period=3.0):
         for dx in (0.40, 0.50):
             beam((dx, sy_, G + 0.86), (dx, sy_, G + 0.78), 0.006, M['iron'],

@@ -117,8 +117,8 @@ def washing_line(M, a, b, h=0.40):
     for w, hh, key in items:
         c = top_a + d * (t + w / 2 / d.length)
         # each piece swings on its own from where it is pegged
-        with anim(f'wash_{key}', 'sway', pivot=(c.x, c.y, c.z), amp=0.16,
-                  period=2.4):
+        with anim(f'wash_{key}', 'sway', pivot=(c.x, c.y, c.z), amp=0.50,
+                  period=2.0):
             rbox((c.x, c.y, c.z - hh / 2 - 0.006), (w, 0.012, hh), (0, 0, rot),
                  M[key], bevel=0.003)
         t += (w + 0.03) / d.length
@@ -154,7 +154,7 @@ def cat(M, x, y, z, rot=0.0):
         ellipsoid(ex, ey, z + 0.09, 0.008, 0.008, 0.014, M['cat'], seg=6,
                   rings=4)
     # the tail hangs over the bench's edge and flicks
-    with anim('cat_tail', 'sway', pivot=at(-0.04, 0.012), amp=0.35, period=1.9):
+    with anim('cat_tail', 'sway', pivot=at(-0.04, 0.012), amp=0.6, period=1.9):
         beam(at(-0.04, 0.012), at(-0.07, -0.085), 0.02, M['cat'], bevel=0)
 
 
@@ -258,7 +258,7 @@ def build():
     cobble_path(M, [(X1 + 0.10, YD), (0.56, ey), (ex - 0.02, ey)], seed=4)
     bench(M, X1 + 0.07, 0.18, 0.46)
     cat(M, X1 + 0.07, 0.30, G + m(0.45) + 0.01, rot=math.radians(-110))
-    woodpile(M, X1 + 0.09, 0.58, 0.84)
+    woodpile(M, X1 + 0.115, 0.58, 0.84)
     barrel(M, X1 + 0.09, 0.07, r=0.07, h=0.17)           # rain butt
 
     veg_bed(M, -0.92, -0.32, -0.94, -0.64)
@@ -266,7 +266,7 @@ def build():
     washing_line(M, (-0.20, -0.93), (0.40, -0.80))   # clear of the entrance path
 
     bush(M, 0.80, 0.78, 0.17, 1, ['fl_white', 'fl_pink'])
-    bush(M, -0.92, 0.92, 0.14, 2)
+    bush(M, 0.84, -0.86, 0.11, 2)                # front corner, clear of the path
     bush(M, 0.88, 0.30, 0.12, 3, ['fl_yel'])
     flower_patch(M, 0.12, -0.62, 7, ['fl_red', 'fl_yel'], 5)
     flower_patch(M, 0.62, 0.52, 6, ['fl_blue', 'fl_white'], 6)
