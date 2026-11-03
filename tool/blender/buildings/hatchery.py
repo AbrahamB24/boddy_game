@@ -292,7 +292,7 @@ def build():
     gable_wall(M, 's', wy0, wx0, wx1, G + wh)
 
     # the egg emblem in the gable
-    ellipsoid(wmid, wy0 - 0.02, G + wh + 0.3, 0.075, 0.016, 0.1, M['pane_glow'],
+    ellipsoid(wmid, wy0 - 0.02, G + wh + 0.16, 0.06, 0.016, 0.08, M['pane_glow'],
               egg=0.2, seg=14, rings=10)
     # roof: extends back into the main house's roof
     wlen = (0.62) - (wy0 - 0.0)       # from wy0 to y=0.62, centred below
@@ -302,7 +302,7 @@ def build():
               egg=0.2)
 
     # awning + table (south wall, west of the door) --------------
-    pole_h = 0.5
+    pole_h = 0.455                # up to the awning's underside, not through it
     for px in (-0.93, -0.12):
         beam((px, -0.28, G), (px, -0.28, G + pole_h), 0.035, M['timber'])
     tilt = math.atan2(0.16, 0.43)
@@ -411,7 +411,7 @@ def build():
     # hanging sign (golden egg) on the wing's south-west corner — it swings
     # from its bracket — and lanterns at the wing's door ------------------
     sy_ = wy0 - 0.02
-    beam((0.60, sy_, G + 0.86), (0.36, sy_, G + 0.86), 0.03, M['timber'])
+    beam((0.60, sy_, G + 0.86), (0.385, sy_, G + 0.86), 0.03, M['timber'])
     beam((0.60, sy_, G + 0.70), (0.44, sy_, G + 0.84), 0.022, M['timber'])
     with anim('sign', 'sway', pivot=(0.45, sy_, G + 0.86), amp=0.16,
               period=3.0):

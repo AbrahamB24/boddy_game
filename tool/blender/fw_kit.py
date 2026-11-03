@@ -181,9 +181,17 @@ def wall_frame(M, face, fixed, a0, a1, z0, z1, nb, braces=(), t=0.052,
             cur = max(cur, h)
         if a1 > cur + 0.05:
             segs.append((cur, a1))
+        # A rail runs from post to post: snapped inward to the nearest posts
+        # left standing, so it never stops in the middle of a plaster panel
+        # (beside a door it did, user 2026-11-03).
+        posts = [a for i, a in enumerate(xs)
+                 if not (any(l < a < h for l, h in pspans) and 0 < i < nb)]
         for l, h in segs:
-            beam(P(face, fixed, l, zm, off), P(face, fixed, h, zm, off),
-                 t * 0.85, M['timber'])
+            inside = [a for a in posts if l - 1e-6 <= a <= h + 1e-6]
+            if len(inside) < 2:
+                continue
+            beam(P(face, fixed, inside[0], zm, off),
+                 P(face, fixed, inside[-1], zm, off), t * 0.85, M['timber'])
     for i, a in enumerate(xs):
         if any(l < a < h for l, h in pspans) and 0 < i < nb:
             continue
@@ -339,19 +347,26 @@ def gable_wall(M, face, fixed, a0, a1, z_base, pitch=PITCH, depth=0.07,
     rise = half * tp
     gable_fill(M, face, fixed, a0, a1, z_base, pitch, depth)
     if king:
-        # The roof slab's TOP runs exactly along the triangle's sloped edge
-        # (gable_roof), so a rafter laid on that edge pokes through the tiles
-        # and voxelises as a dark streak across the roof. Keep the rafters
-        # DZ below the edge, parallel to it.
+        # A real gable frame (user 2026-11-03: "Balken, welche ins Nichts
+        # führen"): two RAFTERS from the apex down into both corners, where
+        # they sit on the wall plate; a COLLAR beam between them; and the
+        # KING POST standing on the collar up to the apex. The rafters lie
+        # just under the tiles — gable_roof lifts the slab a full thickness
+        # above this edge, so they cannot poke through it any more.
         apex = z_base + rise
-        dz = 0.10
-        beam(P(face, fixed, mid, z_base + rise * 0.45, 0.012),
-             P(face, fixed, mid, apex - dz - 0.02, 0.012), 0.05, M['timber'])
-        a_lo = half - (0.03 + dz) / tp
+        t = 0.045
+        dz = t / 2 + 0.004                   # rafter top flush under the slab
+        top = apex - dz / math.cos(math.radians(pitch))
         for sgn in (-1, 1):
-            beam(P(face, fixed, mid + sgn * 0.02, apex - 0.02 * tp - dz, 0.012),
-                 P(face, fixed, mid + sgn * a_lo, z_base + 0.03, 0.012),
-                 0.045, M['timber'])
+            beam(P(face, fixed, mid, top, 0.012),
+                 P(face, fixed, mid + sgn * half, z_base, 0.012), t,
+                 M['timber'])
+        zc = z_base + rise * 0.45
+        reach = (top - zc) / tp               # rafter half-width at the collar
+        beam(P(face, fixed, mid - reach, zc, 0.014),
+             P(face, fixed, mid + reach, zc, 0.014), 0.04, M['timber'])
+        beam(P(face, fixed, mid, zc, 0.012), P(face, fixed, mid, top, 0.012),
+             0.05, M['timber'])
     return z_base + rise
 
 

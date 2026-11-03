@@ -118,6 +118,45 @@ def main():
         if worst > V:
             print(f'  {a:22s} x {b:22s} {worst / V:4.1f} voxels')
 
+    print('== BEAM ENDS IN THE AIR')
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+    verts, polys, owner = [], [], []
+    for i, o in enumerate(objs):
+        mw = o.matrix_world
+        base = len(verts)
+        verts.extend(mw @ v.co for v in o.data.vertices)
+        for p in o.data.polygons:
+            polys.append(tuple(base + k for k in p.vertices))
+            owner.append(i)
+    tree = BVHTree.FromPolygons(verts, polys, all_triangles=False)
+    for i, o in enumerate(objs):
+        if not o.data.materials or o.data.materials[0].name != 'timber':
+            continue
+        xs = [v.co.x for v in o.data.vertices]
+        ys = [v.co.y for v in o.data.vertices]
+        zs = [v.co.z for v in o.data.vertices]
+        ext = (max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+        ax = ext.index(max(ext))
+        if ext[ax] < 3 * sorted(ext)[1]:
+            continue                       # a block, not a beam
+        for sgn in (-1, 1):
+            loc = [0.0, 0.0, 0.0]
+            loc[ax] = (max((xs, ys, zs)[ax]) if sgn > 0 else min((xs, ys, zs)[ax]))
+            end = o.matrix_world @ Vector(loc)
+            if end.z - K.G < 0.01:
+                continue                   # a post standing on the ground
+            # Plaster does not count: a timber that stops in the middle of
+            # a plaster panel without meeting other timber is the "beam
+            # into nothing" (user 2026-11-03).
+            near = [h for h in tree.find_nearest_range(end, 0.03)
+                    if owner[h[2]] != i and objs[owner[h[2]]].data.materials
+                    and objs[owner[h[2]]].data.materials[0].name
+                    not in ('plaster', 'pane', 'pane_glow')]
+            if not near:
+                print(f"  {o.get('part', 'body'):22s} end at "
+                      f'({end.x:+.2f}, {end.y:+.2f}, {end.z - K.G:.2f})')
+
     print('== PATH ON PROP')
     paths = [k for k in keys if k.startswith('cobble_path')]
     for pth in paths:
