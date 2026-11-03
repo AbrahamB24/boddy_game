@@ -63,7 +63,16 @@ const double kIsoTileH = kIsoTileW / 2;
 /// and five times too close is still five times too close even when every pixel
 /// of it is real. Down here the art is simply downsampled, which is the safe
 /// direction.
-const double kMaxMapZoom = 1.0;
+///
+/// ── Closer (user 2026-11-03: "näher heranzoomen") ──
+/// Raised to 2.5 with the Fachwerk buildings: a cell is 160 px there, enough
+/// to read a door, a window box, the washing on the line. The tutorial's
+/// own camera moves keep the old, calmer distance — see [kFocusZoom].
+const double kMaxMapZoom = 2.5;
+
+/// How close the map flies in when it FOCUSES a building for the player
+/// (the tutorial's spotlight): the old maximum, one cell at its native 64 px.
+const double kFocusZoom = 1.0;
 
 /// The map's view transform: [scale] about the origin, then a screen-space
 /// shift of ([tx], [ty]).

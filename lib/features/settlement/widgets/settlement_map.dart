@@ -325,7 +325,7 @@ class SettlementMapState extends State<SettlementMap>
     _healFocusedStep = step;
     focusBuilding(
       hut,
-      targetScale: kMaxMapZoom,
+      targetScale: kFocusZoom,
       topInset: _introTopCardInset(),
       bottomInset: buildingCarouselHeight(context),
     );

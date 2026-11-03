@@ -491,10 +491,11 @@ void main() {
     });
 
     test('zooming IN stops where the player asked it to', () {
-      // Raised one level again (user 2026-08-27): a cell at its own native 64
-      // px, one round step past the 51.2 px measured off the 2026-08-09
-      // screenshot.
-      expect(kIsoTileW * kMaxMapZoom, closeTo(64.0, 0.001));
+      // Raised again (user 2026-11-03: "näher heranzoomen"): a cell 160 px
+      // wide, close enough to read a door or a window box on the Fachwerk
+      // buildings. The tutorial's camera keeps the old 64 px (kFocusZoom).
+      expect(kIsoTileW * kMaxMapZoom, closeTo(160.0, 0.001));
+      expect(kIsoTileW * kFocusZoom, closeTo(64.0, 0.001));
       // And it must still be a range worth having — a max below the min would
       // mean a map that cannot be zoomed at all on some screen.
       expect(kMaxMapZoom, greaterThan(minMapScale(const Size(430, 932))));

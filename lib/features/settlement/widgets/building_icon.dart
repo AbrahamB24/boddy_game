@@ -103,8 +103,11 @@ class BuildingIcon extends StatelessWidget {
   /// caller that warms the cache goes through [providerFor].
   static int decodeWidthFor(BuildContext context, double logicalWidth) {
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
-    final want = (logicalWidth * (dpr > 3 ? 3 : dpr) * 1.25).ceil();
-    return want < 96 ? 96 : (want > 640 ? 640 : want);
+    // x2, not x1.25: the map now zooms in to 2.5 (kMaxMapZoom, user
+    // 2026-11-03), and a picture decoded for zoom 1 went soft right away.
+    // Capped at 960, the width the art SHIPS at — more would only upsample.
+    final want = (logicalWidth * (dpr > 3 ? 3 : dpr) * 2).ceil();
+    return want < 96 ? 96 : (want > 960 ? 960 : want);
   }
 
   /// Exactly the provider this widget resolves for [defId] at [logicalWidth]
