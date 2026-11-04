@@ -2,7 +2,8 @@ import '../../../core/ui/feel.dart';
 import 'dart:async';
 import 'dart:math' show max;
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart' show PointerScrollEvent, PointerSignalEvent;
+import 'package:flutter/material.dart' hide Text;
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/theme/strategy_theme.dart'
@@ -34,6 +35,7 @@ import '../../creatures/services/creatures_controller.dart';
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 class SettlementMap extends StatefulWidget {
   final SettlementController ctrl;
@@ -168,10 +170,13 @@ class SettlementMapState extends State<SettlementMap>
   /// The fixed cell [typeId] must open on while [_tutorialPlacementLocked]
   /// would apply to it, or null outside those two cases.
   (int, int)? _lockedSpotFor(String typeId) => switch (typeId) {
-    kHealingHutBuildingId when widget.ctrl.introStep == IntroStep.buildHealingHut =>
+    kHealingHutBuildingId
+        when widget.ctrl.introStep == IntroStep.buildHealingHut =>
       (kTutorialHealingHutX, kTutorialHealingHutY),
-    'road' when widget.ctrl.introStep == IntroStep.buildRoad =>
-      (kTutorialRoadX, kTutorialRoadY),
+    'road' when widget.ctrl.introStep == IntroStep.buildRoad => (
+      kTutorialRoadX,
+      kTutorialRoadY,
+    ),
     _ => null,
   };
 
@@ -223,6 +228,40 @@ class SettlementMapState extends State<SettlementMap>
 
   final _txCtrl = TransformationController();
   bool _txInitialized = false;
+
+  // ── Mouse wheel / trackpad zoom, guaranteed (user 2026-11-04: "im Baumodus
+  // muss ich auch zoomen können") ──
+  // InteractiveViewer zooms on the wheel through Flutter's pointer-signal
+  // resolver, where only ONE widget per event wins — any widget that
+  // registers first (a scrollable under the cursor, the ghost's controls)
+  // takes the wheel and the map never sees it. This outer raw Listener always
+  // gets the event; one microtask later, after the resolver has run, it zooms
+  // itself — but only if the transform did not change meanwhile, so where
+  // InteractiveViewer does answer there is no double zoom.
+  int _txChanges = 0;
+
+  void _onWheel(PointerSignalEvent e) {
+    if (e is! PointerScrollEvent) return;
+    final before = _txChanges;
+    final focal = e.localPosition;
+    final dy = e.scrollDelta.dy;
+    scheduleMicrotask(() {
+      if (!mounted || _txChanges != before) return;
+      final view = _viewport;
+      if (view == null) return;
+      final m = _txCtrl.value;
+      final scale = m.getMaxScaleOnAxis();
+      final t = m.getTranslation();
+      final newScale = scale * math.exp(-dy / 200);
+      final ax = (focal.dx - t.x) / scale;
+      final ay = (focal.dy - t.y) / scale;
+      _txCtrl.value = mapTransform(
+        newScale,
+        focal.dx - ax * newScale,
+        focal.dy - ay * newScale,
+      );
+    });
+  }
 
   // ── Bringing something into view (user 2026-07-30) ──────────
   // A building you just BUILT is placed for you, and the map is pannable and
@@ -350,8 +389,9 @@ class SettlementMapState extends State<SettlementMap>
   double _introTopCardInset() {
     const fallback = 190.0;
     final cardBox =
-        IntroSpotlightAnchors.of('intro-top-card').currentContext
-                ?.findRenderObject()
+        IntroSpotlightAnchors.of(
+              'intro-top-card',
+            ).currentContext?.findRenderObject()
             as RenderBox?;
     final mapBox = context.findRenderObject() as RenderBox?;
     if (cardBox == null || mapBox == null || !cardBox.hasSize) {
@@ -520,6 +560,7 @@ class SettlementMapState extends State<SettlementMap>
     });
     // Every write to the transform is checked, whoever made it.
     _txCtrl.addListener(_enforceBounds);
+    _txCtrl.addListener(() => _txChanges++);
   }
 
   // ── Opening and closing a session ─────────────────────────
@@ -724,8 +765,7 @@ class SettlementMapState extends State<SettlementMap>
     }
     if (_chainErase) {
       final hit = _hitTest(nx, ny);
-      if (hit == null ||
-          !(placedDefOf(hit)?.isRoad ?? false)) {
+      if (hit == null || !(placedDefOf(hit)?.isRoad ?? false)) {
         Feel.deny();
         return;
       }
@@ -1189,7 +1229,7 @@ class SettlementMapState extends State<SettlementMap>
             label,
             style: FoE.label(size: 14).copyWith(
               color: danger ? CreamPalette.paperTop : kBoxInk,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ),
@@ -1272,9 +1312,7 @@ class SettlementMapState extends State<SettlementMap>
       for (final b in source)
         // A STORED building (Umbaumodus tray) isn't standing anywhere — it
         // paints in neither layer.
-        if (!b.isStored &&
-            (placedDefOf(b)?.isRoad ?? false) == roads)
-          b,
+        if (!b.isStored && (placedDefOf(b)?.isRoad ?? false) == roads) b,
     ];
     out.sort((a, b) {
       final ad = placedDefOf(a);
@@ -1346,8 +1384,10 @@ class SettlementMapState extends State<SettlementMap>
       final fx = w.gx + 0.5, fy = w.gy + 0.5;
       final host = split.where((b) {
         final d = placedDefOf(b)!;
-        return fx >= b.gridX && fy >= b.gridY &&
-            fx < b.gridX + d.gridW && fy < b.gridY + d.gridH;
+        return fx >= b.gridX &&
+            fy >= b.gridY &&
+            fx < b.gridX + d.gridW &&
+            fy < b.gridY + d.gridH;
       }).firstOrNull;
       if (host == null) {
         queue.add(w);
@@ -1361,12 +1401,15 @@ class SettlementMapState extends State<SettlementMap>
     // above it, user 2026-11-03). Until its feet are inside, it goes by them.
     final sortCell = <RoadWalker, (int, int)>{
       for (final w in queue)
-        w: split.any((b) {
-          final d = placedDefOf(b)!;
-          final (x, y) = w.drawCell;
-          return x >= b.gridX && y >= b.gridY &&
-              x < b.gridX + d.gridW && y < b.gridY + d.gridH;
-        })
+        w:
+            split.any((b) {
+              final d = placedDefOf(b)!;
+              final (x, y) = w.drawCell;
+              return x >= b.gridX &&
+                  y >= b.gridY &&
+                  x < b.gridX + d.gridW &&
+                  y < b.gridY + d.gridH;
+            })
             ? ((w.gx + 0.5).floor(), (w.gy + 0.5).floor())
             : w.drawCell,
     };
@@ -1616,138 +1659,141 @@ class SettlementMapState extends State<SettlementMap>
           if (mounted) _focusHealAnchorForTutorial();
         });
 
-        return Stack(
-          children: [
-            InteractiveViewer(
-              constrained: false,
-              minScale: minScale,
-              maxScale: maxScale,
-              // Explicit, though it is the default: zero margin is what stops a
-              // pan from bringing the map's edge inside the viewport, and it is
-              // half of the boundary rule above. A reader should not have to
-              // know the default to know the rule is being kept.
-              boundaryMargin: EdgeInsets.zero,
-              transformationController: _txCtrl,
-              child: GestureDetector(
-                onTapUp: (d) => _handleTap(d.localPosition),
-                onLongPressStart: (d) => _handleLongPress(d.localPosition),
-                child: SizedBox(
-                  width: mapW,
-                  height: mapH,
-                  child: Stack(
-                    children: [
-                      // Replaced the single baked map_background.png (user
-                      // 2026-09-07: "der Background muss wirklich noch
-                      // deutlich überarbeitet werden... genau gleich
-                      // aufgelöst [wie] die Gebäude") — matching the
-                      // buildings' own sharpness across the WHOLE map in one
-                      // image would need a ~117760×58880px source (measured:
-                      // ~270 px/world-unit for a building vs ~22 for the old
-                      // whole-map bake), tens of gigabytes. TerrainLayer
-                      // tiles a small, sharp ground swatch and places detail
-                      // props individually instead — see its own doc comment.
-                      Positioned.fill(
-                        child: RepaintBoundary(
-                          child: TerrainLayer(
-                            buildableRegion: widget.ctrl.buildableRegion,
-                          ),
-                        ),
-                      ),
-                      if (showGhost ||
-                          _chaining ||
-                          widget.editMode ||
-                          widget.roadMode)
+        return Listener(
+          onPointerSignal: _onWheel,
+          child: Stack(
+            children: [
+              InteractiveViewer(
+                constrained: false,
+                minScale: minScale,
+                maxScale: maxScale,
+                // Explicit, though it is the default: zero margin is what stops a
+                // pan from bringing the map's edge inside the viewport, and it is
+                // half of the boundary rule above. A reader should not have to
+                // know the default to know the rule is being kept.
+                boundaryMargin: EdgeInsets.zero,
+                transformationController: _txCtrl,
+                child: GestureDetector(
+                  onTapUp: (d) => _handleTap(d.localPosition),
+                  onLongPressStart: (d) => _handleLongPress(d.localPosition),
+                  child: SizedBox(
+                    width: mapW,
+                    height: mapH,
+                    child: Stack(
+                      children: [
+                        // Replaced the single baked map_background.png (user
+                        // 2026-09-07: "der Background muss wirklich noch
+                        // deutlich überarbeitet werden... genau gleich
+                        // aufgelöst [wie] die Gebäude") — matching the
+                        // buildings' own sharpness across the WHOLE map in one
+                        // image would need a ~117760×58880px source (measured:
+                        // ~270 px/world-unit for a building vs ~22 for the old
+                        // whole-map bake), tens of gigabytes. TerrainLayer
+                        // tiles a small, sharp ground swatch and places detail
+                        // props individually instead — see its own doc comment.
                         Positioned.fill(
-                          child: CustomPaint(
-                            painter: _GridPainter(
+                          child: RepaintBoundary(
+                            child: TerrainLayer(
                               buildableRegion: widget.ctrl.buildableRegion,
                             ),
                           ),
                         ),
-                      // ── GROUND FIRST, THEN WHAT STANDS ON IT ──
-                      // (user 2026-08-01: "die Strasse ist jetzt über dem
-                      // Gebäude").
-                      //
-                      // Depth alone cannot fix that. A road one tile in FRONT
-                      // of a building is genuinely nearer the viewer, so it
-                      // sorts later — and then its flat tile paints over the
-                      // wall that leans into that space, because a tall sprite
-                      // occupies tiles its footprint does not.
-                      //
-                      // So roads are a LAYER, not a competitor: they are
-                      // ground, and nothing that lies on the ground may cover
-                      // something standing on it.
-                      ..._layer(
-                        roads: true,
-                        ghostDef: ghostDef,
-                        gx: gx,
-                        gy: gy,
-                        faded: faded,
-                      ),
-                      // BACK TO FRONT among themselves — and the monsters
-                      // walking the roads among them (user 2026-11-03), so a
-                      // building in front of a walker hides it. Its own
-                      // Stack under a listener: a walker stepping onto a new
-                      // cell re-sorts THIS layer only, not the whole map.
-                      Positioned.fill(
-                        child: ValueListenableBuilder<int>(
-                          valueListenable: _walkers.order,
-                          builder: (context, _, _) => Stack(
-                            clipBehavior: Clip.none,
-                            children: _layer(
-                              roads: false,
-                              ghostDef: ghostDef,
-                              gx: gx,
-                              gy: gy,
-                              faded: faded,
-                              walkers: walkersShown
-                                  ? _walkers.walkers
-                                  : const [],
+                        if (showGhost ||
+                            _chaining ||
+                            widget.editMode ||
+                            widget.roadMode)
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _GridPainter(
+                                buildableRegion: widget.ctrl.buildableRegion,
+                              ),
+                            ),
+                          ),
+                        // ── GROUND FIRST, THEN WHAT STANDS ON IT ──
+                        // (user 2026-08-01: "die Strasse ist jetzt über dem
+                        // Gebäude").
+                        //
+                        // Depth alone cannot fix that. A road one tile in FRONT
+                        // of a building is genuinely nearer the viewer, so it
+                        // sorts later — and then its flat tile paints over the
+                        // wall that leans into that space, because a tall sprite
+                        // occupies tiles its footprint does not.
+                        //
+                        // So roads are a LAYER, not a competitor: they are
+                        // ground, and nothing that lies on the ground may cover
+                        // something standing on it.
+                        ..._layer(
+                          roads: true,
+                          ghostDef: ghostDef,
+                          gx: gx,
+                          gy: gy,
+                          faded: faded,
+                        ),
+                        // BACK TO FRONT among themselves — and the monsters
+                        // walking the roads among them (user 2026-11-03), so a
+                        // building in front of a walker hides it. Its own
+                        // Stack under a listener: a walker stepping onto a new
+                        // cell re-sorts THIS layer only, not the whole map.
+                        Positioned.fill(
+                          child: ValueListenableBuilder<int>(
+                            valueListenable: _walkers.order,
+                            builder: (context, _, _) => Stack(
+                              clipBehavior: Clip.none,
+                              children: _layer(
+                                roads: false,
+                                ghostDef: ghostDef,
+                                gx: gx,
+                                gy: gy,
+                                faded: faded,
+                                walkers: walkersShown
+                                    ? _walkers.walkers
+                                    : const [],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // ── The controls, in SCREEN space ─────────────────
-            // They ride above the InteractiveViewer but cover only the ghost
-            // and its handles — everything else falls through to the viewer,
-            // which is what makes "beside it I can scroll" true without a mode
-            // switch. The AnimatedBuilder is what keeps them pinned while the
-            // map moves under them.
-            if (showGhost || _chaining)
-              // Positioned.fill, because a bare Stack whose children are ALL
-              // positioned collapses to nothing and takes every control with it.
-              Positioned.fill(
-                child: AnimatedBuilder(
-                  animation: _txCtrl,
-                  builder: (context, _) => Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      if (showGhost) ..._aimControls(ghostDef, gx, gy),
-                      if (_chaining) ..._chainControls(),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
 
-            // ── Mode banners ──────────────────────────────────
-            // Pinned to the BOTTOM, not `top: 54`. That offset was tuned to a
-            // 44px header; the header is two rows plus a safe area now (~100px
-            // on a phone), so the banners — and the "Done" button that leaves
-            // the mode — were buried underneath it. Reported as "I can't close
-            // the road menu".
-            //
-            // Bottom is also simply the right place: it's in thumb reach, and
-            // the settlement screen hides its quick menu while a mode is
-            // active, so nothing else is competing for the space.
-            if (!_chaining && !showGhost && widget.editMode)
-              _bottomBanner(_editIdleBanner(), maxWidth: 620),
-          ],
+              // ── The controls, in SCREEN space ─────────────────
+              // They ride above the InteractiveViewer but cover only the ghost
+              // and its handles — everything else falls through to the viewer,
+              // which is what makes "beside it I can scroll" true without a mode
+              // switch. The AnimatedBuilder is what keeps them pinned while the
+              // map moves under them.
+              if (showGhost || _chaining)
+                // Positioned.fill, because a bare Stack whose children are ALL
+                // positioned collapses to nothing and takes every control with it.
+                Positioned.fill(
+                  child: AnimatedBuilder(
+                    animation: _txCtrl,
+                    builder: (context, _) => Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        if (showGhost) ..._aimControls(ghostDef, gx, gy),
+                        if (_chaining) ..._chainControls(),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // ── Mode banners ──────────────────────────────────
+              // Pinned to the BOTTOM, not `top: 54`. That offset was tuned to a
+              // 44px header; the header is two rows plus a safe area now (~100px
+              // on a phone), so the banners — and the "Done" button that leaves
+              // the mode — were buried underneath it. Reported as "I can't close
+              // the road menu".
+              //
+              // Bottom is also simply the right place: it's in thumb reach, and
+              // the settlement screen hides its quick menu while a mode is
+              // active, so nothing else is competing for the space.
+              if (!_chaining && !showGhost && widget.editMode)
+                _bottomBanner(_editIdleBanner(), maxWidth: 620),
+            ],
+          ),
         );
       },
     );
@@ -1860,10 +1906,7 @@ class SettlementMapState extends State<SettlementMap>
         // has nobody in it, and a paused one has been told to stop — a
         // chimney still smoking would say the opposite of what the pause
         // overlay says, and the player would believe the smoke.
-        if (b.isComplete &&
-            !b.isPaused &&
-            !def.isRoad &&
-            !def.isBuildPlot)
+        if (b.isComplete && !b.isPaused && !def.isRoad && !def.isBuildPlot)
           Positioned.fill(
             child: _LifeOverlay(def: def, seed: b.id.hashCode),
           ),
@@ -1887,11 +1930,13 @@ class SettlementMapState extends State<SettlementMap>
               decoration: const BoxDecoration(
                 shape: BoxShape.rectangle,
                 color: Colors.white,
-                boxShadow: [
-                  BoxShadow(color: Color(0x99000000), blurRadius: 2),
-                ],
+                boxShadow: [BoxShadow(color: Color(0x99000000), blurRadius: 2)],
               ),
-              child: const PixelIcon(Icons.remove_road, size: 11, color: FoE.danger),
+              child: const PixelIcon(
+                Icons.remove_road,
+                size: 11,
+                color: FoE.danger,
+              ),
             ),
           ),
         // PAUSED, on the map (user 2026-08-01): a switch you cannot see
@@ -1901,10 +1946,7 @@ class SettlementMapState extends State<SettlementMap>
         // 2026-09-22): the art itself is greyed (see [_BuildingTile]) and sleepy
         // Zs rise where the smoke would — the dark rectangle over the whole field
         // (the ground included) and the 12 px ⏸ are gone.
-        if (b.isPaused &&
-            b.isComplete &&
-            !def.isRoad &&
-            !def.isBuildPlot)
+        if (b.isPaused && b.isComplete && !def.isRoad && !def.isBuildPlot)
           Positioned.fill(
             child: _SleepOverlay(def: def, seed: b.id.hashCode),
           ),
@@ -2008,23 +2050,23 @@ class SettlementMapState extends State<SettlementMap>
           // Every one of them — the Castle has a gate on each side.
           if (entrancesFor(def.artId, def.gridW, def.gridH) case final es?)
             for (final e in es)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _EntrancePainter(
-                    w: def.gridW,
-                    h: def.gridH,
-                    entrance: e,
-                    hasRoad: () {
-                      final (rx, ry) = entranceRoadCell(e, gx, gy);
-                      return widget.ctrl.roadCells.contains(
-                        roadCellKey(rx, ry),
-                      );
-                    }(),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _EntrancePainter(
+                      w: def.gridW,
+                      h: def.gridH,
+                      entrance: e,
+                      hasRoad: () {
+                        final (rx, ry) = entranceRoadCell(e, gx, gy);
+                        return widget.ctrl.roadCells.contains(
+                          roadCellKey(rx, ry),
+                        );
+                      }(),
+                    ),
                   ),
                 ),
               ),
-            ),
         ],
       ),
     );
@@ -2160,7 +2202,7 @@ class SettlementMapState extends State<SettlementMap>
         text,
         style: TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
           color: colour ?? kBoxInkSoft,
         ),
       ),
@@ -2178,7 +2220,7 @@ class SettlementMapState extends State<SettlementMap>
         '${value.ceil()}',
         style: TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           color: (stock[key] ?? 0) >= value ? kBoxInk : CreamPalette.warn,
         ),
       ),
@@ -2320,7 +2362,7 @@ class SettlementMapState extends State<SettlementMap>
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 11,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w400,
                                     color: ok
                                         ? CreamPalette.better
                                         : CreamPalette.warn,
@@ -2466,7 +2508,9 @@ class SettlementMapState extends State<SettlementMap>
         onOk: status.ok ? _confirmAim : null,
         onCancel: _tutorialPlacementLocked ? null : _cancelAim,
         onDelete: canDelete ? _deleteAimed : null,
-        onRotate: def.canRotate && !_tutorialPlacementLocked ? _rotateAim : null,
+        onRotate: def.canRotate && !_tutorialPlacementLocked
+            ? _rotateAim
+            : null,
       ),
     ];
   }
@@ -2740,7 +2784,6 @@ class _BuildingTile extends StatelessWidget {
   /// can draw the picture, and "asleep" is the building's own decision while
   /// "disconnected" is just a fact about the road network around it.
   final bool isDisconnected;
-
 
   const _BuildingTile({
     required this.def,
@@ -3098,7 +3141,11 @@ class _FootprintPainter extends CustomPainter {
   final int h;
   final Color color;
 
-  const _FootprintPainter({required this.w, required this.h, required this.color});
+  const _FootprintPainter({
+    required this.w,
+    required this.h,
+    required this.color,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3156,7 +3203,10 @@ class _EntrancePainter extends CustomPainter {
       Offset((h + gx - gy) * kIsoTileW / 2, (gx + gy) * kIsoTileH / 2);
 
   Path _cell(int cx, int cy) => Path()
-    ..moveTo(_pt(cx.toDouble(), cy.toDouble()).dx, _pt(cx.toDouble(), cy.toDouble()).dy)
+    ..moveTo(
+      _pt(cx.toDouble(), cy.toDouble()).dx,
+      _pt(cx.toDouble(), cy.toDouble()).dy,
+    )
     ..lineTo(_pt(cx + 1.0, cy.toDouble()).dx, _pt(cx + 1.0, cy.toDouble()).dy)
     ..lineTo(_pt(cx + 1.0, cy + 1.0).dx, _pt(cx + 1.0, cy + 1.0).dy)
     ..lineTo(_pt(cx.toDouble(), cy + 1.0).dx, _pt(cx.toDouble(), cy + 1.0).dy)
@@ -3208,8 +3258,14 @@ class _EntrancePainter extends CustomPainter {
       ..drawPath(
         Path()
           ..moveTo(tip.dx, tip.dy)
-          ..lineTo((tip - u * head + n * head * 0.6).dx, (tip - u * head + n * head * 0.6).dy)
-          ..lineTo((tip - u * head - n * head * 0.6).dx, (tip - u * head - n * head * 0.6).dy)
+          ..lineTo(
+            (tip - u * head + n * head * 0.6).dx,
+            (tip - u * head + n * head * 0.6).dy,
+          )
+          ..lineTo(
+            (tip - u * head - n * head * 0.6).dx,
+            (tip - u * head - n * head * 0.6).dy,
+          )
           ..close(),
         Paint()..color = gold,
       );
@@ -3217,7 +3273,10 @@ class _EntrancePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_EntrancePainter old) =>
-      old.w != w || old.h != h || old.entrance != entrance || old.hasRoad != hasRoad;
+      old.w != w ||
+      old.h != h ||
+      old.entrance != entrance ||
+      old.hasRoad != hasRoad;
 }
 
 /// A road without art: its cell, filled flat, with the lit near edge every
