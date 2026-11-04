@@ -92,10 +92,10 @@ void main() {
     // The one that used to fall off the end, and the very last by name.
     expect(
       free.length,
-      greaterThan(60),
+      greaterThan(40),
       reason: 'otherwise nothing was hidden',
     );
-    for (final d in [free[60], free.last, free.first]) {
+    for (final d in [free[40], free.last, free.first]) {
       expect(
         find.text(d.name),
         findsWidgets,

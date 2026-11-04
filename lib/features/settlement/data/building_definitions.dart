@@ -1636,9 +1636,9 @@ class BuildingDef {
 // GENERATED 8-ERA ROSTER (user 2026-07-24). The whole building set is emitted
 // by formula here so code == the DB (building_roster.sql is serialised from
 // this exact model). Per era: 2 producers per raw build-resource (cap 10 +2/era),
-// 1 element refinery, 2 monster-pens, 1 producer per luxury, and 2 worker-free
-// special buildings (Grand Works = raws+element, Treasury = GOLD+luxuries) that
-// each take ONE legendary to double their output. Civic buildings (Builder Camp,
+// 1 element refinery, 2 monster-pens and 1 producer per luxury. (The legendary
+// Grand Works / Treasury pairs were removed 2026-11-04; something new replaces
+// them.) Civic buildings (Builder Camp,
 // Healing/Breeding Hut, Workshop, Scout, Training, Warehouse, Smokehouse) plus
 // the always-available castle/road/building_plot. All numbers tune in Dev Mode.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1710,10 +1710,8 @@ const Map<int, int> _eraHousingCap = {
 // kBuildingUnlockBattle, and an id is not a name.
 const (String, String) _habitatNames = ('Small House', 'Large House');
 
-double _eraMult(int era) => math.pow(1.6, era - 1).toDouble();
 double _eraBuildHours(double seconds, int era) =>
     seconds * math.pow(1.2, era - 1).toDouble() / 3600;
-double _rate1(double v) => (v * 10).roundToDouble() / 10;
 
 Color _rosterColor(String res) {
   const map = {'wood': 0xFF6B8E4E, 'stone': 0xFF7A8288, 'gold': 0xFFC9971A};
@@ -1755,17 +1753,6 @@ Map<int, int> _rosterCapMaterial(int intro) => {
 };
 Map<int, Map<String, double>> _rosterCostPerEra(Map<int, int> cap, double k) =>
     {for (final e in cap.keys) e: _rosterCost(e, k)};
-
-/// The special buildings' one legendary-only boost slot: a stationed legendary
-/// doubles the building's worker-free production (mult 1.0), stats irrelevant.
-List<WorkshopRole> get _legendarySlot => const [
-  WorkshopRole(
-    stat: CreatureStat.breeding,
-    resource: WorkshopRole.kLegendaryBoost,
-    mult: 1.0,
-    slots: 1,
-  ),
-];
 
 String _luxWord(String id) =>
     const {
@@ -2009,91 +1996,6 @@ List<BuildingDef> _buildRoster() {
         ),
       );
     }
-
-    final matProd = <BuildingEffect>[
-      BuildingEffect(
-        type: 'production',
-        key: 'wood',
-        value: _rate1(3 * _eraMult(era)),
-        era: era,
-      ),
-      BuildingEffect(
-        type: 'production',
-        key: 'stone',
-        value: _rate1(3 * _eraMult(era)),
-        era: era,
-      ),
-      for (var e = 2; e <= era; e++)
-        BuildingEffect(
-          type: 'production',
-          key: rawForRegion(e)!.id,
-          value: _rate1(2 * _eraMult(era)),
-          era: era,
-        ),
-      if (element != null)
-        BuildingEffect(
-          type: 'production',
-          key: element.id,
-          value: _rate1(1.5 * _eraMult(era)),
-          era: era,
-        ),
-    ];
-    defs.add(
-      BuildingDef(
-        id: _idFor(era, 'church', 'special_materials_e$era'),
-        name: _named(era, 'Church'),
-        color: const Color(0xFF6D4C41),
-        // 3 x 5 (user 2026-08-12): a NAVE and a west tower, not a hall. Long and
-        // narrow is what makes a church read as a church from above — five cells
-        // of ridge with a tower at one end, where 5 x 5 was a square block.
-        gridW: 3,
-        gridH: 5,
-        resourceCost: _rosterCost(era, 3.0),
-        constructionHours: _eraBuildHours(900, era),
-        eraIds: ['era_$era'],
-        maxCount: 0,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 3.0),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-        workshops: _legendarySlot,
-        effects: matProd,
-      ),
-    );
-    final goldProd = <BuildingEffect>[
-      BuildingEffect(
-        type: 'production',
-        key: 'gold',
-        value: _rate1(4 * _eraMult(era)),
-        era: era,
-      ),
-      for (final lux in luxuries)
-        BuildingEffect(
-          type: 'production',
-          key: lux.id,
-          value: _rate1(1.5 * _eraMult(era)),
-          era: era,
-        ),
-    ];
-    defs.add(
-      BuildingDef(
-        id: _idFor(era, 'marketplace', 'special_treasury_e$era'),
-        name: _named(era, 'Marketplace'),
-        color: const Color(0xFFC9971A),
-        gridW: 4,
-        gridH: 4,
-        resourceCost: _rosterCost(era, 3.0),
-        constructionHours: _eraBuildHours(900, era),
-        eraIds: ['era_$era'],
-        maxCount: 0,
-        maxLevelPerEra: civCap,
-        costPerEra: _rosterCostPerEra(civCap, 3.0),
-        costFactor: 1.3,
-        timeFactor: 1.3,
-        workshops: _legendarySlot,
-        effects: goldProd,
-      ),
-    );
 
     if (era == 1) {
       defs.add(
@@ -2474,7 +2376,6 @@ final Map<String, BuildingDef> kBuildingDefs = Map.of(kFallbackBuildingDefs);
 /// smudge that never moves. Re-render a building whose chimney moved and this
 /// map has to be recomputed with it.
 const Map<String, (double, double)> kChimneyAnchor = {
-  'breeding_hut': (0.454, 0.220),
   // 'castle' had an entry here, but the 2026-08-23 rebuild-to-photo
   // dropped the keep hall (and its chimney) entirely — the new castle is
   // a wall and towers, nothing with a fireplace. A stale anchor would
@@ -2483,8 +2384,6 @@ const Map<String, (double, double)> kChimneyAnchor = {
   // that fits the building onto its tile also reframes the camera, moving
   // the chimney mouth in the picture. Projected through the same camera as
   // before (hhchim-1_pot, the left of the two stacks).
-  'healing_hut': (0.627, 0.5),
-  'builder_camp': (0.456, 0.374),
   // 'large_wood_camp' had an entry here, but that building's chimney is
   // gone — the 2026-08-16 redesign replaced it with an open thatched shed
   // with no fireplace. A stale anchor would have put smoke over open air.
@@ -2506,11 +2405,7 @@ const Map<String, (double, double)> kChimneyAnchor = {
   // taller than 1.25x its own width, so its beacon projects to a NEGATIVE
   // anchorY — correct, not a bug: Clip.none all the way up this Stack lets
   // the smoke paint above the box exactly where the beacon really is.
-  'large_house': (0.302, 0.559),
   'thinker_circle': (0.498, 0.334),
-  'scout_post': (0.655, -0.184),
-  'caravanserai': (0.116, 0.653),
-  'church': (0.127, 0.726),
   'refinery_e2': (0.231, 0.732),
   'small_house': (0.555, 0.134),
   'small_house_r1': (0.696, 0.235),
@@ -2540,6 +2435,22 @@ const Map<String, (double, double)> kChimneyAnchor = {
   'butcher_shop_r1': (0.734, 0.537),
   'butcher_shop_r2': (0.536, 0.645),
   'butcher_shop_r3': (0.266, 0.566),
+  'scout_post': (0.724, 0.413),
+  'scout_post_r1': (0.446, 0.481),
+  'scout_post_r2': (0.276, 0.369),
+  'scout_post_r3': (0.554, 0.301),
+  'large_house': (0.648, 0.472),
+  'large_house_r1': (0.765, 0.637),
+  'large_house_r2': (0.352, 0.684),
+  'large_house_r3': (0.235, 0.519),
+  'breeding_hut': (0.489, 0.491),
+  'breeding_hut_r1': (0.756, 0.589),
+  'breeding_hut_r2': (0.511, 0.696),
+  'breeding_hut_r3': (0.244, 0.598),
+  'healing_hut': (0.740, 0.627),
+  'healing_hut_r1': (0.475, 0.713),
+  'healing_hut_r2': (0.260, 0.607),
+  'healing_hut_r3': (0.525, 0.521),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {
@@ -2556,8 +2467,6 @@ const Map<String, int> kBuildingUnlockBattle = {
   'breeding_hut': 12,
   'hatchery': 12, // unlocks together with the Breeding Hut (user 2026-07-24)
   'builder_camp': 14,
-  'marketplace': 16,
-  'church': 18, // the grand works, just before the era boss (19)
   // THE REFINERY IS THE SECOND-TO-LAST NODE OF AN ERA (user 2026-07-31: "die
   // rafinery wird jeweils beim zweitletzten Knotenpunkt freigeschalten"), i.e.
   // 18 with the boss at 19.

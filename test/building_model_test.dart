@@ -106,11 +106,11 @@ void main() {
     test('the road network starts in front of a gate, not anywhere on the '
         'wall', () {
       final hall = _b('hall', 'castle', 0, 0);
-      // A Large House (no model of its own yet: any-side rule) beside a
+      // A Workshop (no model of its own yet: any-side rule) beside a
       // single road cell below the Castle's south wall.
-      final atGate = [_b('r', 'road', 5, 10), _b('h', 'large_house', 6, 10)];
+      final atGate = [_b('r', 'road', 5, 10), _b('h', 'thinker_circle', 6, 10)];
       expect(GameEngine.connectedBuildingIds([hall, ...atGate]), contains('h'));
-      final atWall = [_b('r', 'road', 2, 10), _b('h', 'large_house', 3, 10)];
+      final atWall = [_b('r', 'road', 2, 10), _b('h', 'thinker_circle', 3, 10)];
       expect(
         GameEngine.connectedBuildingIds([hall, ...atWall]),
         isNot(contains('h')),

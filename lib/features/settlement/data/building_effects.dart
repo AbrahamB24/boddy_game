@@ -413,50 +413,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'church': BuildingEffects(
-    effects: [
-      BuildingEffect(
-        type: 'production',
-        key: 'wood',
-        value: 100,
-        levelFactor: 1.1,
-      ),
-      BuildingEffect(
-        type: 'production',
-        key: 'fish',
-        value: 3,
-        levelFactor: 1.1,
-      ),
-      BuildingEffect(
-        type: 'production',
-        key: 'gold',
-        value: 1,
-        levelFactor: 1.1,
-      ),
-    ],
-  ),
-  'marketplace': BuildingEffects(
-    effects: [
-      BuildingEffect(
-        type: 'production',
-        key: 'stone',
-        value: 100,
-        levelFactor: 1.1,
-      ),
-      BuildingEffect(
-        type: 'production',
-        key: 'meat',
-        value: 3,
-        levelFactor: 1.1,
-      ),
-      BuildingEffect(
-        type: 'production',
-        key: 'gold',
-        value: 1,
-        levelFactor: 1.1,
-      ),
-    ],
-  ),
   'builder_camp': BuildingEffects(
     workshops: [
       WorkshopRole(
@@ -827,39 +783,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'special_materials_e2': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'wood', value: 4.8, era: 2),
-      BuildingEffect(type: 'production', key: 'stone', value: 4.8, era: 2),
-      BuildingEffect(type: 'production', key: 'clay', value: 3.2, era: 2),
-      BuildingEffect(type: 'production', key: 'frame', value: 2.4, era: 2),
-    ],
-  ),
-  'special_treasury_e2': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'gold', value: 6.4, era: 2),
-      // honey/herbs cut 2026-09-12 (down to one luxury per region; meat took
-      // the slot instead) — no replacement bonus line added for meat, since
-      // that would need its own production VALUE decided, not just carried
-      // over from a removed good.
-    ],
-  ),
   'thinker_circle': BuildingEffects(
     workshops: [
       WorkshopRole(
@@ -951,38 +874,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'special_materials_e3': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'wood', value: 7.7, era: 3),
-      BuildingEffect(type: 'production', key: 'stone', value: 7.7, era: 3),
-      BuildingEffect(type: 'production', key: 'clay', value: 5.1, era: 3),
-      BuildingEffect(type: 'production', key: 'lime', value: 5.1, era: 3),
-      BuildingEffect(type: 'production', key: 'daub', value: 3.8, era: 3),
-    ],
-  ),
-  'special_treasury_e3': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'gold', value: 10.2, era: 3),
-      // cheese cut 2026-09-12 (down to one luxury per region) — wine survives.
-      BuildingEffect(type: 'production', key: 'wine', value: 3.8, era: 3),
-    ],
-  ),
   'training_grounds': BuildingEffects(
     workshops: [
       WorkshopRole(
@@ -1053,39 +944,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'special_materials_e4': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'wood', value: 12.3, era: 4),
-      BuildingEffect(type: 'production', key: 'stone', value: 12.3, era: 4),
-      BuildingEffect(type: 'production', key: 'clay', value: 8.2, era: 4),
-      BuildingEffect(type: 'production', key: 'lime', value: 8.2, era: 4),
-      BuildingEffect(type: 'production', key: 'ore', value: 8.2, era: 4),
-      BuildingEffect(type: 'production', key: 'plaster', value: 6.1, era: 4),
-    ],
-  ),
-  'special_treasury_e4': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'gold', value: 16.4, era: 4),
-      // cloth cut 2026-09-12 (down to one luxury per region) — spices survives.
-      BuildingEffect(type: 'production', key: 'spices', value: 6.1, era: 4),
-    ],
-  ),
   'coal_camp_e5': BuildingEffects(
     workshops: [
       WorkshopRole(
@@ -1124,40 +982,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         mult: 0.8,
         slots: 3,
       ),
-    ],
-  ),
-  'special_materials_e5': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'wood', value: 19.7, era: 5),
-      BuildingEffect(type: 'production', key: 'stone', value: 19.7, era: 5),
-      BuildingEffect(type: 'production', key: 'clay', value: 13.1, era: 5),
-      BuildingEffect(type: 'production', key: 'lime', value: 13.1, era: 5),
-      BuildingEffect(type: 'production', key: 'ore', value: 13.1, era: 5),
-      BuildingEffect(type: 'production', key: 'coal', value: 13.1, era: 5),
-      BuildingEffect(type: 'production', key: 'truss', value: 9.8, era: 5),
-    ],
-  ),
-  'special_treasury_e5': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'gold', value: 26.2, era: 5),
-      BuildingEffect(type: 'production', key: 'salt', value: 9.8, era: 5),
-      // silk cut 2026-09-12 (down to one luxury per region) — salt survives.
     ],
   ),
   'sand_camp_e6': BuildingEffects(
@@ -1200,42 +1024,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'special_materials_e6': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'wood', value: 31.5, era: 6),
-      BuildingEffect(type: 'production', key: 'stone', value: 31.5, era: 6),
-      BuildingEffect(type: 'production', key: 'clay', value: 21, era: 6),
-      BuildingEffect(type: 'production', key: 'lime', value: 21, era: 6),
-      BuildingEffect(type: 'production', key: 'ore', value: 21, era: 6),
-      BuildingEffect(type: 'production', key: 'coal', value: 21, era: 6),
-      BuildingEffect(type: 'production', key: 'sand', value: 21, era: 6),
-      BuildingEffect(type: 'production', key: 'clinker', value: 15.7, era: 6),
-    ],
-  ),
-  'special_treasury_e6': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'gold', value: 41.9, era: 6),
-      // chocolate cut 2026-09-12 (down to one luxury per region) — coffee
-      // survives.
-      BuildingEffect(type: 'production', key: 'coffee', value: 15.7, era: 6),
-    ],
-  ),
   'crystal_camp_e7': BuildingEffects(
     workshops: [
       WorkshopRole(
@@ -1276,43 +1064,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
       ),
     ],
   ),
-  'special_materials_e7': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'wood', value: 50.3, era: 7),
-      BuildingEffect(type: 'production', key: 'stone', value: 50.3, era: 7),
-      BuildingEffect(type: 'production', key: 'clay', value: 33.6, era: 7),
-      BuildingEffect(type: 'production', key: 'lime', value: 33.6, era: 7),
-      BuildingEffect(type: 'production', key: 'ore', value: 33.6, era: 7),
-      BuildingEffect(type: 'production', key: 'coal', value: 33.6, era: 7),
-      BuildingEffect(type: 'production', key: 'sand', value: 33.6, era: 7),
-      BuildingEffect(type: 'production', key: 'crystal', value: 33.6, era: 7),
-      BuildingEffect(type: 'production', key: 'glasswork', value: 25.2, era: 7),
-    ],
-  ),
-  'special_treasury_e7': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'gold', value: 67.1, era: 7),
-      // porcelain cut 2026-09-12 (down to one luxury per region) — tea
-      // survives.
-      BuildingEffect(type: 'production', key: 'tea', value: 25.2, era: 7),
-    ],
-  ),
   'aether_camp_e8': BuildingEffects(
     workshops: [
       WorkshopRole(
@@ -1351,44 +1102,6 @@ final Map<String, BuildingEffects> kBuildingEffects = {
         mult: 3.2,
         slots: 3,
       ),
-    ],
-  ),
-  'special_materials_e8': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'wood', value: 80.5, era: 8),
-      BuildingEffect(type: 'production', key: 'stone', value: 80.5, era: 8),
-      BuildingEffect(type: 'production', key: 'clay', value: 53.7, era: 8),
-      BuildingEffect(type: 'production', key: 'lime', value: 53.7, era: 8),
-      BuildingEffect(type: 'production', key: 'ore', value: 53.7, era: 8),
-      BuildingEffect(type: 'production', key: 'coal', value: 53.7, era: 8),
-      BuildingEffect(type: 'production', key: 'sand', value: 53.7, era: 8),
-      BuildingEffect(type: 'production', key: 'crystal', value: 53.7, era: 8),
-      BuildingEffect(type: 'production', key: 'aether', value: 53.7, era: 8),
-      BuildingEffect(type: 'production', key: 'vault', value: 40.3, era: 8),
-    ],
-  ),
-  'special_treasury_e8': BuildingEffects(
-    workshops: [
-      WorkshopRole(
-        stat: CreatureStat.breeding,
-        resource: WorkshopRole.kLegendaryBoost,
-        mult: 1,
-        slots: 1,
-      ),
-    ],
-    effects: [
-      BuildingEffect(type: 'production', key: 'gold', value: 107.4, era: 8),
-      // jewelry cut 2026-09-12 (down to one luxury per region) — perfume
-      // survives.
-      BuildingEffect(type: 'production', key: 'perfume', value: 40.3, era: 8),
     ],
   ),
 };

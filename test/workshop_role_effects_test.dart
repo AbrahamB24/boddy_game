@@ -150,13 +150,14 @@ void main() {
       );
     });
 
-    test('a LATER era\'s effect is not promised in this one', () {
-      // The one thing that must still be skipped: a special building's era-2
-      // production is not an effect it has in era 1.
-      final special = kFallbackBuildingDefs['special_materials_e2']!;
-      expect(special.effects.any((e) => e.era == 2), isTrue);
-      for (final row in buildingEffectCardRows(special, 1, 1)) {
-        expect(row.label, isNot(contains('era 2')));
+    test('a later era effect is not promised in this one', () {
+      // An era-2 effect is not an effect the building has in era 1.
+      for (final special in kFallbackBuildingDefs.values.where(
+        (d) => d.effects.any((e) => e.era == 2),
+      )) {
+        for (final row in buildingEffectCardRows(special, 1, 1)) {
+          expect(row.label, isNot(contains('era 2')));
+        }
       }
     });
 
