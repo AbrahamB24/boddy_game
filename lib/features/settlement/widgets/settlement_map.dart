@@ -2,7 +2,8 @@ import '../../../core/ui/feel.dart';
 import 'dart:async';
 import 'dart:math' show max;
 import 'dart:math' as math;
-import 'package:flutter/gestures.dart' show PointerScrollEvent, PointerSignalEvent;
+import 'package:flutter/gestures.dart'
+    show PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/material.dart' hide Text;
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -231,36 +232,33 @@ class SettlementMapState extends State<SettlementMap>
 
   // ── Mouse wheel / trackpad zoom, guaranteed (user 2026-11-04: "im Baumodus
   // muss ich auch zoomen können") ──
-  // InteractiveViewer zooms on the wheel through Flutter's pointer-signal
-  // resolver, where only ONE widget per event wins — any widget that
-  // registers first (a scrollable under the cursor, the ghost's controls)
-  // takes the wheel and the map never sees it. This outer raw Listener always
-  // gets the event; one microtask later, after the resolver has run, it zooms
-  // itself — but only if the transform did not change meanwhile, so where
-  // InteractiveViewer does answer there is no double zoom.
+  // InteractiveViewer zooms on the wheel by itself, but only where it is hit:
+  // over a ghost's grab box (a sibling drawn above it) it never hears the wheel.
+  // This outer raw Listener always does. A second Listener INSIDE the viewer's
+  // child, which runs before the viewer's own handler, notes the transform's
+  // change counter first, so the outer one can tell whether the viewer already
+  // zoomed (no double zoom) or never heard the event (zoom here, around the
+  // cursor).
   int _txChanges = 0;
+  int? _wheelSeen;
 
   void _onWheel(PointerSignalEvent e) {
     if (e is! PointerScrollEvent) return;
-    final before = _txChanges;
+    final seen = _wheelSeen;
+    _wheelSeen = null;
+    if (seen != null && seen != _txChanges) return;
     final focal = e.localPosition;
-    final dy = e.scrollDelta.dy;
-    scheduleMicrotask(() {
-      if (!mounted || _txChanges != before) return;
-      final view = _viewport;
-      if (view == null) return;
-      final m = _txCtrl.value;
-      final scale = m.getMaxScaleOnAxis();
-      final t = m.getTranslation();
-      final newScale = scale * math.exp(-dy / 200);
-      final ax = (focal.dx - t.x) / scale;
-      final ay = (focal.dy - t.y) / scale;
-      _txCtrl.value = mapTransform(
-        newScale,
-        focal.dx - ax * newScale,
-        focal.dy - ay * newScale,
-      );
-    });
+    final m = _txCtrl.value;
+    final scale = m.getMaxScaleOnAxis();
+    final t = m.getTranslation();
+    final newScale = scale * math.exp(-e.scrollDelta.dy / 200);
+    final ax = (focal.dx - t.x) / scale;
+    final ay = (focal.dy - t.y) / scale;
+    _txCtrl.value = mapTransform(
+      newScale,
+      focal.dx - ax * newScale,
+      focal.dy - ay * newScale,
+    );
   }
 
   // ── Bringing something into view (user 2026-07-30) ──────────
@@ -1673,86 +1671,92 @@ class SettlementMapState extends State<SettlementMap>
                 // know the default to know the rule is being kept.
                 boundaryMargin: EdgeInsets.zero,
                 transformationController: _txCtrl,
-                child: GestureDetector(
-                  onTapUp: (d) => _handleTap(d.localPosition),
-                  onLongPressStart: (d) => _handleLongPress(d.localPosition),
-                  child: SizedBox(
-                    width: mapW,
-                    height: mapH,
-                    child: Stack(
-                      children: [
-                        // Replaced the single baked map_background.png (user
-                        // 2026-09-07: "der Background muss wirklich noch
-                        // deutlich überarbeitet werden... genau gleich
-                        // aufgelöst [wie] die Gebäude") — matching the
-                        // buildings' own sharpness across the WHOLE map in one
-                        // image would need a ~117760×58880px source (measured:
-                        // ~270 px/world-unit for a building vs ~22 for the old
-                        // whole-map bake), tens of gigabytes. TerrainLayer
-                        // tiles a small, sharp ground swatch and places detail
-                        // props individually instead — see its own doc comment.
-                        Positioned.fill(
-                          child: RepaintBoundary(
-                            child: TerrainLayer(
-                              buildableRegion: widget.ctrl.buildableRegion,
-                            ),
-                          ),
-                        ),
-                        if (showGhost ||
-                            _chaining ||
-                            widget.editMode ||
-                            widget.roadMode)
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerSignal: (e) {
+                    if (e is PointerScrollEvent) _wheelSeen = _txChanges;
+                  },
+                  child: GestureDetector(
+                    onTapUp: (d) => _handleTap(d.localPosition),
+                    onLongPressStart: (d) => _handleLongPress(d.localPosition),
+                    child: SizedBox(
+                      width: mapW,
+                      height: mapH,
+                      child: Stack(
+                        children: [
+                          // Replaced the single baked map_background.png (user
+                          // 2026-09-07: "der Background muss wirklich noch
+                          // deutlich überarbeitet werden... genau gleich
+                          // aufgelöst [wie] die Gebäude") — matching the
+                          // buildings' own sharpness across the WHOLE map in one
+                          // image would need a ~117760×58880px source (measured:
+                          // ~270 px/world-unit for a building vs ~22 for the old
+                          // whole-map bake), tens of gigabytes. TerrainLayer
+                          // tiles a small, sharp ground swatch and places detail
+                          // props individually instead — see its own doc comment.
                           Positioned.fill(
-                            child: CustomPaint(
-                              painter: _GridPainter(
+                            child: RepaintBoundary(
+                              child: TerrainLayer(
                                 buildableRegion: widget.ctrl.buildableRegion,
                               ),
                             ),
                           ),
-                        // ── GROUND FIRST, THEN WHAT STANDS ON IT ──
-                        // (user 2026-08-01: "die Strasse ist jetzt über dem
-                        // Gebäude").
-                        //
-                        // Depth alone cannot fix that. A road one tile in FRONT
-                        // of a building is genuinely nearer the viewer, so it
-                        // sorts later — and then its flat tile paints over the
-                        // wall that leans into that space, because a tall sprite
-                        // occupies tiles its footprint does not.
-                        //
-                        // So roads are a LAYER, not a competitor: they are
-                        // ground, and nothing that lies on the ground may cover
-                        // something standing on it.
-                        ..._layer(
-                          roads: true,
-                          ghostDef: ghostDef,
-                          gx: gx,
-                          gy: gy,
-                          faded: faded,
-                        ),
-                        // BACK TO FRONT among themselves — and the monsters
-                        // walking the roads among them (user 2026-11-03), so a
-                        // building in front of a walker hides it. Its own
-                        // Stack under a listener: a walker stepping onto a new
-                        // cell re-sorts THIS layer only, not the whole map.
-                        Positioned.fill(
-                          child: ValueListenableBuilder<int>(
-                            valueListenable: _walkers.order,
-                            builder: (context, _, _) => Stack(
-                              clipBehavior: Clip.none,
-                              children: _layer(
-                                roads: false,
-                                ghostDef: ghostDef,
-                                gx: gx,
-                                gy: gy,
-                                faded: faded,
-                                walkers: walkersShown
-                                    ? _walkers.walkers
-                                    : const [],
+                          if (showGhost ||
+                              _chaining ||
+                              widget.editMode ||
+                              widget.roadMode)
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: _GridPainter(
+                                  buildableRegion: widget.ctrl.buildableRegion,
+                                ),
+                              ),
+                            ),
+                          // ── GROUND FIRST, THEN WHAT STANDS ON IT ──
+                          // (user 2026-08-01: "die Strasse ist jetzt über dem
+                          // Gebäude").
+                          //
+                          // Depth alone cannot fix that. A road one tile in FRONT
+                          // of a building is genuinely nearer the viewer, so it
+                          // sorts later — and then its flat tile paints over the
+                          // wall that leans into that space, because a tall sprite
+                          // occupies tiles its footprint does not.
+                          //
+                          // So roads are a LAYER, not a competitor: they are
+                          // ground, and nothing that lies on the ground may cover
+                          // something standing on it.
+                          ..._layer(
+                            roads: true,
+                            ghostDef: ghostDef,
+                            gx: gx,
+                            gy: gy,
+                            faded: faded,
+                          ),
+                          // BACK TO FRONT among themselves — and the monsters
+                          // walking the roads among them (user 2026-11-03), so a
+                          // building in front of a walker hides it. Its own
+                          // Stack under a listener: a walker stepping onto a new
+                          // cell re-sorts THIS layer only, not the whole map.
+                          Positioned.fill(
+                            child: ValueListenableBuilder<int>(
+                              valueListenable: _walkers.order,
+                              builder: (context, _, _) => Stack(
+                                clipBehavior: Clip.none,
+                                children: _layer(
+                                  roads: false,
+                                  ghostDef: ghostDef,
+                                  gx: gx,
+                                  gy: gy,
+                                  faded: faded,
+                                  walkers: walkersShown
+                                      ? _walkers.walkers
+                                      : const [],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
