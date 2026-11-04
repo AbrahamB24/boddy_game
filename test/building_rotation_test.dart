@@ -54,9 +54,9 @@ void main() {
   });
 
   test('a building without turned pictures cannot turn', () {
-    final old = kBuildingDefs['thinker_circle']!;
+    final old = kBuildingDefs['warehouse']!;
     expect(old.canRotate, isFalse);
-    expect(defRotated('thinker_circle', 1), same(old));
+    expect(defRotated('warehouse', 1), same(old));
   });
 
   test('the entrance turns with the building', () {

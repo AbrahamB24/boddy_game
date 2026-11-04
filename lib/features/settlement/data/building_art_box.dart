@@ -15,7 +15,7 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   // castle and small_quarry (renamed from small_stone_camp); the other six
   // kept their grid but were re-measured anyway since the geometry moved.
   'breeding_hut': (0.91897, 0.50663, 0.02468),
-  'building_plot': (0.92696, 0.50000, 0.02225),
+  'building_plot': (0.96163, 0.49365, 0.01363),
   'builder_camp': (0.90020, 0.48886, 0.02903),
   'caravanserai': (0.82896, 0.49316, 0.04839),
   'castle': (0.96469, 0.50000, 0.02581),
@@ -36,9 +36,9 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'small_quarry': (0.88487, 0.49757, 0.04126),
   'small_wood_camp': (0.87633, 0.49277, 0.03496),
   'storehouse': (0.91872, 0.53574, 0.03414),
-  'thinker_circle': (1.00000, 0.50000, 0.00000),
+  'thinker_circle': (0.81541, 0.47421, 0.08404),
   'trading_post': (0.83713, 0.49408, 0.04690),
-  'training_grounds': (1.00000, 0.50000, 0.00000),
+  'training_grounds': (0.82842, 0.48633, 0.04899),
   'small_house_r1': (0.96854, 0.50999, 0.02991),
   'small_house_r2': (0.96854, 0.50999, 0.01992),
   'small_house_r3': (0.96854, 0.49001, 0.01992),
@@ -97,4 +97,10 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'caravanserai_r1': (0.82896, 0.48925, 0.05718),
   'caravanserai_r2': (0.82896, 0.50684, 0.05914),
   'caravanserai_r3': (0.82896, 0.51075, 0.05035),
+  'thinker_circle_r1': (0.81541, 0.49215, 0.10086),
+  'thinker_circle_r2': (0.81541, 0.52579, 0.09189),
+  'thinker_circle_r3': (0.81541, 0.50785, 0.07507),
+  'training_grounds_r1': (0.82842, 0.48861, 0.06153),
+  'training_grounds_r2': (0.82842, 0.51367, 0.06039),
+  'training_grounds_r3': (0.82842, 0.51139, 0.04785),
 };

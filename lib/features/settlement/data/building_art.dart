@@ -115,6 +115,12 @@ const Set<String> kBundledBuildingArt = {
   'caravanserai_r1',
   'caravanserai_r2',
   'caravanserai_r3',
+  'thinker_circle_r1',
+  'thinker_circle_r2',
+  'thinker_circle_r3',
+  'training_grounds_r1',
+  'training_grounds_r2',
+  'training_grounds_r3',
 };
 
 /// The three placement numbers to use for [def]: the ones the RENDERER
