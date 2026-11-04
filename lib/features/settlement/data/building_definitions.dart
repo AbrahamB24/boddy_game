@@ -2484,8 +2484,6 @@ const Map<String, (double, double)> kChimneyAnchor = {
   // the chimney mouth in the picture. Projected through the same camera as
   // before (hhchim-1_pot, the left of the two stacks).
   'healing_hut': (0.627, 0.5),
-  'fish_shop': (0.517, 0.377),
-  'butcher_shop': (0.863, 0.536),
   'builder_camp': (0.456, 0.374),
   // 'large_wood_camp' had an entry here, but that building's chimney is
   // gone — the 2026-08-16 redesign replaced it with an open thatched shed
@@ -2534,6 +2532,14 @@ const Map<String, (double, double)> kChimneyAnchor = {
   'large_wood_camp_r3': (0.452, 0.729),
   'castle_r2': (0.469, 0.684),
   'castle_r3': (0.252, 0.572),
+  'fish_shop': (0.549, 0.440),
+  'fish_shop_r1': (0.735, 0.553),
+  'fish_shop_r2': (0.451, 0.628),
+  'fish_shop_r3': (0.265, 0.514),
+  'butcher_shop': (0.464, 0.458),
+  'butcher_shop_r1': (0.734, 0.537),
+  'butcher_shop_r2': (0.536, 0.645),
+  'butcher_shop_r3': (0.266, 0.566),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {

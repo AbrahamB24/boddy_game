@@ -80,6 +80,18 @@ const Set<String> kBundledBuildingArt = {
   'large_stone_camp_r3',
   'castle_r2',
   'castle_r3',
+  'fish_shop_r1',
+  'fish_shop_r2',
+  'fish_shop_r3',
+  'butcher_shop_r1',
+  'butcher_shop_r2',
+  'butcher_shop_r3',
+  'storehouse_r1',
+  'storehouse_r2',
+  'storehouse_r3',
+  'gold_vault_r1',
+  'gold_vault_r2',
+  'gold_vault_r3',
 };
 
 /// The three placement numbers to use for [def]: the ones the RENDERER

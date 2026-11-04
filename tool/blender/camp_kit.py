@@ -49,6 +49,14 @@ def mats():
     M['coal'] = plain('coal', '#2a2624', rough=0.6, bump=0.6, bump_scale=80)
     M['dark'] = plain('dark', '#1b1714', rough=0.9, bump=0)
     M['ox'] = plain('ox', '#8a5a32', rough=0.9, bump=0.3, bump_scale=80)
+    # fish, meat and the stone keep (shops and stores, 2026-11-04)
+    M['fish_s'] = plain('fish_s', '#b9cbd6', rough=0.35, metal=0.3, bump=0.05, vary=0.08)
+    M['fish_o'] = plain('fish_o', '#e0803a', rough=0.5, bump=0.05, vary=0.08)
+    M['meat'] = plain('meat', '#b5503e', rough=0.6, bump=0.1, vary=0.12)
+    M['bone'] = plain('bone', '#efe6d0', rough=0.7, bump=0.1, vary=0.05)
+    M['net'] = plain('net', '#8f8160', rough=0.95, bump=0.2, vary=0.1)
+    M['tar'] = plain('tar', '#3b2f26', rough=0.8, bump=0.3, bump_scale=70, vary=0.1)
+    M['antler'] = plain('antler', '#a88a58', rough=0.75, bump=0.2, vary=0.06)
     return M
 
 
@@ -491,6 +499,22 @@ def emblem(M, face, kind):
             flat(c, 0, 0, 0.55 * s, 0.42 * s, 0, 'rock_cut')
             flat(c, 0, 0, 0.58 * s, 0.03 * s, 0, 'dark')
             flat(c, 0, 0, 0.03 * s, 0.44 * s, 0, 'dark')
+        elif kind == 'fish':
+            flat(c, -0.04 * s, 0, 0.5 * s, 0.26 * s, 0.0, 'fish_s')
+            flat(c, 0.3 * s, 0.07 * s, 0.22 * s, 0.1 * s, 0.7, 'fish_s')
+            flat(c, 0.3 * s, -0.07 * s, 0.22 * s, 0.1 * s, -0.7, 'fish_s')
+            flat(c, -0.2 * s, 0.04 * s, 0.06 * s, 0.06 * s, 0.0, 'dark')
+        elif kind == 'ham':
+            flat(c, 0, -0.06 * s, 0.4 * s, 0.34 * s, 0.3, 'meat')
+            flat(c, 0.15 * s, 0.17 * s, 0.07 * s, 0.3 * s, 0.5, 'bone')
+            flat(c, 0.22 * s, 0.3 * s, 0.14 * s, 0.14 * s, 0.0, 'bone')
+        elif kind == 'cleaver':
+            flat(c, -0.05 * s, 0.06 * s, 0.5 * s, 0.34 * s, 0.35, 'iron')
+            flat(c, 0.27 * s, -0.17 * s, 0.34 * s, 0.1 * s, 0.35, 'timber')
+        elif kind == 'coin':
+            flat(c, 0, 0, 0.5 * s, 0.5 * s, 0.0, 'gold')
+            flat(c, 0, 0, 0.5 * s, 0.5 * s, 0.785, 'gold')
+            flat(c, 0, 0, 0.07 * s, 0.34 * s, 0.0, 'dark')
         elif kind == 'crystal':
             for u, h, r in ((-0.15, 0.45, 0.2), (0.05, 0.62, -0.1), (0.2, 0.38, -0.35)):
                 flat(c, u * s, 0, 0.13 * s, h * s, r, 'crystal')
