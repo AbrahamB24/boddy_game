@@ -65,6 +65,19 @@ const Set<String> kBundledBuildingArt = {
   'hatchery_r1',
   'hatchery_r2',
   'hatchery_r3',
+  'small_wood_camp_r1',
+  'small_wood_camp_r2',
+  'small_wood_camp_r3',
+  'castle_r1',
+  'large_wood_camp_r1',
+  'large_wood_camp_r2',
+  'large_wood_camp_r3',
+  'small_quarry_r1',
+  'small_quarry_r2',
+  'small_quarry_r3',
+  'large_stone_camp_r1',
+  'large_stone_camp_r2',
+  'large_stone_camp_r3',
 };
 
 /// The three placement numbers to use for [def]: the ones the RENDERER

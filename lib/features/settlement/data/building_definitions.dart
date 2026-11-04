@@ -1870,6 +1870,7 @@ List<BuildingDef> _buildRoster() {
         // camp the loop produces. See PRESETS['small_wood_camp'] in
         // render_building.py for the matching render-side change.
         final isSmallWoodCamp = era == 1 && res == 'wood' && !large;
+        final isLargeStoneCamp = era == 1 && res == 'stone' && large;
         defs.add(
           BuildingDef(
             id: isSmallQuarry
@@ -1894,11 +1895,13 @@ List<BuildingDef> _buildRoster() {
             color: _rosterColor(res),
             // A camp SHIPS what it gathers, so it needs room for a cart
             // beside the pile (2026-08-09). The works halls were already
-            // 4 x 4 and stay there. small_quarry is 5 x 4 (measured against
+            // 4 x 4 and stay there. small_quarry is 3 x 3 and large_stone_camp
+            // 5 x 4 (the rebuilt models, user 2026-11-03; before that the small
+            // quarry was 5 x 4, measured against
             // the hand-edited .blend, 2026-08-23). small_wood_camp is 3 x 3
             // (user 2026-08-23).
-            gridW: isSmallQuarry ? 5 : (isSmallWoodCamp ? 3 : 4),
-            gridH: isSmallQuarry ? 4 : (large ? 4 : 3),
+            gridW: isLargeStoneCamp ? 5 : ((isSmallQuarry || isSmallWoodCamp) ? 3 : 4),
+            gridH: large ? 4 : 3,
             resourceCost: _rosterCost(era, k),
             constructionHours: _eraBuildHours(large ? 600 : 360, era),
             eraIds: ['era_$era'],
@@ -2483,7 +2486,6 @@ const Map<String, (double, double)> kChimneyAnchor = {
   'healing_hut': (0.627, 0.5),
   'fish_shop': (0.517, 0.377),
   'butcher_shop': (0.863, 0.536),
-  'large_stone_camp': (0.454, 0.342),
   'builder_camp': (0.456, 0.374),
   // 'large_wood_camp' had an entry here, but that building's chimney is
   // gone — the 2026-08-16 redesign replaced it with an open thatched shed
@@ -2507,7 +2509,6 @@ const Map<String, (double, double)> kChimneyAnchor = {
   // anchorY — correct, not a bug: Clip.none all the way up this Stack lets
   // the smoke paint above the box exactly where the beacon really is.
   'large_house': (0.302, 0.559),
-  'small_wood_camp': (0.575, 0.376),
   'thinker_circle': (0.498, 0.334),
   'scout_post': (0.655, -0.184),
   'caravanserai': (0.116, 0.653),
@@ -2521,7 +2522,16 @@ const Map<String, (double, double)> kChimneyAnchor = {
   'hatchery_r1': (0.657, 0.452),
   'hatchery_r2': (0.452, 0.496),
   'hatchery_r3': (0.343, 0.414),
-  'castle': (0.531, 0.494),
+  'castle': (0.531, 0.485),
+  'small_wood_camp': (0.538, 0.468),
+  'small_wood_camp_r1': (0.715, 0.569),
+  'small_wood_camp_r2': (0.462, 0.640),
+  'small_wood_camp_r3': (0.285, 0.539),
+  'large_wood_camp': (0.203, 0.591),
+  'castle_r1': (0.748, 0.597),
+  'large_wood_camp_r1': (0.548, 0.491),
+  'large_wood_camp_r2': (0.797, 0.630),
+  'large_wood_camp_r3': (0.452, 0.729),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {
