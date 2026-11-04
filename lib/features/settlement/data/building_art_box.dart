@@ -58,4 +58,6 @@ const Map<String, (double, double, double)> kBundledArtBox = {
   'large_stone_camp_r1': (0.89798, 0.50082, 0.04557),
   'large_stone_camp_r2': (0.89798, 0.50247, 0.04393),
   'large_stone_camp_r3': (0.89798, 0.49918, 0.04310),
+  'castle_r2': (0.96469, 0.50000, 0.02581),
+  'castle_r3': (0.96469, 0.50000, 0.02581),
 };

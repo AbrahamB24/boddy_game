@@ -61,10 +61,10 @@ import 'package:boddygame/features/settlement/data/building_art.dart';
 
 /// The Castle ships wider (user 2026-11-03): it spans 20 tile-widths where a
 /// house spans 4, and at 960 px it would be half as sharp as everything
-/// around it. One building, placed once.
-const _wide = {'castle'};
-int _maxW(String id) => _wide.contains(id) ? 2048 : 960;
-int _maxBytes(String id) => _wide.contains(id) ? 16 << 20 : 5 << 20;
+/// around it. One building, placed once (in any of its four turns).
+bool _wide(String id) => RegExp(r'^castle(_r[1-3])?$').hasMatch(id);
+int _maxW(String id) => _wide(id) ? 2048 : 960;
+int _maxBytes(String id) => _wide(id) ? 16 << 20 : 5 << 20;
 
 /// A turned picture (`<id>_r1`..`_r3`) is not decoded alongside its
 /// building's other turns: a building stands one way at a time.

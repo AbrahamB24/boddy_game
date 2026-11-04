@@ -148,6 +148,42 @@ void main() {
     });
   });
 
+  group('kBuildingWalkways (user 2026-11-03: "die Monster können durch die '
+      'Tore in die Burg laufen")', () {
+    test('every walkway lies on its footprint and every entrance is one', () {
+      for (final MapEntry(key: id, value: cells) in kBuildingWalkways.entries) {
+        final def = _artDef(id)!;
+        for (final (x, y) in cells) {
+          expect(x >= 0 && y >= 0 && x < def.gridW && y < def.gridH, isTrue,
+              reason: '$id: walkway ($x,$y) is off its footprint');
+        }
+        for (final (cx, cy, _, _) in kBuildingEntrance[id] ?? const []) {
+          expect(cells, contains((cx, cy)),
+              reason: '$id: the gate at ($cx,$cy) leads nowhere');
+        }
+      }
+    });
+
+    test('a building monsters walk into ships its depth map, framed like '
+        'its picture', () {
+      // BuildingOccluder stretches the depth map over the picture: a map of
+      // another aspect would hide a monster behind the wrong thing.
+      for (final id in kBuildingWalkways.keys) {
+        final f = File('assets/images/buildings/${id}_depth.png');
+        expect(f.existsSync(), isTrue, reason: f.path);
+        final b = f.readAsBytesSync();
+        final dw = b[16] << 24 | b[17] << 16 | b[18] << 8 | b[19];
+        final dh = b[20] << 24 | b[21] << 16 | b[22] << 8 | b[23];
+        expect(b[25], 0, reason: '${f.path}: 8-bit grey, values are data');
+        final art = File('assets/images/buildings/$id.webp').readAsBytesSync();
+        // VP8X canvas size (make_building writes extended WebP for alpha)
+        final aw = 1 + (art[24] | art[25] << 8 | art[26] << 16);
+        final ah = 1 + (art[27] | art[28] << 8 | art[29] << 16);
+        expect(dw / dh, closeTo(aw / ah, 0.01), reason: id);
+      }
+    });
+  });
+
   group('kBuildingAnim', () {
     test('every moving building ships its base and its atlas', () {
       for (final MapEntry(key: id, value: spec) in kBuildingAnim.entries) {

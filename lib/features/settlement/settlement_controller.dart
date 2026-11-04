@@ -16,6 +16,7 @@ import '../creatures/services/survival_run.dart' show goldRewardForFloors;
 import '../common/events/game_events.dart';
 import '../onboarding/intro_flow.dart';
 import 'data/building_definitions.dart';
+import 'data/building_model.dart' show walkwaysFor;
 import 'data/goods_definitions.dart';
 import 'data/item_definitions.dart';
 import 'data/road_tiles.dart';
@@ -1401,6 +1402,7 @@ class SettlementController extends ChangeNotifier {
   Set<String>? _connectedCache;
   Set<int>? _regionCache;
   Set<int>? _roadCache;
+  Set<int>? _walkCache;
 
   /// The signed-in user, or null — including when Supabase has not been
   /// initialised at all (2026-09-21). `supabase.auth` ASSERTS on an
@@ -1431,6 +1433,7 @@ class SettlementController extends ChangeNotifier {
     _connectedCache = null;
     _regionCache = null;
     _roadCache = null;
+    _walkCache = null;
   }
 
   static bool _sameLayout(List<PlacedBuilding> a, List<PlacedBuilding> b) {
@@ -1464,6 +1467,24 @@ class SettlementController extends ChangeNotifier {
       for (final b in buildings)
         if (placedDefOf(b)?.isRoad ?? false)
           roadCellKey(b.gridX, b.gridY),
+    };
+  }
+
+  /// Every cell a monster on the roads may walk: the roads, plus the lanes
+  /// INSIDE a building that has them — the Castle's, from each gate to the
+  /// square (user 2026-11-03: "die Monster können durch die Tore in die Burg
+  /// laufen"). A road tile in front of a gate counts its lane as a
+  /// neighbour too, so the road runs on into the gate instead of ending at
+  /// the moat.
+  Set<int> get walkCells {
+    _refreshDerived();
+    return _walkCache ??= {
+      ...roadCells,
+      for (final b in buildings)
+        if (b.isComplete && !b.isStored)
+          if (placedDefOf(b) case final d?)
+            if (walkwaysFor(d.artId, d.gridW, d.gridH) case final cells?)
+              for (final (cx, cy) in cells) roadCellKey(b.gridX + cx, b.gridY + cy),
     };
   }
 

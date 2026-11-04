@@ -218,6 +218,18 @@ def write_chimney(bid, anchor):
     print('CHIMNEY', bid, anchor)
 
 
+def _cell_turned(W, H, cell, r):
+    """A grid cell of the unturned footprint after r quarter turns CLOCKWISE
+    on the map — the same turn as fw_kit.entrance_turned, done on the cell's
+    centre in Blender coordinates (grid y runs against Blender y)."""
+    x, y = cell[0] + 0.5 - W / 2, -(cell[1] + 0.5 - H / 2)
+    w, h = W, H
+    for _ in range(r % 4):
+        x, y = y, -x
+        w, h = h, w
+    return (int(math.floor(x + w / 2)), int(math.floor(-y + h / 2)))
+
+
 def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     ap = argparse.ArgumentParser()
@@ -228,6 +240,7 @@ def main():
     ap.add_argument('--out')
     ap.add_argument('--remesh', action='store_true',
                     help='old Remesh voxeliser, for comparison')
+    ap.add_argument('--turns', help='only these quarter turns, e.g. 2,3 (to finish an interrupted run)')
     ap.add_argument('--anchors-only', action='store_true',
                     help='build + voxelise + frame, write the art box and the '
                          'chimney anchor, render nothing')
@@ -255,8 +268,9 @@ def main():
             g = voxelizer.voxelize(fw_kit.VOX, f'anim_{name}', objs=obs)
             g['anim'] = name
             groups[name] = (g, specs[name])
-        voxelize(args.id, objs=[o for o in bpy.data.objects
-                                if o.type == 'MESH' and 'anim' not in o.keys()])
+        rest = [o for o in bpy.data.objects
+                if o.type == 'MESH' and 'anim' not in o.keys()]
+        voxelize(args.id, objs=rest)
     K.lighting()
     samples = min(args.samples, 24) if args.preview else args.samples
     # the picture's MINIMUM height, in widths (it always grows to hold the
@@ -288,6 +302,8 @@ def main():
     # one entrance (face, k) or several [(face, k), ...] — the Castle's gates
     ents = [] if ent is None else ([ent] if isinstance(ent[0], str) else list(ent))
     turns = range(4) if getattr(mod, 'ROTATE', True) else range(1)
+    if args.turns:
+        turns = [int(t) for t in args.turns.split(',')]
 
     # ── every quarter turn (user 2026-11-03: "Gebäude um 90° drehen") ──
     # Turn r is the building turned r x 90 degrees CLOCKWISE on the map. The
@@ -324,6 +340,28 @@ def main():
         # entrance and the moving parts while a def says otherwise
         ap_._set_map_entry(model_dart, 'kModelFootprint', art,
                            f"  '{art}': ({w}, {h}),")
+        # Walkways (user 2026-11-03: "die Strasse durch die Burg … in der
+        # Mitte zum Versammlungsplatz"): from every entrance straight in to
+        # the module's WALKWAY_TO cells — cells the monsters on the roads
+        # may walk, and that a road tile in front of a gate joins up with.
+        plaza = getattr(mod, 'WALKWAY_TO', None)
+        if plaza:
+            cells = set(map(tuple, plaza))
+            for e in ents:
+                cx, cy, dx, dy = fw_kit.entrance_grid(mod.W, mod.H, *e)
+                while (cx, cy) not in plaza and 0 <= cx < mod.W and 0 <= cy < mod.H:
+                    cells.add((cx, cy))
+                    cx, cy = cx - dx, cy - dy
+            cells = sorted(_cell_turned(mod.W, mod.H, c, r) for c in cells)
+            ap_._set_map_entry(model_dart, 'kBuildingWalkways', art,
+                               f"  '{art}': [" + ', '.join(f'({x}, {y})' for x, y in cells)
+                               + '],')
+            # … and since monsters walk INTO it, which pixel stands in front
+            # of which ground (depth_pass.py; the map's _BuildingOccluder)
+            import depth_pass
+            depth_pass.render_depth(
+                os.path.join(ROOT, 'assets', 'images', 'buildings', f'{art}_depth.png'),
+                tmp, mod.W, mod.H)
         write_art_box(art, box)
         write_chimney(art, anchor)
         register_bundled(art)

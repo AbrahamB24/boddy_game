@@ -26,6 +26,7 @@ import 'building_carousel.dart' show buildingCarouselHeight;
 import 'animated_building_art.dart';
 import 'building_icon.dart';
 import 'building_life.dart';
+import 'building_occluder.dart';
 import 'road_walkers.dart';
 import 'terrain_layer.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
@@ -485,7 +486,7 @@ class SettlementMapState extends State<SettlementMap>
   void _syncWalkers(bool show) {
     if (show) {
       _walkers.sync(
-        widget.ctrl.roadCells,
+        widget.ctrl.walkCells,
         CreaturesController().battleReadyCreatures,
       );
     }
@@ -1323,17 +1324,62 @@ class SettlementMapState extends State<SettlementMap>
     var pending = withGhost;
     // Walkers, back to front, each slotted in before the first building that
     // stands in front of its cell — the same rule the ghost uses below.
-    final queue = [...walkers]
-      ..sort((a, b) {
-        final (ax, ay) = a.drawCell;
-        final (bx, by) = b.drawCell;
-        return isoDrawOrder(ax, ay, 1, 1, bx, by, 1, 1);
-      });
+    // ── INTO THE CASTLE (user 2026-11-03: "die Monster können durch die Tore
+    // in die Burg laufen") ──
+    // A building with walkways keeps the walkers whose FEET are on its
+    // footprint for itself: it is drawn, then each of them back to front,
+    // each with its pixels ERASED where the building stands in front of its
+    // feet (BuildingOccluder, from the model's depth map). Two halves were tried
+    // first and were not enough (user 2026-11-03: "Manchmal sind sie über
+    // Gebäuden, obwohl sie dahinter sein sollten"). Everyone else is slotted
+    // in by depth as before.
+    final split = <PlacedBuilding>[
+      if (!roads)
+        for (final b in widget.ctrl.buildings)
+          if (_walkedInto(b)) b,
+    ];
+    final inside = <String, List<RoadWalker>>{};
+    final queue = <RoadWalker>[];
+    for (final w in walkers) {
+      // its feet, not its draw cell: walking in through the FRONT gate, the
+      // draw cell is still the road outside while the feet are in the arch
+      final fx = w.gx + 0.5, fy = w.gy + 0.5;
+      final host = split.where((b) {
+        final d = placedDefOf(b)!;
+        return fx >= b.gridX && fy >= b.gridY &&
+            fx < b.gridX + d.gridW && fy < b.gridY + d.gridH;
+      }).firstOrNull;
+      if (host == null) {
+        queue.add(w);
+      } else {
+        (inside[host.id] ??= []).add(w);
+      }
+    }
+    // A monster about to walk IN through a gate: its draw cell is already
+    // inside the building while its feet are still on the road, and sorted
+    // by that cell it was drawn over the whole building (the gatehouse roof
+    // above it, user 2026-11-03). Until its feet are inside, it goes by them.
+    final sortCell = <RoadWalker, (int, int)>{
+      for (final w in queue)
+        w: split.any((b) {
+          final d = placedDefOf(b)!;
+          final (x, y) = w.drawCell;
+          return x >= b.gridX && y >= b.gridY &&
+              x < b.gridX + d.gridW && y < b.gridY + d.gridH;
+        })
+            ? ((w.gx + 0.5).floor(), (w.gy + 0.5).floor())
+            : w.drawCell,
+    };
+    queue.sort((a, b) {
+      final (ax, ay) = sortCell[a]!;
+      final (bx, by) = sortCell[b]!;
+      return isoDrawOrder(ax, ay, 1, 1, bx, by, 1, 1);
+    });
     var wi = 0;
     for (final b in _sortedForPainting(roads: roads)) {
       final d = placedDefOf(b);
       while (wi < queue.length) {
-        final (wx, wy) = queue[wi].drawCell;
+        final (wx, wy) = sortCell[queue[wi]]!;
         if (isoDrawOrder(
               wx,
               wy,
@@ -1374,6 +1420,18 @@ class SettlementMapState extends State<SettlementMap>
       // the tiles after it instead of handing every one of them its
       // neighbour's widget (which would rebuild and repaint the whole town
       // each time a monster stepped onto a new cell).
+      if (split.contains(b)) {
+        final mine = [...?inside[b.id]]
+          ..sort((p, q) => (p.gx + p.gy).compareTo(q.gx + q.gy));
+        out.add(
+          KeyedSubtree(
+            key: ValueKey(b.id),
+            child: _buildingTile(b, faded: faded.contains(b.id)),
+          ),
+        );
+        out.addAll(mine.map((w) => _insideWalkerView(b, w)));
+        continue;
+      }
       out.add(
         KeyedSubtree(
           key: ValueKey(b.id),
@@ -1393,6 +1451,44 @@ class SettlementMapState extends State<SettlementMap>
       );
     }
     return out;
+  }
+
+  /// Whether monsters walk INTO [b] — a model with walkways, which ships a
+  /// depth map with them (tool/blender/depth_pass.py).
+  bool _walkedInto(PlacedBuilding b) {
+    final d = placedDefOf(b);
+    if (d == null || b.isStored || !b.isComplete) return false;
+    return walkwaysFor(d.artId, d.gridW, d.gridH) != null &&
+        buildingAsset(d.artId) != null;
+  }
+
+  /// [w] inside [b], erased wherever [b] stands in front of its feet.
+  Widget _insideWalkerView(PlacedBuilding b, RoadWalker w) {
+    final def = placedDefOf(b)!;
+    final iso = isoBounds(b.gridX, b.gridY, def.gridW, def.gridH);
+    final box = artBoxOf(def);
+    final art = artPlacement(
+      isoLocalBounds(def.gridW, def.gridH),
+      baseWidth: box.baseWidth,
+      anchorX: box.anchorX,
+      lift: box.lift,
+    );
+    return KeyedSubtree(
+      key: ValueKey('inside:${w.serial}'),
+      child: BuildingOccluder(
+        artId: def.artId,
+        left: iso.left + art.left,
+        bottom: iso.top + art.bottom,
+        width: art.width,
+        gridX: b.gridX,
+        gridY: b.gridY,
+        gridW: def.gridW,
+        gridH: def.gridH,
+        walker: w,
+        walkers: _walkers,
+        child: _walkerView(w),
+      ),
+    );
   }
 
   Widget _walkerView(RoadWalker w) => RoadWalkerView(
@@ -1713,7 +1809,7 @@ class SettlementMapState extends State<SettlementMap>
   }
 
   int _roadMaskOf(PlacedBuilding b) =>
-      roadMask(widget.ctrl.roadCells, b.gridX, b.gridY);
+      roadMask(widget.ctrl.walkCells, b.gridX, b.gridY);
 
   Widget _composeTile(
     PlacedBuilding b,
@@ -1764,7 +1860,10 @@ class SettlementMapState extends State<SettlementMap>
         // has nobody in it, and a paused one has been told to stop — a
         // chimney still smoking would say the opposite of what the pause
         // overlay says, and the player would believe the smoke.
-        if (b.isComplete && !b.isPaused && !def.isRoad && !def.isBuildPlot)
+        if (b.isComplete &&
+            !b.isPaused &&
+            !def.isRoad &&
+            !def.isBuildPlot)
           Positioned.fill(
             child: _LifeOverlay(def: def, seed: b.id.hashCode),
           ),
@@ -1802,7 +1901,10 @@ class SettlementMapState extends State<SettlementMap>
         // 2026-09-22): the art itself is greyed (see [_BuildingTile]) and sleepy
         // Zs rise where the smoke would — the dark rectangle over the whole field
         // (the ground included) and the 12 px ⏸ are gone.
-        if (b.isPaused && b.isComplete && !def.isRoad && !def.isBuildPlot)
+        if (b.isPaused &&
+            b.isComplete &&
+            !def.isRoad &&
+            !def.isBuildPlot)
           Positioned.fill(
             child: _SleepOverlay(def: def, seed: b.id.hashCode),
           ),
@@ -1863,7 +1965,7 @@ class SettlementMapState extends State<SettlementMap>
                 child: Image.asset(
                   roadAsset(
                     roadMask(
-                      {...widget.ctrl.roadCells, roadCellKey(gx, gy)},
+                      {...widget.ctrl.walkCells, roadCellKey(gx, gy)},
                       gx,
                       gy,
                     ),
@@ -2639,6 +2741,7 @@ class _BuildingTile extends StatelessWidget {
   /// "disconnected" is just a fact about the road network around it.
   final bool isDisconnected;
 
+
   const _BuildingTile({
     required this.def,
     required this.building,
@@ -2650,10 +2753,12 @@ class _BuildingTile extends StatelessWidget {
   /// parts (see [AnimatedBuildingArt]), the still render otherwise. A site
   /// under construction stays still — nobody hangs washing on a scaffold.
   Widget _livingArt(double width, bool done) {
-    final spec = animFor(def.artId, def.gridW, def.gridH);
-    if (done && spec != null && buildingAsset(def.artId) != null) {
+    final id = def.artId;
+    final spec = animFor(id, def.gridW, def.gridH);
+    final running = done && !building.isPaused;
+    if (running && spec != null && buildingAsset(id) != null) {
       return AnimatedBuildingArt(
-        defId: def.artId,
+        defId: id,
         spec: spec,
         width: width,
         phaseSeed: building.id.hashCode,
