@@ -34,8 +34,8 @@ abstract final class UiArt {
 
   /// The voxel glyphs ALONE, no ring and no dish (user 2026-11-05): they sit on
   /// the Flutter-drawn [WoodBoard]s. Rendered by make_ui4.py (`*_bare`).
-  static const String chestBare = '${_dir}chest_bare.webp';
-  static const String compassBare = '${_dir}compass_bare.webp';
+  static const String chestBare = '${_dir}chest_nr.webp';
+  static const String compassBare = '${_dir}compass_nr.webp';
   static const String badgeBoltBare = '${_dir}badge_bolt_bare.webp';
   static const String badgeKnotBare = '${_dir}badge_knot_bare.webp';
   static const String scroll = '${_dir}scroll.webp';
@@ -49,6 +49,18 @@ abstract final class UiArt {
     'Profile' => '${_dir}icon_person.webp',
     'Bag' => '${_dir}icon_bag.webp',
     'Daily tasks' => '${_dir}icon_tasks.webp',
+    _ => null,
+  };
+
+  /// The voxel glyph a header cell wears for a resource's emoji, where one has
+  /// been modelled (user 2026-11-07: icons that match what they stand for).
+  static String? hudGlyph(String emoji) => switch (emoji) {
+    '🪵' => '${_dir}hud_log.webp',
+    '🪨' => '${_dir}hud_stone.webp',
+    '🐟' => '${_dir}hud_fish.webp',
+    '🪙' => '${_dir}hud_coin.webp',
+    '🏠' => '${_dir}hud_house.webp',
+    '⏰' => '${_dir}hud_clock.webp',
     _ => null,
   };
 
@@ -472,21 +484,26 @@ class UiScroll extends StatelessWidget {
   );
 }
 
-/// TIMBER FOR THE MAIN SCREEN'S UI (user 2026-11-05): the beam browns with the
-/// header's grain painted over them. A squared beam with pegs ([round] false) or
-/// a round board ([round] true). Used by the header cells, the round quick
-/// buttons and the bell's bracket, so all the wood on the screen reads as one.
+/// STEEL AND METAL FOR THE MAIN SCREEN'S UI (user 2026-11-07, second concept:
+/// "die Farben viel kräftiger und fröhlicher"). A bright steel-blue board in a
+/// rim of silver, pale gold or gold ([tier] 0, 1, 2). The header runs from silver
+/// at both ends to gold at the chest in the middle. A rounded square, or a round
+/// board ([round] true). Used by the header cells, the quick buttons, the
+/// medals and the bell's bracket, so all the metal on the screen reads as one.
+/// (Class name kept from the timber version, which is what it replaced.)
 class WoodBoard extends StatelessWidget {
   final bool round;
   final bool pegs;
   final double radius;
+  final int tier;
   final Widget? child;
 
   const WoodBoard({
     super.key,
     this.round = false,
     this.pegs = false,
-    this.radius = 7,
+    this.radius = 9,
+    this.tier = 2,
     this.child,
   });
 
@@ -495,13 +512,6 @@ class WoodBoard extends StatelessWidget {
     decoration: BoxDecoration(
       shape: round ? BoxShape.circle : BoxShape.rectangle,
       borderRadius: round ? null : BorderRadius.circular(radius),
-      gradient: const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [UiWood.beamLight, UiWood.beam, UiWood.beamDark],
-        stops: [0.0, 0.45, 1.0],
-      ),
-      border: Border.all(color: const Color(0xFF2E170A), width: 2),
       boxShadow: const [
         BoxShadow(
           color: Color(0x80000000),
@@ -511,90 +521,94 @@ class WoodBoard extends StatelessWidget {
       ],
     ),
     child: CustomPaint(
-      painter: WoodGrainPainter(round: round, pegs: pegs, radius: radius),
+      painter: SteelPainter(round: round, radius: radius, tier: tier),
       child: child,
     ),
   );
 }
 
-/// Grain, a lit top edge and (on a beam) two pegs over [WoodBoard]'s colours.
-class WoodGrainPainter extends CustomPainter {
+/// The rim colours of the three tiers, light edge, body, shade, glint.
+const List<List<Color>> kSteelRims = [
+  [Color(0xFFFFFFFF), Color(0xFFC7D2E0), Color(0xFF7F8EA3), Color(0xFFEAF0F7)],
+  [Color(0xFFFFF6D0), Color(0xFFE8D79A), Color(0xFFA9955A), Color(0xFFFFF0B8)],
+  [Color(0xFFFFF0A0), Color(0xFFFFC62E), Color(0xFFD98200), Color(0xFFFFE27A)],
+];
+
+/// A bright steel-blue board in a metal rim with a lit top edge, drawn smooth
+/// (the rim is no voxel staircase).
+class SteelPainter extends CustomPainter {
   final bool round;
-  final bool pegs;
   final double radius;
-  const WoodGrainPainter({
+  final int tier;
+  final bool rimOnly;
+  const SteelPainter({
     this.round = false,
-    this.pegs = false,
-    this.radius = 7,
+    this.radius = 9,
+    this.tier = 2,
+    this.rimOnly = false,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final inner = rect.deflate(1);
-    canvas.save();
-    canvas.clipPath(
-      round
-          ? (Path()..addOval(inner))
-          : (Path()..addRRect(
-              RRect.fromRectAndRadius(inner, Radius.circular(radius - 1)),
-            )),
-    );
-    // Long wavy grain lines, dark and light alternating. Fixed phases, so the
-    // pattern never flickers on rebuild.
-    final lines = (size.height / 5).clamp(4, 12).round();
-    for (var i = 0; i < lines; i++) {
-      final y = size.height * (0.1 + i * 0.8 / lines);
-      final path = Path()..moveTo(0, y);
-      for (double x = 0; x <= size.width; x += 6) {
-        path.lineTo(x, y + math.sin(x / 17 + i * 1.9) * 1.1);
-      }
+    final rim = kSteelRims[tier.clamp(0, 2)];
+    final w = round ? math.max(3.0, size.shortestSide * 0.075) : 3.0;
+    Path shape(Rect r) => round
+        ? (Path()..addOval(r))
+        : (Path()..addRRect(RRect.fromRectAndRadius(r, Radius.circular(radius))));
+    if (!rimOnly) {
       canvas.drawPath(
-        path,
+        shape(rect),
         Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = i.isEven ? 1.0 : 0.7
-          ..color = i.isEven
-              ? const Color(0x40240F05)
-              : const Color(0x22FFD9A0),
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF3F79C4), Color(0xFF244C92), Color(0xFF1A356E)],
+            stops: [0.0, 0.5, 1.0],
+          ).createShader(rect),
       );
-    }
-    // A lit edge along the top.
-    if (round) {
-      canvas.drawArc(
-        inner.deflate(2),
-        math.pi * 1.15,
-        math.pi * 0.7,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.6
-          ..strokeCap = StrokeCap.round
-          ..color = const Color(0x66FFE0B0),
-      );
-    } else {
+      // a soft light across the top half
+      canvas.save();
+      canvas.clipPath(shape(rect.deflate(w)));
       canvas.drawRect(
-        Rect.fromLTWH(0, 0, size.width, 1.5),
-        Paint()..color = const Color(0x55FFE0B0),
+        Rect.fromLTWH(0, 0, size.width, size.height * 0.46),
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x40FFFFFF), Color(0x00FFFFFF)],
+          ).createShader(Rect.fromLTWH(0, 0, size.width, size.height * 0.46)),
       );
+      canvas.restore();
     }
-    canvas.restore();
-    if (pegs && !round) {
-      for (final x in [6.0, size.width - 6]) {
-        final c = Offset(x, size.height / 2);
-        canvas.drawCircle(c, 2.4, Paint()..color = const Color(0xFF2E170A));
-        canvas.drawCircle(
-          c.translate(-0.4, -0.5),
-          1.2,
-          Paint()..color = const Color(0xFFC9923F),
-        );
-      }
-    }
+    // the metal rim: a lit edge, a body, a shade underneath
+    canvas.drawPath(
+      shape(rect.deflate(w / 2)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [rim[0], rim[1], rim[2], rim[1], rim[3]],
+          stops: const [0.0, 0.3, 0.62, 0.85, 1.0],
+        ).createShader(rect),
+    );
+    canvas.drawPath(
+      shape(rect.deflate(w)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = const Color(0x66102040),
+    );
   }
 
   @override
-  bool shouldRepaint(WoodGrainPainter old) =>
-      old.round != round || old.pegs != pegs || old.radius != radius;
+  bool shouldRepaint(SteelPainter old) =>
+      old.round != round ||
+      old.radius != radius ||
+      old.tier != tier ||
+      old.rimOnly != rimOnly;
 }
 
 /// A round wooden button of [size], with [child] (the glyph) on its board.
@@ -618,7 +632,7 @@ class IronButton extends StatelessWidget {
     child: Stack(
       alignment: Alignment.center,
       children: [
-        const Positioned.fill(child: WoodBoard(round: true)),
+        const Positioned.fill(child: WoodBoard(radius: 14)),
         if (lit)
           Container(
             width: size * 0.62,
@@ -702,7 +716,7 @@ class _CompassButtonState extends State<CompassButton>
                 height: size * 0.78,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Color(0xFF1C120B),
+                  color: Color(0xFF15306B),
                 ),
               ),
             ),
@@ -714,6 +728,17 @@ class _CompassButtonState extends State<CompassButton>
               fit: BoxFit.contain,
               filterQuality: FilterQuality.medium,
               gaplessPlayback: true,
+            ),
+            // The smooth gold ring over the spikes' feet (user 2026-11-07: less
+            // pixelated, like the chest's).
+            IgnorePointer(
+              child: SizedBox(
+                width: size,
+                height: size,
+                child: const CustomPaint(
+                  painter: SteelPainter(round: true, tier: 2, rimOnly: true),
+                ),
+              ),
             ),
             Transform.translate(
               offset: Offset(0, dy),
@@ -834,7 +859,7 @@ class ChestImage extends StatelessWidget {
                   height: d * 0.76,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Color(0xFF1C120B),
+                    color: Color(0xFF15306B),
                   ),
                 ),
               ),
@@ -896,11 +921,11 @@ class _SurroundPainter extends CustomPainter {
     final dark = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 8
-      ..color = const Color(0xFF2E170A);
+      ..color = const Color(0xFF0E1E40);
     final brass = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4
-      ..color = const Color(0xFFD8A53A);
+      ..color = const Color(0xFFFFC62E);
     final shadow = Paint()
       ..color = const Color(0x80000000)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
@@ -911,7 +936,7 @@ class _SurroundPainter extends CustomPainter {
       ..shader = const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [UiWood.beamLight, UiWood.beam, UiWood.beamDark],
+        colors: [Color(0xFF3F79C4), Color(0xFF244C92), Color(0xFF1A356E)],
         stops: [0.0, 0.45, 1.0],
       ).createShader(Rect.fromLTRB(0, disc.top, 0, disc.bottom));
     both((p) => canvas.drawPath(p, fill));
@@ -923,8 +948,8 @@ class _SurroundPainter extends CustomPainter {
     for (final dx in [9.0, size.width - 9]) {
       for (final dy in [8.0, size.height - 8]) {
         final c = Offset(dx, dy);
-        canvas.drawCircle(c, 3.2, Paint()..color = const Color(0xFF2E170A));
-        canvas.drawCircle(c, 2.2, Paint()..color = const Color(0xFFE6B94A));
+        canvas.drawCircle(c, 3.2, Paint()..color = const Color(0xFF0E1E40));
+        canvas.drawCircle(c, 2.2, Paint()..color = const Color(0xFFFFC62E));
         canvas.drawCircle(
           c.translate(-0.6, -0.6),
           0.9,
@@ -959,12 +984,12 @@ class UiEnergyHalf extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 5),
     child: DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1008),
+        color: const Color(0xFF0C1630),
         borderRadius: BorderRadius.circular(5),
         // Set INTO the timber board: dark rim, a light lip under it.
-        border: Border.all(color: const Color(0xFF120A04), width: 2),
+        border: Border.all(color: const Color(0xFF081024), width: 2),
         boxShadow: const [
-          BoxShadow(color: Color(0x55FFD9A0), offset: Offset(0, 1)),
+          BoxShadow(color: Color(0x55BFD8FF), offset: Offset(0, 1)),
         ],
       ),
       child: ClipRRect(

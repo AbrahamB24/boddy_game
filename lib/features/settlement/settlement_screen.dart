@@ -2139,6 +2139,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                       eraRes[i].id,
                       _amountOf(eraRes[i].id),
                       rates[eraRes[i].id] ?? 0,
+                      tier: _tierFromCentre(eraRes.length - 1 - i),
                     ),
                   ),
                 ],
@@ -2158,6 +2159,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                     'gold',
                     _amountOf('gold'),
                     rates['gold'] ?? 0,
+                    tier: _tierFromCentre(0),
                   ),
                 ),
                 _cellDivider(),
@@ -2171,6 +2173,14 @@ class _SettlementScreenState extends State<SettlementScreen>
       ),
     );
   }
+
+  /// The rim of a header cell by its distance from the chest: gold beside it,
+  /// pale gold next, silver at the far ends (user 2026-11-07).
+  int _tierFromCentre(int c) => c <= 0
+      ? 2
+      : c == 1
+      ? 1
+      : 0;
 
   /// What era [era] itself deals in: its two build resources and its two
   /// luxuries. Era I's build pair is wood and stone — ResourceModel's own
@@ -2248,7 +2258,7 @@ class _SettlementScreenState extends State<SettlementScreen>
   static const List<Shadow> _hudTextShadow = <Shadow>[];
 
   // Shared sizing for every header cell so glyphs and text lines all match up.
-  static const _kHeaderIconSize = 17.0;
+  static const _kHeaderIconSize = 20.0;
   static const _kHeaderSubSize = 10.0;
 
   /// Header numbers are SHORT (`1.2k`, `12k`, `1.4M`). At a seventh of a phone
@@ -2267,7 +2277,9 @@ class _SettlementScreenState extends State<SettlementScreen>
   Widget _headerCell({
     required VoidCallback onTap,
     required Widget child,
+    int tier = 2,
   }) => WoodBoard(
+    tier: tier,
     // A SQUARED TIMBER BEAM (user 2026-11-05: "der braune Hintergrund soll wie
     // Holzbalken aussehen"): the same board the round buttons and the bell's
     // bracket use, see [WoodBoard].
@@ -2304,8 +2316,10 @@ class _SettlementScreenState extends State<SettlementScreen>
     String title,
     String resourceId,
     double amount,
-    double rate,
-  ) => _headerCell(
+    double rate, {
+    int tier = 2,
+  }) => _headerCell(
+    tier: tier,
     onTap: () => _showResourceBreakdown(
       resourceId: resourceId,
       emoji: emoji,
@@ -2385,7 +2399,16 @@ class _SettlementScreenState extends State<SettlementScreen>
             // Our own icons, drawn directly (not through a Text) so they keep
             // their size; they are the SMOOTH set now (user 2026-11-04) —
             // see tool/icons/gen_icons.js.
-            child: kEmojiToIcon[emoji] != null
+            child: UiArt.hudGlyph(emoji) != null
+                ? Image.asset(
+                    UiArt.hudGlyph(emoji)!,
+                    width: _kHeaderIconSize + 7,
+                    height: _kHeaderIconSize + 7,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.medium,
+                    gaplessPlayback: true,
+                  )
+                : kEmojiToIcon[emoji] != null
                 ? GameIcon(kEmojiToIcon[emoji]!, size: _kHeaderIconSize)
                 : w.Text(
                     emoji,
@@ -2446,6 +2469,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     builder: (context, s) {
       final ready = s.ready > 0;
       return _headerCell(
+        tier: _tierFromCentre(2),
         onTap: _showExpeditions,
         child: _cellBody(
           emoji: '⏰',
@@ -2523,6 +2547,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     final cap = _ctrl.housingCapacity;
     final full = used >= cap;
     return _headerCell(
+      tier: _tierFromCentre(1),
       // Opens Work, not Housing (user 2026-09-20: "wenn ich beim Header auf
       // Housing drücke, soll Work aufgehen, da dies der wichtigere Screen
       // ist") — Housing is the page's second tab, one tap over.
