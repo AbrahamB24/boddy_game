@@ -56,32 +56,31 @@ void main() {
     }
   }
 
-  testWidgets('the deck opens on Attack: actor, tiles, info, End turn', (
+  testWidgets('the command bar always shows the abilities, with Items and Change', (
     t,
   ) async {
     await open(t);
-    expect(find.text('Attack'), findsWidgets); // the tab and the basic tile
+    expect(find.text('Attack'), findsOneWidget); // the basic tile; no Attack tab
     expect(find.text('Items'), findsOneWidget);
     expect(find.text('Change'), findsOneWidget);
     expect(find.text('End turn'), findsOneWidget);
-    // The type chart moved to a round key in the top bar (user 2026-09-21), so
-    // the ability description has the room it used to take.
     expect(find.byTooltip('Type chart'), findsOneWidget);
     expect(find.text('Type chart'), findsNothing);
-    // And the way to a description is said out loud, with an (i) on the tiles.
-    expect(find.textContaining('Tap the (i)'), findsOneWidget);
-    expect(find.byIcon(Icons.info_outline), findsWidgets);
-    expect(find.text('Lv 5'), findsWidgets);
+    // The plates carry the level now (the podium that carried the HP is gone).
+    expect(find.text('L5'), findsWidgets);
+    // The bar lies along the bottom edge.
+    expect(t.getRect(find.text('End turn')).bottom, greaterThan(430 - 70));
   });
 
-  testWidgets('Items and Change are tabs, not sheets', (t) async {
+  testWidgets('Items and Change open their page above the bar', (t) async {
     await open(t, team: 4);
 
     await t.tap(find.text('Items'));
     await t.pump(const Duration(milliseconds: 400));
     expect(find.text('USE AN ITEM'), findsOneWidget);
     expect(find.byType(BottomSheet), findsNothing);
-    expect(find.text('End turn'), findsNothing);
+    // The bar stays: End turn is always one tap away.
+    expect(find.text('End turn'), findsOneWidget);
 
     await t.tap(find.text('Change'));
     await t.pump(const Duration(milliseconds: 400));
@@ -89,8 +88,10 @@ void main() {
     expect(find.text('Send in'), findsWidgets);
     expect(find.byType(BottomSheet), findsNothing);
 
-    await t.tap(find.text('Attack').first);
+    await t.tap(find.text('Change')); // a second tap closes the page
     await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('USE AN ITEM'), findsNothing);
+    expect(find.text('SWITCH MONSTER'), findsNothing);
     expect(find.text('End turn'), findsOneWidget);
   });
 
@@ -101,61 +102,58 @@ void main() {
     expect(find.text('No reserves left.'), findsOneWidget);
   });
 
-  testWidgets('the info box describes the picked ability', (t) async {
-    await open(t);
-    expect(find.textContaining('Power '), findsOneWidget);
-    await t.longPress(find.text('Attack').last);
-    await t.pump(const Duration(milliseconds: 400));
-    expect(find.textContaining('Power '), findsOneWidget);
-  });
-
-  testWidgets('the keys sit at the arena\'s top right, beside the deck', (
+  testWidgets('the (i) on a tile opens the description, a tap closes it', (
     t,
   ) async {
+    await open(t);
+    expect(find.textContaining('Power '), findsNothing);
+    await t.tap(find.byIcon(Icons.info_outline).first);
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining('Power '), findsOneWidget);
+    await t.tap(find.textContaining('Power '));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining('Power '), findsNothing);
+  });
+
+  testWidgets('the keys sit along the top of the field', (t) async {
     await open(t);
     final flee = t.getRect(find.byTooltip('Flee'));
     final type = t.getRect(find.byTooltip('Type chart'));
     final auto = t.getRect(find.text('AUTO'));
-    // In the top strip, left to right, and inside the arena (the deck is the
-    // right-hand 317 px).
+    // In the top strip, left to right; the field runs the full width now.
     expect(flee.top, lessThan(60));
-    // Flee has the top LEFT corner of the arena to itself.
     expect(flee.left, lessThan(20));
     expect(flee.right, lessThan(type.left));
     expect(type.right, lessThan(auto.left));
-    expect(auto.right, lessThan(932 - 317));
-    // The deck runs to the top too: its first tab is near the screen's top edge.
-    expect(t.getRect(find.text('Attack').first).top, lessThan(45));
+    expect(auto.right, lessThanOrEqualTo(932));
   });
 
-  testWidgets('the waiting monsters are small tiles down the left, mine under '
-      'the log', (t) async {
+  testWidgets('the waiting monsters are small tiles down the left edge', (
+    t,
+  ) async {
     await open(t, team: 5);
-    // Three fight, two wait: two "Lv 1" tiles in the left gutter, below the seam.
+    // Three fight, two wait: two "Lv 1" tiles in the left gutter.
     final tiles = [
       for (final e in find.text('Lv 1').evaluate())
         t.getTopLeft(find.byWidget(e.widget)),
     ].where((p) => p.dx < 46).toList();
     expect(tiles, hasLength(2));
-    for (final p in tiles) {
-      expect(p.dy, greaterThan(215));
-    }
-    // The lone enemy has nobody waiting behind it.
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('two monsters stand apart, not shoulder to shoulder', (t) async {
+  testWidgets('my side stands at the left, the enemy\'s at the right', (
+    t,
+  ) async {
     await open(t, team: 2);
-    // The plates under the platforms (exact names, low on the screen) — the log
-    // line may also carry a monster's name.
-    Offset plate(String name) => [
-      for (final e in find.text(name).evaluate())
-        t.getCenter(find.byWidget(e.widget)),
-    ].firstWhere((p) => p.dy > 380);
+    Offset plate(String name) => t.getCenter(find.text(name));
     final a = plate('Mine m0');
     final b = plate('Mine m1');
-    // A slot is a third of the rank (~170 px); the two used to sit exactly one
-    // slot apart, now there is a gap on top of that.
-    expect((b.dx - a.dx).abs(), greaterThan(220));
+    final enemy = plate('Kit');
+    // Side view: both of mine left of the middle, the enemy right of it, and
+    // two of mine stand apart rather than shoulder to shoulder.
+    expect(a.dx, lessThan(932 / 2));
+    expect(b.dx, lessThan(932 / 2));
+    expect(enemy.dx, greaterThan(932 / 2));
+    expect((b.dx - a.dx).abs(), greaterThan(80));
   });
 }

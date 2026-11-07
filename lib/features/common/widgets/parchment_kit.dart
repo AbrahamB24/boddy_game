@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/theme/strategy_theme.dart';
@@ -7,6 +7,7 @@ import '../../../core/theme/cream_kit.dart';
 import '../../settlement/widgets/scroll_paper.dart' show kActionGreen;
 import 'parchment_page.dart';
 import '../../../core/ui/pressable.dart';
+import '../../../core/ui/game_text.dart';
 
 // ── The pieces a parchment SCREEN is made of ───────────────────────────────
 //

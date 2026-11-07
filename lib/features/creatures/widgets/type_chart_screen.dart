@@ -1,12 +1,13 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../models/creature_enums.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/ui/game_text.dart';
 
 /// THE TYPE CHART — "Ring, auswählbar" (user 2026-09-22, replacing the German
 /// "Typen-Kreis" dialog): the ring of six types with Light and Shadow inside it,
@@ -437,7 +438,7 @@ class _InfoCard extends StatelessWidget {
                 label.toUpperCase(),
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   letterSpacing: 1.1,
                   color: kBoxAccent,
                 ),

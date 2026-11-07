@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,9 +19,16 @@ void main() {
     expect(MonsterSheets.battle('tidelord', 3, back: false), isNull);
     expect(MonsterSheets.battle('somebody_else', 0, back: false), isNull);
     expect(MonsterSheets.battle(null, 0, back: false), isNull);
-    for (final h in ['se', 'ne', 'nw', 'sw']) {
-      expect(MonsterSheets.map('tidelord', 0, h), isNotNull, reason: h);
+    for (var stage = 0; stage < 3; stage++) {
+      for (final h in ['se', 'ne', 'nw', 'sw']) {
+        expect(
+          MonsterSheets.map('tidelord', stage, h),
+          isNotNull,
+          reason: '$stage $h',
+        );
+      }
     }
+    expect(MonsterSheets.map('tidelord', 3, 'se'), isNull);
     expect(MonsterSheets.map('tidelord', 0, 'up'), isNull);
   });
 
@@ -27,11 +36,16 @@ void main() {
     final sets = <MonsterSheetSet>[
       MonsterSheets.battle('tidelord', 0, back: false)!,
       MonsterSheets.battle('tidelord', 0, back: true)!,
-      for (final h in ['se', 'ne', 'nw', 'sw'])
-        MonsterSheets.map('tidelord', 0, h)!,
+      for (var stage = 0; stage < 3; stage++)
+        for (final mine in [true, false])
+          MonsterSheets.battleSide('tidelord', stage, mine: mine)!,
+      for (var stage = 0; stage < 3; stage++)
+        for (final h in ['se', 'ne', 'nw', 'sw'])
+          MonsterSheets.map('tidelord', stage, h)!,
     ];
     for (final s in sets) {
       for (final a in s.anims.values) {
+        expect(File(a.asset).existsSync(), isTrue, reason: a.asset);
         expect(a.frames, inInclusiveRange(2, 32));
         expect(a.fps, inInclusiveRange(4, 30));
         expect(

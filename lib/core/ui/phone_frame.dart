@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../theme/foe_theme.dart';
 import '../theme/voxel_kit.dart' show vr;
 import '../theme/voxel_icons.dart';
+import 'game_text.dart';
 
 /// Frames the whole app to a landscape-phone-sized viewport when it runs on a
 /// screen bigger than that.
@@ -123,7 +124,7 @@ class _RotatePrompt extends StatelessWidget {
               style: TextStyle(
                 color: Color(0xFFF7F0E2),
                 fontSize: 22,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 decoration: TextDecoration.none,
               ),
             ),
@@ -135,7 +136,7 @@ class _RotatePrompt extends StatelessWidget {
               style: TextStyle(
                 color: Color(0xFFE9DABE),
                 fontSize: 14,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w400,
                 decoration: TextDecoration.none,
               ),
             ),

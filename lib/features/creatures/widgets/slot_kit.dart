@@ -1,12 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../../common/widgets/recess_bar.dart';
-import '../../social/widgets/social_kit.dart';
+import '../../social/widgets/social_kit.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// THE SLOT FAMILY (user 2026-09-20, "Variante 2, Slot-Karten"): the Healing Hut,
 /// the Combat School and the Hatchery are one page with different nouns — a
@@ -86,7 +87,7 @@ class SlotCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w400,
                         color: kBoxInk,
                       ),
                     ),
@@ -116,7 +117,7 @@ class SlotCard extends StatelessWidget {
                 time,
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: ready ? CreamPalette.better : kBoxAccent,
                 ),
               ),
@@ -172,7 +173,7 @@ class FreeSlotCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: CreamPalette.goldDeep,
                 ),
               ),
@@ -207,7 +208,7 @@ class SlotPill extends StatelessWidget {
           label,
           style: const TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             color: kBoxInk,
           ),
         ),
@@ -245,8 +246,8 @@ class SlotChip extends StatelessWidget {
           Text(
             name,
             style: const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
               color: kBoxInk,
             ),
           ),
@@ -316,7 +317,7 @@ class SlotTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               color: kBoxInk,
             ),
           ),
@@ -345,7 +346,7 @@ class SlotTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 10,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w400,
                 color: noteWarn ? CreamPalette.warn : kBoxInkSoft,
               ),
             ),
@@ -487,7 +488,7 @@ Widget slotLineHeading(String label, String count) => Padding(
         label.toUpperCase(),
         style: const TextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           letterSpacing: 0.9,
           color: kBoxAccent,
         ),
@@ -497,7 +498,7 @@ Widget slotLineHeading(String label, String count) => Padding(
         count,
         style: const TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           color: kBoxInk,
         ),
       ),
@@ -516,7 +517,7 @@ Widget slotEmptyNote(String title, String body) => Padding(
         textAlign: TextAlign.center,
         style: const TextStyle(
           fontSize: 15,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           color: kBoxInk,
         ),
       ),

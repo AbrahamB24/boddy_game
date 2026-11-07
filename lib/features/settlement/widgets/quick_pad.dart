@@ -1,10 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
+import '../../../core/theme/fachwerk.dart';
 import '../../../core/theme/cream_kit.dart';
+import '../../../core/theme/ui_art.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_kit.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// One button on a [QuickRail].
 class QuickPadItem {
@@ -31,6 +34,10 @@ class QuickPadItem {
   /// The button's own colour; null picks one by [label] (see [_accentFor]).
   final Color? accent;
 
+  /// Drawn as the compass-and-globe button instead of a round iron one (the
+  /// main tile of the bottom-left corner).
+  final bool compass;
+
   const QuickPadItem(
     this.icon,
     this.label,
@@ -39,6 +46,7 @@ class QuickPadItem {
     this.active = false,
     this.anchorKey,
     this.accent,
+    this.compass = false,
   });
 }
 
@@ -59,7 +67,7 @@ class QuickRail extends StatelessWidget {
     this.axis = Axis.horizontal,
   });
 
-  static const double tile = 52;
+  static const double tile = 64;
   static const double gap = 10;
 
   @override
@@ -126,47 +134,46 @@ class _QuickDockState extends State<QuickDock> {
     // solo hand-off hands this dock just its one lit tile, `more: []` — a
     // chevron that unfolds into empty space invites a tap for nothing).
     if (widget.more.isEmpty) return QuickRail._anchored(widget.main);
+    // BOTTOM-aligned (user 2026-11-04: the small icons must stand on the same
+    // line as the ones on the right, not float at the big compass's middle);
+    // the fold plate is centred on that one line of tiles.
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
         QuickRail._anchored(widget.main),
-        const SizedBox(width: QuickRail.gap),
-        _foldButton(hidden),
-        // The row grows out of the fold button; clipped so it never spills
-        // while it animates.
+        // Right up against the compass (user 2026-11-04: "näher an Expedition").
+        const SizedBox(width: 1),
+        // At the compass's BOTTOM RIGHT (user 2026-11-04: "unten rechts von
+        // Expeditions"), tucked 12 px over its edge; it keeps its own tap area.
+        Transform.translate(
+          offset: const Offset(-12, 0),
+          child: _foldButton(hidden),
+        ),
         // Clipped to the row's own WIDTH while it animates, but free above and
         // below (user 2026-09-28: "die Notification ist abgeschnitten und unten
         // der Schatten von den Icons"): the badge on a button's corner and its
         // hard shadow hang outside the row. The room is a CLIP allowance, not
-        // padding — padding made the open row taller, and the buttons on the left
-        // are centred on it, so they climbed (user, same day: "die Buttons links
-        // wandern nach oben"). Nothing here may change the row's height.
+        // padding — padding made the open row taller, and the buttons on the
+        // left are centred on it, so they climbed (user, same day: "die Buttons
+        // links wandern nach oben"). Nothing here may change the row's height.
         ClipRect(
           clipper: const _VerticalRoom(),
           child: AnimatedSize(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
             alignment: Alignment.centerLeft,
-            // The row stays MOUNTED either way now (user 2026-09-29: "beim
-            // Zuklappen fehlt die Animation") — it used to be swapped for a
-            // bare SizedBox.shrink() when closed, which unmounted the whole
-            // QuickRail the instant `_open` flipped: the buttons vanished
-            // before AnimatedSize had drawn a single frame, and only the
-            // trailing empty space was left to visibly collapse. An `Align`
-            // with a widthFactor keeps the row's own laid-out size honest
-            // (0 when closed) without ever tearing it down, so AnimatedSize
-            // now has something real to shrink — the same reveal-by-clipping
-            // it already did on the way open, just running in reverse too.
+            // The row stays MOUNTED either way (user 2026-09-29: "beim
+            // Zuklappen fehlt die Animation"): an `Align` with a widthFactor
+            // keeps the row's own laid-out size honest (0 when closed) without
+            // tearing it down, so AnimatedSize has something real to shrink.
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: Alignment.bottomLeft,
               widthFactor: _open ? 1 : 0,
+              heightFactor: 1,
               child: Padding(
                 // Right: room for a badge that hangs past the last button.
-                padding: const EdgeInsets.only(
-                  left: QuickRail.gap,
-                  right: _kHang,
-                ),
+                padding: const EdgeInsets.only(right: _kHang),
                 child: QuickRail(items: widget.more),
               ),
             ),
@@ -183,30 +190,23 @@ class _QuickDockState extends State<QuickDock> {
     label: _open ? 'Fold away' : 'More buttons',
     button: true,
     child: SizedBox(
-      width: 24,
-      height: 34,
+      width: 40,
+      height: 40,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
             child: Pressable(
               onTap: () => setState(() => _open = !_open),
-              child: DecoratedBox(
-                // The real gem chrome now, not `goldButton()`'s flat chunky
-                // pill (user 2026-09-29: "es fehlt noch der weisse Rahmen
-                // und der Farbverlauf, damit sie gleich sind wie die Buttons
-                // Build und Management") — gradient, cream/white rim and
-                // drop shadow, exactly [_QuickTile]'s own decoration.
-                decoration: gemDecoration(
-                  CreamPalette.gold,
-                  lit: _open,
-                  shape: BoxShape.rectangle,
-                  borderRadius: vr(12),
-                ),
+              child: IronButton(
+                size: 40,
+                lit: _open,
                 child: PixelIcon(
                   _open ? Icons.chevron_left : Icons.chevron_right,
-                  size: 20,
-                  color: CreamPalette.ink,
+                  size: 19,
+                  color: _open
+                      ? const Color(0xFFFFE9B0)
+                      : const Color(0xFF8FD98F),
                 ),
               ),
             ),
@@ -233,32 +233,11 @@ Widget _badge(int count) => Container(
     count > 99 ? '99+' : '$count',
     style: const TextStyle(
       color: CreamPalette.ink,
-      fontWeight: FontWeight.w800,
-      fontSize: 10.5,
+      fontWeight: FontWeight.w400,
+      fontSize: 11,
     ),
   ),
 );
-
-/// A button's colour. TWO tones only (user 2026-09-28: the main buttons all one
-/// colour, the fold-out drawer's buttons one slightly different colour among
-/// themselves), so the row reads as one family and the icons tell the buttons
-/// apart. Deep amber keeps a white glyph readable.
-Color _accentFor(QuickPadItem item) {
-  if (item.accent != null) return item.accent!;
-  // TWO colours, not one per button (user 2026-09-28: "Die Buttons … sollen alle
-  // die gleiche Farbe haben. Die Unterbuttons … sind leicht anders, aber für sich
-  // auch alle gleich"). The places you go to all the time wear the amber; what
-  // sits in the fold-out drawer wears one quieter tone. The icon tells them apart.
-  return switch (item.label) {
-    'Build' ||
-    'Monsters' ||
-    'Map' ||
-    'Manage' ||
-    'Expedition' => CreamPalette.gold,
-    'Social' || 'Profile' || 'Bag' || 'Daily tasks' => CreamPalette.goldDeep,
-    _ => CreamPalette.tan,
-  };
-}
 
 Color _lighten(Color c, double t) => Color.lerp(c, Colors.white, t)!;
 Color _darken(Color c, double t) => Color.lerp(c, Colors.black, t)!;
@@ -286,22 +265,26 @@ RadialGradient gemGradient(Color accent) => RadialGradient(
 BoxDecoration gemDecoration(
   Color accent, {
   bool lit = false,
-  BoxShape shape = BoxShape.rectangle,
+  BoxShape shape = BoxShape.circle,
   BorderRadius? borderRadius,
 }) => BoxDecoration(
   shape: shape,
-  borderRadius: shape == BoxShape.rectangle
-      ? (borderRadius ?? vr(12))
-      : null,
-  // VOXEL (2026-11-03): one flat block of the accent colour, a dark outline
-  // (white while lit) and a hard slab of shadow. No gradient, no blur.
-  color: accent,
+  borderRadius: shape == BoxShape.rectangle ? (borderRadius ?? vr(12)) : null,
+  // PERGAMENT UND STEIN (2026-11-04): a round IRON button — the accent lit from
+  // the top left, a dark rim (a brass-lit one while pressed) and a hard slab of
+  // shadow underneath.
+  gradient: RadialGradient(
+    center: const Alignment(-0.35, -0.5),
+    radius: 1.0,
+    colors: [_lighten(accent, 0.35), accent, _darken(accent, 0.4)],
+    stops: const [0, 0.5, 1],
+  ),
   border: Border.all(
-    color: lit ? Colors.white : Voxel.outline,
+    color: lit ? HudBlocks.litRim : HudBlocks.mossDark,
     width: lit ? 3 : 2.5,
   ),
-  boxShadow: [
-    BoxShadow(color: _darken(accent, 0.55), offset: const Offset(0, 4)),
+  boxShadow: const [
+    BoxShadow(color: Color(0x8C000000), offset: Offset(0, 4), blurRadius: 3),
   ],
 );
 
@@ -317,10 +300,8 @@ class _QuickTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lit = item.active;
-    final accent = lit ? CreamPalette.gold : _accentFor(item);
-    final light = accent.computeLuminance() > 0.45;
-    final ink = light ? CreamPalette.ink : Colors.white;
-    const d = QuickRail.tile;
+    final d = item.compass ? 108.0 : QuickRail.tile;
+    final art = UiArt.iconFor(item.label);
     return Semantics(
       label: item.label,
       button: true,
@@ -335,50 +316,40 @@ class _QuickTile extends StatelessWidget {
               Positioned.fill(
                 child: Pressable(
                   onTap: item.onTap,
-                  child: DecoratedBox(
-                    decoration: gemDecoration(accent, lit: lit),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // The gloss: a pale, curved highlight across the top.
-                        Positioned(
-                          top: 3,
-                          left: 9,
-                          right: 9,
-                          height: 15,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: vr(10),
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.white.withValues(
-                                    alpha: light ? 0.55 : 0.42,
-                                  ),
-                                  Colors.white.withValues(alpha: 0),
-                                ],
-                              ),
-                            ),
-                          ),
+                  // Rendered iron button / compass (user 2026-11-04, painted
+                  // concept); the glyph sits on its dark dish.
+                  // The compass picture leaves 6 px of air under its ring at this
+                  // size, the iron buttons only 2.4: pushed down by the difference
+                  // so the visible bottoms of ALL icons stand on one line (user
+                  // 2026-11-04).
+                  child: item.compass
+                      // No lift any more: the timber board has no air under it.
+                      ? CompassButton(size: d)
+                      // The medal: timber ring round a beige (plaster) dish, the
+                      // glyph on it (user 2026-11-05: "bei allen Icons den beigen
+                      // Hintergrund und den Holzrahmen").
+                      : IronButton(
+                          size: d,
+                          lit: lit,
+                          // The rendered 3D glyph where there is one, else the
+                          // flat icon.
+                          child: art != null
+                              ? Image.asset(
+                                  art,
+                                  width: d * 0.64,
+                                  height: d * 0.64,
+                                  fit: BoxFit.contain,
+                                  filterQuality: FilterQuality.medium,
+                                  gaplessPlayback: true,
+                                )
+                              : PixelIcon(
+                                  item.icon,
+                                  size: 26,
+                                  color: lit
+                                      ? const Color(0xFFFFE9B0)
+                                      : const Color(0xFFEFE2BC),
+                                ),
                         ),
-                        PixelIcon(
-                          item.icon,
-                          size: 27,
-                          color: ink,
-                          shadows: light
-                              ? null
-                              : const [
-                                  Shadow(
-                                    color: Color(0x66000000),
-                                    offset: Offset(0, 1.5),
-                                    blurRadius: 2,
-                                  ),
-                                ],
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               ),
               if (item.badge > 0)

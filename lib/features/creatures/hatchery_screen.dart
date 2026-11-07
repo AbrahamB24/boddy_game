@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -27,6 +27,7 @@ import 'widgets/egg_card.dart';
 import 'widgets/gene_bar_toggle.dart';
 import '../../core/theme/voxel_icons.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 /// The two halves of the page (user 2026-09-20: "hatchery und breeding sollten
 /// zusammen sein wie worker und population"): making an egg, and incubating it.
@@ -124,16 +125,16 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
                     Text(
                       name,
                       style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
                         color: kBoxInk,
                       ),
                     ),
                     Text(
                       sub,
                       style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
                         color: kBoxInkSoft,
                       ),
                     ),
@@ -674,7 +675,7 @@ class _HatcheryPaneState extends State<HatcheryPane> {
               style: TextStyle(
                 fontSize: size,
                 height: 1.1,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: goldButtonInk(active: onTap != null),
               ),
             ),
@@ -684,7 +685,7 @@ class _HatcheryPaneState extends State<HatcheryPane> {
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.1,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w400,
                   color: goldButtonInk(active: onTap != null),
                 ),
               ),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../creatures/models/ability_def.dart';
@@ -6,6 +6,7 @@ import '../../creatures/models/creature_enums.dart';
 import '../../creatures/models/species_def.dart';
 import 'dev_lists.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/ui/game_text.dart';
 
 /// THE ABILITIES, TO READ (user 2026-09-20: "Abilities anzeigen lassen mit
 /// Erklärung — und ich gebe dir den Auftrag, falls etwas geändert werden muss").
@@ -56,8 +57,8 @@ class _DevAbilitiesViewState extends State<DevAbilitiesView> {
                   child: Text(
                     '${list.length} / ${kAbilityDefs.length}',
                     style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
                       color: kBoxAccent,
                     ),
                   ),
@@ -156,7 +157,7 @@ class _Explanation extends StatelessWidget {
                   a.name,
                   style: const TextStyle(
                     fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     color: kBoxInk,
                   ),
                 ),
@@ -167,7 +168,7 @@ class _Explanation extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 2),
-          Text(a.id, style: TextStyle(fontSize: 10.5, color: kBoxInkFaint)),
+          Text(a.id, style: TextStyle(fontSize: 11, color: kBoxInkFaint)),
           if (a.description.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
@@ -225,8 +226,8 @@ class _Explanation extends StatelessWidget {
             child: Text(
               'Zum Ändern: sag mir, welche Ability und was — ich passe sie an.',
               style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
                 color: kBoxInkSoft,
               ),
             ),
@@ -245,8 +246,8 @@ class _Explanation extends StatelessWidget {
     child: Text(
       t,
       style: const TextStyle(
-        fontSize: 11.5,
-        fontWeight: FontWeight.w800,
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
         color: kBoxInk,
       ),
     ),
@@ -260,7 +261,7 @@ class _Explanation extends StatelessWidget {
           t.toUpperCase(),
           style: const TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             letterSpacing: 1.1,
             color: kBoxAccent,
           ),
@@ -281,9 +282,9 @@ class _Explanation extends StatelessWidget {
     child: Text(
       t,
       style: TextStyle(
-        fontSize: 12.5,
+        fontSize: 13,
         height: 1.45,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w400,
         color: warn ? CreamPalette.warn : kBoxInkSoft,
       ),
     ),
@@ -299,9 +300,9 @@ class _Explanation extends StatelessWidget {
           child: Text(
             t,
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: 13,
               height: 1.4,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w400,
               color: kBoxInkSoft,
             ),
           ),

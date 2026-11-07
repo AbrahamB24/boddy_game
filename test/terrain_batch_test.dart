@@ -59,7 +59,12 @@ Future<List<int>> _render(WidgetTester tester, double scale, Offset origin,
 }
 
 void main() {
-  tearDown(() => TerrainLayer.debugDrawOneByOne = false);
+  // No wind, no drifting water: the two pictures must be pixel-comparable.
+  setUp(() => TerrainLayer.debugAnimate = false);
+  tearDown(() {
+    TerrainLayer.debugDrawOneByOne = false;
+    TerrainLayer.debugAnimate = true;
+  });
 
   testWidgets('batched terrain matches the one-by-one picture', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 600));

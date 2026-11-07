@@ -81,7 +81,7 @@ void main() {
     expect(find.text('Lv 1'), findsOneWidget);
     String storageOf(WidgetTester t) => t
         .widgetList<Text>(find.byType(Text))
-        .map((w) => w.data ?? '')
+        .map((w) => w.data ?? w.textSpan?.toPlainText() ?? '')
         .firstWhere((s) => s.contains('500') || s.contains('625'));
     final at1 = storageOf(t);
     await t.tap(find.byIcon(Icons.chevron_right_rounded));

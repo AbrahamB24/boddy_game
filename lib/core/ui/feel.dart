@@ -170,6 +170,32 @@ class Feel {
   static void deny() => of(FeelEvent.deny);
   static void alert() => of(FeelEvent.alert);
 
+  /// The lightest click there is, with NO sound: a building crossing into the
+  /// next grid cell while it is dragged (user 2026-11-05, "Bauen soll sich gut
+  /// anfühlen"). Haptic only — a clip per cell would be a machine gun.
+  static void tick() {
+    if (!_hapticsOn) return;
+    try {
+      _fireAndForget(HapticFeedback.selectionClick(), 'haptics');
+    } catch (e) {
+      debugPrint('[Feel] no haptics here: $e');
+    }
+  }
+
+  /// A dragged building changed between "fits" and "does not fit". Haptic only:
+  /// a soft tap when it starts to fit, a firmer one when it stops.
+  static void snap({required bool fits}) {
+    if (!_hapticsOn) return;
+    try {
+      _fireAndForget(
+        fits ? HapticFeedback.lightImpact() : HapticFeedback.mediumImpact(),
+        'haptics',
+      );
+    } catch (e) {
+      debugPrint('[Feel] no haptics here: $e');
+    }
+  }
+
   /// Starts [work] and DISCARDS its outcome, errors included.
   ///
   /// Both channels are async platform calls, and a plain try/catch around a call

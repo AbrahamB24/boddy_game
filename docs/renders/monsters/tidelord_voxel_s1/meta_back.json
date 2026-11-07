@@ -10,6 +10,12 @@
     387
   ],
   "anims": {
+    "walk": {
+      "sheet": "back_walk.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": true
+    },
     "idle": {
       "sheet": "back_idle.png",
       "frames": 16,

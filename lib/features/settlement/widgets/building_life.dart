@@ -475,7 +475,7 @@ class _SleepZPainter extends CustomPainter {
     final style = outline
         ? TextStyle(
             fontSize: _base,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w400,
             foreground: Paint()
               ..style = PaintingStyle.stroke
               ..strokeWidth = 4
@@ -484,7 +484,7 @@ class _SleepZPainter extends CustomPainter {
           )
         : const TextStyle(
             fontSize: _base,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w400,
             color: Colors.white,
           );
     return TextPainter(

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'dev_foe.dart';
 import '../../creatures/models/creature_enums.dart';
@@ -22,6 +22,7 @@ import '../data/workshop_role_effects.dart';
 import '../services/trade_center.dart' show kMaxTradeDiscount;
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // Reusable editor for the generic `effects` JSON vocabulary
 // (BuildingDef.fromDefRow/toDefRow — see building_definitions.dart).

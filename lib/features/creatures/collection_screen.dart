@@ -1,8 +1,9 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
+import '../../core/theme/ui_art.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/pressable.dart';
 import '../common/widgets/filter_pills.dart';
@@ -20,8 +21,8 @@ import 'services/creatures_controller.dart';
 import 'starter_preview_screen.dart';
 import 'teams_screen.dart';
 import 'widgets/creature_card.dart';
-import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// Sort orders for the collection grid (user request 2026-07-17). `newest`
 /// is the controller's own order — catch order — so the default costs no
@@ -92,7 +93,14 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   /// The pills' own palette on a cream card — the shared look the egg picker and
   /// the breeding screen wear.
-  static final PillPalette _pills = PillPalette.cream;
+  static final PillPalette _pills = PillPalette(
+    ink: UiArt.ink,
+    inkFaint: UiArt.inkSoft,
+    accent: UiArt.plaqueRim,
+    fill: UiArt.plaqueLight,
+    border: UiArt.plaqueRim,
+    menuSurface: UiArt.plaqueLight,
+  );
 
   /// Starter preview drafts, one per species, cached so the picker's tile
   /// doesn't reroll a new gender/genes on every rebuild — see [_starterDraft].
@@ -175,12 +183,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
       // and nowhere earlier to close back to (user 2026-10-01: "der ganze
       // Header kannst du bei diesem Screen löschen") — exactly the branch
       // below that renders [_starterPicker] instead of the grid.
-      final showingStarterPicker =
-          !_ctrl.isLoading && _ctrl.creatures.isEmpty;
+      final showingStarterPicker = !_ctrl.isLoading && _ctrl.creatures.isEmpty;
       return MenuScaffold(
+        timber: true,
         showHeader: !showingStarterPicker,
         title: 'Monsters',
-        trailing: _housingReadout(),
+        trailing: _headerTools(),
         // No card of its own any more (user 2026-09-30, spotting the outer
         // card still wrapping the grid+hubs Row: "die grosse Kachel...
         // braucht es nicht" — MenuScaffold is already the one card on
@@ -198,12 +206,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
             Expanded(
               child: Column(
                 children: [
-                  if (_ctrl.creatures.isNotEmpty) _sortFilterBar(),
+                  if (_searchOpen && _ctrl.creatures.isNotEmpty) _searchRow(),
                   Expanded(
                     child: _ctrl.isLoading && _ctrl.creatures.isEmpty
                         ? const Center(
                             child: CircularProgressIndicator(
-                              color: CreamPalette.gold,
+                              color: UiWood.gold,
                             ),
                           )
                         : _ctrl.creatures.isEmpty
@@ -224,7 +232,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                 // shaving more off here just hands the grid another column's
                 // worth of room instead of sitting unused in this panel.
                 width: 132,
-                child: zoneBox(padding: const EdgeInsets.all(7), child: _hubs()),
+                child: _hubs(),
               ),
             ],
           ],
@@ -236,15 +244,17 @@ class _CollectionScreenState extends State<CollectionScreen> {
   /// "14 · housing 12/16" at the right of the title card — how many monsters
   /// you have and how many the settlement can shelter.
   Widget _housingReadout() => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    // A recess in the header's plaster, like the cells of the main screen.
     decoration: BoxDecoration(
-      color: CreamPalette.tan.withValues(alpha: 0.18),
-      borderRadius: vr(9),
+      color: UiArt.plaqueRim.withValues(alpha: 0.16),
+      borderRadius: BorderRadius.circular(3),
+      border: Border.all(color: UiArt.plaqueRim.withValues(alpha: 0.5)),
     ),
     child: Text(
       '${_ctrl.creatures.length} · housing '
       '${_settlement.housingUsed}/${_settlement.housingCapacity}',
-      style: FoE.value(size: 11).copyWith(color: kBoxInk),
+      style: FoE.value(size: 12).copyWith(color: UiArt.ink),
     ),
   );
 
@@ -329,31 +339,23 @@ class _CollectionScreenState extends State<CollectionScreen> {
     // A raised tile, not a card of its own — the three hubs are all the
     // same kind of thing (a shortcut), standing on the shared [zoneBox]
     // the way a trip or a target tile stands on its page.
+    // The main screen's plaque: plaster in a wooden rim, with the bronze
+    // medal its quick buttons wear for the glyph.
     child: Container(
-      decoration: raisedTile(lit: highlight, radius: 12),
-      padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
+      decoration: uiPlaque(lit: highlight),
+      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  shape: BoxShape.rectangle,
-                  color: CreamPalette.gold,
-                  boxShadow: [
-                    BoxShadow(
-                      color: CreamPalette.goldDeep,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: PixelIcon(icon, size: 15, color: CreamPalette.ink),
+              IronButton(
+                size: 36,
+                lit: highlight,
+                child: PixelIcon(icon, size: 15, color: UiArt.ink),
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: 5),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,15 +364,15 @@ class _CollectionScreenState extends State<CollectionScreen> {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: FoE.title(size: 12).copyWith(color: kBoxInk),
+                      style: FoE.title(size: 13).copyWith(color: UiArt.ink),
                     ),
                     Text(
                       line1,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: FoE.label(size: 11).copyWith(
-                        color: highlight ? kBoxAccent : kBoxInkSoft,
-                        fontWeight: FontWeight.w800,
+                        color: highlight ? UiArt.warn : UiArt.inkSoft,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ],
@@ -380,13 +382,21 @@ class _CollectionScreenState extends State<CollectionScreen> {
           ),
           if (progress != null) ...[
             const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: vr(4),
-              child: LinearProgressIndicator(
-                value: progress.clamp(0.0, 1.0),
-                minHeight: 7,
-                color: CreamPalette.gold,
-                backgroundColor: kBoxInk.withValues(alpha: 0.15),
+            // A dark well with a gold fill, like the energy bar's.
+            Container(
+              height: 8,
+              decoration: BoxDecoration(
+                color: UiWood.wellDeep,
+                borderRadius: BorderRadius.circular(2),
+                border: Border.all(color: UiArt.plaqueRim, width: 1),
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: progress.clamp(0.0, 1.0),
+                  heightFactor: 1,
+                  child: const ColoredBox(color: UiWood.gold),
+                ),
               ),
             ),
           ],
@@ -434,7 +444,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                       'Starters are the three fire/water/plant epics — add '
                       'them in Dev Mode (Species tab).',
             textAlign: TextAlign.center,
-            style: FoE.label(size: 13).copyWith(color: kBoxInk),
+            style: FoE.label(size: 13).copyWith(color: UiWood.onWood),
           ),
         ),
       );
@@ -456,7 +466,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
           child: Text(
             'Choose your starter!',
             textAlign: TextAlign.center,
-            style: FoE.title(size: 18).copyWith(color: kBoxInk),
+            style: FoE.title(size: 18).copyWith(color: UiWood.onWood),
           ),
         ),
         Padding(
@@ -465,7 +475,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
             'Your first creature — the three starters are fire, water and '
             'plant; pick your element.',
             textAlign: TextAlign.center,
-            style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
+            style: FoE.dim(size: 12).copyWith(color: UiWood.onWoodSoft),
           ),
         ),
         Expanded(
@@ -530,53 +540,51 @@ class _CollectionScreenState extends State<CollectionScreen> {
     );
   }
 
-  // ── Search + filter + sort bar ─────────────────────────────
-  Widget _sortFilterBar() => Padding(
-    padding: const EdgeInsets.fromLTRB(14, 3, 14, 0),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _headerTools() {
+    if (_ctrl.creatures.isEmpty) return _housingReadout();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            _glyphBtn(
-              _searchOpen ? Icons.search_off : Icons.search,
-              () => setState(() {
-                _searchOpen = !_searchOpen;
-                if (!_searchOpen && _searchQuery.isNotEmpty) {
-                  _searchCtrl.clear();
-                  _searchQuery = '';
-                }
-              }),
-              tooltip: _searchQuery.isEmpty
-                  ? 'Search'
-                  : 'Search: "$_searchQuery"',
-              engaged: _searchOpen || _searchQuery.isNotEmpty,
-            ),
-            CompositedTransformTarget(
-              link: _filterLink,
-              child: _filterGlyphBtn(),
-            ),
-            _sortGlyphBtn(),
-            const SizedBox(width: 2),
-            // What the order is, in words — the icon alone never said.
-            Text(
-              '${_sort.label}${_sortReversed ? ' ↑' : ''}',
-              style: FoE.dim(size: 11.5).copyWith(color: kBoxInkSoft),
-            ),
-          ],
+        _glyphBtn(
+          _searchOpen ? Icons.search_off : Icons.search,
+          () => setState(() {
+            _searchOpen = !_searchOpen;
+            if (!_searchOpen && _searchQuery.isNotEmpty) {
+              _searchCtrl.clear();
+              _searchQuery = '';
+            }
+          }),
+          tooltip: _searchQuery.isEmpty ? 'Search' : 'Search: "$_searchQuery"',
+          engaged: _searchOpen || _searchQuery.isNotEmpty,
         ),
-        if (_searchOpen) ...[
-          const SizedBox(height: 8),
-          SizedBox(
-            width: 280,
-            child: SearchPill(
-              controller: _searchCtrl,
-              onChanged: (v) => setState(() => _searchQuery = v),
-              palette: _pills,
-            ),
+        CompositedTransformTarget(link: _filterLink, child: _filterGlyphBtn()),
+        _sortGlyphBtn(),
+        // What the order is, in words — the icon alone never said.
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Text(
+            '${_sort.label}${_sortReversed ? ' ↑' : ''}',
+            style: FoE.label(size: 12).copyWith(color: UiArt.inkSoft),
           ),
-        ],
+        ),
+        _housingReadout(),
       ],
+    );
+  }
+
+  /// The search field, under the header while the lens is open.
+  Widget _searchRow() => Padding(
+    padding: const EdgeInsets.fromLTRB(14, 4, 14, 2),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: SizedBox(
+        width: 280,
+        child: SearchPill(
+          controller: _searchCtrl,
+          onChanged: (v) => setState(() => _searchQuery = v),
+          palette: _pills,
+        ),
+      ),
     ),
   );
 
@@ -593,27 +601,28 @@ class _CollectionScreenState extends State<CollectionScreen> {
       message: tooltip,
       child: Pressable(
         onTap: onTap,
-        child: Container(
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: engaged ? goldButton() : raisedTile(radius: 12),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              PixelIcon(icon, size: 18, color: kBoxInk),
-              if (badge != null) ...[
-                const SizedBox(width: 4),
-                Text(
-                  badge,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: kBoxInk,
-                  ),
+        // The bronze medal the main screen's quick buttons wear; lit while
+        // the control is doing something (a filter, a search).
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IronButton(
+              size: 34,
+              lit: engaged,
+              child: PixelIcon(icon, size: 17, color: UiArt.ink),
+            ),
+            if (badge != null) ...[
+              const SizedBox(width: 3),
+              Text(
+                badge,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: UiWood.onWood,
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
     ),
@@ -657,13 +666,13 @@ class _CollectionScreenState extends State<CollectionScreen> {
         message: 'Sort: ${_sort.label}${_sortReversed ? ' (reversed)' : ''}',
         child: PopupMenuButton<String>(
           tooltip: '',
-          color: CreamPalette.paperTop,
+          color: UiArt.plaqueLight,
           elevation: 10,
           position: PopupMenuPosition.under,
           padding: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: vr(12),
-            side: BorderSide(color: CreamPalette.tan, width: 1.5),
+            borderRadius: BorderRadius.circular(3),
+            side: const BorderSide(color: UiArt.plaqueRim, width: 2),
           ),
           onSelected: (name) => setState(() {
             final mode = _SortMode.values.byName(name);
@@ -686,15 +695,15 @@ class _CollectionScreenState extends State<CollectionScreen> {
                         mode.label,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: mode == _sort ? kBoxAccent : kBoxInk,
+                          fontWeight: FontWeight.w400,
+                          color: mode == _sort ? UiArt.warn : UiArt.ink,
                         ),
                       ),
                     ),
                     if (mode == _sort)
                       Text(
                         _sortReversed ? '↑' : '↓',
-                        style: TextStyle(fontSize: 13, color: kBoxAccent),
+                        style: const TextStyle(fontSize: 13, color: UiArt.warn),
                       ),
                   ],
                 ),
@@ -702,11 +711,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
           ],
           // A plain decorated box — PopupMenuButton already wraps this in its
           // own tap handler to open the menu.
-          child: Container(
-            height: 34,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: engaged ? goldButton() : raisedTile(radius: 12),
-            child: const PixelIcon(Icons.swap_vert, size: 18, color: kBoxInk),
+          child: IronButton(
+            size: 34,
+            lit: engaged,
+            child: const PixelIcon(Icons.swap_vert, size: 17, color: UiArt.ink),
           ),
         ),
       ),
@@ -777,7 +785,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
         width: 220,
         // A cream card of its own, on top of the page — the kit's, not a
         // separate material.
-        child: creamCard(
+        child: DecoratedBox(
+          decoration: uiPlaque(),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.7,
@@ -831,7 +840,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   Widget _menuDivider() => Container(
     height: 1,
-    color: CreamPalette.tan.withValues(alpha: 0.6),
+    color: UiArt.plaqueRim.withValues(alpha: 0.5),
     margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
   );
 
@@ -849,18 +858,18 @@ class _CollectionScreenState extends State<CollectionScreen> {
           PixelIcon(
             active ? Icons.check_box : Icons.check_box_outline_blank,
             size: 16,
-            color: active ? (color ?? kBoxAccent) : kBoxInkFaint,
+            color: active ? (color ?? UiArt.warn) : UiArt.inkSoft,
           ),
           const SizedBox(width: 8),
           Text(
             label,
-            // A rarity row (color != null) always shows its name in the rarity
-            // colour; other rows follow the active/inactive scheme (user
-            // 2026-07-18).
+            // A rarity row shows its colour on the tick box (the pale rarity
+            // colours do not read as text on plaster); the others follow the
+            // active/inactive scheme.
             style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color ?? (active ? kBoxAccent : kBoxInk),
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: active && color == null ? UiArt.warn : UiArt.ink,
             ),
           ),
         ],
@@ -868,76 +877,355 @@ class _CollectionScreenState extends State<CollectionScreen> {
     ),
   );
 
-  // ── Collection grid ────────────────────────────────────────
-  static const _gridSpacing = 10.0;
-  static const _gridHPad = 14.0;
-  static const _gridVPad = 8.0;
+  // ── Collection album ───────────────────────────────────────
+  // Concept 2 "Sammelalbum" (user 2026-11-05): the collection is a book. Two
+  // pages per spread (one on a narrow window), six pockets per page; owned
+  // monsters first, then a shrouded pocket for every species not yet found,
+  // and empty pockets to the end of the last page. The element tabs on the
+  // book's right edge are the element filter. Turn pages with the arrows or a
+  // swipe.
+  static const _perPage = 6;
+  static const _albumCols = 3;
+  static const _tabW = 34.0;
+  static const _leather = Color(0xFF5A3A20);
+
+  int _spread = 0;
+
+  List<({CreatureInstance? c, SpeciesDef? s})> _albumSlots(
+    List<CreatureInstance> list,
+  ) {
+    final slots = <({CreatureInstance? c, SpeciesDef? s})>[
+      for (final c in list) (c: c, s: null),
+    ];
+    // Undiscovered species only when nothing narrows the book.
+    if (_elementFilters.isEmpty &&
+        _rarityFilters.isEmpty &&
+        _searchQuery.trim().isEmpty) {
+      final owned = {for (final c in _ctrl.creatures) c.speciesId};
+      final missing =
+          kSpeciesDefs.values.where((s) => !owned.contains(s.id)).toList()
+            ..sort((a, b) {
+              final r = a.rarity.index.compareTo(b.rarity.index);
+              return r != 0 ? r : a.name.compareTo(b.name);
+            });
+      for (final s in missing) {
+        slots.add((c: null, s: s));
+      }
+    }
+    return slots;
+  }
 
   Widget _collectionGrid() {
     final list = _visibleCreatures();
-    if (list.isEmpty) {
+    final slots = _albumSlots(list);
+    if (slots.isEmpty) {
       return Center(
         child: Text(
           'Nothing matches the filter.',
-          style: TextStyle(color: kBoxInkSoft, fontSize: 12),
+          style: TextStyle(color: UiWood.onWoodSoft, fontSize: 12),
         ),
       );
     }
-    // Auto-flowing (2026-09-18, landscape) — see this file's own doc comment
-    // on why the shared monsterTileWidth/kMonsterTileCols convention doesn't
-    // fit here any more.
-    //
-    // Row height is worked out by hand, not left to [childAspectRatio] (user
-    // 2026-10-04: "Monsterkacheln bis zum unteren Bildschirmrand anzeigen"
-    // — the fixed aspect ratio made the last row run past the bottom of a
-    // short landscape window and get clipped mid-tile, since GridView just
-    // crops to its viewport). If the rows a full collection needs are only
-    // a little taller than the space available, shrink them just enough
-    // that the last one lands flush on the edge instead of being cut off; a
-    // collection too big for that stays at the natural tile size and
-    // scrolls normally — a cut-off row while actively scrolling is normal,
-    // only the UNSCROLLED first screen showing one is the bug.
     return LayoutBuilder(
       builder: (context, constraints) {
-        final availW = constraints.maxWidth - _gridHPad * 2;
-        final columns = math.max(1, (availW / 112).ceil());
-        final tileW = (availW - _gridSpacing * (columns - 1)) / columns;
-        final naturalH = tileW / kMonsterTileAspect;
-        final availH = constraints.maxHeight - _gridVPad * 2;
-        final rowsNeeded = (list.length / columns).ceil();
-        final rowsThatFit = math.max(
-          1,
-          ((availH + _gridSpacing) / (naturalH + _gridSpacing)).floor(),
-        );
-        var tileH = naturalH;
-        if (rowsNeeded > rowsThatFit) {
-          final fitted =
-              (availH - _gridSpacing * (rowsNeeded - 1)) / rowsNeeded;
-          if (fitted >= naturalH * 0.82) tileH = fitted;
-        }
-        return GridView.builder(
-          padding: const EdgeInsets.fromLTRB(
-            _gridHPad,
-            _gridVPad,
-            _gridHPad,
-            _gridVPad,
-          ),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            mainAxisSpacing: _gridSpacing,
-            crossAxisSpacing: _gridSpacing,
-            mainAxisExtent: tileH,
-          ),
-          itemCount: list.length,
-          itemBuilder: (_, i) => CreatureCard(
-            creature: list[i],
-            onTap: () => pushMenu(
-              context,
-              CreatureDetailScreen(creatureId: list[i].id),
+        final two = constraints.maxWidth >= 560;
+        final pages = two ? 2 : 1;
+        final perSpread = _perPage * pages;
+        final spreads = math.max(1, (slots.length / perSpread).ceil());
+        final spread = _spread.clamp(0, spreads - 1);
+        Widget page(int p) {
+          final first = spread * perSpread + p * _perPage;
+          return Expanded(
+            child: _albumPage(
+              slots: [
+                for (var i = first; i < first + _perPage; i++)
+                  i < slots.length ? slots[i] : null,
+              ],
+              number: spread * pages + p + 1,
+              left: p == 0 && two,
+              right: p == pages - 1 && two,
             ),
+          );
+        }
+
+        void turn(int by) {
+          final to = (spread + by).clamp(0, spreads - 1);
+          if (to != _spread) setState(() => _spread = to);
+        }
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onHorizontalDragEnd: (d) {
+                    final v = d.primaryVelocity ?? 0;
+                    if (v < -200) turn(1);
+                    if (v > 200) turn(-1);
+                  },
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: _leather,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(0xFF3A2410),
+                              width: 2,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x80000000),
+                                blurRadius: 8,
+                                offset: Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            child: Row(
+                              key: ValueKey(spread),
+                              children: [page(0), if (two) page(1)],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (spread > 0)
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(
+                            child: _turner(Icons.chevron_left, -1, turn),
+                          ),
+                        ),
+                      if (spread < spreads - 1)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(
+                            child: _turner(Icons.chevron_right, 1, turn),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(width: _tabW, child: _albumTabs()),
+            ],
           ),
         );
       },
     );
   }
+
+  Widget _turner(IconData icon, int by, void Function(int) turn) => Pressable(
+    onTap: () => turn(by),
+    child: Container(
+      width: 28,
+      height: 56,
+      decoration: BoxDecoration(
+        color: const Color(0xCC2A170A),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: UiWood.gold.withValues(alpha: 0.7)),
+      ),
+      child: Icon(icon, color: UiWood.gold, size: 22),
+    ),
+  );
+
+  Widget _albumPage({
+    required List<({CreatureInstance? c, SpeciesDef? s})?> slots,
+    required int number,
+    required bool left,
+    required bool right,
+  }) {
+    final shade = Color.lerp(UiArt.plaqueLight, Colors.black, 0.14)!;
+    return Container(
+      margin: EdgeInsets.only(left: right ? 1 : 0, right: left ? 1 : 0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.horizontal(
+          left: Radius.circular(right ? 0 : 6),
+          right: Radius.circular(left ? 0 : 6),
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: left
+              ? [UiArt.plaqueLight, UiArt.plaqueLight, shade]
+              : right
+              ? [shade, UiArt.plaqueLight, UiArt.plaqueLight]
+              : [UiArt.plaqueLight, UiArt.plaqueLight],
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+      child: Column(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, box) {
+                const gap = 10.0;
+                // The monsters' heads reach above the tile.
+                const topRoom = 14.0;
+                final tileW =
+                    (box.maxWidth - gap * (_albumCols - 1)) / _albumCols;
+                final rows = _perPage ~/ _albumCols;
+                final fitH =
+                    (box.maxHeight - topRoom - gap * (rows - 1)) / rows;
+                final tileH = math.min(tileW / kMonsterTileAspect, fitH);
+                return Padding(
+                  padding: const EdgeInsets.only(top: topRoom),
+                  child: GridView.builder(
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: EdgeInsets.zero,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: _albumCols,
+                      mainAxisSpacing: gap,
+                      crossAxisSpacing: gap,
+                      mainAxisExtent: tileH,
+                    ),
+                    itemCount: _perPage,
+                    itemBuilder: (_, i) => _pocket(slots[i]),
+                  ),
+                );
+              },
+            ),
+          ),
+          Text(
+            '— $number —',
+            style: FoE.dim(size: 10).copyWith(color: UiArt.inkSoft),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pocket(({CreatureInstance? c, SpeciesDef? s})? slot) {
+    if (slot == null) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: UiArt.plaqueRim.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
+        ),
+      );
+    }
+    final c = slot.c;
+    if (c == null) {
+      return CreatureCard.shrouded(shroudImageUrl: slot.s?.stageAt(0).imageUrl);
+    }
+    return _HoverLift(
+      child: CreatureCard(
+        creature: c,
+        rarityFrame: true,
+        showXp: true,
+        onTap: () => pushMenu(context, CreatureDetailScreen(creatureId: c.id)),
+      ),
+    );
+  }
+
+  /// The element tabs on the book's right edge — the element filter.
+  Widget _albumTabs() {
+    Widget tab({
+      required String glyph,
+      required Color color,
+      required bool active,
+      required VoidCallback onTap,
+      required String tip,
+    }) => Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Tooltip(
+        message: tip,
+        child: Pressable(
+          onTap: onTap,
+          child: Container(
+            width: active ? _tabW : _tabW - 6,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: const BorderRadius.horizontal(
+                right: Radius.circular(9),
+              ),
+              border: Border.all(
+                color: active ? UiWood.gold : const Color(0xFF3A2410),
+                width: active ? 2 : 1,
+              ),
+            ),
+            child: Text(glyph, style: const TextStyle(fontSize: 14)),
+          ),
+        ),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              tab(
+                glyph: '★',
+                color: const Color(0xFF8A6A3A),
+                active: _elementFilters.isEmpty,
+                tip: 'All',
+                onTap: () => setState(() {
+                  _elementFilters.clear();
+                  _spread = 0;
+                }),
+              ),
+              for (final e in CreatureElement.values)
+                if (e != CreatureElement.neutral)
+                  tab(
+                    glyph: e.emoji,
+                    color: Color.lerp(e.color, Colors.black, 0.25)!,
+                    active:
+                        _elementFilters.length == 1 &&
+                        _elementFilters.contains(e),
+                    tip: e.label,
+                    onTap: () => setState(() {
+                      _elementFilters
+                        ..clear()
+                        ..add(e);
+                      _spread = 0;
+                    }),
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lifts its child a few pixels while the mouse is over it (web/desktop);
+/// a no-op on touch.
+class _HoverLift extends StatefulWidget {
+  final Widget child;
+  const _HoverLift({required this.child});
+
+  @override
+  State<_HoverLift> createState() => _HoverLiftState();
+}
+
+class _HoverLiftState extends State<_HoverLift> {
+  bool _over = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => setState(() => _over = true),
+    onExit: (_) => setState(() => _over = false),
+    child: AnimatedSlide(
+      offset: _over ? const Offset(0, -0.03) : Offset.zero,
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOut,
+      child: widget.child,
+    ),
+  );
 }

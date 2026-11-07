@@ -33,7 +33,7 @@ abstract final class Voxel {
     fontFamily: font,
     fontSize: size,
     color: color,
-    fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+    fontWeight: bold ? FontWeight.w400 : FontWeight.w400,
     letterSpacing: spacing,
     height: 1.15,
   );

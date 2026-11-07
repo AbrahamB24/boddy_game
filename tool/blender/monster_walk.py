@@ -37,10 +37,21 @@ def setup(heading_yaw, samples):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
     K._mats.clear()          # materials die with read_factory_settings
-    tp.build(yaw=heading_yaw, head_yaw=6.0, catcher=3.4)
+    # Evolutions (MV_STAGE=1/2) are bigger in the world: the frame widens by
+    # the same factor and the pixels per tile shrink by it, so every stage
+    # comes out in the SAME frame size with the creature filling it alike —
+    # the game draws the later stages bigger itself.
+    stage = int(os.environ.get('MV_STAGE', '0'))
+    k = 1.0
+    if stage:
+        import tidelord_evo as evo
+        k = evo.CONFIG[stage]['scale']
+        evo.build(stage, yaw=heading_yaw, head_yaw=6.0, catcher=3.4 * k)
+    else:
+        tp.build(yaw=heading_yaw, head_yaw=6.0, catcher=3.4)
     K.lighting(sky=0.85, sun=5.5)
     K.rim_light(Vector((-0.6, 0.5, 0.7)))
-    rb.frame(TILES, TILES, SCALE, 0.80, 0.0, fit=False)
+    rb.frame(TILES * k, TILES * k, SCALE / k, 0.80, 0.0, fit=False)
     scene.render.engine = 'CYCLES'
     cy = scene.cycles
     cy.device = 'CPU'

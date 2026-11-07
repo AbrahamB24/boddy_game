@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/ui/pressable.dart';
@@ -14,6 +14,7 @@ import 'gather_defs_tab.dart';
 import 'path_editor_tab.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// The menus, top to bottom on the rail.
 enum _Menu {
@@ -144,7 +145,7 @@ class _DevModeScreenState extends State<DevModeScreen> {
             'Dev Mode',
             style: TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               color: CreamPalette.paperTop,
             ),
           ),
@@ -188,8 +189,8 @@ class _DevModeScreenState extends State<DevModeScreen> {
               child: Text(
                 _menu.subs[i],
                 style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
                   color: i == _sub
                       ? kBoxInk
                       : CreamPalette.paperTop.withValues(alpha: 0.85),
@@ -247,7 +248,7 @@ class _DevModeScreenState extends State<DevModeScreen> {
                         maxLines: 1,
                         style: TextStyle(
                           fontSize: 9,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w400,
                           color: m == _menu ? kBoxInk : CreamPalette.paperTop,
                         ),
                       ),

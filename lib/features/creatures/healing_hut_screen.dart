@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -16,6 +16,7 @@ import 'services/healing_cost.dart';
 import 'widgets/creature_family.dart';
 import 'widgets/slot_kit.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 /// The Healing Hut (user 2026-09-20, "Variante 2, Slot-Karten").
 ///
@@ -369,7 +370,7 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
         SocialGoldButton(
           'Heal all ${waiting.length}',
           height: 28,
-          fontSize: 11.5,
+          fontSize: 12,
           onTap: live ? () => _run('all', _creatures.healAll) : null,
         ),
       ],

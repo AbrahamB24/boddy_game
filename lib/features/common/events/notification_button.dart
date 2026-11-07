@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart' show pushMenu;
 import '../../../core/theme/foe_theme.dart';
@@ -14,9 +14,10 @@ import '../../settlement/sheets/building_detail_dialog.dart';
 import '../../settlement/widgets/parchment_sheet.dart';
 import '../widgets/parchment_page.dart';
 import 'game_events.dart';
-import '../../../core/ui/pressable.dart';
+import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// The bell: how many things happened that you haven't looked at, and what.
 ///
@@ -71,7 +72,7 @@ class NotificationButton extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: FoE.dim(size: 8).copyWith(
                         color: Colors.white,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ),

@@ -46,9 +46,10 @@ def _lean(dx, dy, amount):
     return (-amount * dy, amount * dx, 0.0)
 
 
-def build(stage):
+def build(stage, **kw):
+    """[kw] goes on to tidelord_pro.build (yaw, head_yaw, catcher)."""
     cfg = CONFIG[stage]
-    root = tp.build(yaw=0.0)
+    root = tp.build(**{'yaw': 0.0, **kw})
     head = bpy.data.objects['head']
     ice = K._mats['ice']
     ivory = K._mats['ivory']

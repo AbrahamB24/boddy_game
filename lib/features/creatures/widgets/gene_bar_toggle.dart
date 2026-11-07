@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import '../../../core/theme/foe_theme.dart';
-import '../../../core/ui/pressable.dart';
+import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// WHAT THE BARS MEASURE — a two-segment switch over any stat table (user
 /// 2026-07-27: "lvl 1 und das Icon sollen klickbar sein. Wenn ich das level up
@@ -158,7 +159,7 @@ class LevelRefToggle extends StatelessWidget {
         label,
         style: FoE.label(size: 11).copyWith(
           color: active ? accent : inkFaint,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
         ),
       ),
     ),

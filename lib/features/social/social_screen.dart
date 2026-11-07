@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -9,8 +9,9 @@ import 'pvp_pane.dart';
 import 'ranking_pane.dart';
 import 'services/message_notifier.dart';
 import 'social_controller.dart';
-import 'widgets/social_kit.dart';
+import 'widgets/social_kit.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 /// What the right-hand card is showing.
 enum _Pane { chat, friends, pvp, ranking }
@@ -194,7 +195,7 @@ class _SocialScreenState extends State<SocialScreen> {
               label,
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: on ? kBoxInk : kBoxInkSoft,
               ),
             ),
@@ -285,7 +286,7 @@ class _SocialScreenState extends State<SocialScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: FoE.label(
                           size: 13,
-                        ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+                        ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
                       ),
                     ),
                     if (t != null)

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/ui/scroll_cue.dart';
@@ -10,6 +10,7 @@ import '../services/battle_stars.dart' show kStarHpFraction;
 import '../services/overworld_layout.dart' show OverworldNodeState;
 import 'creature_family.dart' show CreatureAvatar, CreatureFace;
 import 'star_row.dart';
+import '../../../core/ui/game_text.dart';
 
 /// The share of HP for the third star, as the percentage the card prints.
 final int _hpNeed = (kStarHpFraction * 100).round();
@@ -87,7 +88,7 @@ class OverworldFightCard extends StatelessWidget {
                 .toUpperCase(),
             style: const TextStyle(
               fontSize: 10,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               letterSpacing: 1.1,
               color: kBoxAccent,
             ),
@@ -104,7 +105,7 @@ class OverworldFightCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     color: kBoxInk,
                   ),
                 ),
@@ -169,7 +170,7 @@ class OverworldFightCard extends StatelessWidget {
         t.toUpperCase(),
         style: const TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           letterSpacing: 1.1,
           color: kBoxAccent,
         ),
@@ -241,8 +242,8 @@ class _EnemyRow extends StatelessWidget {
                           'Lv ${enemies[i].level}',
                           maxLines: 1,
                           style: const TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
                             color: kBoxInk,
                           ),
                         ),
@@ -275,7 +276,7 @@ class _EnemyFace extends StatelessWidget {
           'Lv ${e.level}',
           style: const TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             color: kBoxInk,
           ),
         ),
@@ -327,8 +328,8 @@ class _RewardRow extends StatelessWidget {
             child: Text(
               building ? r.text.replaceFirst('New building: ', '') : r.text,
               style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
                 color: kBoxInk,
               ),
             ),

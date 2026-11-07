@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -11,6 +11,7 @@ import '../../creatures/models/creature_enums.dart'
 import '../data/building_definitions.dart';
 import '../data/goods_definitions.dart';
 import '../data/workshop_role_effects.dart';
+import '../../../core/ui/game_text.dart';
 
 /// Shows a building's EFFECTS at FULL UPGRADE — its highest reachable level
 /// (user 2026-07-24). Opened from the build menu (before you commit to it) and
@@ -234,7 +235,7 @@ class _BuildingUpgradeSheet extends StatelessWidget {
           style: FoE.dim(size: 9).copyWith(
             color: _inkFaint,
             letterSpacing: 1.0,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
           ),
         ),
       ),
@@ -415,7 +416,7 @@ class _BuildingUpgradeSheet extends StatelessWidget {
                       'Lv $maxLevel',
                       style: FoE.title(
                         size: 22,
-                      ).copyWith(color: _accent, fontWeight: FontWeight.w800),
+                      ).copyWith(color: _accent, fontWeight: FontWeight.w400),
                     ),
                   ],
                 ),

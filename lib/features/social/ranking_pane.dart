@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -7,6 +7,7 @@ import 'models/pvp_match.dart';
 import 'social_controller.dart';
 import 'widgets/social_kit.dart';
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// The friends leaderboard (you among them) next to the activity feed.
 class RankingPane extends StatelessWidget {
@@ -67,7 +68,7 @@ class RankingPane extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: FoE.label(size: 13).copyWith(
                   color: kBoxInk,
-                  fontWeight: isMe ? FontWeight.w800 : FontWeight.w600,
+                  fontWeight: isMe ? FontWeight.w400 : FontWeight.w400,
                 ),
               ),
             ),

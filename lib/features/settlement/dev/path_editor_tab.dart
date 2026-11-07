@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'dev_foe.dart';
 import '../../creatures/models/path_node.dart';
@@ -15,6 +15,7 @@ import 'path_species_sheet.dart';
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // The Dev-Mode "Pfad" tab (user 2026-07-25): the linear overworld path as an
 // editable, REORDERABLE list of battle nodes. Drag to move a node (also between

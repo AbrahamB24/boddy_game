@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -11,6 +11,7 @@ import '../services/pvp_service.dart';
 import '../social_screen.dart';
 import 'social_kit.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/ui/game_text.dart';
 
 /// Where a banner's main button goes: into the lobby (loading the match
 /// fresh — what the banner saw may be minutes old), or to the PvP list for a
@@ -194,7 +195,7 @@ class _Banner extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: FoE.label(
                       size: 13,
-                    ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+                    ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
                   ),
                 ),
                 if (more > 0) ...[

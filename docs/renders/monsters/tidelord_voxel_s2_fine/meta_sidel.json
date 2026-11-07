@@ -1,0 +1,26 @@
+{
+  "monster": "tidelord",
+  "style": "pro",
+  "view": "sidel",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anchor": [
+    274,
+    387
+  ],
+  "anims": {
+    "attack": {
+      "sheet": "sidel_attack.png",
+      "frames": 14,
+      "fps": 16,
+      "loop": false
+    },
+    "hurt": {
+      "sheet": "sidel_hurt.png",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+}

@@ -1,12 +1,13 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../ui/pressable.dart';
 import 'cream_kit.dart' show MenuScaffold;
 import 'foe_theme.dart';
 import 'voxel_kit.dart';
 import 'voxel_icons.dart';
+import '../ui/game_text.dart';
 
 /// The app-wide chunky "strategy HUD" look (2026-09-18 redesign, following
 /// Forge of Empires / Clash of Clans / Rise of Kingdoms: ribbon banners,
@@ -445,7 +446,7 @@ class StrategyHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Color(0xFFFFE9B0),
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 fontSize: 13,
                 letterSpacing: 0.5,
               ),
@@ -484,7 +485,7 @@ class PillBadge extends StatelessWidget {
       text,
       style: TextStyle(
         color: textColor ?? strategyTextOn(color),
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w400,
         fontSize: 12,
       ),
     ),
@@ -558,7 +559,7 @@ class SelectChip extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             color: strategyTextOn(active ? Strategy.gold : Strategy.tan),
           ),
         ),

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/scheduler.dart' show Ticker;
 
 import '../../core/theme/cream_kit.dart';
@@ -12,6 +12,7 @@ import 'models/creature_enums.dart';
 import 'services/capture_math.dart';
 import 'widgets/creature_family.dart' show CreatureFigure;
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 /// The Balkenjagd catch screen (user 2026-10-01, replacing the old inline
 /// ring QTE; bait selection split OUT into its own step 2026-10-02, then
@@ -207,20 +208,32 @@ class _CaptureBarScreenState extends State<CaptureBarScreen>
       title: 'Catch Attempt',
       showClose: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 2, 10, 10),
-        child: Column(
+        padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
+        // "Daumenhälften" layout (user pick no. 7, 2026-11-05): the left and
+        // right slabs of the screen ARE the controls — hold anywhere on them
+        // — and the percentage, track and Ready button sit in the middle.
+        child: Row(
           children: [
-            _wildHeader(),
-            const SizedBox(height: 4),
-            // The percentage sits ABOVE the catch bar (user 2026-10-04:
-            // "die Prozentzahl soll über dem Fangbalken gross stehen"), big
-            // enough to read at a glance while your thumbs are busy with
-            // the hold buttons below the track.
-            _percentReadout(),
-            const SizedBox(height: 10),
-            Expanded(child: _track()),
-            const SizedBox(height: 10),
-            _footer(),
+            Expanded(flex: 2, child: _thumbZone('◀️', -1)),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 5,
+              child: Column(
+                children: [
+                  _wildHeader(),
+                  const SizedBox(height: 4),
+                  // The percentage sits ABOVE the catch bar (user 2026-10-04:
+                  // "die Prozentzahl soll über dem Fangbalken gross stehen").
+                  _percentReadout(),
+                  const SizedBox(height: 10),
+                  Expanded(child: _track()),
+                  const SizedBox(height: 10),
+                  _footer(),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(flex: 2, child: _thumbZone('▶️', 1)),
           ],
         ),
       ),
@@ -285,8 +298,6 @@ class _CaptureBarScreenState extends State<CaptureBarScreen>
           ),
         ),
       ),
-      const SizedBox(height: 10),
-      _controls(),
     ],
   );
 
@@ -305,36 +316,47 @@ class _CaptureBarScreenState extends State<CaptureBarScreen>
     );
   }
 
-  Widget _controls() => Row(
-    children: [
-      Expanded(child: _holdButton('◀️ left', -1)),
-      const SizedBox(width: 10),
-      Expanded(child: _holdButton('right ▶️', 1)),
-    ],
-  );
+  double _heldDir = 0; // which thumb slab is down (for the pressed look)
 
-  Widget _holdButton(String label, double dir) => Listener(
-    onPointerDown: (_) => _startHold(dir),
-    onPointerUp: (_) => _stopHold(),
-    onPointerCancel: (_) => _stopHold(),
-    child: Container(
-      height: 54,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [CreamPalette.tileTop, CreamPalette.tileBottom],
+  /// A full-height timber slab that is the hold control for one direction.
+  Widget _thumbZone(String arrow, double dir) {
+    final down = _heldDir == dir;
+    return Listener(
+      onPointerDown: (_) {
+        _heldDir = dir;
+        _startHold(dir);
+        setState(() {});
+      },
+      onPointerUp: (_) {
+        _heldDir = 0;
+        _stopHold();
+        setState(() {});
+      },
+      onPointerCancel: (_) {
+        _heldDir = 0;
+        _stopHold();
+        setState(() {});
+      },
+      child: Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: dir < 0 ? Alignment.centerLeft : Alignment.centerRight,
+            end: dir < 0 ? Alignment.centerRight : Alignment.centerLeft,
+            colors: down
+                ? const [Color(0xFFB0683A), Color(0xFF8C4A28)]
+                : const [Color(0xFF6E3A1F), Color(0xFF8C4A28)],
+          ),
+          borderRadius: vr(12),
+          border: Border.all(color: const Color(0xFF2A1409), width: 2),
         ),
-        borderRadius: vr(12),
-        border: Border.all(color: CreamPalette.tan.withValues(alpha: 0.5)),
+        child: Text(
+          arrow,
+          style: FoE.title(size: 40).copyWith(color: const Color(0xFFF6E7C4)),
+        ),
       ),
-      child: Text(
-        label,
-        style: FoE.title(size: 15).copyWith(color: kBoxAccent),
-      ),
-    ),
-  );
+    );
+  }
 
   Widget _percentReadout() {
     final pct = _percent;

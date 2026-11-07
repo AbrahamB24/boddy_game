@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/voxel_icons.dart';
@@ -12,6 +12,7 @@ import '../services/battle_stars.dart' show kStarHpFraction;
 import '../services/overworld_layout.dart' show OverworldNodeState;
 import 'creature_family.dart' show CreatureAvatar, CreatureFace;
 import 'star_row.dart';
+import '../../../core/ui/game_text.dart';
 
 /// The share of HP for the third star, as the percentage the view prints.
 final int _hpNeed = (kStarHpFraction * 100).round();
@@ -140,7 +141,7 @@ class OverworldFocusView extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             letterSpacing: 1.1,
             color: kBoxAccent,
           ),
@@ -151,7 +152,7 @@ class OverworldFocusView extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             fontSize: 28,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             color: kBoxInk,
           ),
         ),
@@ -200,7 +201,7 @@ class OverworldFocusView extends StatelessWidget {
         t.toUpperCase(),
         style: const TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           letterSpacing: 1.1,
           color: kBoxAccent,
         ),
@@ -269,7 +270,7 @@ class _BigEnemies extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     color: kBoxInk,
                   ),
                 ),
@@ -312,7 +313,7 @@ class _RewardRow extends StatelessWidget {
               building ? r.text.replaceFirst('New building: ', '') : r.text,
               style: const TextStyle(
                 fontSize: 15,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
                 color: kBoxInk,
               ),
             ),

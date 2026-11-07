@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -8,6 +8,7 @@ import 'social_controller.dart';
 import 'widgets/social_kit.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// Where friends are made and unmade: search a username and add, answer the
 /// requests you received, and the full friend list with every verb (chat,
@@ -155,7 +156,7 @@ class _FriendsPaneState extends State<FriendsPane> {
           overflow: TextOverflow.ellipsis,
           style: FoE.label(
             size: 13,
-          ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+          ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
         ),
         if (sub != null)
           Text(

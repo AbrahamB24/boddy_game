@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/ui/pressable.dart';
@@ -19,6 +19,7 @@ import 'building_def_form.dart';
 import 'item_def_form.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // ── The Dev menu's lists, "Variante 3": list left, form right ──────────────
 // (user 2026-09-20). A list on a narrow cream card, and beside it a pane that
@@ -93,7 +94,7 @@ class _DevMasterDetailState extends State<DevMasterDetail> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w400,
                         color: kBoxInkSoft,
                       ),
                     ),
@@ -149,7 +150,7 @@ class DevSearch extends StatelessWidget {
             cursorColor: kBoxInk,
             style: const TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w400,
               color: kBoxInk,
             ),
             decoration: InputDecoration.collapsed(
@@ -198,8 +199,8 @@ class DevDrop<T> extends StatelessWidget {
         icon: PixelIcon(Icons.arrow_drop_down, color: kBoxInkFaint),
         dropdownColor: CreamPalette.paperBottom,
         style: const TextStyle(
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
           color: kBoxInk,
         ),
       ),
@@ -225,7 +226,7 @@ class DevNewButton extends StatelessWidget {
         label,
         style: TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           color: goldButtonInk(),
         ),
       ),
@@ -263,7 +264,7 @@ Widget devRow({
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     color: kBoxInk,
                   ),
                 ),
@@ -276,8 +277,8 @@ Widget devRow({
           Text(
             note,
             style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
               color: noteColor ?? kBoxInkSoft,
             ),
           ),
@@ -424,8 +425,8 @@ class _SpeciesListPaneState extends State<SpeciesListPane> {
           child: Text(
             '${visible.length} / ${kSpeciesDefs.length}',
             style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
               color: kBoxAccent,
             ),
           ),
@@ -558,8 +559,8 @@ class _BuildingsListPaneState extends State<BuildingsListPane> {
           child: Text(
             '${visible.length} / ${kBuildingDefs.length}',
             style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
               color: kBoxAccent,
             ),
           ),
@@ -609,7 +610,7 @@ class _BuildingsListPaneState extends State<BuildingsListPane> {
         children: [
           Text(
             'Gelöscht (${ids.length}) — tippen zum Zurückholen',
-            style: TextStyle(fontSize: 10.5, color: kBoxInkSoft),
+            style: TextStyle(fontSize: 11, color: kBoxInkSoft),
           ),
           const SizedBox(height: 4),
           Wrap(
@@ -629,7 +630,7 @@ class _BuildingsListPaneState extends State<BuildingsListPane> {
                       '⟵ ${kFallbackBuildingDefs[id]?.name ?? id}',
                       style: const TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w400,
                         color: kBoxInk,
                       ),
                     ),
@@ -734,7 +735,7 @@ class _ApplyModelsButtonState extends State<_ApplyModelsButton> {
                     : 'Renders & Grössen übernehmen ($n)',
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: n == 0 ? kBoxInkFaint : kBoxInk,
                 ),
               ),
@@ -807,8 +808,8 @@ class _DefListPaneState extends State<DefListPane> {
           child: Text(
             '${rows.length}',
             style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
               color: kBoxAccent,
             ),
           ),

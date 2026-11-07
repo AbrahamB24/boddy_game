@@ -627,5 +627,17 @@ void main() {
       expect(after.dx, closeTo(before.dx, 1e-6));
       expect(after.dy, closeTo(before.dy, 1e-6));
     });
+
+    test('a header inset lets the map rest lower, never past its true edge', () {
+      // Full-bleed map under a header (user 2026-11-04): with [topInset] the
+      // top of the camera's map may come down by that much, so the terrain
+      // padding fills the space behind the header.
+      const v = Size(932, 430);
+      final plain = clampMapTransform(mapTransform(1.0, -100, 5000), v);
+      final inset = clampMapTransform(mapTransform(1.0, -100, 5000), v, topInset: 60);
+      final dy = inset.getTranslation().y - plain.getTranslation().y;
+      expect(dy, closeTo(60, 1e-6));
+      expect(inset.getTranslation().y, lessThanOrEqualTo(0.0));
+    });
   });
 }

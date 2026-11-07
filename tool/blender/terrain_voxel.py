@@ -47,7 +47,23 @@ FILES = {
 }
 
 U = 1 / 32            # one block, in cells, for props
-GU = 1 / 16           # one block of ground
+# ONE BLOCK OF GROUND = ONE BLOCK OF A BUILDING (user 2026-11-05: "Voxelgrösse des
+# Bodens exakt denjenigen der Gebäude anpassen"): the very constant
+# fw_kit.VOX is derived from, in cells (= tiles). Props that stand on the ground
+# next to buildings (flowers, bushes) use it too.
+VOX = 4.1822 / (0.99 * 256)
+GU = VOX
+
+# The ground swatch: TILE_CELLS x TILE_CELLS cells at TILE_SCALE x the canvas
+# (the buildings' art is 4x the canvas too, so a block is 4 px in both). The
+# app draws it at 1 / TILE_SCALE. 4 cells, 8 once mirrored (a 2-cell swatch
+# showed its pattern every 4 cells).
+TILE_CELLS = 4.0
+TILE_SCALE = 5 * 960 / 1227     # = make_prop.PROP_PX, the buildings' own density
+
+# Ground greens: the buildings' leaf / leaf2 family (fw_kit: #4f8a24, #6a9a2a).
+GRASS_MID, GRASS_DARK, GRASS_LIGHT = '#548e26', '#487f22', '#639529'
+GRASS_DEEP, GRASS_BRIGHT, GRASS_SIDE = '#437a20', '#6f9d2c', '#4a8224'
 
 
 # ── voxel plumbing ─────────────────────────────────────────
@@ -171,30 +187,58 @@ def stone_boulder():
     return _stone(5, [(0, 0, 5, 6.5, 6, 5), (-5, 3, 2, 2.5, 2.5, 2)])
 
 
-def _flowers(seed, head, head2):
-    r = random.Random(seed)
-    v = Vox(['#3f7a2e', head, head2, '#2d5e22', '#6aa04a'], U)
-    for _ in range(9):
-        x, y = r.randint(-6, 6), r.randint(-5, 5)
-        h = r.randint(3, 6)
-        for z in range(h):
-            v.put(x, y, z, 0)
-        for dx, dy, dz in [(0, 0, 0), (1, 0, 0), (-1, 0, 0), (0, 1, 0),
-                           (0, 0, 1)]:
-            if r.random() < 0.85:
-                v.put(x + dx, y + dy, h + dz, 1 if r.random() < .6 else 2)
-        for dx in (-1, 1):
-            v.put(x + dx, y, 1, 3)
-    for _ in range(14):
-        v.put(r.randint(-7, 7), r.randint(-6, 6), 0, 4)
-    return v
+PROP_FLOWERS = ['#d8352c', '#4b6fd8', '#f4f0e6', '#e982b4', '#f2cf3a']
 
 
 def flower_heather():
-    return _flowers(7, '#a35fbf', '#c88ae0')
+    """A flower patch exactly like the ones by the buildings (fw_kit
+    flower_patch): stems 3-6 blocks tall, a small head of the kit's own
+    colours, a few tufts. Built at the buildings' block size (VOX)."""
+    r = random.Random(7)
+    v = Vox(['#4f7a22'] + PROP_FLOWERS + ['#6a9a2a', '#8aa636'], VOX)
+    for _ in range(26):
+        x, y = r.randint(-14, 14), r.randint(-12, 12)
+        h = r.randint(3, 6)
+        for z in range(h):
+            v.put(x, y, z, 0)
+        c = 1 + r.randrange(5)
+        v.put(x, y, h, c)
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            if r.random() < 0.55:
+                v.put(x + dx, y + dy, h - 1, c)
+        v.put(x, y, h + 1, c)
+    for _ in range(34):
+        x, y = r.randint(-15, 15), r.randint(-13, 13)
+        if (x, y, 0) not in v.v:
+            v.put(x, y, 0, 6)
+            if r.random() < 0.5:
+                v.put(x, y, 1, 7)
+    return v
 
 
 def flower_gorse():
+    """A bush exactly like the buildings' (fw_kit bush): six overlapping
+    rounded masses in leaf / leaf2, dotted with the kit's flowers."""
+    r = random.Random(8)
+    v = Vox(['#4f8a24', '#6a9a2a', '#437a20', '#8aa636'] +
+            PROP_FLOWERS, VOX)
+    R = 0.22 / VOX
+    for i in range(6):
+        a = r.uniform(0, 6.28)
+        d = r.uniform(0, R * 0.7)
+        rr = R * r.uniform(0.5, 0.85)
+        v.ball(math.cos(a) * d, math.sin(a) * d, rr * 0.75, rr, rr, rr * 0.85,
+               lambda x, y, z: (1 if r.random() < 0.5 else 0)
+               if z > rr * 0.9 else (2 if z < 3 else (0 if r.random() < 0.5 else 1)),
+               r, 0.10)
+    top = {}
+    for (x, y, z) in v.v:
+        if z > top.get((x, y), -1):
+            top[(x, y)] = z
+    for (x, y), z in top.items():
+        if z >= 5 and r.random() < 0.045:
+            v.put(x, y, z + 1, 4 + r.randrange(5))
+    return v
     return _flowers(8, '#f0c322', '#ffe066')
 
 
@@ -246,16 +290,25 @@ PROPS = {
 
 
 # ── ground ─────────────────────────────────────────────────
-def ground_field(cells=2.0, margin=1.0):
+def ground_field(cells=TILE_CELLS, margin=1.0):
+    # A diamond field must contain the frame's whole RECTANGLE (a diamond does
+    # not fill its own bounding box): side >= 2 * cells.
+    margin = cells / 2 + 1
     """A field of block columns a block or two high, much larger than the
     frame, so the camera never sees an edge."""
     r = random.Random(21)
     n = int((cells + 2 * margin) / GU)
-    v = Vox(['#4a8a32', '#52933a', '#5d9f42', '#417c2c', '#559b3c',
-             '#6e5a38', '#386c27'], GU)
+    # Greens taken from the buildings' own bushes and lawn (fw_kit leaf / leaf2),
+    # not a minty green of their own (user 2026-11-05: "die Farbe des Grases
+    # anpassen, dass es zu den Gebäuden passt"). 7-11 flower heads, 12 stem,
+    # 13 tuft: the same colours fw_kit gives its flower boxes and bushes.
+    v = Vox([GRASS_MID, GRASS_DARK, GRASS_LIGHT, GRASS_DEEP, GRASS_BRIGHT,
+             '#6e5a38', GRASS_SIDE,
+             '#d8352c', '#4b6fd8', '#f4f0e6', '#e982b4', '#f2cf3a',
+             '#4f7a22', GRASS_BRIGHT], GU)
     # smooth value noise for the heights
     g = {}
-    def noise(x, y, f=5):
+    def noise(x, y, f=20):
         gx, gy = x // f, y // f
         def n(a, b):
             if (a, b) not in g:
@@ -268,14 +321,15 @@ def ground_field(cells=2.0, margin=1.0):
         return a * (1 - ty) + b * ty
     for x in range(-n // 2, n // 2):
         for y in range(-n // 2, n // 2):
-            h = 1 + (1 if noise(x, y) > 0.58 else 0) + \
-                (1 if noise(x + 99, y + 7, 3) > 0.8 else 0)
+            h = 1
             for z in range(h):
                 top = (z == h - 1)
                 if top:
-                    t = noise(x + 40, y + 40, 2)
+                    t = noise(x + 40, y + 40, 8)
                     c = 1 if t < 0.3 else (0 if t < 0.55 else (2 if t < 0.8
                                                                    else 4))
+                    if r.random() < 0.28:      # per-block tone: the voxel grid shows
+                        c = r.choice([0, 1, 2, 4])
                     if r.random() < 0.012:
                         c = 5
                     if r.random() < 0.05:
@@ -398,20 +452,130 @@ def fit_to_canvas(src, dst, W, H):
     res.save()
 
 
+DECOR = {          # name: voxels (dx, dy, dz, palette index)
+    'tuft': [(0, 0, 0, 13)],
+    'tuft2': [(0, 0, 0, 13), (0, 0, 1, 13)],
+}
+for _i, _c in enumerate(range(7, 12)):
+    DECOR[f'flower{_i}'] = [(0, 0, 0, 12), (0, 0, 1, _c)]
+
+
+def render_decor(outdir, samples):
+    """Each bit of ground cover as its own upright, transparent sprite at the
+    tile's own scale. They are composited onto the finished (mirrored) tile
+    by pack_tile.py: baked into the tile they came out UPSIDE DOWN in every
+    mirrored copy (user 2026-11-05: "einige Blumen auf dem Kopf")."""
+    pal = [GRASS_MID, GRASS_DARK, GRASS_LIGHT, GRASS_DEEP, GRASS_BRIGHT,
+           '#6e5a38', GRASS_SIDE, '#d8352c', '#4b6fd8', '#f4f0e6',
+           '#e982b4', '#f2cf3a', '#4f7a22', GRASS_BRIGHT]
+    for name, vs in DECOR.items():
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        K._mats.clear()
+        v = Vox(pal, GU)
+        for dx, dy, dz, c in vs:
+            v.put(dx, dy, dz, c)
+        build_mesh(v, 'decor')
+        K.lighting()
+        scene = bpy.context.scene
+        rb.frame(2.0, 2.0, TILE_SCALE, 0.5, fit=False)
+        setup_cycles(scene, samples, transparent=True)
+        scene.view_settings.exposure = -1.05
+        scene.render.filepath = os.path.join(outdir, f'decor_{name}.png')
+        bpy.ops.render.render(write_still=True)
+        print('decor', name, scene.render.resolution_x, scene.render.resolution_y)
+
+
 def render_tile(outdir, samples):
     ob = build_mesh(ground_field(), 'ground')
     K.lighting()
     scene = bpy.context.scene
     # the map's own swatch frame: a 2 x 2 patch, diamond bounding box 2:1
-    cells = 2.0
-    scale = 4
+    cells = TILE_CELLS
+    scale = TILE_SCALE
     rb.frame(cells, cells, scale, 0.5, fit=False)
     setup_cycles(scene, samples, transparent=False)
-    scene.view_settings.exposure = -0.35
+    scene.view_settings.exposure = -1.05
     path = os.path.join(outdir, 'grass_tile.png')
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
     print('tile', scene.render.resolution_x, 'x', scene.render.resolution_y)
+
+
+
+# ── sand and water: the same flat voxel ground, other colours ──────────
+SAND = ['#e6d3a4', '#decb98', '#eddcb2', '#d6c08c', '#f2e6c4',   # 0-4 tones
+        '#b09a6c', '#bdb49c', '#c9ae78']                         # 5-7 flecks                         # 5-7 flecks
+WATER = ['#2fa6cc', '#279cc4', '#3bb4d6', '#2092b8', '#8fe0ee',  # 0-3 tones, 4 crest
+         '#1c88b0']
+
+
+def _value_noise(r):
+    g = {}
+
+    def noise(x, y, f=20):
+        gx, gy = x // f, y // f
+
+        def n(a, b):
+            if (a, b) not in g:
+                g[(a, b)] = r.random()
+            return g[(a, b)]
+        tx, ty = (x % f) / f, (y % f) / f
+        tx, ty = tx * tx * (3 - 2 * tx), ty * ty * (3 - 2 * ty)
+        a = n(gx, gy) * (1 - tx) + n(gx + 1, gy) * tx
+        b = n(gx, gy + 1) * (1 - tx) + n(gx + 1, gy + 1) * tx
+        return a * (1 - ty) + b * ty
+    return noise
+
+
+def flat_field(palette, pick, seed, cells=TILE_CELLS):
+    """One block thick, no relief: what makes it voxel is the per-block tone
+    (same size as the grass's and the buildings')."""
+    r = random.Random(seed)
+    noise = _value_noise(r)
+    n = int((2 * cells + 2) / GU)
+    v = Vox(palette, GU)
+    for x in range(-n // 2, n // 2):
+        for y in range(-n // 2, n // 2):
+            v.put(x, y, 0, pick(x, y, r, noise))
+    return v
+
+
+def sand_pick(x, y, r, noise):
+    t = noise(x, y, 14)
+    c = 3 if t < 0.28 else (0 if t < 0.55 else (2 if t < 0.82 else 4))
+    if r.random() < 0.30:
+        c = r.choice([0, 1, 2, 3])
+    if r.random() < 0.035:
+        c = r.choice([5, 6, 7])
+    return c
+
+
+def water_pick(x, y, r, noise):
+    t = noise(x, y, 16)
+    c = 3 if t < 0.3 else (0 if t < 0.6 else 2)
+    # ripples: short crest dashes along the ground's diagonal
+    if (x + y) % 13 == 0 and noise(x + 300, y, 7) > 0.62:
+        c = 4
+    if r.random() < 0.25:
+        c = r.choice([0, 1, 2, 3])
+    if r.random() < 0.006:
+        c = 4
+    return c
+
+
+def render_flat(outdir, samples, name):
+    pal, pick, seed = {'sand': (SAND, sand_pick, 31),
+                       'water': (WATER, water_pick, 41)}[name]
+    ob = build_mesh(flat_field(pal, pick, seed), name)
+    K.lighting()
+    scene = bpy.context.scene
+    rb.frame(TILE_CELLS, TILE_CELLS, TILE_SCALE, 0.5, fit=False)
+    setup_cycles(scene, samples, transparent=False)
+    scene.view_settings.exposure = -0.3 if name == 'sand' else -0.7
+    scene.render.filepath = os.path.join(outdir, f'{name}_tile.png')
+    bpy.ops.render.render(write_still=True)
+    print('tile', name, scene.render.resolution_x, 'x', scene.render.resolution_y)
+
 
 
 def main():
@@ -424,6 +588,14 @@ def main():
     args = ap.parse_args(argv)
     outdir = os.path.abspath(args.out)
     os.makedirs(outdir, exist_ok=True)
+    if args.what in ('sand', 'water'):
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        K._mats.clear()
+        render_flat(outdir, args.samples, args.what)
+        return
+    if args.what == 'decor':
+        render_decor(outdir, args.samples)
+        return
     names = (['tile'] + list(PROPS)) if args.what == 'all' else [args.what]
     for n in names:
         bpy.ops.wm.read_factory_settings(use_empty=True)

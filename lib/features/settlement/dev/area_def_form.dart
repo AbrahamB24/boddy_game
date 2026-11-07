@@ -1,5 +1,5 @@
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'dev_foe.dart';
 import '../../creatures/models/area.dart';
@@ -9,6 +9,7 @@ import '../services/game_defs_service.dart';
 import 'dev_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // Create/edit form for a single overworld AreaDef — same trusted-single-author
 // dev-content pattern as EraDefForm. `battle_stage` doubles as the unlock gate

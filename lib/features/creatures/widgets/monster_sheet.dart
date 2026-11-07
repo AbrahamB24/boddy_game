@@ -95,46 +95,76 @@ abstract final class MonsterSheets {
   static final MonsterSheetSet _titanFront = _evo(2, false, 1.4);
   static final MonsterSheetSet _titanBack = _evo(2, true, 1.4);
 
+  /// The SIDE-VIEW battle sheets (user 2026-11-04: my monsters stand at the left
+  /// of the field, the enemy's at the right, facing each other). Baked per side
+  /// - sidel faces right, sider faces left - rather than mirrored, so the sun
+  /// stays upper-left on both.
+  static MonsterSheetSet _side(int stage, bool mine, double scale) {
+    final d = stage == 0 ? _t : '${_t}_s$stage';
+    final v = mine ? 'sidel' : 'sider';
+    return MonsterSheetSet(
+      frameW: 560,
+      frameH: 448,
+      scale: scale,
+      anims: {
+        'idle': SheetAnim('$d/${v}_idle.webp', 16, 12),
+        'attack': SheetAnim('$d/${v}_attack.webp', 14, 16, loop: false),
+        'hurt': SheetAnim('$d/${v}_hurt.webp', 10, 14, loop: false),
+      },
+    );
+  }
+
+  static final List<MonsterSheetSet> _sideMine = [
+    _side(0, true, 1.0),
+    _side(1, true, 1.2),
+    _side(2, true, 1.4),
+  ];
+  static final List<MonsterSheetSet> _sideTheirs = [
+    _side(0, false, 1.0),
+    _side(1, false, 1.2),
+    _side(2, false, 1.4),
+  ];
+
+  /// Battle art for the side-view field: [mine] stands at the left facing right,
+  /// the enemy at the right facing left. Null when the creature has none.
+  static MonsterSheetSet? battleSide(
+    String? speciesId,
+    int stage, {
+    required bool mine,
+  }) {
+    if (speciesId != 'tidelord' || stage < 0 || stage > 2) return null;
+    return (mine ? _sideMine : _sideTheirs)[stage];
+  }
+
   /// The map headings, named by the screen direction of the world axis they
   /// walk along: se = +x, ne = +y, nw = -x, sw = -y.
-  static const Map<String, MonsterSheetSet> _tidelordMap = {
-    'se': MonsterSheetSet(
-      frameW: 544,
-      frameH: 435,
-      decodeScale: 0.5,
-      anims: {
-        'walk': SheetAnim('$_t/se_walk.webp', 8, 10),
-        'idle': SheetAnim('$_t/se_idle.webp', 8, 8),
-      },
-    ),
-    'ne': MonsterSheetSet(
-      frameW: 544,
-      frameH: 435,
-      decodeScale: 0.5,
-      anims: {
-        'walk': SheetAnim('$_t/ne_walk.webp', 8, 10),
-        'idle': SheetAnim('$_t/ne_idle.webp', 8, 8),
-      },
-    ),
-    'nw': MonsterSheetSet(
-      frameW: 544,
-      frameH: 435,
-      decodeScale: 0.5,
-      anims: {
-        'walk': SheetAnim('$_t/nw_walk.webp', 8, 10),
-        'idle': SheetAnim('$_t/nw_idle.webp', 8, 8),
-      },
-    ),
-    'sw': MonsterSheetSet(
-      frameW: 544,
-      frameH: 435,
-      decodeScale: 0.5,
-      anims: {
-        'walk': SheetAnim('$_t/sw_walk.webp', 8, 10),
-        'idle': SheetAnim('$_t/sw_idle.webp', 8, 8),
-      },
-    ),
-  };
+  ///
+  /// All three stages share one frame size; the evolutions fill it like the
+  /// pup does, and [MonsterSheetSet.scale] draws them bigger on the map (a
+  /// little less than in battle, so the roads do not look crowded).
+  static Map<String, MonsterSheetSet> _walkSets(int stage, double scale) {
+    final d = stage == 0 ? _t : '${_t}_s$stage';
+    return {
+      for (final h in const ['se', 'ne', 'nw', 'sw'])
+        h: MonsterSheetSet(
+          // The evolutions' frame rounds one pixel smaller (see monster_walk.py).
+          frameW: stage == 0 ? 544 : 543,
+          frameH: stage == 0 ? 435 : 434,
+          decodeScale: 0.5,
+          scale: scale,
+          anims: {
+            'walk': SheetAnim('$d/${h}_walk.webp', 8, 10),
+            'idle': SheetAnim('$d/${h}_idle.webp', 8, 8),
+          },
+        ),
+    };
+  }
+
+  static final List<Map<String, MonsterSheetSet>> _tidelordMap = [
+    _walkSets(0, 1.0),
+    _walkSets(1, 1.15),
+    _walkSets(2, 1.3),
+  ];
 
   /// Battle art for a creature, or null when it has none (-> flat sprite).
   /// [back] is the player's own monster seen from behind.
@@ -182,10 +212,11 @@ abstract final class MonsterSheets {
   }
 
   /// Map-walking art for a creature heading [heading] ('se', 'ne', 'nw',
-  /// 'sw'), or null. Nothing on the map walks yet; this is what a walker
-  /// would ask for.
+  /// 'sw'), or null — what the road walkers ask for.
   static MonsterSheetSet? map(String? speciesId, int stage, String heading) {
-    if (speciesId == 'tidelord' && stage == 0) return _tidelordMap[heading];
+    if (speciesId == 'tidelord' && stage >= 0 && stage < _tidelordMap.length) {
+      return _tidelordMap[stage][heading];
+    }
     return null;
   }
 }

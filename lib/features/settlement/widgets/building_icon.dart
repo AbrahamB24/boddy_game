@@ -4,10 +4,11 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../data/building_art.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // Shared icon renderer for BuildingDef (and the handful of non-building
 // "source" rows that still use a literal emoji, e.g. resource_detail_screen

@@ -1444,6 +1444,11 @@ class SettlementController extends ChangeNotifier {
           x.buildingTypeId != y.buildingTypeId ||
           x.gridX != y.gridX ||
           x.gridY != y.gridY ||
+          // A quarter turn moves the ENTRANCE (and swaps the footprint), so a
+          // building turned in place is a new layout: without this the
+          // connection cache kept answering for the old facing and a turned
+          // building never went red (user 2026-11-05).
+          x.rotation != y.rotation ||
           x.isComplete != y.isComplete ||
           // A recall/place doesn't necessarily move gridX/gridY (a building
           // placed back at the same spot it started from wouldn't), but it

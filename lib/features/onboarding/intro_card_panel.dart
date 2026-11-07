@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -10,6 +10,7 @@ import '../creatures/services/expedition_controller.dart';
 import '../settlement/settlement_controller.dart';
 import '../social/social_actions.dart' show confirmDialog;
 import 'intro_flow.dart';
+import '../../core/ui/game_text.dart';
 
 /// The new-player guidance card, shown over the settlement map for as long as
 /// the intro chain runs. Deliberately a card the player can ignore rather than
@@ -112,7 +113,7 @@ class IntroCardPanel extends StatelessWidget {
           'GETTING STARTED',
           style: TextStyle(
             fontSize: 10,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             letterSpacing: 1.1,
             color: kBoxAccent,
           ),

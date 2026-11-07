@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
@@ -7,8 +7,9 @@ import '../models/creature_instance.dart';
 import '../services/creature_power.dart';
 import 'creature_backdrop.dart';
 import 'creature_family.dart' show CreatureFigure, creatureHpColor;
-import 'creature_sprite.dart';
+import 'creature_sprite.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// One extra figure a screen wants on the tile — the stat this seat or trip is
 /// judged on, the level-1 power a breeding parent passes on. It hangs from the
@@ -54,6 +55,13 @@ class CreatureCard extends StatelessWidget {
   /// level, as everywhere else.
   final int? atLevel;
 
+  /// Ring the foot in the species' rarity colour (epic and above also glow),
+  /// and draw the XP progress as a thin gold line above the HP edge. Both are
+  /// opt-in: only the Monsters screen turns them on, every other screen keeps
+  /// the calm tile.
+  final bool rarityFrame;
+  final bool showXp;
+
   const CreatureCard({
     super.key,
     required CreatureInstance this.creature,
@@ -61,6 +69,8 @@ class CreatureCard extends StatelessWidget {
     this.showHp = true,
     this.extras = const [],
     this.atLevel,
+    this.rarityFrame = false,
+    this.showXp = false,
   }) : shrouded = false,
        shroudImageUrl = null;
 
@@ -69,7 +79,9 @@ class CreatureCard extends StatelessWidget {
       creature = null,
       showHp = false,
       extras = const [],
-      atLevel = null;
+      atLevel = null,
+      rarityFrame = false,
+      showXp = false;
 
   // The tile's geometry, from the design: everything below the foot's top edge
   // is anchored to the BOTTOM, so the text keeps its place whatever height the
@@ -95,6 +107,16 @@ class CreatureCard extends StatelessWidget {
     final element = shrouded
         ? FoE.textMuted
         : (species?.element.color ?? FoE.borderGold);
+    final rarity = species?.rarity;
+    final framed = rarityFrame && !shrouded && rarity != null;
+    final frameColor = framed
+        ? Color.lerp(rarity.color, Colors.white, 0.25)!
+        : null;
+    final glows = framed && rarity.index >= CreatureRarity.epic.index;
+    final cap = inst == null ? 0 : xpToNextLevel(inst.level);
+    final xpFraction = (showXp && inst != null && cap > 0)
+        ? (inst.xp / cap).clamp(0.0, 1.0)
+        : 0.0;
 
     return Pressable(
       // THE WHOLE CELL TAKES THE TAP (user 2026-07-27): the top of the tile is
@@ -126,9 +148,22 @@ class CreatureCard extends StatelessWidget {
                   clipBehavior: Clip.antiAlias,
                   decoration: ShapeDecoration(
                     color: Color.lerp(element, Colors.black, 0.36),
-                    shape: FoE.facet(radius: 20),
-                    shadows: const [
-                      BoxShadow(color: Color(0x4D000000), offset: Offset(0, 3)),
+                    shape: FoE.facet(
+                      radius: 20,
+                      side: framed
+                          ? BorderSide(color: frameColor!, width: 2)
+                          : BorderSide.none,
+                    ),
+                    shadows: [
+                      const BoxShadow(
+                        color: Color(0x4D000000),
+                        offset: Offset(0, 3),
+                      ),
+                      if (glows)
+                        BoxShadow(
+                          color: rarity.color.withValues(alpha: 0.55),
+                          blurRadius: 10,
+                        ),
                     ],
                   ),
                   child: Stack(
@@ -170,6 +205,26 @@ class CreatureCard extends StatelessWidget {
                           child: shrouded ? _shroudText() : _text(inst!),
                         ),
                       ),
+                      if (xpFraction > 0)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: showHp ? _barH : 0,
+                          height: 3,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              const ColoredBox(color: Color(0x66000000)),
+                              FractionallySizedBox(
+                                alignment: Alignment.centerLeft,
+                                widthFactor: xpFraction,
+                                child: const ColoredBox(
+                                  color: Color(0xFFF5C84A),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       if (!shrouded && showHp)
                         Positioned(
                           left: 0,
@@ -331,7 +386,7 @@ class CreatureCard extends StatelessWidget {
                                   Colors.white,
                                   0.45,
                                 ),
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w400,
                                 letterSpacing: 1.0,
                                 shadows: _shadowLine,
                               ),
@@ -361,7 +416,7 @@ class CreatureCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: FoE.label(size: 13).copyWith(
               color: _ink,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w400,
               shadows: _shadowLine,
             ),
           ),
@@ -372,7 +427,7 @@ class CreatureCard extends StatelessWidget {
           style: TextStyle(
             color: Color.lerp(inst.gender.color, Colors.white, 0.45),
             fontSize: 12,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             height: 1.0,
             shadows: _shadowLine,
           ),
@@ -390,8 +445,7 @@ class CreatureCard extends StatelessWidget {
     size: 26,
     color: Color(0xFF2FD37A),
     shadows: [
-      Shadow(color: Color(0xCC000000), blurRadius: 3),
-      Shadow(color: Color(0x99000000), offset: Offset(0, 1.5)),
+      Shadow(color: Color(0xCC000000), offset: Offset(0, 1)),
     ],
   );
 
@@ -404,7 +458,7 @@ class CreatureCard extends StatelessWidget {
         '???',
         style: FoE.label(size: 13).copyWith(
           color: Colors.white.withValues(alpha: 0.55),
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           letterSpacing: 2,
         ),
       ),
@@ -458,7 +512,7 @@ class CreatureCard extends StatelessWidget {
           maxLines: 1,
           style: FoE.dim(size: 7).copyWith(
             color: Colors.white.withValues(alpha: 0.7),
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             letterSpacing: 0.3,
           ),
         ),

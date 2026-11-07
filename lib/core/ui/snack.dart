@@ -1,9 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../theme/cream_kit.dart';
 import '../theme/voxel_kit.dart' show vr;
+import 'game_text.dart';
 
 /// THE call site for a one-line message.
 ///
@@ -119,8 +120,8 @@ class _ToastView extends StatelessWidget {
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
                       color: error ? CreamPalette.warn : CreamPalette.ink,
                     ),
                   ),

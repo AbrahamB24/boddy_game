@@ -303,3 +303,269 @@ class _PlatePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PlatePainter old) => old.radius != radius;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN-SCREEN HUD: "OZEANRIFF" (user 2026-11-04, palette no. 18 of the
+// colour concepts: deep-sea panels, light blue for action, icy ink; it was no. 13,
+// aubergine, for a few hours)
+//
+// The header is a DEEP-SEA slab with a light-blue rim, every figure sits on its
+// own lighter plaque in cream ink, and the round buttons are sea-blue with a
+// light-blue ring when lit. Only the settlement screen's HUD wears these. (The
+// constant NAMES come from the earlier stone-and-moss HUD, then the parchment
+// one, and are kept so no call site had to change: "stone" is the header
+// surface, "moss" the round buttons.)
+// ─────────────────────────────────────────────────────────────────────────────
+abstract final class HudBlocks {
+  // The header surface, lit → shaded.
+  static const Color stoneLight = Color(0xFF1585D0);
+  static const Color stone = Color(0xFF0A66B0);
+  static const Color stoneDark = Color(0xFF064F8F);
+  // The darkest edge: rim shadow and the trim's foot.
+  static const Color stoneMortar = Color(0xFF00A6B8);
+
+  // Round buttons: the main row, its shade, the drawer's quieter tone.
+  static const Color moss = Color(0xFF1A86D6);
+  static const Color mossDark = Color(0xFF04305C);
+  static const Color mossDeep = Color(0xFF0E68B0);
+  // Lit / pressed: the light blue of the loading bar (user 2026-11-04: "aus dem
+  // Rot das hellere Blau, das den Ladebalken ausfüllt"), once coral.
+  static const Color accent = Color(0xFF1FE6E0);
+
+  // Cream ink on the dark surface, its quieter weight, and the plaque's tones.
+  static const Color ink = Color(0xFFE6FBFF);
+  static const Color inkSoft = Color(0xFF9CC8DB);
+  static const Color plaqueTop = Color(0xFF1F8FD8);
+  static const Color plaqueBottom = Color(0xFF0F6CB4);
+  static const Color plaqueEdge = Color(0xFF04305C);
+
+  // States read ON the dark surface.
+  static const Color warn = Color(0xFFFF4560);
+  static const Color good = Color(0xFF4DFF98);
+
+  /// Light ink for a glyph on a round button.
+  static const Color glyph = Color(0xFFE6FBFF);
+
+  /// The ring of a lit (pressed / open) button.
+  static const Color litRim = Color(0xFFE6FBFF);
+}
+
+// ── GOLD FILIGREE (user 2026-11-04, ornament proposal no. 1 of the fantasy
+// round): gilded scrollwork under the header and along the screen's foot, jewels
+// set in it, a gold flourish in each corner of the map.
+// ───────────────────────────────────────────────────────────────────────────
+
+const Color _kGoldLight = Color(0xFFFFF2B8);
+const Color _kGold = Color(0xFFE8BF4A);
+const Color _kGoldDeep = Color(0xFF9A6A1C);
+const Color _kGoldDark = Color(0xFF5A3D10);
+
+Shader _goldShader(Rect r, {bool vertical = false}) => LinearGradient(
+  begin: vertical ? Alignment.topCenter : Alignment.topLeft,
+  end: vertical ? Alignment.bottomCenter : Alignment.bottomRight,
+  colors: const [_kGoldLight, _kGold, _kGoldDeep, _kGold, Color(0xFF7A5214)],
+  stops: const [0, 0.25, 0.55, 0.8, 1],
+).createShader(r);
+
+/// A string of S-shaped scrolls along [y] from 0 to [width], with a small curl
+/// above and below each bend, stroked in gold.
+void _paintScrollBand(Canvas canvas, double width, double y, {double period = 24}) {
+  if (!width.isFinite || width <= 0) return;
+  final line = Path()..moveTo(0, y);
+  final curls = Path();
+  for (var x = 0.0; x < width; x += period) {
+    line
+      ..quadraticBezierTo(x + period / 4, y - 3.2, x + period / 2, y)
+      ..quadraticBezierTo(x + period * 0.75, y + 3.2, x + period, y);
+    curls
+      ..addArc(
+        Rect.fromCircle(center: Offset(x + period / 4, y - 5), radius: 2.1),
+        0.6,
+        4.6,
+      )
+      ..addArc(
+        Rect.fromCircle(center: Offset(x + period * 0.75, y + 5), radius: 2.1),
+        3.74,
+        4.6,
+      );
+  }
+  final shader = _goldShader(Rect.fromLTWH(0, y - 6, width, 12), vertical: true);
+  canvas.drawPath(
+    line,
+    Paint()
+      ..shader = shader
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.9
+      ..strokeCap = StrokeCap.round,
+  );
+  canvas.drawPath(
+    curls,
+    Paint()
+      ..shader = shader
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3
+      ..strokeCap = StrokeCap.round,
+  );
+}
+
+/// A jewel in a gold bezel: [light] to [dark] radial, with a white glint.
+void _paintJewel(Canvas canvas, Offset c, double r, Color light, Color mid, Color dark) {
+  canvas.drawCircle(
+    c.translate(0.3, 0.7),
+    r + 0.9,
+    Paint()..color = Colors.black.withValues(alpha: 0.45),
+  );
+  canvas.drawCircle(
+    c,
+    r + 0.9,
+    Paint()..shader = _goldShader(Rect.fromCircle(center: c, radius: r + 1)),
+  );
+  canvas.drawCircle(
+    c,
+    r,
+    Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(-0.35, -0.45),
+        radius: 0.95,
+        colors: [light, mid, dark],
+        stops: const [0, 0.45, 1],
+      ).createShader(Rect.fromCircle(center: c, radius: r)),
+  );
+  canvas.drawOval(
+    Rect.fromCenter(center: c.translate(-r * 0.3, -r * 0.35), width: r * 0.8, height: r * 0.45),
+    Paint()..color = Colors.white.withValues(alpha: 0.7),
+  );
+}
+
+void _paintRuby(Canvas canvas, Offset c, double r) =>
+    _paintJewel(canvas, c, r, const Color(0xFFFFB3B9), const Color(0xFFD4243A), const Color(0xFF5A0A18));
+void _paintSapphire(Canvas canvas, Offset c, double r) =>
+    _paintJewel(canvas, c, r, const Color(0xFFC9F3FF), const Color(0xFF2A8FD6), const Color(0xFF0A2F6A));
+
+/// The header's foot: a gold bar with a lit and a shaded edge, scrollwork under
+/// it and four jewels set in it. (Class name kept from the stone course and the
+/// rivet rim it replaced.)
+class StoneCourseStrip extends StatelessWidget {
+  final double height;
+  final double blockWidth;
+  const StoneCourseStrip({super.key, this.height = 13, this.blockWidth = 22});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: height,
+    child: CustomPaint(
+      painter: const _GoldTrimPainter(),
+      size: Size.infinite,
+    ),
+  );
+}
+
+class _GoldTrimPainter extends CustomPainter {
+  const _GoldTrimPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!size.isFinite || size.isEmpty) return;
+    canvas.drawRect(Offset.zero & size, Paint()..color = HudBlocks.stoneDark);
+    final bar = Rect.fromLTWH(0, 0, size.width, 3);
+    canvas.drawRect(bar, Paint()..shader = _goldShader(bar, vertical: true));
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, 0.8),
+      Paint()..color = Colors.white.withValues(alpha: 0.55),
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(0, 3, size.width, 1),
+      Paint()..color = const Color(0x992A1C08),
+    );
+    _paintScrollBand(canvas, size.width, 8.6);
+    final y = 7.4;
+    _paintSapphire(canvas, Offset(size.width * 0.15, y), 3);
+    _paintRuby(canvas, Offset(size.width * 0.3, y), 3.4);
+    _paintRuby(canvas, Offset(size.width * 0.7, y), 3.4);
+    _paintSapphire(canvas, Offset(size.width * 0.85, y), 3);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GoldTrimPainter old) => false;
+}
+
+/// The frame over the map: a scrollwork band along the screen's foot and a gold
+/// flourish in each of the map's four corners. Paints only; it never takes a
+/// touch, so wrap it in an [IgnorePointer].
+class FiligreeFrame extends StatelessWidget {
+  /// Where the map's top edge is (under the header).
+  final double top;
+
+  /// The band along the foot hangs this high.
+  final double bottomHeight;
+
+  const FiligreeFrame({super.key, required this.top, this.bottomHeight = 13});
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _FiligreeFramePainter(top, bottomHeight),
+    size: Size.infinite,
+  );
+}
+
+class _FiligreeFramePainter extends CustomPainter {
+  final double top;
+  final double bottomHeight;
+  const _FiligreeFramePainter(this.top, this.bottomHeight);
+
+  static Path _flourish() => Path()
+    ..moveTo(0, 0)
+    ..lineTo(14, 0)
+    ..cubicTo(14, 3, 11, 4, 9, 3)
+    ..cubicTo(8, 2, 9, 0.8, 10.4, 1.2)
+    ..lineTo(3, 1.2)
+    ..lineTo(3, 8)
+    ..cubicTo(4, 8, 4.8, 9, 4, 10)
+    ..cubicTo(3, 11, 0.6, 10, 0.6, 7.5)
+    ..lineTo(0.6, 0)
+    ..close();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!size.isFinite || size.isEmpty) return;
+    final w = size.width, h = size.height;
+    // The foot: a dim backing so the scrollwork reads on any ground, a gold
+    // rule, the scrolls.
+    // bottomHeight 0 = no band at all (user 2026-11-04: the gold band went).
+    if (bottomHeight > 0) {
+      final band = Rect.fromLTWH(0, h - bottomHeight, w, bottomHeight);
+      canvas.drawRect(band, Paint()..color = HudBlocks.stoneDark.withValues(alpha: 0.72));
+      final rule = Rect.fromLTWH(0, h - bottomHeight, w, 2);
+      canvas.drawRect(rule, Paint()..shader = _goldShader(rule, vertical: true));
+      canvas.save();
+      canvas.translate(0, h - bottomHeight + 4.2);
+      _paintScrollBand(canvas, w, 4.4);
+      canvas.restore();
+    }
+    // Corner flourishes: top two under the header, bottom two above the band.
+    final path = _flourish().transform(Matrix4.diagonal3Values(1.7, 1.7, 1).storage);
+    void corner(double x, double y, double sx, double sy) {
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.scale(sx, sy);
+      canvas.drawPath(path.shift(const Offset(0.4, 0.8)), Paint()..color = Colors.black.withValues(alpha: 0.4));
+      canvas.drawPath(path, Paint()..shader = _goldShader(const Rect.fromLTWH(0, 0, 24, 24)));
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.5
+          ..color = _kGoldDark,
+      );
+      canvas.restore();
+    }
+    corner(1, top + 1, 1, 1);
+    corner(w - 1, top + 1, -1, 1);
+    corner(1, h - bottomHeight - 1, 1, -1);
+    corner(w - 1, h - bottomHeight - 1, -1, -1);
+  }
+
+  @override
+  bool shouldRepaint(covariant _FiligreeFramePainter old) =>
+      old.top != top || old.bottomHeight != bottomHeight;
+}

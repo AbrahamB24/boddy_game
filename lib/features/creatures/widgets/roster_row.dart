@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -7,6 +7,7 @@ import '../models/creature_instance.dart';
 import 'creature_family.dart' show CreatureAvatar;
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// How a [RosterRow]'s status pill reads: good (free to pick / already on
 /// the team), a warning (taken elsewhere / over cap), or simply
@@ -179,8 +180,8 @@ class RosterRow extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w800,
+        fontSize: 11,
+        fontWeight: FontWeight.w400,
         color: switch (statusKind) {
           RosterPillKind.free => CreamPalette.better,
           RosterPillKind.warn => CreamPalette.warn,

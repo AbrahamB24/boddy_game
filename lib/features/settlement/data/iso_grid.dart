@@ -143,7 +143,14 @@ double minMapScale(Size viewport) => math.max(
 /// A clamped ZOOM is re-centred on the viewport's middle. Scaling about the
 /// origin instead would drag the map sideways every time a pinch went one notch
 /// too far, which reads as the map fighting you.
-Matrix4 clampMapTransform(Matrix4 m, Size viewport) {
+///
+/// [topInset] is the height of chrome (the header) laid over the TOP of a
+/// full-bleed viewport (user 2026-11-04: "als Hintergrund will ich die Karte
+/// durchgehend haben"): the map may be pulled that much further down than its
+/// edge margin allows, so what the camera treats as the top of the map still
+/// rests just under the header while the terrain padding fills the space
+/// behind it. It never reaches the canvas's true edge.
+Matrix4 clampMapTransform(Matrix4 m, Size viewport, {double topInset = 0}) {
   final lo = minMapScale(viewport);
   final scale = m.getMaxScaleOnAxis();
   final want = scale.clamp(lo, math.max(lo, kMaxMapZoom)).toDouble();
@@ -168,7 +175,7 @@ Matrix4 clampMapTransform(Matrix4 m, Size viewport) {
   final hiX = -marginX * want;
   tx = tx.clamp(loX, math.max(loX, hiX)).toDouble();
   final loY = viewport.height - (isoCanvasSize.height - marginY) * want;
-  final hiY = -marginY * want;
+  final hiY = math.min(0.0, -marginY * want + topInset);
   ty = ty.clamp(loY, math.max(loY, hiY)).toDouble();
   return mapTransform(want, tx, ty);
 }

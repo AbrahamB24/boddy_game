@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -19,8 +19,9 @@ import 'services/expedition_controller.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/versus_kit.dart';
-import 'widgets/wild_preview.dart';
+import 'widgets/wild_preview.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 // The catch moment (user design, 2026-07-15; QTE moved INTO the battle
 // 2026-07-18; hunts rebuilt as ONE continuous multi-wild battle 2026-09-11;
@@ -317,8 +318,8 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
               child: const Text(
                 'NEW',
                 style: TextStyle(
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w400,
                   color: kBoxInk,
                   letterSpacing: 0.3,
                 ),

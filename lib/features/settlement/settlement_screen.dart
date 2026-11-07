@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+import 'package:flutter/widgets.dart' as w show Text;
+import '../../core/theme/game_icon_data.dart' show kEmojiToIcon;
 import 'package:flutter/services.dart';
 // Warms the picture's BYTES without decoding it — see
 // [_warmNetworkArtInBackground] for why a decode-based precache was worse
@@ -13,6 +15,7 @@ import 'data/road_tiles.dart' show roadAsset, kRoadDecodeWidth;
 import 'data/resource_icons.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/theme/cream_kit.dart';
+import '../../core/theme/ui_art.dart';
 import '../../core/theme/fachwerk.dart';
 import '../../core/ui/duration_format.dart';
 import '../../core/ui/number_format.dart';
@@ -66,6 +69,7 @@ import '../social/services/message_notifier.dart';
 import '../social/services/pvp_notifier.dart';
 import '../../core/theme/voxel_kit.dart';
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// How many background art downloads run at once — see
 /// [_SettlementScreenState._warmNetworkArtInBackground].
@@ -293,6 +297,8 @@ class _SettlementScreenState extends State<SettlementScreen>
       );
     }
     local.add(precacheImage(AssetImage(roadAsset(15)), context));
+    // The rendered interface pieces (ui_art.dart).
+    local.add(UiArt.precache(context));
     // The animated monster sheets every list and
     // battle draws from, the sound effects and music, and the one runtime
     // font (Outfit, used by the creature detail screen) — so the first
@@ -477,9 +483,9 @@ class _SettlementScreenState extends State<SettlementScreen>
   Future<void> _preloadFonts() async {
     try {
       GoogleFonts.outfit();
-      GoogleFonts.outfit(fontWeight: FontWeight.w600);
-      GoogleFonts.outfit(fontWeight: FontWeight.w700);
-      GoogleFonts.outfit(fontWeight: FontWeight.w800);
+      GoogleFonts.outfit(fontWeight: FontWeight.w400);
+      GoogleFonts.outfit(fontWeight: FontWeight.w400);
+      GoogleFonts.outfit(fontWeight: FontWeight.w400);
       await GoogleFonts.pendingFonts();
     } catch (_) {}
   }
@@ -829,7 +835,7 @@ class _SettlementScreenState extends State<SettlementScreen>
         text,
         style: FoE.label(
           size: 11.5,
-        ).copyWith(color: CreamPalette.warn, fontWeight: FontWeight.w700),
+        ).copyWith(color: CreamPalette.warn, fontWeight: FontWeight.w400),
       ),
     );
     final notices = <Widget>[
@@ -1093,8 +1099,9 @@ class _SettlementScreenState extends State<SettlementScreen>
         left: 0,
         right: 0,
         bottom: 0,
-        top: _mapTop,
+        top: 0,
         child: SettlementMap(
+          topInset: _mapTop,
           key: _mapKey,
           ctrl: _ctrl,
           pendingTypeId: _pendingTypeId,
@@ -1144,6 +1151,9 @@ class _SettlementScreenState extends State<SettlementScreen>
             child: const SizedBox.expand(),
           ),
         ),
+      // The stone frame (UiFrame) is switched off for now (user 2026-11-04:
+      // "lösche einmal die Steine"); put `const Positioned.fill(child:
+      // IgnorePointer(child: UiFrame()))` back here to bring it back.
       // Stacked rather than each Positioned at a guessed offset: the top bar's
       // height now depends on the device's safe area, so a hardcoded `top: 50`
       // for the debug row would sit under it on a notched phone.
@@ -1171,13 +1181,26 @@ class _SettlementScreenState extends State<SettlementScreen>
                   if (_ctrl.saveFailed) _syncWarning(),
                   // Sound/music left the header for the Profile (user
                   // 2026-09-20: "Musik/Sound aus gehört ins Profil").
-                  _newsButton(),
-                  const SizedBox(width: 4),
                 ],
               ),
             ),
           ],
         ),
+      ),
+      // The bell hangs from the header's own foot, out of the screen's right
+      // edge (user 2026-11-04: "deutlich höher und kleiner"). Positioned off the
+      // measured header, not placed under the top bar's layout, which the
+      // emblem's overhang would push down.
+      // Hangs from the header beam's underside (user 2026-11-05), a little in
+      // from the edge, its mounting block tucked up under the eave.
+      Positioned(top: _mapTop - 4, right: 14, child: _newsButton()),
+      // The compass rose over the middle of the header: the door to the
+      // resource list.
+      Positioned(
+        top: _mapTop - _kEmblemUp,
+        left: 0,
+        right: 0,
+        child: _erasTab(),
       ),
       // One bottom stack instead of three things fighting for the corner: at
       // phone width (430) a bottom-left card and a bottom-right menu simply
@@ -1486,6 +1509,7 @@ class _SettlementScreenState extends State<SettlementScreen>
     return SafeArea(
       top: false,
       child: Padding(
+        // Bigger buttons (user 2026-11-04) stand nearer the foot.
         padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
         child: _quickRails(),
       ),
@@ -1559,76 +1583,32 @@ class _SettlementScreenState extends State<SettlementScreen>
       // Measured (see [_measureHeader]): the map starts where this ends.
       KeyedSubtree(
         key: _headerKey,
-        child: ParchmentHeader.band(
-          // A flat gradient (both stops [FoE.bg]) rather than ill: — a band
-          // given a plain fill also draws its lit/shaded facet edges, a seam the
-          // pull tab hanging off the bottom of it has no counterpart for.
-          //
-          // It LIGHTENS towards the top now (user 2026-09-18: "der Header ...
-          // wirkt sehr schlicht") but still ends on exactly [FoE.bg], the flat
-          // colour the wave fills itself with, so the two read as one shape.
-          // A TIMBER BEAM now (Fachwerk, 2026-11-02): lit wood on top,
-          // shaded wood at the foot, where the roof course hangs from it.
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Fachwerk.timberLight,
-              Fachwerk.timber,
-              Fachwerk.timberDark,
-            ],
+        // FLOATING PILLS (user 2026-11-05, variant 2 of the ten bar mockups):
+        // no plaster beam any more — every readout is its own timber pill
+        // sitting straight on the map. The safe area is the top padding, and
+        // the measured height (see [_measureHeader]) includes it.
+        child: Padding(
+          padding: EdgeInsets.only(
+            top: MediaQuery.paddingOf(context).top + 8,
+            left: 12,
+            right: 12,
+            bottom: 12,
           ),
-          shadow: _mapShadow,
-          // The safe area is the band's own top padding rather than a
-          // SafeArea around it: the plate paints up through a notch instead of
-          // leaving a strip of map showing above it, and the measured height
-          // then includes it — which is what the map's top edge needs.
-          child: Padding(
-            padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [_resourceRow(), _headerTrim()],
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [_resourceRow()],
           ),
         ),
       ),
       // Up by the trim's own height, so the tab's fill covers the trim where
       // the two meet and the gold line carries on around the tab's edge
       // instead of cutting across its top.
-      Transform.translate(offset: const Offset(0, -_kTrimH), child: _erasTab()),
     ],
   );
 
-  static const double _kTrimH = 13;
-
-  /// A thin gold rule along the header's foot, brightest in the middle where the
-  /// wave hangs from it and fading out towards the phone's edges — the piece of
-  /// jewellery that stops a flat navy plate reading as a bare bar.
-  ///
-  /// Fachwerk (2026-11-02): a course of ROOF TILES instead of the gold rule —
-  /// the header is the eaves the map sits under.
-  Widget _headerTrim() => const RoofTileStrip(height: _kTrimH, tileWidth: 18);
-
-  /// The main screen's own drop shadow — straight down, not [FoE.drop]'s
-  /// usual down-RIGHT diagonal (user 2026-09-06: "der Schatten... soll auch
-  /// links bis zum Rand gehen") — the diagonal is why every other [FoE.drop]
-  /// user only ever shows a sliver on the right/bottom: shifting the shadow
-  /// rect sideways tucks its left edge behind the box itself. Shared between
-  /// the header band and the eras tab hanging off it, so the two read as one
-  /// continuous shape lifted off the map, not two mismatched edges.
-  static final List<BoxShadow> _mapShadow = [
-    BoxShadow(
-      color: Colors.black.withValues(alpha: 0.45),
-      offset: const Offset(0, 3),
-    ),
-  ];
-
   /// The one-line strip's height. The band is nothing but this row (and the eras
   /// panel when it is unfolded) — the map starts right under it.
-  static const double _kResourceRowHeight = 34;
-
-  /// How tall the rounded tab under the header is.
-  static const double _kPullH = 22;
+  static const double _kResourceRowHeight = 30;
 
   /// The tab under the header — belongs TO the header, not beside it (user
   /// 2026-09-06: "dieser gehört zum Header. Daher gibt es keinen Übergang"), so it
@@ -1640,38 +1620,36 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// all" link). (It wore a coral dot while any store was full; removed on
   /// request, 2026-09-22 — the Resources page marks full stores itself.)
   Widget _erasTab() => Center(
-    child: Semantics(
-      label: 'All resources',
-      button: true,
-      child: Pressable(
-        onTap: () => setState(() => _resourcesOpen = !_resourcesOpen),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          width: 78,
-          height: _kPullH,
-          decoration: BoxDecoration(
-            // Hangs from the roof course: a terracotta tile of its own.
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Fachwerk.timberLight, Fachwerk.timber],
+    child: SizedBox(
+      width: _kEmblemSize + 90,
+      height: _kEmblemSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 45,
+            top: 0,
+            child: Semantics(
+              label: 'All resources',
+              button: true,
+              child: Pressable(
+                onTap: () => setState(() => _resourcesOpen = !_resourcesOpen),
+                behavior: HitTestBehavior.opaque,
+                // The treasure chest in a dark-steel medal in the middle of the
+                // header (user 2026-11-04/05, painted concept) is the door to
+                // the resource list, in place of the old rounded tab.
+                child: const ChestImage(size: _kEmblemSize),
+              ),
             ),
-            borderRadius: const BorderRadius.vertical(
-              bottom: Radius.circular(16),
-            ),
-            border: Border.all(color: Voxel.outline, width: 2),
-            boxShadow: [_mapShadow.first],
           ),
-          alignment: Alignment.center,
-          child: PixelIcon(
-            _resourcesOpen ? Icons.expand_less_rounded : Icons.apps_rounded,
-            size: 16,
-            color: CreamPalette.gold,
-          ),
-        ),
+        ],
       ),
     ),
   );
+
+  /// The emblem's size, and how far it climbs up over the header band.
+  static const double _kEmblemSize = 142;
+  static const double _kEmblemUp = 77;
 
   /// The resources dropdown itself (user 2026-09-30) — a cream panel hanging
   /// under the tab, GOLD ALONE AND CENTRED AT THE TOP ("Gold ist immer oben
@@ -1733,7 +1711,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                                 romanNumeral(s.era!),
                                 style: TextStyle(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w400,
                                   letterSpacing: 1.0,
                                   color: kBoxAccent,
                                 ),
@@ -1767,7 +1745,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                                 'See all →',
                                 style: FoE.dim(size: 11.5).copyWith(
                                   color: kBoxAccent,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w400,
                                 ),
                               ),
                             ),
@@ -1901,7 +1879,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                       '$day',
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w400,
                         color: on ? CreamPalette.ink : kBoxInkSoft,
                       ),
                     ),
@@ -1936,7 +1914,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                         : 'Streak: $streak days',
                     style: FoE.label(
                       size: 13,
-                    ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+                    ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
                   ),
                 ],
               ),
@@ -1988,7 +1966,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                     color: state.chestOpened
                         ? CreamPalette.better
                         : kBoxInkSoft,
-                    fontWeight: state.chestOpened ? FontWeight.w800 : null,
+                    fontWeight: state.chestOpened ? FontWeight.w400 : null,
                   ),
                 ),
             ],
@@ -2010,7 +1988,7 @@ class _SettlementScreenState extends State<SettlementScreen>
             label,
             style: FoE.label(
               size: 13,
-            ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+            ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
           ),
         ],
       ),
@@ -2058,7 +2036,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                   t.kind.label,
                   style: FoE.label(
                     size: 13,
-                  ).copyWith(color: kBoxInk, fontWeight: FontWeight.w700),
+                  ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
                 ),
                 const SizedBox(height: 4),
                 ClipRRect(
@@ -2137,60 +2115,59 @@ class _SettlementScreenState extends State<SettlementScreen>
   Widget _resourceRow() {
     final rates = _ctrl.hourlyRates;
     final era = _ctrl.dungeonMaxStage;
-    // ONE LINE, 34 px (user 2026-09-22, "Variante 4"). LEFT: the era's own
-    // resources (its build pair and its luxury — three in era I). CENTRE: ENERGY,
-    // the one bar, because it scales every rate on the strip. RIGHT: gold,
-    // housing and trips. The two groups get the same width either side of the
-    // bar, so the bar stays on the screen's own centre line. The bell is not in
-    // the strip: it hangs under the header at the right.
+    final eraRes = _eraResources(era, cleared: _ctrl.battlesCleared);
+    // ONE LINE (user 2026-09-22, "Variante 4"), one BEAM (user 2026-11-05).
+    // LEFT: the era's own resources. CENTRE: ENERGY, the split bar with the
+    // chest hanging between its halves. RIGHT: gold, housing and trips. The two
+    // groups get the same width either side of the bar, so the bar stays on the
+    // screen's own centre line. The bell is not in the strip: it hangs under the
+    // header at the right.
     return SizedBox(
       height: _kResourceRowHeight,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  for (final r in _eraResources(
-                    era,
-                    cleared: _ctrl.battlesCleared,
-                  ))
-                    Expanded(
-                      child: _resCell(
-                        r.emoji,
-                        r.name,
-                        r.id,
-                        _amountOf(r.id),
-                        rates[r.id] ?? 0,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 6),
-            _energyBar(),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Row(
-                children: [
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                for (var i = 0; i < eraRes.length; i++) ...[
+                  if (i > 0) _cellDivider(),
                   Expanded(
                     child: _resCell(
-                      '🪙',
-                      'Gold',
-                      'gold',
-                      _amountOf('gold'),
-                      rates['gold'] ?? 0,
+                      eraRes[i].emoji,
+                      eraRes[i].name,
+                      eraRes[i].id,
+                      _amountOf(eraRes[i].id),
+                      rates[eraRes[i].id] ?? 0,
                     ),
                   ),
-                  Expanded(child: _housingCell()),
-                  Expanded(child: _tripsCell()),
                 ],
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+          _cellDivider(),
+          _energyBar(),
+          _cellDivider(),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: _resCell(
+                    '🪙',
+                    'Gold',
+                    'gold',
+                    _amountOf('gold'),
+                    rates['gold'] ?? 0,
+                  ),
+                ),
+                _cellDivider(),
+                Expanded(child: _housingCell()),
+                _cellDivider(),
+                Expanded(child: _tripsCell()),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2267,8 +2244,11 @@ class _SettlementScreenState extends State<SettlementScreen>
     };
   }
 
+  /// No text shadow on the parchment: brown ink sits flat on it.
+  static const List<Shadow> _hudTextShadow = <Shadow>[];
+
   // Shared sizing for every header cell so glyphs and text lines all match up.
-  static const _kHeaderIconSize = 15.0;
+  static const _kHeaderIconSize = 17.0;
   static const _kHeaderSubSize = 10.0;
 
   /// Header numbers are SHORT (`1.2k`, `12k`, `1.4M`). At a seventh of a phone
@@ -2284,17 +2264,40 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// slot around it any more (user 2026-09-22, "Variante 4"): the figures stand
   /// straight on the bar, and the cell is scaled down as a whole when a long
   /// figure would not fit its share of the width.
-  Widget _headerCell({required VoidCallback onTap, required Widget child}) =>
-      InkWell(
-        onTap: onTap,
-        borderRadius: vr(10),
+  Widget _headerCell({
+    required VoidCallback onTap,
+    required Widget child,
+  }) => WoodBoard(
+    // A SQUARED TIMBER BEAM (user 2026-11-05: "der braune Hintergrund soll wie
+    // Holzbalken aussehen"): the same board the round buttons and the bell's
+    // bracket use, see [WoodBoard].
+    pegs: true,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(7),
+      // No plaque of its own: the header bar is ONE beam now (user 2026-11-05:
+      // "ein verbundener Balken, damit alle die gleiche Form haben"), so
+      // every cell shares its shape. The scale-down still happens here, so a
+      // long figure shrinks instead of leaving its cell.
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: FittedBox(fit: BoxFit.scaleDown, child: child),
+          // Clip.none: the pixel icons are painted a little larger than their
+          // layout box (kGameIconGrow), and FittedBox's default clip cut that
+          // overhang off at the bottom (user 2026-11-04).
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            child: child,
           ),
         ),
-      );
+      ),
+    ),
+  );
+
+  /// The gap between two pills of the header.
+  Widget _cellDivider() => const SizedBox(width: 6);
 
   Widget _resCell(
     String emoji,
@@ -2345,11 +2348,7 @@ class _SettlementScreenState extends State<SettlementScreen>
           // erreicht wurde, dies bitte in der Farbe Koralle darstellen") —
           // one colour for both, since [over] used to fall through this
           // chain with no colour of its own at all.
-          subColor: losing
-              ? FoE.danger
-              : (full || over)
-              ? FoE.coral
-              : null,
+          subColor: losing || full || over ? UiArt.warn : null,
         );
       },
     ),
@@ -2367,38 +2366,68 @@ class _SettlementScreenState extends State<SettlementScreen>
     Color? subColor,
   }) => Row(
     mainAxisSize: MainAxisSize.min,
+    mainAxisAlignment: MainAxisAlignment.center,
+    crossAxisAlignment: CrossAxisAlignment.center,
     children: [
       // Fixed box, not a bare Text: color emoji render through a fallback
       // system font whose glyph bitmap sits taller than the line height
       // Flutter computes from Outfit's own metrics at this size, so an
       // unconstrained emoji bled down and overwrote the value beside it (user
       // 2026-08-31: "Die Icons werden überschrieben").
-      SizedBox(
-        width: _kHeaderIconSize + 5,
-        height: _kHeaderIconSize + 5,
-        child: Center(
-          child: Text(
-            emoji,
-            style: const TextStyle(fontSize: _kHeaderIconSize),
+      // Centred again (user 2026-11-04) — the earlier 2 px lift was a
+      // workaround for the clipping, which the direct picture below fixed.
+      Transform.translate(
+        offset: Offset.zero,
+        child: SizedBox(
+          width: _kHeaderIconSize + 5,
+          height: _kHeaderIconSize + 5,
+          child: Center(
+            // Our own icons, drawn directly (not through a Text) so they keep
+            // their size; they are the SMOOTH set now (user 2026-11-04) —
+            // see tool/icons/gen_icons.js.
+            child: kEmojiToIcon[emoji] != null
+                ? GameIcon(kEmojiToIcon[emoji]!, size: _kHeaderIconSize)
+                : w.Text(
+                    emoji,
+                    style: const TextStyle(fontSize: _kHeaderIconSize),
+                  ),
           ),
         ),
       ),
       const SizedBox(width: 3),
-      Text(
-        value,
-        maxLines: 1,
-        style: FoE.value(size: 13).copyWith(
-          color: valueColor,
-          shadows: ParchmentHeader.engraved(depth: 0.8),
-        ),
-      ),
-      const SizedBox(width: 4),
-      Text(
-        sub,
-        maxLines: 1,
-        style: FoE.dim(size: _kHeaderSubSize).copyWith(
-          color: subColor,
-          shadows: ParchmentHeader.engraved(depth: 0.6),
+      // Figure and rate share ONE BASELINE (the rate used to float higher
+      // than the figure — user 2026-11-04), and the pair sits a pixel low so
+      // the pixel face lines up with the icon beside it.
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value,
+              maxLines: 1,
+              style: FoE.value(size: 13).copyWith(
+                color: valueColor ?? const Color(0xFFFFE9C2),
+                shadows: _hudTextShadow,
+              ),
+            ),
+            const SizedBox(width: 4),
+            // Dropped 1 px: at its smaller size the rate still read higher than
+            // the figure even on the same baseline (user 2026-11-04).
+            Transform.translate(
+              offset: const Offset(0, 1),
+              child: Text(
+                sub,
+                maxLines: 1,
+                style: FoE.dim(size: _kHeaderSubSize).copyWith(
+                  color: subColor ?? const Color(0xFFE3C58A),
+                  shadows: _hudTextShadow,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     ],
@@ -2419,7 +2448,7 @@ class _SettlementScreenState extends State<SettlementScreen>
       return _headerCell(
         onTap: _showExpeditions,
         child: _cellBody(
-          emoji: '🧭',
+          emoji: '⏰',
           value: s.noSlots ? '–' : '${ready ? s.ready : s.out}',
           sub: ready
               ? 'ready'
@@ -2428,8 +2457,8 @@ class _SettlementScreenState extends State<SettlementScreen>
               : s.noSlots
               ? 'no post'
               : 'idle',
-          valueColor: ready ? CreamPalette.gold : null,
-          subColor: ready ? CreamPalette.gold : null,
+          valueColor: ready ? HudBlocks.good : null,
+          subColor: ready ? HudBlocks.good : null,
         ),
       );
     },
@@ -2445,37 +2474,15 @@ class _SettlementScreenState extends State<SettlementScreen>
       button: true,
       child: Pressable(
         onTap: open,
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                // The full gem chrome, the same as Build/Manage — gradient,
-                // white/cream rim, drop shadow — not just the fill colour
-                // (user 2026-09-29: "es fehlt noch der weisse Rahmen und der
-                // Farbverlauf, damit sie gleich sind wie die Buttons Build
-                // und Management").
-                decoration: gemDecoration(CreamPalette.gold),
-                child: PixelIcon(
-                  unread > 0
-                      ? Icons.notifications_active_rounded
-                      : Icons.notifications_none_rounded,
-                  size: 20,
-                  color: CreamPalette.ink.withValues(
-                    alpha: unread > 0 ? 1 : 0.6,
-                  ),
-                ),
-              ),
-              if (unread > 0)
-                Positioned(
-                  top: 0,
-                  right: -2,
-                  child: Container(
+        // A brass bell on an iron strap from a timber block that sits on the
+        // header beam (user 2026-11-05: smaller, hung from the beam, not the
+        // side edge).
+        child: Transform.translate(
+          offset: Offset.zero,
+          child: UiBell(
+            width: 50,
+            badge: unread > 0
+                ? Container(
                     constraints: const BoxConstraints(minWidth: 18),
                     height: 18,
                     padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -2494,13 +2501,12 @@ class _SettlementScreenState extends State<SettlementScreen>
                       unread > 99 ? '99+' : '$unread',
                       style: const TextStyle(
                         color: CreamPalette.ink,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w400,
                         fontSize: 10,
                       ),
                     ),
-                  ),
-                ),
-            ],
+                  )
+                : null,
           ),
         ),
       ),
@@ -2522,11 +2528,11 @@ class _SettlementScreenState extends State<SettlementScreen>
       // ist") — Housing is the page's second tab, one tap over.
       onTap: () => pushMenu(context, const WorkScreen()),
       child: _cellBody(
-        emoji: '🛏',
+        emoji: '🏠',
         value: '$used/$cap',
         sub: full ? 'full' : '${cap - used} free',
-        valueColor: full ? FoE.danger : null,
-        subColor: full ? FoE.danger : null,
+        valueColor: full ? HudBlocks.warn : null,
+        subColor: full ? HudBlocks.warn : null,
       ),
     );
   }
@@ -2557,44 +2563,24 @@ class _SettlementScreenState extends State<SettlementScreen>
       child: Pressable(
         onTap: _showEnergyOverview,
         behavior: HitTestBehavior.opaque,
-        // The same battery the energy page itself shows (user 2026-09-30:
-        // "verwende beim Header für die Energieanzeige die Batterie, welche
-        // bereits beim Detailscreen vorhanden ist"), compact and with no
-        // "100 %"/"125 %" marks. Its rim is [_QuickTile]'s own unlit one, not
-        // a plain black or white (user, same message: "der Rand soll aber
-        // nicht Schwarz sein, sondern so wie der Rand des Management oder
-        // Build Buttons" — those sit at `CreamPalette.paperTop` @ 95 %, not
-        // `Colors.white`, unless active). Red when the pool is empty, same
-        // warning the gauge's own retired stroke used to give.
+        // SPLIT BAR (user 2026-11-04, "den geteilten Balken"): the LEFT half is
+        // 0-100 %, the RIGHT half the bonus range from 100 to 125 %, with the
+        // treasure chest hanging between them. Red text when the pool is empty.
         child: SizedBox(
           width: _kEnergyBarWidth,
-          height: 24,
+          height: 40,
           child: Stack(
-            alignment: Alignment.center,
+            clipBehavior: Clip.none,
             children: [
-              EnergyBattery(
-                percent: percent,
-                height: 22,
-                radius: 10,
-                borderColor: atFloor
-                    ? FoE.danger
-                    : CreamPalette.paperTop.withValues(alpha: 0.95),
-                borderWidth: 2,
-                showLabels: false,
-                continuous: true,
-                showContact: false,
+              const Positioned(
+                left: -7,
+                right: -7,
+                top: -8,
+                bottom: -8,
+                child: IgnorePointer(child: ChestSurround(bulge: 44)),
               ),
-              Text(
-                energy == null ? '⚡ —' : '⚡ ${percent.round()}%$left',
-                maxLines: 1,
-                style: FoE.value(size: 11.5).copyWith(
-                  color: atFloor ? FoE.danger : Colors.white,
-                  fontWeight: FontWeight.w800,
-                  shadows: const [
-                    Shadow(color: Color(0xCC000000), blurRadius: 2),
-                    Shadow(color: Color(0x99000000), offset: Offset(0, 1)),
-                  ],
-                ),
+              Positioned.fill(
+                child: _energyBoard(percent, atFloor, energy != null, left),
               ),
             ],
           ),
@@ -2603,8 +2589,51 @@ class _SettlementScreenState extends State<SettlementScreen>
     );
   }
 
+  Widget _energyBoard(
+    double percent,
+    bool atFloor,
+    bool hasEnergy,
+    String left,
+  ) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 3),
+    child: Row(
+      children: [
+        Expanded(
+          child: UiEnergyHalf(
+            fraction: percent.clamp(0.0, 100.0) / 100,
+            label: Text(
+              !hasEnergy ? '⚡ —' : '⚡ ${percent.round()}%$left',
+              maxLines: 1,
+              style: FoE.value(size: 11.5).copyWith(
+                color: atFloor ? FoE.danger : Colors.white,
+                fontWeight: FontWeight.w400,
+                shadows: const [
+                  Shadow(color: Color(0xCC000000), offset: Offset(0, 1)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        // Room for the chest.
+        const SizedBox(width: _kChestGap),
+        Expanded(
+          child: UiEnergyHalf(
+            bonus: true,
+            fraction: ((percent - 100) / (kEnergyMaxPercent - 100)).clamp(
+              0.0,
+              1.0,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// The gap between the two halves, where the chest hangs.
+  static const double _kChestGap = 112;
+
   /// The energy bar's width — wide enough for "⚡ 125% · 30h" at a glance.
-  static const double _kEnergyBarWidth = 172;
+  static const double _kEnergyBarWidth = 330;
 
   // ── Quick buttons (bottom-left dock, bottom-right row) ──
   /// THE SETTLEMENT'S CONTROLS THE FORGE-OF-EMPIRES WAY (user 2026-09-19): at
@@ -2667,6 +2696,7 @@ class _SettlementScreenState extends State<SettlementScreen>
       Icons.travel_explore,
       'Expedition',
       _showManagement,
+      compass: true,
       anchorKey: solo == 'quick-trips'
           ? IntroSpotlightAnchors.of('quick-trips')
           : null,
@@ -2724,7 +2754,12 @@ class _SettlementScreenState extends State<SettlementScreen>
       right: [build, monsters, map],
       // Verwalten (Manage), always visible — swapped with Social (user
       // 2026-09-22).
-      main: QuickPadItem(Icons.travel_explore, 'Expedition', _showManagement),
+      main: QuickPadItem(
+        Icons.travel_explore,
+        'Expedition',
+        _showManagement,
+        compass: true,
+      ),
       // Everything else, behind the fold button next to Manage.
       more: [
         // Waiting on you: a challenge to answer, an opponent already in
@@ -2756,7 +2791,7 @@ class _SettlementScreenState extends State<SettlementScreen>
           badge: NewItems().total,
         ),
         QuickPadItem(
-          Icons.flag,
+          Icons.checklist,
           'Daily tasks',
           _showDailyTasks,
           badge: _ctrl.dailyTasks.claimableCount,

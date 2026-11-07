@@ -96,7 +96,7 @@ abstract final class FoE {
   static TextStyle title({double size = 14}) => TextStyle(
     color: kBoxInk,
     fontSize: size + 2,
-    fontWeight: FontWeight.w800,
+    fontWeight: FontWeight.w400,
     height: 1.2,
     decoration: TextDecoration.none,
   );
@@ -104,7 +104,7 @@ abstract final class FoE {
   static TextStyle value({double size = 13}) => TextStyle(
     color: kBoxInk,
     fontSize: size + 1,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w400,
     height: 1.25,
     decoration: TextDecoration.none,
   );
@@ -112,7 +112,7 @@ abstract final class FoE {
   static TextStyle label({double size = 11}) => TextStyle(
     color: kBoxInk,
     fontSize: size + 1,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w400,
     height: 1.4,
     decoration: TextDecoration.none,
   );
@@ -120,7 +120,7 @@ abstract final class FoE {
   static TextStyle dim({double size = 10}) => TextStyle(
     color: textDim,
     fontSize: size + 1,
-    fontWeight: FontWeight.w500,
+    fontWeight: FontWeight.w400,
     height: 1.35,
     decoration: TextDecoration.none,
   );

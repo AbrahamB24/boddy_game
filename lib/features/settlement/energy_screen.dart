@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -6,9 +6,10 @@ import '../../core/ui/pressable.dart';
 import 'data/building_definitions.dart';
 import 'models/energy_model.dart';
 import 'services/step_tracker_service.dart';
-import 'settlement_controller.dart';
+import 'settlement_controller.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// THE ENERGY PAGE — "Batterie" (user 2026-09-22): the pool as a battery of 25
 /// cells of 5 % each (amber up to 100 %, cyan above it), what it is worth and how
@@ -142,7 +143,7 @@ class _PoolCard extends StatelessWidget {
             'ENERGY POOL',
             style: TextStyle(
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               letterSpacing: 1.1,
               color: kBoxAccent,
             ),
@@ -165,7 +166,7 @@ class _PoolCard extends StatelessWidget {
                   headline,
                   style: FoE.dim(size: 12).copyWith(
                     color: full || empty ? CreamPalette.warn : kBoxInkSoft,
-                    fontWeight: full || empty ? FontWeight.w700 : null,
+                    fontWeight: full || empty ? FontWeight.w400 : null,
                   ),
                 ),
               ),
@@ -296,7 +297,7 @@ class EnergyBattery extends StatelessWidget {
                     '100 %',
                     style: FoE.dim(
                       size: 10,
-                    ).copyWith(color: kBoxInkSoft, fontWeight: FontWeight.w800),
+                    ).copyWith(color: kBoxInkSoft, fontWeight: FontWeight.w400),
                   ),
                 ),
               ),
@@ -308,7 +309,7 @@ class EnergyBattery extends StatelessWidget {
                     '${kEnergyMaxPercent.round()} %',
                     style: FoE.dim(
                       size: 10,
-                    ).copyWith(color: _cyanInk, fontWeight: FontWeight.w800),
+                    ).copyWith(color: _cyanInk, fontWeight: FontWeight.w400),
                   ),
                 ),
               ),

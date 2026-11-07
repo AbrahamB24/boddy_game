@@ -7,6 +7,7 @@ import 'package:flutter/gestures.dart'
 import 'package:flutter/material.dart' hide Text;
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/theme/ui_art.dart';
 import '../../../core/theme/strategy_theme.dart'
     show chunkyDecoration, strategyDarken;
 import '../../../core/ui/duration_format.dart';
@@ -40,6 +41,11 @@ import '../../../core/ui/game_text.dart';
 
 class SettlementMap extends StatefulWidget {
   final SettlementController ctrl;
+
+  /// Height of the header laid over the top of this full-bleed map: the camera
+  /// keeps the map's top just under it (see [clampMapTransform]).
+  final double topInset;
+
   final String? pendingTypeId;
   final bool editMode;
   final bool roadMode;
@@ -99,6 +105,7 @@ class SettlementMap extends StatefulWidget {
     this.persistentEditMode = false,
     this.selectBuildingId,
     this.onAimingChanged,
+    this.topInset = 0,
   });
 
   @override
@@ -204,6 +211,29 @@ class SettlementMapState extends State<SettlementMap>
   Offset? _dragAt; // last pointer position, in the map widget's coordinates
   Timer? _edgeTimer;
 
+  // ── THE GHOST GLIDES (user 2026-11-05: "Bauen soll sich richtig gut
+  //    anfühlen … Smoothheit") ──
+  // The logic stays on whole cells ([_aimX]/[_aimY]); only what is DRAWN eases
+  // there. [_glideDelta] is how far the picture still lags behind the cell, in
+  // map pixels, at the moment the cell last changed; it shrinks to nothing as
+  // [_glide] runs. Retargeting mid-glide starts from where the picture IS, so a
+  // fast drag never snaps back.
+  late final AnimationController _glide = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 120),
+  );
+  Offset _glideDelta = Offset.zero;
+  Offset get _glideShift =>
+      _glideDelta * (1 - Curves.easeOutCubic.transform(_glide.value));
+
+  /// Whether the last cell the ghost sat on was one the game accepts — so the
+  /// phone can buzz when that CHANGES, not on every move.
+  bool? _lastFits;
+
+  /// The thud ring that marks where something was just set down.
+  ({int x, int y, int w, int h, int n})? _pulse;
+  int _pulseN = 0;
+
   // ── Pinch-to-zoom THROUGH the grab box (user 2026-09-17: "der zoom
   // funktioniert während des Platzierens eines Gebäudes nicht") ──
   // The grab box below has to win single-finger gestures outright — a plain
@@ -287,13 +317,15 @@ class SettlementMapState extends State<SettlementMap>
       kInitialPlotX + kInitialPlotSize / 2,
       kInitialPlotY + kInitialPlotSize / 2,
     );
+    final inset = widget.topInset;
     return clampMapTransform(
       mapTransform(
         scale,
         view.width / 2 - home.dx * scale,
-        view.height / 2 - home.dy * scale,
+        inset + (view.height - inset) / 2 - home.dy * scale,
       ),
       view,
+      topInset: inset,
     );
   }
 
@@ -470,6 +502,12 @@ class SettlementMapState extends State<SettlementMap>
   @override
   void didUpdateWidget(SettlementMap oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.topInset != oldWidget.topInset && _txInitialized) {
+      // The header was measured (or changed height): re-clamp against it.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _enforceBounds();
+      });
+    }
     // Leaving a mode drops whatever was being aimed in it. Nothing was written,
     // so there is nothing to undo.
     if (!widget.editMode && oldWidget.editMode && _aimMoveId != null) {
@@ -540,6 +578,7 @@ class SettlementMapState extends State<SettlementMap>
   @override
   void dispose() {
     _edgeTimer?.cancel();
+    _glide.dispose();
     _panCtrl.dispose();
     _txCtrl.dispose();
     _walkTicker.dispose();
@@ -582,6 +621,9 @@ class SettlementMapState extends State<SettlementMap>
     // im Screen" promise below gives a fresh building.
     final fromStorage = b?.isStored ?? false;
     _stopDrag();
+    _glide.stop();
+    _glideDelta = Offset.zero;
+    _lastFits = null;
     setState(() {
       _dropChainState();
       _aimType = typeId;
@@ -659,6 +701,9 @@ class SettlementMapState extends State<SettlementMap>
   void _clearAim() {
     _stopDrag();
     if (!_aiming) return;
+    _glide.stop();
+    _glideDelta = Offset.zero;
+    _lastFits = null;
     setState(() {
       _aimType = null;
       _aimMoveId = null;
@@ -694,6 +739,19 @@ class SettlementMapState extends State<SettlementMap>
       return;
     }
     Feel.place();
+    // The ring that says "set down here".
+    final setDown = _aimDefOf(type);
+    if (setDown != null) {
+      setState(() {
+        _pulse = (
+          x: x,
+          y: y,
+          w: setDown.gridW,
+          h: setDown.gridH,
+          n: ++_pulseN,
+        );
+      });
+    }
     final isNewRoad = moveId == null && (kBuildingDefs[type]?.isRoad ?? false);
     // Captured before advanceIntro moves the step past buildRoad (user
     // 2026-10-01: "wenn ich die Strasse baue, dann bitte nur eine bauen
@@ -782,6 +840,37 @@ class SettlementMapState extends State<SettlementMap>
       });
       return;
     }
+    // BACK THE WAY YOU CAME (user 2026-11-05: "wenn ich … wieder den Weg zurück
+    // drücke, dann soll diese gelöscht werden"). The arrow that points at the
+    // road laid just before the current one takes the current one away and
+    // moves the head back onto it — an undo that needs no extra button.
+    //
+    // Not only for roads laid in this stroke: ANY road next door counts, so the
+    // way back keeps taking roads away through ones that were built long ago
+    // (their cells are remembered, and the ✗ puts them back).
+    final head = _hitTest(_chainX, _chainY);
+    final next = _hitTest(nx, ny);
+    if (head != null &&
+        next != null &&
+        (placedDefOf(head)?.isRoad ?? false) &&
+        (placedDefOf(next)?.isRoad ?? false)) {
+      final err = await widget.ctrl.deleteBuilding(head.id);
+      if (!mounted) return;
+      if (err != null) {
+        Feel.deny();
+        context.snack(err, error: true);
+        return;
+      }
+      Feel.tap();
+      setState(() {
+        if (!_chainBuilt.remove(head.id)) {
+          _chainRemoved.add((head.gridX, head.gridY));
+        }
+        _chainX = nx;
+        _chainY = ny;
+      });
+      return;
+    }
     final err = await widget.ctrl.placeBuilding('road', nx, ny);
     if (!mounted) return;
     if (err != null) {
@@ -818,18 +907,16 @@ class SettlementMapState extends State<SettlementMap>
   Future<void> _undoChain() async {
     final built = [..._chainBuilt];
     final removed = [..._chainRemoved];
-    final erasing = _chainErase;
     Feel.tap();
     setState(_dropChainState);
     _closeSessionMode();
-    if (erasing) {
-      for (final (x, y) in removed) {
-        await widget.ctrl.placeBuilding('road', x, y);
-      }
-    } else {
-      for (final id in built) {
-        await widget.ctrl.deleteBuilding(id);
-      }
+    // Both halves, whatever the mode: a laying stroke can have taken old roads
+    // away on its way back, an erasing one only ever removes.
+    for (final id in built) {
+      await widget.ctrl.deleteBuilding(id);
+    }
+    for (final (x, y) in removed) {
+      await widget.ctrl.placeBuilding('road', x, y);
     }
   }
 
@@ -856,6 +943,29 @@ class SettlementMapState extends State<SettlementMap>
     var gy = (row - _grabDy).clamp(0, kGridRows - def.gridH);
     (gx, gy) = widget.ctrl.snapPlacement(type!, gx, gy);
     if (gx == _aimX && gy == _aimY) return;
+    // Ease the picture over to the new cell instead of jumping it there.
+    final ox = _aimX, oy = _aimY;
+    if (ox != null && oy != null) {
+      final from =
+          isoBounds(ox, oy, def.gridW, def.gridH).topLeft + _glideShift;
+      final to = isoBounds(gx, gy, def.gridW, def.gridH).topLeft;
+      _glideDelta = from - to;
+      _glide.forward(from: 0);
+    }
+    // Felt as well as seen: a tick per cell, a firmer tap when "fits" flips.
+    final fits = widget.ctrl.isPlacementValid(
+      type,
+      gx,
+      gy,
+      excludeId: _aimMoveId,
+      rotation: _aimRotation,
+    );
+    if (_lastFits != null && _lastFits != fits) {
+      Feel.snap(fits: fits);
+    } else {
+      Feel.tick();
+    }
+    _lastFits = fits;
     setState(() {
       _aimX = gx;
       _aimY = gy;
@@ -869,6 +979,15 @@ class SettlementMapState extends State<SettlementMap>
     if (def == null || _aimX == null || _aimY == null) return;
     final local = _mapLocal(globalPosition);
     final (col, row) = _cellAt(local);
+    // Picking it up: a small thud, and the starting point for "fits" changes.
+    Feel.snap(fits: true);
+    _lastFits = widget.ctrl.isPlacementValid(
+      type!,
+      _aimX!,
+      _aimY!,
+      excludeId: _aimMoveId,
+      rotation: _aimRotation,
+    );
     setState(() {
       _dragging = true;
       // Clamped INTO the footprint: the touch box reaches up over the art, and
@@ -980,15 +1099,20 @@ class SettlementMapState extends State<SettlementMap>
   // it, because the hand holding the building is the hand that would have
   // panned. The band is generous (a thumb is wide) and the speed ramps with how
   // far in you are, so grazing the edge nudges and pinning to it runs.
-  static const double _kEdgeBand = 76;
-  static const double _kEdgeSpeed = 13;
+  static const double _kEdgeBand = 96;
+  static const double _kEdgeSpeed = 15;
 
   void _tickEdgeScroll() {
     final at = _dragAt;
     final view = _viewport;
     if (!_dragging || at == null || view == null) return;
-    double push(double d) =>
-        d >= _kEdgeBand ? 0 : (1 - math.max(d, 0) / _kEdgeBand) * _kEdgeSpeed;
+    // Squared: grazing the band barely nudges, pinning to the edge runs — no
+    // sudden lurch the moment the finger crosses into the band.
+    double push(double d) {
+      if (d >= _kEdgeBand) return 0;
+      final f = 1 - math.max(d, 0) / _kEdgeBand;
+      return f * f * _kEdgeSpeed;
+    }
     // Near the LEFT edge the content slides right, which is what reveals what
     // lies further left.
     final dx = push(at.dx) - push(view.width - at.dx);
@@ -1027,7 +1151,7 @@ class SettlementMapState extends State<SettlementMap>
     final view = _viewport;
     if (view == null) return;
     final m = _txCtrl.value;
-    final fixed = clampMapTransform(m, view);
+    final fixed = clampMapTransform(m, view, topInset: widget.topInset);
     if (_sameTransform(fixed, m)) return;
     _fixingBounds = true;
     _txCtrl.value = fixed;
@@ -1600,8 +1724,19 @@ class SettlementMapState extends State<SettlementMap>
     final ghostDef = _aimDefOf(_aimType);
     final gx = _aimX, gy = _aimY;
     final showGhost = ghostDef != null && gx != null && gy != null;
+    // While a road is being laid out (the arrow brush), EVERY building stays
+    // see-through, not just the ones in front of the first tile (user
+    // 2026-11-05) — the next tile can be anywhere, and a road hidden behind a
+    // roof is a road you cannot judge.
     final faded = showGhost
         ? _fadedBehindGhost(ghostDef, gx, gy)
+        : _chaining
+        ? {
+            for (final b in widget.ctrl.buildings)
+              if (!b.isStored && !(placedDefOf(b)?.isRoad ?? true) &&
+                  !(placedDefOf(b)?.isBuildPlot ?? true))
+                b.id,
+          }
         : const <String>{};
     final walkersShown =
         !showGhost && !_chaining && !widget.editMode && !widget.roadMode;
@@ -1643,7 +1778,11 @@ class SettlementMapState extends State<SettlementMap>
             if (!mounted) return;
             final scale = _txCtrl.value.getMaxScaleOnAxis();
             if (scale >= minScale) {
-              _txCtrl.value = clampMapTransform(_txCtrl.value, view);
+              _txCtrl.value = clampMapTransform(
+                _txCtrl.value,
+                view,
+                topInset: widget.topInset,
+              );
               return;
             }
             _txCtrl.value = _homeTransform(minScale, view);
@@ -1706,9 +1845,25 @@ class SettlementMapState extends State<SettlementMap>
                               widget.editMode ||
                               widget.roadMode)
                             Positioned.fill(
-                              child: CustomPaint(
-                                painter: _GridPainter(
-                                  buildableRegion: widget.ctrl.buildableRegion,
+                              // Fades in when a session opens, and — while a
+                              // building is held — washes the ground it may
+                              // stand on, so the legal spots are SEEN instead
+                              // of felt for.
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween(begin: 0.0, end: 1.0),
+                                duration: const Duration(milliseconds: 260),
+                                curve: Curves.easeOut,
+                                builder: (context, v, grid) =>
+                                    v >= 1 ? grid! : Opacity(opacity: v, child: grid),
+                                child: CustomPaint(
+                                  painter: _GridPainter(
+                                    buildableRegion:
+                                        widget.ctrl.buildableRegion,
+                                    fill:
+                                        ghostDef != null &&
+                                        showGhost &&
+                                        !ghostDef.isBuildPlot,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1755,6 +1910,27 @@ class SettlementMapState extends State<SettlementMap>
                               ),
                             ),
                           ),
+                          // ── WHICH TILES ARE TAKEN (user 2026-11-05) ──
+                          // The grid under the buildings is hidden by their
+                          // sprites, so in build mode the occupied cells are
+                          // outlined ABOVE them: one amber diamond per tile.
+                          if (showGhost || widget.editMode)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: CustomPaint(
+                                  painter: _OccupiedPainter([
+                                    for (final b in widget.ctrl.buildings)
+                                      if (b.id != _aimMoveId)
+                                        if (placedDefOf(b) case final d?)
+                                          // roads are ground, and a build plot
+                                          // only widens the buildable area
+                                          if (!d.isRoad && !d.isBuildPlot)
+                                            (b.gridX, b.gridY, d.gridW, d.gridH),
+                                  ]),
+                                ),
+                              ),
+                            ),
+                          if (_pulse case final p?) _placePulse(p),
                         ],
                       ),
                     ),
@@ -1773,7 +1949,7 @@ class SettlementMapState extends State<SettlementMap>
                 // positioned collapses to nothing and takes every control with it.
                 Positioned.fill(
                   child: AnimatedBuilder(
-                    animation: _txCtrl,
+                    animation: Listenable.merge([_txCtrl, _glide]),
                     builder: (context, _) => Stack(
                       clipBehavior: Clip.none,
                       children: [
@@ -1825,12 +2001,28 @@ class SettlementMapState extends State<SettlementMap>
     final isHealAnchor =
         b.buildingTypeId == kHealingHutBuildingId &&
         widget.ctrl.introStep == IntroStep.assignHealer;
+    // A red building says WHAT is wrong, not why. For one with a named entrance
+    // the tile therefore marks that cell — gold, outlined green once a road
+    // lies on it — so "my road touches it and it is still red" shows whether
+    // the road is on the wrong side or merely does not reach the Castle. One
+    // bit per entrance, in the signature so the mark updates with the roads.
+    var entranceRoads = 0;
+    if (isDisconnected) {
+      final es = entrancesFor(def.artId, def.gridW, def.gridH);
+      for (final (i, e) in (es ?? const <BuildingEntrance>[]).indexed) {
+        final (rx, ry) = entranceRoadCell(e, b.gridX, b.gridY);
+        if (widget.ctrl.roadCells.contains(roadCellKey(rx, ry))) {
+          entranceRoads |= 1 << i;
+        }
+      }
+    }
     final signature =
         (faded ? 1 : 0) |
         (isGhostSrc ? 2 : 0) |
         (isDisconnected ? 4 : 0) |
         (isHealAnchor ? 8 : 0) |
-        (roadMask << 4);
+        (roadMask << 4) |
+        (entranceRoads << 8);
     final hit = _tileCache[b.id];
     // The def is part of the key: Dev Mode replaces defs (art, footprint)
     // without touching the placed buildings.
@@ -1848,6 +2040,7 @@ class SettlementMapState extends State<SettlementMap>
       isDisconnected: isDisconnected,
       isHealAnchor: isHealAnchor,
       roadMask: roadMask,
+      entranceRoads: entranceRoads,
     );
     _tileCache[b.id] = (
       building: b,
@@ -1869,6 +2062,7 @@ class SettlementMapState extends State<SettlementMap>
     required bool isDisconnected,
     required bool isHealAnchor,
     required int roadMask,
+    int entranceRoads = 0,
   }) {
     // ── ISOMETRIC PLACEMENT (2026-08-01) ──
     // The box is the footprint's own bounding rectangle (isoBounds), and the
@@ -1904,6 +2098,28 @@ class SettlementMapState extends State<SettlementMap>
             isDisconnected: isDisconnected,
           ),
         ),
+        // WHERE ITS ROAD HAS TO GO — only while it is cut off; see
+        // [_buildingTile].
+        if (isDisconnected)
+          for (final (i, e) in (entrancesFor(
+                    def.artId,
+                    def.gridW,
+                    def.gridH,
+                  ) ??
+                  const <BuildingEntrance>[])
+              .indexed)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _EntrancePainter(
+                    w: def.gridW,
+                    h: def.gridH,
+                    entrance: e,
+                    hasRoad: (entranceRoads >> i) & 1 == 1,
+                  ),
+                ),
+              ),
+            ),
         // ── SIGNS OF LIFE (user 2026-08-04) ──
         // Smoke and lamplight, over the sprite and inside its own box.
         // Only on a FINISHED, RUNNING building: a site under construction
@@ -1965,9 +2181,72 @@ class SettlementMapState extends State<SettlementMap>
       // boundary that composites through an OpacityLayer at ANY alpha above
       // zero — 1.0 included — so wrapping every tile unconditionally cost a
       // pointless layer per building, ~200 of them, on every frame.
+      // EASED DOWN rather than switched (user 2026-11-05): a roof that blinks
+      // out as the ghost slides behind it reads as a glitch. Coming back is
+      // still instant — the wrapper only exists while it is see-through.
       child: isGhostSrc || faded
-          ? Opacity(opacity: 0.3, child: content)
+          ? TweenAnimationBuilder<double>(
+              tween: Tween(begin: 1.0, end: 0.3),
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              builder: (context, o, c) => Opacity(opacity: o, child: c),
+              child: content,
+            )
           : content,
+    );
+  }
+
+  /// The ring that flashes out of a footprint the moment something is set down
+  /// on it, then removes itself.
+  Widget _placePulse(({int x, int y, int w, int h, int n}) p) {
+    final iso = isoBounds(p.x, p.y, p.w, p.h);
+    return Positioned(
+      key: ValueKey('pulse:${p.n}'),
+      left: iso.left,
+      top: iso.top,
+      width: iso.width,
+      height: iso.height,
+      child: IgnorePointer(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.0, end: 1.0),
+          duration: const Duration(milliseconds: 520),
+          curve: Curves.easeOutCubic,
+          onEnd: () {
+            if (mounted && _pulse?.n == p.n) setState(() => _pulse = null);
+          },
+          builder: (context, t, _) =>
+              CustomPaint(painter: _PulsePainter(w: p.w, h: p.h, t: t)),
+        ),
+      ),
+    );
+  }
+
+  /// What the ghost's picture goes through: the pop-in when it appears, the
+  /// lift while it is held, and the red wash when it cannot go where it is.
+  Widget _ghostFx({
+    required Widget child,
+    required double pop,
+    required double lift,
+    required double bad,
+    double alpha = 0.9,
+  }) {
+    final p = pop.clamp(0.0, 1.0);
+    return Opacity(
+      opacity: (alpha - 0.1 * bad) * p,
+      child: ColorFiltered(
+        colorFilter: ColorFilter.mode(
+          const Color(0xFFFF3B30).withValues(alpha: 0.5 * bad),
+          BlendMode.srcATop,
+        ),
+        child: Transform.translate(
+          offset: Offset(0, -9 * lift),
+          child: Transform.scale(
+            scale: (0.9 + 0.1 * pop) * (1 + 0.035 * lift),
+            alignment: Alignment.bottomCenter,
+            child: child,
+          ),
+        ),
+      ),
     );
   }
 
@@ -1981,12 +2260,21 @@ class SettlementMapState extends State<SettlementMap>
       rotation: _aimRotation,
     );
     final iso = isoBounds(gx, gy, def.gridW, def.gridH);
-    return Positioned(
-      left: iso.left,
-      top: iso.top,
-      width: iso.width,
-      height: iso.height,
-      child: Stack(
+    final lifted = _dragging;
+    // Three small animations stacked: the pop-in when the ghost appears, the
+    // green→red wash when "fits" flips, the lift while a finger holds it.
+    final body = TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutBack,
+      builder: (context, pop, _) => TweenAnimationBuilder<double>(
+        tween: Tween<double>(end: free ? 0 : 1),
+        duration: const Duration(milliseconds: 150),
+        builder: (context, bad, _) => TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: lifted ? 1 : 0),
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          builder: (context, lift, _) => Stack(
         clipBehavior: Clip.none,
         children: [
           // The validity mark is the footprint's own diamond — a rectangle here
@@ -1996,7 +2284,12 @@ class SettlementMapState extends State<SettlementMap>
               painter: _FootprintPainter(
                 w: def.gridW,
                 h: def.gridH,
-                color: free ? Colors.greenAccent : Colors.redAccent,
+                color: Color.lerp(
+                  const Color(0xFF69F0AE),
+                  const Color(0xFFFF5252),
+                  bad,
+                )!,
+                lift: lift,
               ),
             ),
           ),
@@ -2006,8 +2299,11 @@ class SettlementMapState extends State<SettlementMap>
           // is the whole question you are asking while you aim it.
           if (def.isRoad)
             Positioned.fill(
-              child: Opacity(
-                opacity: 0.75,
+              child: _ghostFx(
+                pop: pop,
+                lift: 0,
+                bad: bad,
+                alpha: 0.75,
                 child: Image.asset(
                   roadAsset(
                     roadMask(
@@ -2038,11 +2334,16 @@ class SettlementMapState extends State<SettlementMap>
                   left: art.left,
                   width: art.width,
                   bottom: local.height - art.bottom,
-                  child: BuildingIcon(
-                    imageUrl: def.imageUrl,
-                    defId: def.artId,
-                    width: art.width,
-                    anchorBottomOverflowTop: true,
+                  child: _ghostFx(
+                    pop: pop,
+                    lift: lift,
+                    bad: bad,
+                    child: BuildingIcon(
+                      imageUrl: def.imageUrl,
+                      defId: def.artId,
+                      width: art.width,
+                      anchorBottomOverflowTop: true,
+                    ),
                   ),
                 );
               },
@@ -2072,7 +2373,24 @@ class SettlementMapState extends State<SettlementMap>
                 ),
               ),
         ],
+          ),
+        ),
       ),
+    );
+    // The picture eases over to its cell; see [_glide].
+    return AnimatedBuilder(
+      animation: _glide,
+      child: body,
+      builder: (context, child) {
+        final s = _glideShift;
+        return Positioned(
+          left: iso.left + s.dx,
+          top: iso.top + s.dy,
+          width: iso.width,
+          height: iso.height,
+          child: child!,
+        );
+      },
     );
   }
 
@@ -2269,9 +2587,10 @@ class SettlementMapState extends State<SettlementMap>
     final left = (anchor.center.dx - w / 2)
         .clamp(8.0, math.max(8.0, view.width - w - 8))
         .toDouble();
-    final above = anchor.top - gap - h >= 8;
+    final minTop = 8.0 + widget.topInset;
+    final above = anchor.top - gap - h >= minTop;
     final top = (above ? anchor.top - gap - h : anchor.bottom + gap)
-        .clamp(8.0, math.max(8.0, view.height - h - 8))
+        .clamp(minTop, math.max(minTop, view.height - h - 8))
         .toDouble();
     // The notch points at the anchor, and stays inside the card's own width.
     final notchX = (anchor.center.dx - left).clamp(24.0, w - 24).toDouble();
@@ -2292,9 +2611,7 @@ class SettlementMapState extends State<SettlementMap>
                 width: 16,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: above
-                      ? CreamPalette.paperBottom
-                      : CreamPalette.paperTop,
+                  color: const Color(0xFFE2CE9C),
                   borderRadius: vr(3),
                   boxShadow: [
                     BoxShadow(
@@ -2307,8 +2624,9 @@ class SettlementMapState extends State<SettlementMap>
             ),
           ),
           Positioned.fill(
-            child: creamCard(
-              padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
+            // A strapped parchment scroll (user 2026-11-04, painted concept).
+            child: UiScroll(
+              padding: const EdgeInsets.fromLTRB(40, 9, 38, 9),
               child: Row(
                 children: [
                   Expanded(
@@ -2463,9 +2781,11 @@ class SettlementMapState extends State<SettlementMap>
   /// below already IS the move gesture; [_chainControls] keeps its own
   /// arrows, since laying a road has no drag to replace them with.
   List<Widget> _aimControls(BuildingDef def, int gx, int gy) {
+    // Shifted by the glide, so the grab box and the tag travel WITH the picture
+    // instead of leaping ahead of it.
     final rect = MatrixUtils.transformRect(
       _txCtrl.value,
-      _artRect(def, gx, gy),
+      _artRect(def, gx, gy).shift(_glideShift),
     );
     final moving = _aimMoveId != null;
     final canDelete = moving && !def.isMainBuilding && !def.isBuildPlot;
@@ -3026,25 +3346,107 @@ class _BuildingTile extends StatelessWidget {
 // at all, just the plain background.
 class _GridPainter extends CustomPainter {
   final Set<int> buildableRegion;
-  const _GridPainter({required this.buildableRegion});
+
+  /// Also washes every buildable cell green — while a building is held, so the
+  /// ground it may stand on is visible at a glance.
+  final bool fill;
+  const _GridPainter({required this.buildableRegion, this.fill = false});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0x55FFFFFF)
+      ..color = fill ? const Color(0x66FFFFFF) : const Color(0x55FFFFFF)
       ..strokeWidth = 0.8
       ..style = PaintingStyle.stroke;
+    final wash = Path();
     for (final key in buildableRegion) {
       final x = key % kGridCols, y = key ~/ kGridCols;
       // A cell is a diamond now, so the grid marks are too — a square here
       // would draw a lattice that has nothing to do with where you can build.
-      canvas.drawPath(footprintPath(x, y, 1, 1), paint);
+      final cell = footprintPath(x, y, 1, 1);
+      canvas.drawPath(cell, paint);
+      if (fill) wash.addPath(cell, Offset.zero);
+    }
+    // One path, one draw: cells only share edges, so the wash is even.
+    if (fill) {
+      canvas.drawPath(wash, Paint()..color = const Color(0x2469F0AE));
     }
   }
 
   @override
   bool shouldRepaint(_GridPainter old) =>
-      old.buildableRegion != buildableRegion;
+      old.buildableRegion != buildableRegion || old.fill != fill;
+}
+
+/// Build mode: every tile a building stands on, outlined in amber
+/// over the sprites (which hide the plain grid beneath them).
+class _OccupiedPainter extends CustomPainter {
+  final List<(int, int, int, int)> rects;
+  const _OccupiedPainter(this.rects);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Calm on purpose: one soft wash and ONE outline per building. Per-tile
+    // lines over the sprites made the whole map look like a net (user
+    // 2026-11-05: "wirkt noch nicht schön").
+    final fill = Paint()..color = const Color(0x4DFF5A14);
+    final frame = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.6
+      ..strokeJoin = StrokeJoin.round
+      ..color = const Color(0xFFFF4D00);
+    for (final (x, y, w, h) in rects) {
+      final outline = footprintPath(x, y, w, h);
+      canvas.drawPath(outline, fill);
+      canvas.drawPath(outline, frame);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_OccupiedPainter old) {
+    if (old.rects.length != rects.length) return true;
+    for (var i = 0; i < rects.length; i++) {
+      if (old.rects[i] != rects[i]) return true;
+    }
+    return false;
+  }
+}
+
+/// The ring that flashes out of a footprint when something is set down on it.
+class _PulsePainter extends CustomPainter {
+  final int w;
+  final int h;
+  final double t; // 0 → 1
+
+  const _PulsePainter({required this.w, required this.h, required this.t});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = footprintPathLocal(w, h);
+    final c = size.center(Offset.zero);
+    final fade = 1 - t;
+    canvas
+      ..save()
+      ..translate(c.dx, c.dy)
+      ..scale(1 + 0.45 * t)
+      ..translate(-c.dx, -c.dy)
+      ..drawPath(
+        path,
+        Paint()..color = const Color(0xFFFFE08A).withValues(alpha: 0.3 * fade),
+      )
+      ..drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1 + 3 * fade
+          ..color = const Color(0xFFFFE08A).withValues(alpha: fade),
+      )
+      ..restore();
+  }
+
+  @override
+  bool shouldRepaint(_PulsePainter old) =>
+      old.t != t || old.w != w || old.h != h;
 }
 
 /// Smoke and lamplight over one building, placed in the SPRITE's box rather
@@ -3145,10 +3547,14 @@ class _FootprintPainter extends CustomPainter {
   final int h;
   final Color color;
 
+  /// 0 = on the ground, 1 = held up by a finger: a soft shadow grows under it.
+  final double lift;
+
   const _FootprintPainter({
     required this.w,
     required this.h,
     required this.color,
+    this.lift = 0,
   });
 
   @override
@@ -3157,7 +3563,15 @@ class _FootprintPainter extends CustomPainter {
     // MAP space and therefore landed a whole map-origin away from the box it
     // was painting in — the outline the user saw beside the building rather
     // than under it (2026-08-01).
-    final fill = Paint()..color = color.withValues(alpha: 0.24);
+    if (lift > 0) {
+      canvas.drawPath(
+        footprintPathLocal(w, h),
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.3 * lift)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+      );
+    }
+    final fill = Paint()..color = color.withValues(alpha: 0.32);
     canvas.drawPath(footprintPathLocal(w, h), fill);
     // CELL BY CELL: the seams between the tiles, so a 2×2 reads as four of
     // them. One flat wash would say "an area", and the question a selected
@@ -3180,7 +3594,7 @@ class _FootprintPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_FootprintPainter old) =>
-      old.w != w || old.h != h || old.color != color;
+      old.w != w || old.h != h || old.color != color || old.lift != lift;
 }
 
 /// A building's entrance on its placement ghost: the entrance CELL of the

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -13,8 +13,9 @@ import 'models/creature_instance.dart';
 import 'services/creatures_controller.dart';
 import 'services/training_cost.dart';
 import 'widgets/creature_family.dart';
-import 'widgets/slot_kit.dart';
+import 'widgets/slot_kit.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 /// The Combat School (user 2026-09-05; laid out like the Healing Hut since
 /// 2026-09-20, "Variante 2, Slot-Karten") — where a creature actually learns a
@@ -287,7 +288,7 @@ class _MovePickerScreen extends StatelessWidget {
                         creature.displayName,
                         style: const TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w400,
                           color: kBoxInk,
                         ),
                       ),
@@ -304,7 +305,7 @@ class _MovePickerScreen extends StatelessWidget {
                           'KNOWS',
                           style: TextStyle(
                             fontSize: 10,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w400,
                             letterSpacing: 0.9,
                             color: kBoxAccent,
                           ),
@@ -330,7 +331,7 @@ class _MovePickerScreen extends StatelessWidget {
                                       k,
                                       style: const TextStyle(
                                         fontSize: 11,
-                                        fontWeight: FontWeight.w800,
+                                        fontWeight: FontWeight.w400,
                                         color: kBoxInk,
                                       ),
                                     ),
@@ -357,7 +358,7 @@ class _MovePickerScreen extends StatelessWidget {
                             'MOVES IT CAN LEARN',
                             style: TextStyle(
                               fontSize: 10,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w400,
                               letterSpacing: 0.9,
                               color: kBoxAccent,
                             ),
@@ -411,8 +412,8 @@ class _MovePickerScreen extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
                     color: kBoxInk,
                   ),
                 ),
@@ -435,7 +436,7 @@ class _MovePickerScreen extends StatelessWidget {
                 _CombatSchoolScreenState._fmt(trainingDuration(a)),
                 style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: kBoxInk,
                 ),
               ),
@@ -445,7 +446,7 @@ class _MovePickerScreen extends StatelessWidget {
           SocialGoldButton(
             'Learn',
             height: 28,
-            fontSize: 11.5,
+            fontSize: 12,
             onTap: () => Navigator.pop(context, a.id),
           ),
         ],

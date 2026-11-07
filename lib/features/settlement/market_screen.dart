@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 
 import '../../core/theme/cream_kit.dart';
@@ -27,6 +27,7 @@ import 'services/trade_center.dart';
 import 'settlement_controller.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// The Market (user 2026-09-20, "Variante 3, Handelskacheln", with every
 /// resource of an ERA side by side and a tappable amount field).
@@ -309,7 +310,7 @@ class _MarketScreenState extends State<MarketScreen> {
                       maxLines: 1,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w400,
                         color: _ink,
                       ),
                     ),
@@ -318,8 +319,8 @@ class _MarketScreenState extends State<MarketScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
                         color: on ? _ink.withValues(alpha: 0.75) : _inkSoft,
                       ),
                     ),
@@ -401,7 +402,7 @@ class _MarketScreenState extends State<MarketScreen> {
             'ERA $label',
             style: const TextStyle(
               fontSize: 10,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               letterSpacing: 0.9,
               color: kBoxAccent,
             ),
@@ -421,8 +422,8 @@ class _MarketScreenState extends State<MarketScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
                   color: _caravan.isEmpty
                       ? CreamPalette.warn
                       : CreamPalette.better,
@@ -488,7 +489,7 @@ class _MarketScreenState extends State<MarketScreen> {
                   'Get',
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     color: _inkSoft,
                   ),
                 ),
@@ -561,8 +562,8 @@ class _MarketScreenState extends State<MarketScreen> {
                   child: Text(
                     labels[i],
                     style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
                       color: i == index ? _ink : _inkSoft,
                     ),
                   ),
@@ -742,8 +743,8 @@ class _MarketScreenState extends State<MarketScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
                           color: _ink,
                         ),
                       ),
@@ -753,7 +754,7 @@ class _MarketScreenState extends State<MarketScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w400,
                           color: _inkSoft,
                         ),
                       ),
@@ -829,7 +830,7 @@ class _MarketScreenState extends State<MarketScreen> {
                     text: '${amount.toInt()}',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       color: live ? _ink : _inkFaint,
                     ),
                     children: [
@@ -838,7 +839,7 @@ class _MarketScreenState extends State<MarketScreen> {
                           text: ' /${max.toInt()}',
                           style: TextStyle(
                             fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w400,
                             color: _inkFaint,
                           ),
                         ),
@@ -873,7 +874,7 @@ class _MarketScreenState extends State<MarketScreen> {
           maxLines: 1,
           style: TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             color: goldButtonInk(active: onTap != null),
           ),
         ),
@@ -1004,7 +1005,7 @@ class _MarketScreenState extends State<MarketScreen> {
                               '$owned',
                               style: const TextStyle(
                                 fontSize: 9,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w400,
                                 color: Colors.white,
                               ),
                             ),
@@ -1024,7 +1025,7 @@ class _MarketScreenState extends State<MarketScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w400,
                           color: _ink,
                         ),
                       ),
@@ -1035,7 +1036,7 @@ class _MarketScreenState extends State<MarketScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w400,
                           color: _inkSoft,
                         ),
                       ),
@@ -1099,7 +1100,7 @@ class _MarketScreenState extends State<MarketScreen> {
                 'CARAVAN',
                 style: TextStyle(
                   fontSize: 9,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   letterSpacing: 0.9,
                   color: kBoxAccent,
                 ),
@@ -1108,7 +1109,7 @@ class _MarketScreenState extends State<MarketScreen> {
                 '${_caravan.length}/$cap',
                 style: const TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: _ink,
                 ),
               ),
@@ -1139,7 +1140,7 @@ class _MarketScreenState extends State<MarketScreen> {
             'Saved',
             icon: Icons.bookmark_border,
             height: 34,
-            fontSize: 11.5,
+            fontSize: 12,
             badge: _creatures.caravans.length,
             onTap: _savedDialog,
           ),
@@ -1243,8 +1244,8 @@ class _MarketScreenState extends State<MarketScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
                   color: _ink,
                 ),
               ),
@@ -1254,8 +1255,8 @@ class _MarketScreenState extends State<MarketScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
                   color: _inkSoft,
                 ),
               ),
@@ -1298,7 +1299,7 @@ class _MarketScreenState extends State<MarketScreen> {
               'ON THE ROAD',
               style: TextStyle(
                 fontSize: 9,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 letterSpacing: 0.9,
                 color: kBoxAccent,
               ),
@@ -1307,7 +1308,7 @@ class _MarketScreenState extends State<MarketScreen> {
               '🐫 ${_exp.caravanCount}/${_exp.maxCaravanSlots}',
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: _exp.caravansFull ? CreamPalette.warn : _ink,
               ),
             ),
@@ -1354,8 +1355,8 @@ class _MarketScreenState extends State<MarketScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
                     color: _ink,
                   ),
                 ),
@@ -1363,8 +1364,8 @@ class _MarketScreenState extends State<MarketScreen> {
               Text(
                 ready ? 'arrived' : _fmt(e.remaining(now)),
                 style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
                   color: _inkSoft,
                 ),
               ),
@@ -1428,7 +1429,7 @@ class _MarketScreenState extends State<MarketScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 15,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       color: _ink,
                     ),
                   ),
@@ -1461,8 +1462,8 @@ class _MarketScreenState extends State<MarketScreen> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w400,
                                           color: _ink,
                                         ),
                                       ),
@@ -1648,7 +1649,7 @@ class _AmountDialogState extends State<_AmountDialog> {
                   cursorColor: CreamPalette.goldDeep,
                   style: const TextStyle(
                     fontSize: 26,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     color: kBoxInk,
                   ),
                   decoration: InputDecoration(
@@ -1681,7 +1682,7 @@ class _AmountDialogState extends State<_AmountDialog> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w400,
                     color: over ? CreamPalette.warn : kBoxInkSoft,
                   ),
                 ),
@@ -1798,7 +1799,7 @@ class _NameDialogState extends State<_NameDialog> {
                 cursorColor: CreamPalette.goldDeep,
                 style: const TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: kBoxInk,
                 ),
                 decoration: InputDecoration(

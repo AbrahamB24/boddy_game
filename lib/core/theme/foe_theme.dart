@@ -306,9 +306,9 @@ class FoE {
       _titleCache[size] ??= TextStyle(
         fontFamily: Voxel.font,
         color: parchment,
-        fontSize: size + 2,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -0.2,
+        fontSize: (size + 2).roundToDouble(),
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0,
         height: 1.2,
         decoration: TextDecoration.none,
       );
@@ -318,8 +318,8 @@ class FoE {
       _valueCache[size] ??= TextStyle(
         fontFamily: Voxel.font,
         color: parchment, // ink on the parchment (was white on the dark theme)
-        fontSize: size + 1,
-        fontWeight: FontWeight.w600,
+        fontSize: (size + 1).roundToDouble().clamp(12.0, 99.0),
+        fontWeight: FontWeight.w400,
         height: 1.25,
         decoration: TextDecoration.none,
       );
@@ -329,7 +329,7 @@ class FoE {
       _labelCache[size] ??= TextStyle(
         fontFamily: Voxel.font,
         color: parchment,
-        fontSize: size + 1,
+        fontSize: (size + 1).roundToDouble().clamp(12.0, 99.0),
         fontWeight: FontWeight.w400,
         height: 1.4,
         decoration: TextDecoration.none,
@@ -340,7 +340,7 @@ class FoE {
       _dimCache[size] ??= TextStyle(
         fontFamily: Voxel.font,
         color: textDim,
-        fontSize: size + 1,
+        fontSize: (size + 1).roundToDouble().clamp(12.0, 99.0),
         fontWeight: FontWeight.w400,
         height: 1.35,
         decoration: TextDecoration.none,

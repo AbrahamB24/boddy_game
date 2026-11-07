@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 
 import '../../../core/theme/cream_kit.dart';
@@ -14,6 +14,7 @@ import '../settlement_controller.dart';
 import 'dev_species_tools.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// THE DEV MENU'S ACTIONS PAGE (user 2026-09-20: "alle dev buttons wie heal all
 /// oder add resources etc. im Devmenü verstecken … ich will alle Menüs so sehen
@@ -201,7 +202,7 @@ class _DevActionsPageState extends State<DevActionsPage> {
                   cursorColor: kBoxInk,
                   style: const TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w400,
                     color: kBoxInk,
                   ),
                   decoration: InputDecoration.collapsed(
@@ -284,8 +285,8 @@ class _DevActionsPageState extends State<DevActionsPage> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
                   color: kBoxInk,
                 ),
               ),
@@ -359,14 +360,14 @@ class _DevActionsPageState extends State<DevActionsPage> {
                     title,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       color: warn ? CreamPalette.warn : kBoxInk,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     help,
-                    style: TextStyle(fontSize: 10.5, color: kBoxInkSoft),
+                    style: TextStyle(fontSize: 11, color: kBoxInkSoft),
                   ),
                 ],
               ),
@@ -391,7 +392,7 @@ class _DevActionsPageState extends State<DevActionsPage> {
             label,
             style: TextStyle(
               fontSize: gold ? 12 : 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               color: gold ? goldButtonInk() : kBoxInk,
             ),
           ),

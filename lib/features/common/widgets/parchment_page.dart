@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -13,6 +13,7 @@ import '../../settlement/widgets/scroll_paper.dart'
         kParchmentLight,
         kParchmentMid;
 import 'app_back_button.dart';
+import '../../../core/ui/game_text.dart';
 
 /// THE PAGE'S SHARED MEASURES (was the page every screen is printed on, until
 /// every screen moved to [MenuScaffold] — user 2026-09-22 removed the dead widget

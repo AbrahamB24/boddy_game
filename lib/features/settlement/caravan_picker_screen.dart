@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -10,6 +10,7 @@ import '../creatures/services/creatures_controller.dart';
 import '../creatures/widgets/creature_card.dart';
 import '../creatures/widgets/picker_detail_panel.dart';
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// Filling ONE PLACE in the Market's caravan — the egg picker's twin (the
 /// Hatchery fills its slot from a SCREEN, not a popup, and the Market follows

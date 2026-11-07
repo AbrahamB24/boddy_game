@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/ui/game_text.dart';
 
 /// THE left-hand detail card every monster picker shares now (user
 /// 2026-10-05, "Konzept 4": a filter bar on top, a fixed detail panel on the
@@ -98,7 +99,7 @@ class PickerDetailPanel extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: FoE.dim(size: 10.5).copyWith(
                               color: kBoxAccent,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w400,
                             ),
                           ),
                         if (rows.isNotEmpty) ...[

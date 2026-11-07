@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -9,6 +9,7 @@ import 'data/resource_icons.dart';
 import 'resource_detail_screen.dart';
 import 'settlement_controller.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 /// ALL RESOURCES AT ONE GLANCE — "Epochen-Regale" (user 2026-09-22): one shelf per
 /// era, its resources on it as tiles (glyph, stock, rate per hour, a bar of how
@@ -145,7 +146,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
                       era == null ? 'Gold' : romanNumeral(era),
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w400,
                         color: kBoxInk,
                       ),
                     ),
@@ -255,7 +256,7 @@ class ResourceTile extends StatelessWidget {
                     _rateText(rate),
                     style: FoE.dim(
                       size: 10.5,
-                    ).copyWith(color: rateColor, fontWeight: FontWeight.w700),
+                    ).copyWith(color: rateColor, fontWeight: FontWeight.w400),
                   ),
                 ],
               ),

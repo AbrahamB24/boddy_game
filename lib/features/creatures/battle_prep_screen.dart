@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -20,8 +20,9 @@ import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/picker_detail_panel.dart';
-import 'widgets/versus_kit.dart';
+import 'widgets/versus_kit.dart';
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 // ── Pre-battle briefing (user 2026-07-24) ───────────────────
 // Before a fight starts you see WHO you're fighting, WHAT clearing it unlocks,
@@ -336,8 +337,8 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
           const Text(
             'REWARDS',
             style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w800,
+              fontSize: 10,
+              fontWeight: FontWeight.w400,
               letterSpacing: 0.9,
               color: kBoxAccent,
             ),
@@ -411,8 +412,8 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
                                 child: Text(
                                   r.text.replaceFirst('New building: ', ''),
                                   style: const TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w400,
                                     color: kBoxInk,
                                   ),
                                 ),
@@ -446,8 +447,8 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
             const Text(
               'SAVED TEAMS',
               style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w800,
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
                 letterSpacing: 0.9,
                 color: kBoxAccent,
               ),
@@ -500,8 +501,8 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
               color: kBoxInk,
             ),
           ),

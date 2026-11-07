@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -23,6 +23,7 @@ import 'settlement_controller.dart';
 import 'work_screen.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// THE WORKBENCH (user 2026-09-20, "Variante 4, Kategorien + Detail").
 ///
@@ -239,7 +240,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                           maxLines: 1,
                           style: const TextStyle(
                             fontSize: 10,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w400,
                             color: _ink,
                           ),
                         ),
@@ -263,7 +264,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
               group.label.toUpperCase(),
               style: const TextStyle(
                 fontSize: 10,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 letterSpacing: 0.9,
                 color: kBoxAccent,
               ),
@@ -320,7 +321,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       color: _ink,
                     ),
                   ),
@@ -331,8 +332,8 @@ class _CraftingScreenState extends State<CraftingScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
                       color: can >= 1 ? CreamPalette.better : CreamPalette.warn,
                     ),
                   ),
@@ -344,7 +345,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                 '×$making',
                 style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: CreamPalette.goldDeep,
                 ),
               ),
@@ -376,7 +377,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                 '$owned',
                 style: const TextStyle(
                   fontSize: 9,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: Colors.white,
                 ),
               ),
@@ -436,7 +437,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontSize: 19,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w400,
                                 color: _ink,
                               ),
                             ),
@@ -460,7 +461,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                             secs == null ? '—' : fmtDuration(secs),
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w400,
                               color: secs == null ? _inkFaint : _ink,
                             ),
                           ),
@@ -535,7 +536,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
     t.toUpperCase(),
     style: const TextStyle(
       fontSize: 10,
-      fontWeight: FontWeight.w800,
+      fontWeight: FontWeight.w400,
       letterSpacing: 0.9,
       color: kBoxAccent,
     ),
@@ -561,7 +562,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                 text: _n(need),
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: color,
                 ),
                 children: [
@@ -569,7 +570,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                     text: ' of ${_n(have)}',
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w400,
                       color: short ? CreamPalette.warn : _inkSoft,
                     ),
                   ),
@@ -594,13 +595,13 @@ class _CraftingScreenState extends State<CraftingScreen> {
         Text(
           'You can make',
           maxLines: 1,
-          style: TextStyle(fontSize: 10.5, color: _inkSoft),
+          style: TextStyle(fontSize: 11, color: _inkSoft),
         ),
         Text(
           can >= kCraftableCap ? '∞' : '$can',
           style: TextStyle(
             fontSize: 22,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             color: can >= 1 ? CreamPalette.better : CreamPalette.warn,
           ),
         ),
@@ -636,7 +637,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 15,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               color: _ink,
             ),
           ),
@@ -790,7 +791,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
             '${resourceEmoji(id)} ${_n(need)} / ${_n(have)}',
             style: const TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               color: _ink,
             ),
           ),
@@ -835,7 +836,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w400,
                       color: CreamPalette.warn,
                     ),
                   ),
@@ -887,7 +888,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                             : 'IN LINE  ${queued.length}/$cap',
                         style: const TextStyle(
                           fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w400,
                           letterSpacing: 0.9,
                           color: kBoxAccent,
                         ),
@@ -941,7 +942,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     color: _ink,
                   ),
                 ),
@@ -953,8 +954,8 @@ class _CraftingScreenState extends State<CraftingScreen> {
                     ? '—'
                     : fmtDuration(total * (1 - progress)),
                 style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
                   color: waiting ? CreamPalette.warn : _inkSoft,
                 ),
               ),

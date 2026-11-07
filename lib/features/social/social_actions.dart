@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -10,6 +10,7 @@ import 'services/pvp_service.dart';
 import 'social_controller.dart';
 import 'widgets/social_kit.dart' show recordLine;
 import 'visit_city_screen.dart';
+import '../../core/ui/game_text.dart';
 
 /// The verbs several panes share — the chat header, the friend list and the
 /// PvP list all offer "visit", "challenge" and "enter the lobby", and they all

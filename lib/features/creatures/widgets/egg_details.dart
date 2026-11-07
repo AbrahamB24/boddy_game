@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/theme/cream_kit.dart' show CreamPalette, kBoxInk;
@@ -15,6 +15,7 @@ import 'gene_bar_toggle.dart';
 import '../../common/widgets/parchment_kit.dart';
 import '../../common/widgets/recess_bar.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// WHAT IS INSIDE AN EGG — the two blocks that answer it, shared by the
 /// Hatchery's slot panel and the bag's egg screen (user 2026-07-27: the bag's
@@ -73,7 +74,7 @@ class EggFacts extends StatelessWidget {
               'PARENTS',
               style: FoE.dim(size: 9).copyWith(
                 color: _kInkFaint,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 letterSpacing: 1,
               ),
             ),

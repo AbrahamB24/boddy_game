@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../creatures/models/creature_enums.dart';
 import '../../creatures/models/species_balance.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/ui/game_text.dart';
 
 /// BUDGETS & LIMITS, TO READ (user 2026-09-20: "das genau gleiche bei Budgets und
 /// Grenzen" — shown with an explanation, changes by request).
@@ -121,8 +122,8 @@ class DevBudgetsView extends StatelessWidget {
               'Zum Ändern: sag mir, welche Zahl und auf welchen Wert — ich '
               'passe sie an.',
               style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
                 color: kBoxInkSoft,
               ),
             ),
@@ -147,7 +148,7 @@ class DevBudgetsView extends StatelessWidget {
               label,
               style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: kBoxInk,
               ),
             ),
@@ -157,8 +158,8 @@ class DevBudgetsView extends StatelessWidget {
             child: Text(
               value,
               style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
                 color: kBoxAccent,
               ),
             ),
@@ -236,7 +237,7 @@ class DevBudgetsView extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               height: 1.45,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w400,
               color: kBoxInkSoft,
             ),
           ),
@@ -266,7 +267,7 @@ class DevBudgetsView extends StatelessWidget {
         textAlign: first ? TextAlign.left : TextAlign.right,
         style: TextStyle(
           fontSize: head ? 10 : 12,
-          fontWeight: head ? FontWeight.w800 : FontWeight.w700,
+          fontWeight: head ? FontWeight.w400 : FontWeight.w400,
           letterSpacing: head ? 0.6 : 0,
           color: color ?? (head ? kBoxAccent : kBoxInk),
         ),

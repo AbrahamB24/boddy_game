@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../data/building_definitions.dart';
 import '../models/placed_building.dart';
 import '../widgets/building_icon.dart';
+import '../../../core/ui/game_text.dart';
 
 /// A minimal, DISPLAY-ONLY building popup for the read-only "visit a
 /// friend's city" screen — modelled on creature_detail_screen.dart's

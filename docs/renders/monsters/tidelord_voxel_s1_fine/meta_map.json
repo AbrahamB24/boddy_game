@@ -1,0 +1,76 @@
+{
+  "monster": "tidelord",
+  "style": "pro",
+  "view": "map",
+  "cols": 8,
+  "headings": {
+    "se": "+x",
+    "ne": "+y",
+    "nw": "-x",
+    "sw": "-y"
+  },
+  "anims": {
+    "se": {
+      "walk": {
+        "sheet": "se_walk.png",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "idle": {
+        "sheet": "se_idle.png",
+        "frames": 8,
+        "fps": 8,
+        "loop": true
+      }
+    },
+    "ne": {
+      "walk": {
+        "sheet": "ne_walk.png",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "idle": {
+        "sheet": "ne_idle.png",
+        "frames": 8,
+        "fps": 8,
+        "loop": true
+      }
+    },
+    "nw": {
+      "walk": {
+        "sheet": "nw_walk.png",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "idle": {
+        "sheet": "nw_idle.png",
+        "frames": 8,
+        "fps": 8,
+        "loop": true
+      }
+    },
+    "sw": {
+      "walk": {
+        "sheet": "sw_walk.png",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "idle": {
+        "sheet": "sw_idle.png",
+        "frames": 8,
+        "fps": 8,
+        "loop": true
+      }
+    }
+  },
+  "frame_w": 543,
+  "frame_h": 434,
+  "anchor": [
+    271,
+    298
+  ]
+}

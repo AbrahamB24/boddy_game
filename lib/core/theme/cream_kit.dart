@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../ui/pressable.dart';
 import 'fachwerk.dart';
+import 'ui_art.dart';
 import 'strategy_theme.dart';
 import 'voxel_kit.dart';
 import 'voxel_icons.dart';
+import '../ui/game_text.dart';
 
 // ── The cream kit: the building detail dialog's look, as shared parts ──────
 //
@@ -508,6 +510,11 @@ class MenuScaffold extends StatelessWidget {
   /// [MenuScaffold].
   final CreamPatternStyle pattern;
 
+  /// The main screen's own materials (user 2026-11-05): walnut ground, the
+  /// header's timber bar with its terracotta eave as the title, a studded
+  /// walnut board for the body, a bronze medal to leave by. See [UiBar].
+  final bool timber;
+
   const MenuScaffold({
     super.key,
     required this.title,
@@ -520,10 +527,118 @@ class MenuScaffold extends StatelessWidget {
     this.back,
     this.floatingActionButton,
     this.pattern = CreamPatternStyle.none,
+    this.timber = false,
   });
 
+  /// [timber]'s layout: a bar across the top like the main screen's header,
+  /// the board under it.
+  Widget _timberBody(BuildContext context, bool nested) {
+    final side = MediaQuery.paddingOf(context);
+    final board = Padding(padding: const EdgeInsets.fromLTRB(6, 4, 4, 4), child: child);
+    if (!showHeader) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+          8 + side.left,
+          8 + side.top,
+          8 + side.right,
+          10 + side.bottom,
+        ),
+        child: board,
+      );
+    }
+    final goesBack = back ?? nested;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        UiBar(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              18 + side.left,
+              side.top + 31,
+              18 + side.right,
+              10,
+            ),
+            child: SizedBox(
+              height: 34,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        letterSpacing: 0.4,
+                        color: UiArt.ink,
+                      ),
+                    ),
+                  ),
+                  if (trailing != null) ...[
+                    trailing!,
+                    const SizedBox(width: 10),
+                  ],
+                  if (showClose)
+                    Semantics(
+                      label: goesBack ? 'Back' : 'Close',
+                      button: true,
+                      child: Pressable(
+                        onTap:
+                            onClose ?? () => Navigator.of(context).maybePop(),
+                        child: IronButton(
+                          size: 34,
+                          child: VoxelIcon(
+                            goesBack ? VoxelGlyph.back : VoxelGlyph.close,
+                            size: 17,
+                            color: UiArt.ink,
+                            shadow: false,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              8 + side.left,
+              6,
+              8 + side.right,
+              10 + side.bottom,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: board,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => _MenuDepth(
+  Widget build(BuildContext context) => timber
+      ? _MenuDepth(
+          builder: (nested) => Scaffold(
+            backgroundColor: UiWood.groundBottom,
+            floatingActionButton: floatingActionButton,
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                const Positioned.fill(child: UiGround()),
+                _timberBody(context, nested),
+              ],
+            ),
+          ),
+        )
+      : _buildCream(context);
+
+  Widget _buildCream(BuildContext context) => _MenuDepth(
     builder: (nested) => Scaffold(
       backgroundColor: CreamPalette.groundBottom,
       floatingActionButton: floatingActionButton,
@@ -751,7 +866,7 @@ class CreamHeading extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 letterSpacing: 1.1,
                 color: kBoxAccent,
               ),
@@ -841,7 +956,7 @@ class EmptySeat extends StatelessWidget {
               label!,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: CreamPalette.tan,
               ),
             ),

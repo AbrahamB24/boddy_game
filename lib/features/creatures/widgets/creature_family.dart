@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart'
     show CreamPalette, kBoxInk, kBoxInkSoft;
@@ -9,6 +9,7 @@ import '../models/creature_instance.dart';
 import 'battle_scene.dart' show TypePodium;
 import 'creature_sprite.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // ── THE MONSTER FAMILY (user 2026-09-20: "Monsterkacheln müssen vereinheitlicht
 // werden. Aktuell gibt es sehr viele verschiedene Darstellungen") ──
@@ -337,7 +338,7 @@ class CreatureSeatTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: FoE.label(
                       size: 9.5 * u,
-                    ).copyWith(color: kBoxInkSoft, fontWeight: FontWeight.w700),
+                    ).copyWith(color: kBoxInkSoft, fontWeight: FontWeight.w400),
                   ),
                 FittedBox(
                   fit: BoxFit.scaleDown,

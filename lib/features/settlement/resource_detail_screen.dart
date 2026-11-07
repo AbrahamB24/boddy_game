@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -10,9 +10,10 @@ import 'models/placed_building.dart';
 import 'services/game_engine.dart';
 import 'settlement_controller.dart';
 import 'sheets/building_detail_dialog.dart';
-import 'widgets/building_icon.dart';
+import 'widgets/building_icon.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// ONE RESOURCE, WHOLE (user 2026-09-22, "Epochen-Regale"): what is in the store
 /// and how full it is, what MAKES it and what EATS it, and where the room to keep
@@ -217,7 +218,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
             textAlign: TextAlign.center,
             style: FoE.dim(size: 11.5).copyWith(
               color: full ? CreamPalette.warn : kBoxInkSoft,
-              fontWeight: full ? FontWeight.w800 : null,
+              fontWeight: full ? FontWeight.w400 : null,
             ),
           ),
         ],
@@ -318,7 +319,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
     text.toUpperCase(),
     style: TextStyle(
       fontSize: 11,
-      fontWeight: FontWeight.w800,
+      fontWeight: FontWeight.w400,
       letterSpacing: 1.1,
       color: kBoxAccent,
     ),
@@ -379,7 +380,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
             'Total',
             style: FoE.label(
               size: 13,
-            ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+            ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
           ),
         ),
         Text(
@@ -417,14 +418,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
           style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
         ),
         const SizedBox(height: 8),
-        if (baseCap > 0)
-          _row(
-            icon: const Text('🏛', style: TextStyle(fontSize: 24)),
-            name: 'The settlement itself',
-            sub: 'base room',
-            value: '+${baseCap.toStringAsFixed(0)}',
-            color: kBoxInk,
-          ),
+        if (baseCap > 0) _baseRoomRow(baseCap),
         for (final s in sources)
           _builtRow(s.$1, s.$2, '+${s.$3.toStringAsFixed(0)}', color: kBoxInk),
         const SizedBox(height: 6),
@@ -436,6 +430,32 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
           primary: full,
         ),
       ],
+    );
+  }
+
+  /// The base room is the Castle's, whether it comes from its own storage
+  /// effects or from the flat fallback dial (goods no store holds yet, e.g.
+  /// Timber Frame). Shown as the real placed Castle — its art, tappable like
+  /// every other source — and only falls back to a plain row without one.
+  Widget _baseRoomRow(double baseCap) {
+    for (final b in _ctrl.buildings) {
+      final def = placedDefOf(b);
+      if (def != null && def.id == 'castle') {
+        return _builtRow(
+          b,
+          def,
+          '+${baseCap.toStringAsFixed(0)}',
+          sub: 'base room',
+          color: kBoxInk,
+        );
+      }
+    }
+    return _row(
+      icon: const Text('🏛', style: TextStyle(fontSize: 24)),
+      name: 'Castle',
+      sub: 'base room',
+      value: '+${baseCap.toStringAsFixed(0)}',
+      color: kBoxInk,
     );
   }
 
@@ -470,7 +490,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
         label,
         style: FoE.label(size: 13).copyWith(
           color: primary ? goldButtonInk() : kBoxInk,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
         ),
       ),
     ),
@@ -536,7 +556,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: FoE.label(
                   size: 12.5,
-                ).copyWith(color: kBoxInk, fontWeight: FontWeight.w700),
+                ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
               ),
               if (sub != null)
                 Text(

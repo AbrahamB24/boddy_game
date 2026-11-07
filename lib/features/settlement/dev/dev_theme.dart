@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/ui/pressable.dart';
 import '../../creatures/models/species_def.dart' show kSpeciesDefs;
 import 'dev_foe.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/ui/game_text.dart';
 
 /// The dev forms' Material theme: cream (user 2026-09-20, "Dev Mode Variante 3").
 ///
@@ -57,9 +58,9 @@ ThemeData buildDevModeTheme() {
       unselectedLabelColor: inkSoft,
       indicatorColor: CreamPalette.goldDeep,
       dividerColor: line,
-      labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+      labelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 13),
       unselectedLabelStyle: const TextStyle(
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w400,
         fontSize: 13,
       ),
     ),
@@ -71,7 +72,7 @@ ThemeData buildDevModeTheme() {
       labelStyle: TextStyle(color: inkSoft, fontSize: 12),
       floatingLabelStyle: const TextStyle(
         color: CreamPalette.accent,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w400,
       ),
       hintStyle: TextStyle(color: inkFaint),
       helperStyle: TextStyle(color: inkSoft, fontSize: 11),
@@ -90,14 +91,14 @@ ThemeData buildDevModeTheme() {
     ),
     popupMenuTheme: const PopupMenuThemeData(
       color: CreamPalette.paperBottom,
-      textStyle: TextStyle(color: ink, fontWeight: FontWeight.w600),
+      textStyle: TextStyle(color: ink, fontWeight: FontWeight.w400),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: CreamPalette.paperTop,
       titleTextStyle: const TextStyle(
         color: ink,
         fontSize: 17,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w400,
       ),
       contentTextStyle: TextStyle(color: inkSoft, fontSize: 13, height: 1.4),
     ),
@@ -128,13 +129,13 @@ ThemeData buildDevModeTheme() {
     chipTheme: ChipThemeData(
       backgroundColor: CreamPalette.paperBottom,
       selectedColor: CreamPalette.gold,
-      labelStyle: const TextStyle(color: ink, fontWeight: FontWeight.w700),
+      labelStyle: const TextStyle(color: ink, fontWeight: FontWeight.w400),
       side: BorderSide(color: line),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: CreamPalette.accent,
-        textStyle: const TextStyle(fontWeight: FontWeight.w800),
+        textStyle: const TextStyle(fontWeight: FontWeight.w400),
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
@@ -142,7 +143,7 @@ ThemeData buildDevModeTheme() {
         backgroundColor: CreamPalette.gold,
         foregroundColor: ink,
         elevation: 0,
-        textStyle: const TextStyle(fontWeight: FontWeight.w800),
+        textStyle: const TextStyle(fontWeight: FontWeight.w400),
         shape: RoundedRectangleBorder(borderRadius: vr(12)),
       ),
     ),
@@ -219,7 +220,7 @@ Future<bool> confirmDeleteDialog(
                         'Delete',
                         style: FoE.label(size: 12).copyWith(
                           color: Colors.white,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ),

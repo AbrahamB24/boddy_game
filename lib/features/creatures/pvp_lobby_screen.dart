@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase/supabase_client.dart';
@@ -20,6 +20,7 @@ import 'services/creatures_controller.dart';
 import 'services/pvp_combatant_snapshot.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/versus_kit.dart';
+import '../../core/ui/game_text.dart';
 
 /// The PvP lobby (user 2026-09-15): opened once BOTH sides have accepted a
 /// challenge (`status == accepted`). Each player picks their team here — via
@@ -348,7 +349,7 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen> {
               pending ? 'Withdraw' : 'Leave lobby',
               style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: CreamPalette.warn,
               ),
             ),
@@ -382,7 +383,7 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen> {
                     'Change team',
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       color: kBoxInk,
                     ),
                   ),

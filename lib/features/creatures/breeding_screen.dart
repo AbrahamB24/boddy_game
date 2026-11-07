@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/snack.dart';
@@ -27,6 +27,7 @@ import '../common/widgets/recess_bar.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 // The Breeding Hut: MATING, and nothing after it (user 2026-07-26 — "Eggs
 // müssen nicht angezeigt werden … und die Hatchery auch nicht, da dies ein
@@ -370,7 +371,7 @@ class _BreedingPaneState extends State<BreedingPane> {
                 text: '${(favored * 100).round()} %',
                 style: const TextStyle(
                   color: CreamPalette.better,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
               const TextSpan(text: ' the better parent\'s'),
@@ -411,7 +412,7 @@ class _BreedingPaneState extends State<BreedingPane> {
               style: TextStyle(
                 fontSize: 17,
                 height: 1.1,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: goldButtonInk(active: canStart),
               ),
             ),
@@ -425,7 +426,7 @@ class _BreedingPaneState extends State<BreedingPane> {
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.1,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w400,
                   color: affordable
                       ? goldButtonInk(active: canStart)
                       : CreamPalette.warn,
@@ -669,7 +670,7 @@ class _BreedingPaneState extends State<BreedingPane> {
                   : '   no breeders posted',
               style: TextStyle(
                 color: saved ? CreamPalette.better : _pageInkFaint,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
@@ -772,7 +773,7 @@ class _BreedingPaneState extends State<BreedingPane> {
           .copyWith(
             height: 1,
             color: better ? CreamPalette.better : _pageInkFaint,
-            fontWeight: better ? FontWeight.w800 : FontWeight.w400,
+            fontWeight: better ? FontWeight.w400 : FontWeight.w400,
           ),
     ),
   );

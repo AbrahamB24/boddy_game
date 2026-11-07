@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/fachwerk.dart' show Fachwerk;
@@ -33,6 +33,7 @@ import 'services/region_dungeon.dart'
     show spawnPathBattle, scriptedFirstBattleEnemy;
 import '../../core/theme/voxel_icons.dart';
 import '../../core/theme/voxel_kit.dart' show VoxelBackdrop, vr;
+import '../../core/ui/game_text.dart';
 
 // ── The Overworld (the campaign) ────────────────────────────
 // ONE straight line you climb (linear rebuild 2026-07-24). Numbered BATTLES,
@@ -281,7 +282,7 @@ class _OverworldScreenState extends State<OverworldScreen> {
                     style: TextStyle(
                       fontSize: 17,
                       height: 1.1,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       color: ink,
                     ),
                   ),
@@ -372,8 +373,8 @@ class _OverworldScreenState extends State<OverworldScreen> {
             'Overworld',
             style: TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: CreamPalette.paperTop,
+              fontWeight: FontWeight.w400,
+              color: kBoxInk,
             ),
           ),
           const Spacer(),
@@ -403,7 +404,7 @@ class _OverworldScreenState extends State<OverworldScreen> {
                       'Survival',
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w400,
                         color: kBoxInk,
                       ),
                     ),
@@ -451,7 +452,7 @@ class _OverworldScreenState extends State<OverworldScreen> {
               '${t.earned} / ${t.max}',
               style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: kBoxInk,
               ),
             ),

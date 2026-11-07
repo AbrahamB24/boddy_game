@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../theme/cream_kit.dart';
 import '../theme/voxel_kit.dart' show vr;
+import 'game_text.dart';
 
 /// A scrolling area that SAYS when there is more (user 2026-09-22, the fight
 /// card's rewards: "Reward muss ausklappbar sein oder irgendwie signalisieren,
@@ -132,8 +133,8 @@ class _ScrollCueState extends State<ScrollCue> {
                   child: Text(
                     vertical ? '▾ more' : '▸',
                     style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
                       color: CreamPalette.ink,
                     ),
                   ),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 
 import '../data/resource_icons.dart';
@@ -6,6 +6,7 @@ import 'dev_foe.dart';
 import '../data/gather_defs.dart';
 import '../data/goods_definitions.dart';
 import '../services/game_defs_controller.dart';
+import '../../../core/ui/game_text.dart';
 
 /// Dev Mode → Resources: the four dials that decide what an expedition is worth
 /// (user 2026-07-25).

@@ -4,8 +4,9 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
-    show compute, setEquals, visibleForTesting;
+    show ValueListenable, ValueNotifier, compute, setEquals, visibleForTesting;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../data/building_definitions.dart' show kGridCols, kGridRows;
@@ -74,18 +75,53 @@ class TerrainLayer extends StatefulWidget {
   @visibleForTesting
   static bool debugDrawOneByOne = false;
 
+  /// Test hook: no wind, no drifting water — the picture stands still, so a
+  /// test can compare it pixel for pixel.
+  @visibleForTesting
+  static bool debugAnimate = true;
+
   @visibleForTesting
   static Future<ui.Image> levelTile(ui.Image image) =>
       _TerrainData._levelled(image);
 }
 
-class _TerrainLayerState extends State<TerrainLayer> {
+class _TerrainLayerState extends State<TerrainLayer>
+    with SingleTickerProviderStateMixin {
   _TerrainData? _data;
+
+  /// Seconds of wind and water, advanced about 15 times a second — the
+  /// terrain's moving half repaints on it, its still half never does.
+  final ValueNotifier<double> _time = ValueNotifier<double>(0);
+  /// The animals walk on their own, faster clock (about 30 fps) — their
+  /// layer is small, so repainting it often is cheap.
+  final ValueNotifier<double> _fauna = ValueNotifier<double>(0);
+  Ticker? _ticker;
+  Duration _last = Duration.zero;
+  Duration _lastFauna = Duration.zero;
 
   @override
   void initState() {
     super.initState();
     _resolve();
+    if (TerrainLayer.debugAnimate) {
+      _ticker = createTicker((elapsed) {
+        if ((elapsed - _lastFauna).inMilliseconds >= 33) {
+          _lastFauna = elapsed;
+          _fauna.value = elapsed.inMilliseconds / 1000.0;
+        }
+        if ((elapsed - _last).inMilliseconds < 66) return;
+        _last = elapsed;
+        _time.value = elapsed.inMilliseconds / 1000.0;
+      })..start();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.dispose();
+    _time.dispose();
+    _fauna.dispose();
+    super.dispose();
   }
 
   @override
@@ -124,7 +160,25 @@ class _TerrainLayerState extends State<TerrainLayer> {
     if (data == null || data.images[_kGrass] == null) {
       return const SizedBox.shrink();
     }
-    return CustomPaint(size: isoCanvasSize, painter: _TerrainPainter(data));
+    // Two layers: the still ground (grass, sand, shadows) is drawn once and
+    // cached; the moving one (water, props) is redrawn as the time ticks.
+    return SizedBox.fromSize(
+      size: isoCanvasSize,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          RepaintBoundary(
+            child: CustomPaint(painter: _TerrainPainter(data)),
+          ),
+          RepaintBoundary(
+            child: CustomPaint(painter: _TerrainLivePainter(data, _time)),
+          ),
+          RepaintBoundary(
+            child: CustomPaint(painter: _FaunaPainter(data, _fauna)),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -132,58 +186,168 @@ class _TerrainLayerState extends State<TerrainLayer> {
 // The terrain is planned in a background isolate, and a ui.Image cannot cross
 // that boundary — so the plan speaks in these kind ids and the painter looks
 // the picture up by them.
-const int _kStone = 0,
-    _kStoneFlat = 1,
-    _kStoneBoulder = 2,
-    _kHeather = 3,
-    _kGorse = 4,
-    _kConifer = 5,
-    _kBroadleaf = 6,
-    _kDriftwood = 7,
-    _kShell = 8,
-    _kGrass = 9;
+//
+// Every prop picture is rendered in the BUILDINGS' pipeline (tool/blender/
+// make_prop.py) at the buildings' pixel density, and is drawn at its native
+// size, never rescaled ([_kPropPx]) — so a block of a tree is a block of a
+// house. Size variety comes from different pictures, not from stretching one.
+const int _kStoneA = 0, // stones: pebble-sized .. big
+    _kStoneB = 1,
+    _kStoneC = 2,
+    _kStoneD = 3,
+    _kStoneE = 4,
+    _kStoneF = 5, // a handful of pebbles
+    _kFlowersA = 6, // flower patches
+    _kFlowersD = 9,
+    _kBushA = 10, // bushes
+    _kBushD = 13,
+    _kConiferS = 14, // trees: small, medium, large
+    _kConiferL = 16,
+    _kBroadleafS = 17,
+    _kBroadleafL = 19,
+    _kDriftwoodA = 20,
+    _kShellA = 22,
+    _kTuft = 24,
+    _kFern = 25,
+    _kStump = 26,
+    _kLog = 27,
+    _kReeds = 28,
+    // Landmarks (user 2026-11-05: ruins, a stranded boat ... "alles was die
+    // Spielwelt lebendig machen kann"), rendered by make_life.py.
+    _kRuinWall = 29,
+    _kRuinTower = 30,
+    _kRuinArch = 31,
+    _kRuinColumns = 32,
+    _kMenhirs = 33,
+    _kWagon = 34,
+    _kCampfire = 35,
+    _kWell = 36,
+    _kBoatWreck = 37,
+    _kBoatRow = 38,
+    _kWhaleRibs = 39,
+    _kFlotsam = 40,
+    _kGrass = 41,
+    _kSandTile = 42,
+    _kWaterTile = 43,
+    // Animal pictures, drawn by the moving fauna layer (see [_FaunaPainter]).
+    _kFSheepSe = 44,
+    _kFSheepNe = 45,
+    _kFSheepGraze = 46,
+    _kFDeerSe = 47,
+    _kFDeerNe = 48,
+    _kFDeerGraze = 49,
+    _kFRabbitSe = 50,
+    _kFRabbitNe = 51,
+    _kFGullSe = 52,
+    _kFGullNe = 53,
+    _kFDuckSe = 54,
+    _kFDuckNe = 55,
+    _kFGullUpSe = 56,
+    _kFGullDownSe = 57,
+    _kFGullUpNe = 58,
+    _kFGullDownNe = 59,
+    _kFCrab = 60,
+    _kFButterOpen = 61,
+    _kFButterShut = 62,
+    _kFFoxSe = 63,
+    _kFFoxNe = 64,
+    _kFBoarSe = 65,
+    _kFBoarNe = 66,
+    _kFCowSe = 67,
+    _kFCowNe = 68,
+    _kFCowGraze = 69,
+    _kFFrog = 70,
+    _kFCrowUpSe = 71,
+    _kFCrowDownSe = 72,
+    _kFCrowUpNe = 73,
+    _kFCrowDownNe = 74,
+    _kFHawkSe = 75,
+    _kFHawkNe = 76;
+
+/// Image pixels per canvas pixel, for every prop picture: the render scale
+/// (5) times the shipping density (960 / 1227) — the same number the
+/// buildings' art is drawn at.
+const double _kPropPx = 5 * 960 / 1227;
+
+/// Stones are drawn at this fraction of their picture size, and the bottom
+/// [_kStoneSink] of each picture is cut off so the rock sits sunk in the ground.
+const double _kStoneScale = 0.6;
+const double _kStoneSink = 0.28;
+
+/// The remaining picture is squashed to this fraction of its height.
+const double _kStoneFlat = 0.6;
 
 /// The props that STAND, and so cast a shadow on the ground (user 2026-09-22:
-/// "den Schatten jetzt auch auf den Rest der Map"): trees and stones. Flat
-/// things — dirt, shells, driftwood, the little flowers — lie in the ground and
-/// have none worth drawing.
-const Set<int> _kShadowCasters = {
-  _kStone,
-  _kStoneFlat,
-  _kStoneBoulder,
-  _kConifer,
-  _kBroadleaf,
-};
+/// "den Schatten jetzt auch auf den Rest der Map"). Flat things — flowers,
+/// tufts, shells, driftwood — lie in the ground and have none worth drawing.
+bool _castsShadow(int kind) =>
+    kind <= _kStoneF ||
+    (kind >= _kBushA && kind <= _kBroadleafL) ||
+    kind == _kStump ||
+    kind == _kLog ||
+    (kind >= _kRuinWall && kind <= _kFlotsam && kind != _kWhaleRibs);
 
 /// How deep each caster's shadow lies on the ground, as a fraction of its
-/// picture's width (see `castShadowMask`'s `groundDepth`). Without it a tree's
-/// shadow is a hair-thin strip. A crown covers a patch, so trees get a wide,
-/// SHALLOW ellipse (0.14 — 0.22 read too round); stones are compact, so theirs
-/// is smaller and hugs the rock.
-const Map<int, double> _kShadowDepth = {
-  _kConifer: 0.14,
-  _kBroadleaf: 0.14,
-  _kStone: 0.08,
-  _kStoneFlat: 0.08,
-  _kStoneBoulder: 0.08,
-};
+/// picture's width (see `castShadowMask`'s `groundDepth`). A crown covers a
+/// patch, so trees get a wide, SHALLOW ellipse; stones are compact.
+double _shadowDepth(int kind) {
+  if (kind >= _kConiferS && kind <= _kBroadleafL) return 0.14;
+  if (kind >= _kBushA && kind <= _kBushD) return 0.10;
+  return 0.08;
+}
 
-const List<String> _kAssets = [
-  'assets/images/terrain/prop_stone.webp', // _kStone
-  // Two more rock silhouettes (user 2026-09-14: "Die Steine bitte in
-  // unterschiedlichen Grössen und Formen") — outcrops/beach pebbles pick
-  // among all three instead of rescaling one shape.
-  'assets/images/terrain/prop_stone_flat.webp',
-  'assets/images/terrain/prop_stone_boulder.webp',
-  'assets/images/terrain/prop_wildflower_heather.webp',
-  'assets/images/terrain/prop_wildflower_gorse.webp',
-  'assets/images/terrain/prop_tree_conifer.webp',
-  'assets/images/terrain/prop_tree_broadleaf.webp',
+final List<String> _kAssets = [
+  'assets/images/terrain/prop_stone_a.webp',
+  'assets/images/terrain/prop_stone_b.webp',
+  'assets/images/terrain/prop_stone_c.webp',
+  'assets/images/terrain/prop_stone_d.webp',
+  'assets/images/terrain/prop_stone_e.webp',
+  'assets/images/terrain/prop_stone_f.webp',
+  'assets/images/terrain/prop_flowers_a.webp',
+  'assets/images/terrain/prop_flowers_b.webp',
+  'assets/images/terrain/prop_flowers_c.webp',
+  'assets/images/terrain/prop_flowers_d.webp',
+  'assets/images/terrain/prop_bush_a.webp',
+  'assets/images/terrain/prop_bush_b.webp',
+  'assets/images/terrain/prop_bush_c.webp',
+  'assets/images/terrain/prop_bush_d.webp',
+  'assets/images/terrain/prop_conifer_s.webp',
+  'assets/images/terrain/prop_conifer_m.webp',
+  'assets/images/terrain/prop_conifer_l.webp',
+  'assets/images/terrain/prop_broadleaf_s.webp',
+  'assets/images/terrain/prop_broadleaf_m.webp',
+  'assets/images/terrain/prop_broadleaf_l.webp',
   // Beach-only detail (user 2026-09-14: "der Strand soll noch Holz und
   // kleine Muscheln haben").
-  'assets/images/terrain/prop_driftwood.webp',
-  'assets/images/terrain/prop_shell.webp',
+  'assets/images/terrain/prop_driftwood_a.webp',
+  'assets/images/terrain/prop_driftwood_b.webp',
+  'assets/images/terrain/prop_shell_a.webp',
+  'assets/images/terrain/prop_shell_b.webp',
+  'assets/images/terrain/prop_tuft.webp',
+  'assets/images/terrain/prop_fern.webp',
+  'assets/images/terrain/prop_stump.webp',
+  'assets/images/terrain/prop_log_a.webp',
+  'assets/images/terrain/prop_reeds.webp',
+  for (final n in _kLandmarkFiles) 'assets/images/terrain/life_$n.webp',
   'assets/images/terrain/grass_tile.webp', // _kGrass
+  'assets/images/terrain/sand_tile.webp', // _kSandTile
+  'assets/images/terrain/water_tile.webp', // _kWaterTile
+  for (final n in _kFaunaFiles) 'assets/images/terrain/life_$n.webp',
+];
+
+const List<String> _kLandmarkFiles = [
+  'ruin_wall', 'ruin_tower', 'ruin_arch', 'ruin_columns', 'menhirs', 'wagon',
+  'campfire', 'well', 'boat_wreck', 'boat_row', 'whale_ribs', 'flotsam', // 29..40
+];
+
+// In the order of the [_kFSheepSe]… ids.
+const List<String> _kFaunaFiles = [
+  'sheep_se', 'sheep_ne', 'sheep_graze', 'deer_se', 'deer_ne', 'deer_graze',
+  'rabbit_se', 'rabbit_ne', 'gull_se', 'gull_ne', 'duck_se', 'duck_ne',
+  'gullfly_up', 'gullfly_down', 'gullfly_up_ne', 'gullfly_down_ne', 'crab',
+  'butterfly_open', 'butterfly_shut', 'fox_se', 'fox_ne', 'boar_se', 'boar_ne',
+  'cow_se', 'cow_ne', 'cow_graze', 'frog', 'crow_up_se', 'crow_down_se',
+  'crow_up_ne', 'crow_down_ne', 'hawk_se', 'hawk_ne',
 ];
 
 /// The ground art plus the worked-out terrain for one region.
@@ -215,6 +379,40 @@ class _TerrainData {
 
   /// Every prop as one sprite-sheet draw: an [RSTransform] and a source rect
   /// per prop, in the plan's own depth order. Worked out once per plan.
+  /// The same props, re-posable every frame (see [_SwayBatch]).
+  late final _SwayBatch? sway = sheets == null
+      ? null
+      : _SwayBatch.build(plan.props, images, sheets!.propSlots);
+
+  /// Props that can stand in front of an animal (not rotated debris), as prop
+  /// offsets sorted by their foot's screen y, with that y alongside and the
+  /// tallest picture's height — the fauna layer redraws those over an animal
+  /// that walks behind them.
+  late final ({List<int> offsets, List<double> footY, double maxH}) occluders =
+      () {
+    final props = plan.props;
+    final list = <(double, int)>[];
+    var maxH = 0.0;
+    for (var o = 0; o < props.length; o += _propStride) {
+      final kind = props[o].toInt();
+      final image = kind < images.length ? images[kind] : null;
+      if (image == null || props[o + 6] != 0) continue;
+      final destH = image.height / _kPropPx * props[o + 3];
+      if (destH > maxH) maxH = destH;
+      final foot = gridToScreen(
+        props[o + 1] + 0.5 + props[o + 4],
+        props[o + 2] + 0.5 + props[o + 5],
+      );
+      list.add((foot.dy, o));
+    }
+    list.sort((a, b) => a.$1.compareTo(b.$1));
+    return (
+      offsets: [for (final e in list) e.$2],
+      footY: [for (final e in list) e.$1],
+      maxH: maxH,
+    );
+  }();
+
   late final (Float32List, Float32List)? propBatch = sheets?.propBatch(
     plan.props,
     images,
@@ -269,9 +467,9 @@ class _TerrainData {
 
   static Future<_TerrainData> _build(Set<int> region) async {
     final images = await (_imagesFuture ??= _loadImages());
-    var available = 0;
+    final available = Uint8List(_kGrass);
     for (var k = 0; k < _kGrass; k++) {
-      if (images[k] != null) available |= 1 << k;
+      if (images[k] != null) available[k] = 1;
     }
     final plan = await compute(
       _planTerrain,
@@ -300,10 +498,10 @@ class _TerrainData {
   static Future<List<ui.Image?>> _loadShadows(List<ui.Image?> images) =>
       Future.wait([
         for (var k = 0; k < images.length; k++)
-          if (_kShadowCasters.contains(k) && images[k] != null)
+          if (_castsShadow(k) && images[k] != null)
             castShadowImage(
               images[k]!,
-              groundDepth: _kShadowDepth[k] ?? 0,
+              groundDepth: _shadowDepth(k),
             )
           else
             Future<ui.Image?>.value(null),
@@ -320,9 +518,35 @@ class _TerrainData {
       codec.dispose();
       // The ground tile is levelled so its repeat leaves no seam (see below).
       if (asset == _kAssets[_kGrass]) return await _levelled(frame.image);
+      if (_kAssets.indexOf(asset) <= _kStoneF) return await _sunk(frame.image);
       return frame.image;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// A stone picture with its bottom [_kStoneSink] cut off, so the foot (the
+  /// picture's bottom edge) lands partway up the rock: it stands sunk in the
+  /// ground. Falls back to the picture as it is.
+  static Future<ui.Image> _sunk(ui.Image image) async {
+    try {
+      final w = image.width;
+      final srcH = (image.height * (1 - _kStoneSink)).roundToDouble();
+      // …and squashed flat: most rocks lie low, they are not round and tall.
+      final h = math.max(1, (srcH * _kStoneFlat).round());
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawImageRect(
+        image,
+        Rect.fromLTWH(0, 0, w.toDouble(), srcH),
+        Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+        Paint()..filterQuality = FilterQuality.medium,
+      );
+      final picture = recorder.endRecording();
+      final out = await picture.toImage(w, h);
+      picture.dispose();
+      return out;
+    } catch (_) {
+      return image;
     }
   }
 
@@ -529,7 +753,7 @@ class _TerrainSheets {
           ? propSlots[kind * 2 + flip]
           : null;
       if (image == null || slot == null) continue;
-      final destW = kIsoTileW * props[o + 3];
+      final destW = image.width / _kPropPx * props[o + 3];
       final scale = destW / image.width;
       final destH = image.height * scale;
       final foot = gridToScreen(
@@ -576,7 +800,7 @@ class _TerrainSheets {
           ? shadowSlots[kind * 2 + flip]
           : null;
       if (mask == null || image == null || slot == null) continue;
-      final destW = kIsoTileW * props[o + 3];
+      final destW = image.width / _kPropPx * props[o + 3];
       final unit = destW / image.width;
       final foot = gridToScreen(
         props[o + 1] + 0.5 + props[o + 4],
@@ -594,7 +818,7 @@ class _TerrainSheets {
 
 class _PlanRequest {
   final List<int> region;
-  final int available;
+  final Uint8List available;
   const _PlanRequest(this.region, this.available);
 }
 
@@ -612,16 +836,21 @@ class _TerrainPlan {
   /// widthInTiles, offX, offY, rotation, flip.
   final Float64List props;
 
+  /// The animals, [_faunaStride] doubles each (see [_TerrainPlanner._scatterFauna]).
+  final Float64List fauna;
+
   const _TerrainPlan({
     required this.beachPositions,
     required this.beachColors,
     required this.waterPositions,
     required this.waterColors,
     required this.props,
+    required this.fauna,
   });
 }
 
 const int _propStride = 8;
+const int _faunaStride = 16;
 
 /// FNV-1a, exactly like tool/blender/terrain.py's own `_hash01` — not because
 /// the two ever need to agree on any SPECIFIC position (Dart picks its own
@@ -648,10 +877,22 @@ _TerrainPlan _planTerrain(_PlanRequest request) =>
 /// synchronously.
 @visibleForTesting
 Object planTerrainForTest(Set<int> region) =>
-    _TerrainPlanner(region, (1 << _kGrass) - 1).plan();
+    _TerrainPlanner(region, Uint8List(_kGrass)..fillRange(0, _kGrass, 1)).plan();
 
 @visibleForTesting
 Float64List propsOfPlanForTest(Object plan) => (plan as _TerrainPlan).props;
+
+/// Test hook: the animals of a plan, [faunaStrideForTest] doubles each —
+/// species, speed, pause, phase, stop count, five (x, y) stops, salt.
+@visibleForTesting
+Float64List faunaOfPlanForTest(Object plan) => (plan as _TerrainPlan).fauna;
+
+@visibleForTesting
+const int faunaStrideForTest = _faunaStride;
+
+/// Test hook: the first and last landmark kind.
+@visibleForTesting
+const (int, int) landmarkKindsForTest = (_kRuinWall, _kFlotsam);
 
 /// One placed prop, ready to be depth-sorted against every other prop
 /// regardless of which kind it is — a tree standing next to a stone must
@@ -675,9 +916,10 @@ class _PropPlacement {
   final double offX;
   final double offY;
 
-  /// Rotation in radians, purely cosmetic — real driftwood/pebbles never lie
-  /// at the same angle twice.
-  final double rotation;
+  /// Scenery is never turned: the pictures are isometric renders, and a
+  /// turned one would no longer sit on the grid. (Kept in the plan so the
+  /// painters need no second code path.)
+  double get rotation => 0;
 
   /// Mirrored left-right about its own foot — free shape variety from a
   /// single sprite (user 2026-09-29: trees "in unterschiedlichen Grössen und
@@ -691,7 +933,6 @@ class _PropPlacement {
     this.widthInTiles, {
     this.offX = 0,
     this.offY = 0,
-    this.rotation = 0,
     this.flip = false,
   });
 }
@@ -703,45 +944,69 @@ class _PropPlacement {
 class _TerrainPlanner {
   final Set<int> buildableRegion;
 
-  // A prop's kind id when its picture actually loaded, else null — the old
-  // "is the image there yet" checks, unchanged.
-  final int? stoneProp;
-  final int? stoneFlatProp;
-  final int? stoneBoulderProp;
-  final int? wildflowerHeatherProp;
-  final int? wildflowerGorseProp;
-  final int? treeConiferProp;
-  final int? treeBroadleafProp;
-  final int? driftwoodProp;
-  final int? shellProp;
+  /// Entry k is 1 when prop kind k's picture loaded.
+  final Uint8List available;
 
-  _TerrainPlanner(this.buildableRegion, int available)
-    : stoneProp = _has(available, _kStone),
-      stoneFlatProp = _has(available, _kStoneFlat),
-      stoneBoulderProp = _has(available, _kStoneBoulder),
-      wildflowerHeatherProp = _has(available, _kHeather),
-      wildflowerGorseProp = _has(available, _kGorse),
-      treeConiferProp = _has(available, _kConifer),
-      treeBroadleafProp = _has(available, _kBroadleaf),
-      driftwoodProp = _has(available, _kDriftwood),
-      shellProp = _has(available, _kShell);
+  _TerrainPlanner(this.buildableRegion, this.available);
 
-  static int? _has(int mask, int kind) => (mask >> kind) & 1 == 1 ? kind : null;
+  bool _has(int kind) => available[kind] == 1;
+
+  /// The kinds [from]..[to] whose pictures are there.
+  List<int> _kinds(int from, int to) => [
+    for (var k = from; k <= to; k++)
+      if (_has(k)) k,
+  ];
 
   _TerrainPlan plan() {
     final bands = _shoreBands();
-    final beach = _shoreMesh(bands.beach, (k, gx, gy) {
-      final ring = bands.beachRing[k] ?? _kBeachRingCap;
+    // The sand also lies UNDER the shallow water: the water's edge is now a
+    // smooth curve (see [_shoreMesh] `smoothRings`) that can pull back into
+    // the outermost water cells, and the bank must show there, not grass.
+    final underWater = {
+      for (final e in bands.waterRing.entries)
+        if (e.value <= _kWaterRingCap) e.key,
+    };
+    final beach = _shoreMesh({...bands.beach, ...underWater}, (k, gx, gy) {
+      final ring = bands.water.contains(k)
+          ? 0
+          : (bands.beachRing[k] ?? _kBeachRingCap);
       final alpha = 1.0 - ring / (_kBeachRingCap + 1);
-      return _jitter(
-        _sand,
-        _hash01('shoretone$gx,$gy'),
-      ).withValues(alpha: alpha);
+      // A TINT for the voxel sand tile (modulated, see paintBeach): a little
+      // lighter or darker per cell, and damp-dark at the waterline.
+      // Smooth noise, not a per-cell roll: a roll shows the tile grid.
+      final v = 0.92 + 0.08 * _noise(gx / 7, gy / 7, 81);
+      final damp = ring == 0 ? 0.86 : 1.0;
+      return Color.from(
+        alpha: alpha,
+        red: v * damp,
+        green: v * damp * 0.98,
+        blue: v * damp * 0.95,
+      );
+    }, outside: (k, gx, gy) {
+      // Water leaves the sand's colour alone; grass is where it fades out.
+      if (bands.water.contains(k)) return null;
+      final v = 0.92 + 0.08 * _noise(gx / 7, gy / 7, 81);
+      return Color.from(alpha: 0, red: v, green: v * 0.98, blue: v * 0.95);
     });
-    final water = _shoreMesh(bands.water, (k, gx, gy) {
-      final ring = bands.waterRing[k] ?? _kWaterRingCap;
-      return _jitter(_waterColorForRing(ring), _hash01('watertone$gx,$gy'));
-    });
+    Color waterTint(int ring, int gx, int gy) {
+      // The depth colour as a TINT for the voxel water tile, which is
+      // rendered in the shallow colour: shallow water is the tile as it is,
+      // deep water the tile darkened and pushed towards blue.
+      final c = _jitter(_waterColorForRing(ring), _noise(gx / 7, gy / 7, 82));
+      return Color.from(
+        alpha: 1,
+        red: (c.r / _waterShallow.r).clamp(0.0, 1.0),
+        green: (c.g / _waterShallow.g).clamp(0.0, 1.0),
+        blue: (c.b / _waterShallow.b).clamp(0.0, 1.0),
+      );
+    }
+    final water = _shoreMesh(
+      bands.water,
+      (k, gx, gy) => waterTint(bands.waterRing[k] ?? _kWaterRingCap, gx, gy),
+      // The smoothed edge bulges into land cells too: they take the shore tint.
+      outside: (k, gx, gy) => waterTint(1, gx, gy),
+      smoothRings: bands.waterRing,
+    );
     final placements = _scatterProps();
     final props = Float64List(placements.length * _propStride);
     for (var i = 0; i < placements.length; i++) {
@@ -750,7 +1015,9 @@ class _TerrainPlanner {
       props[o] = p.kind.toDouble();
       props[o + 1] = p.gx.toDouble();
       props[o + 2] = p.gy.toDouble();
-      props[o + 3] = p.widthInTiles;
+      // Stones are drawn smaller than their pictures (user 2026-11-05: "die
+      // Steine sind zu gross"); their lower part is cropped away on load.
+      props[o + 3] = p.widthInTiles * (p.kind <= _kStoneF ? _kStoneScale : 1.0);
       props[o + 4] = p.offX;
       props[o + 5] = p.offY;
       props[o + 6] = p.rotation;
@@ -762,6 +1029,7 @@ class _TerrainPlanner {
       waterPositions: water.$1,
       waterColors: water.$2,
       props: props,
+      fauna: _scatterFauna(),
     );
   }
 
@@ -770,48 +1038,166 @@ class _TerrainPlanner {
   /// and not a path per cell.
   (Float32List, Int32List) _shoreMesh(
     Set<int> cells,
-    Color Function(int key, int gx, int gy) colorOf,
-  ) {
-    final positions = Float32List(cells.length * 12);
-    final colors = Int32List(cells.length * 6);
-    var i = 0;
-    for (final k in cells) {
-      final (gx, gy) = _cellFromKey(k);
-      final n = gridToScreen(gx.toDouble(), gy.toDouble());
-      final e = gridToScreen(gx + 1.0, gy.toDouble());
-      final s = gridToScreen(gx + 1.0, gy + 1.0);
-      final w = gridToScreen(gx.toDouble(), gy + 1.0);
-      final p = i * 12;
-      positions[p] = n.dx;
-      positions[p + 1] = n.dy;
-      positions[p + 2] = e.dx;
-      positions[p + 3] = e.dy;
-      positions[p + 4] = s.dx;
-      positions[p + 5] = s.dy;
-      positions[p + 6] = n.dx;
-      positions[p + 7] = n.dy;
-      positions[p + 8] = s.dx;
-      positions[p + 9] = s.dy;
-      positions[p + 10] = w.dx;
-      positions[p + 11] = w.dy;
-      final argb = colorOf(k, gx, gy).toARGB32();
-      for (var v = 0; v < 6; v++) {
-        colors[i * 6 + v] = argb;
+    Color Function(int key, int gx, int gy) colorOf, {
+    Color? Function(int key, int gx, int gy)? outside,
+    Map<int, int>? smoothRings,
+  }) {
+    final positions = <double>[];
+    final colors = <int>[];
+    // Colour per GRID CORNER, averaged over the cells meeting there, so the
+    // colour blends smoothly across the cells instead of stepping at every
+    // cell edge (user 2026-11-05: the diamonds were still visible).
+    final corner = <int, Color>{};
+    Color cornerAt(int vx, int vy) => corner.putIfAbsent(_cellKey(vx, vy), () {
+      var r = 0.0, g = 0.0, b = 0.0, a = 0.0;
+      var n = 0;
+      for (final (dx, dy) in const [(-1, -1), (0, -1), (-1, 0), (0, 0)]) {
+        final cx = vx + dx, cy = vy + dy;
+        final ck = _cellKey(cx, cy);
+        final c = cells.contains(ck)
+            ? colorOf(ck, cx, cy)
+            : outside?.call(ck, cx, cy);
+        if (c == null) continue;
+        r += c.r;
+        g += c.g;
+        b += c.b;
+        a += c.a;
+        n++;
       }
-      i++;
+      if (n == 0) return const Color(0x00000000);
+      return Color.from(alpha: a / n, red: r / n, green: g / n, blue: b / n);
+    });
+    // ── Smooth coastline (user 2026-11-05: the river/sea edge was still too
+    // square). The water's cell mask is blurred, read bilinearly between cell
+    // centres, and the mesh is cut along its 0.5 contour on a fine lattice —
+    // the staircase of diamonds becomes a flowing curve. Only the outer water
+    // cells (ring <= 2) are subdivided; deeper ones stay two triangles.
+    const sub = 6;
+    const blurR = 7;
+    final blurW = () {
+      final w = [
+        for (var d = -blurR; d <= blurR; d++) math.exp(-d * d / (2 * 3.0 * 3.0)),
+      ];
+      final total = w.reduce((a, b) => a + b);
+      return [for (final x in w) x / total];
+    }();
+    final blurMemo = <int, double>{};
+    double raw(int x, int y, double def) =>
+        !_inPicture(x, y) ? def : (cells.contains(_cellKey(x, y)) ? 1.0 : 0.0);
+    double blurred(int cx, int cy) =>
+        blurMemo.putIfAbsent(_cellKey(cx, cy), () {
+          final def = cells.contains(_cellKey(cx, cy)) ? 1.0 : 0.0;
+          // Gaussian, sigma 3 cells: the source coastline steps several cells
+          // at a time, and only a wide blur turns those steps into a curve.
+          var sum = 0.0;
+          for (var dy = -blurR; dy <= blurR; dy++) {
+            for (var dx = -blurR; dx <= blurR; dx++) {
+              sum += blurW[dx + blurR] * blurW[dy + blurR] *
+                  raw(cx + dx, cy + dy, def);
+            }
+          }
+          return sum;
+        });
+    double field(double u, double v) {
+      final fx = u - 0.5, fy = v - 0.5;
+      final cx = fx.floor(), cy = fy.floor();
+      final tx = fx - cx, ty = fy - cy;
+      final a = blurred(cx, cy) * (1 - tx) + blurred(cx + 1, cy) * tx;
+      final b = blurred(cx, cy + 1) * (1 - tx) + blurred(cx + 1, cy + 1) * tx;
+      return a * (1 - ty) + b * ty;
     }
-    return (positions, colors);
-  }
 
-  /// Every rendered stone shape available right now — outcrops and beach
-  /// pebbles both pick from this instead of one shape rescaled (user
-  /// 2026-09-14: "Die Steine bitte in unterschiedlichen Grössen und
-  /// Formen").
-  List<int> get _stoneVariants => [
-    if (stoneProp != null) stoneProp!,
-    if (stoneFlatProp != null) stoneFlatProp!,
-    if (stoneBoulderProp != null) stoneBoulderProp!,
-  ];
+    void addVertex(double u, double v, int argb) {
+      final p = gridToScreen(u, v);
+      positions
+        ..add(p.dx)
+        ..add(p.dy);
+      colors.add(argb);
+    }
+
+    int colorAtPoint(double u, double v) =>
+        cornerAt(u.round(), v.round()).toARGB32();
+
+    // One triangle of the fine lattice, clipped to field >= 0.5.
+    void clipTri(List<(double, double)> p) {
+      final f = [for (final q in p) field(q.$1, q.$2) - 0.5];
+      final inside = [for (final x in f) x >= 0];
+      final count = inside.where((b) => b).length;
+      if (count == 0) return;
+      (double, double) cut((double, double) a, double fa, (double, double) b,
+          double fb) {
+        final t = fa / (fa - fb);
+        return (a.$1 + (b.$1 - a.$1) * t, a.$2 + (b.$2 - a.$2) * t);
+      }
+
+      final poly = <(double, double)>[];
+      for (var j = 0; j < 3; j++) {
+        final k2 = (j + 1) % 3;
+        if (inside[j]) poly.add(p[j]);
+        if (inside[j] != inside[k2]) poly.add(cut(p[j], f[j], p[k2], f[k2]));
+      }
+      for (var j = 1; j + 1 < poly.length; j++) {
+        for (final q in [poly[0], poly[j], poly[j + 1]]) {
+          addVertex(q.$1, q.$2, colorAtPoint(q.$1, q.$2));
+        }
+      }
+    }
+
+    // The smoothed edge can bulge up to a few cells into the land, so the
+    // water cells alone are not enough to cover it.
+    var loopCells = cells;
+    if (smoothRings != null) {
+      loopCells = {...cells};
+      for (var pass = 0; pass < 3; pass++) {
+        for (final k in loopCells.toList()) {
+          final (cx, cy) = _cellFromKey(k);
+          for (final (dx, dy) in _kNeighbors8) {
+            if (_inPicture(cx + dx, cy + dy)) {
+              loopCells.add(_cellKey(cx + dx, cy + dy));
+            }
+          }
+        }
+      }
+    }
+    for (final k in loopCells) {
+      final (gx, gy) = _cellFromKey(k);
+      var lo = 1.0, hi = 0.0;
+      if (smoothRings != null) {
+        for (var dy = -1; dy <= 1; dy++) {
+          for (var dx = -1; dx <= 1; dx++) {
+            final b = blurred(gx + dx, gy + dy);
+            if (b < lo) lo = b;
+            if (b > hi) hi = b;
+          }
+        }
+        // Wholly outside the smoothed shore: the bank shows instead.
+        if (hi < 0.5) continue;
+      }
+      if (smoothRings != null && lo < 0.5) {
+        for (var j = 0; j < sub; j++) {
+          for (var i2 = 0; i2 < sub; i2++) {
+            final x0 = gx + i2 / sub, x1 = gx + (i2 + 1) / sub;
+            final y0 = gy + j / sub, y1 = gy + (j + 1) / sub;
+            clipTri([(x0, y0), (x1, y0), (x1, y1)]);
+            clipTri([(x0, y0), (x1, y1), (x0, y1)]);
+          }
+        }
+        continue;
+      }
+      final x0 = gx.toDouble(), y0 = gy.toDouble();
+      final cn = cornerAt(gx, gy).toARGB32();
+      final ce = cornerAt(gx + 1, gy).toARGB32();
+      final cs = cornerAt(gx + 1, gy + 1).toARGB32();
+      final cw = cornerAt(gx, gy + 1).toARGB32();
+      addVertex(x0, y0, cn);
+      addVertex(x0 + 1, y0, ce);
+      addVertex(x0 + 1, y0 + 1, cs);
+      addVertex(x0, y0, cn);
+      addVertex(x0 + 1, y0 + 1, cs);
+      addVertex(x0, y0 + 1, cw);
+    }
+    return (Float32List.fromList(positions), Int32List.fromList(colors));
+  }
 
   // ── The water palette (user 2026-09-08: "das Wasser deutlich spannender
   // gestalten und es soll wieder ein Ufer geben") ── one flat colour read as
@@ -823,7 +1209,6 @@ class _TerrainPlanner {
   static const Color _waterDeep = Color(0xFF2A6188);
   static const Color _waterMid = Color(0xFF3E85B0);
   static const Color _waterShallow = Color(0xFF6FBBC4);
-  static const Color _sand = Color(0xFFDCC48C);
 
   // ── Beyond the real, buildable grid ──────────────────────────
   // The canvas is the grid's own diamond shape's BOUNDING BOX
@@ -1167,368 +1552,661 @@ class _TerrainPlanner {
   }
 
 
-  /// Picks [count] cluster centres on GRASS cells only (not water). A real
-  /// landscape grows in clumps — a stand of trees, a flower patch, a rock
-  /// outcrop — not as independent uniform noise, which is what a "wild"
-  /// per-instance scatter reads as (user 2026-09-07).
-  List<(int, int)> _clusterCenters(String seed, int count) {
-    final out = <(int, int)>[];
-    for (var c = 0; c < count; c++) {
-      final cx = (_hash01('${seed}cx$c') * kGridCols).floor();
-      final cy = (_hash01('${seed}cy$c') * kGridRows).floor();
-      if (_isLegal(cx, cy)) out.add((cx, cy));
-    }
-    return out;
+  // ── Scenery that grows where it would grow ─────────────────────
+  // (user 2026-11-05: "Die Verteilung der Gegenstände soll realistisch sein")
+  //
+  // Nothing here is scattered uniformly. A handful of smooth NOISE FIELDS says
+  // what the land is like — how wooded, how wet, how rocky, how conifer-ish —
+  // and every kind of prop reads them:
+  //
+  //  * forest: where the wood is dense the trees stand close and tall; where
+  //    it thins they are young and small; where it breaks, there is a meadow;
+  //  * undergrowth (ferns, grass, the odd stump or fallen log) lives under
+  //    the trees; bushes stand along the forest edge and round the player's
+  //    own land, like hedges;
+  //  * meadow flowers drift in patches over the open ground, one colour
+  //    family to a drift;
+  //  * stones lie in outcrops, a big rock with smaller ones around it, mostly
+  //    near water;
+  //  * the shore has driftwood, shells, pebbles and reed beds.
+
+  /// A cheap deterministic 0..1 hash of a point — sin-based, so the planner
+  /// (which also runs on the web, where `compute` is not a real isolate and
+  /// string hashing thousands of times would stall the loading screen) stays
+  /// fast.
+  static double _h(double x, double y, int salt) {
+    final v = math.sin(x * 127.1 + y * 311.7 + salt * 74.7) * 43758.5453;
+    return v - v.floorToDouble();
   }
 
-  /// Scatters [perClusterMin]..[perClusterMax] instances of [images] (picked
-  /// per-instance, for a mixed clump rather than a monoculture) around each
-  /// of [centers], within [radius] grid cells.
-  List<_PropPlacement> _clusterScatter({
-    required List<(int, int)> centers,
-    required String seed,
-    required int perClusterMin,
-    required int perClusterMax,
-    required double radius,
-    required List<int> images,
-    required double widthInTiles,
-    // A size RANGE rather than one fixed width, so a clump of (say) stones
-    // reads as different-sized rocks, not one shape rescaled uniformly
-    // (user 2026-09-14: "Die Steine bitte in unterschiedlichen Grössen und
-    // Formen"). Defaults to no variation — every other caller is unaffected.
-    double? widthMax,
-    bool Function(int gx, int gy)? legal,
-    // Half the instances mirrored left-right — free shape variety out of a
-    // single sprite (user 2026-09-29). Off by default: flipping a rock or a
-    // flower is invisible (both read symmetric at this size), so only a
-    // caller with something worth mirroring turns it on.
-    bool mirror = false,
-  }) {
-    if (images.isEmpty) return const [];
-    final isLegal = legal ?? _isLegal;
-    final wMax = widthMax ?? widthInTiles;
-    final out = <_PropPlacement>[];
-    for (var c = 0; c < centers.length; c++) {
-      final (ccx, ccy) = centers[c];
-      final span = perClusterMax - perClusterMin + 1;
-      final n = perClusterMin + (_hash01('${seed}n$c') * span).floor();
-      for (var i = 0; i < n; i++) {
-        final a = _hash01('$seed a$c-$i') * 2 * math.pi;
-        final r = _hash01('$seed r$c-$i') * radius;
-        // The prop's TRUE continuous position — legality is still checked on
-        // the grid cell it falls in (props stay off buildable land, water,
-        // …), but the leftover fraction becomes its sub-tile drift instead
-        // of being thrown away. Every instance used to snap dead-centre onto
-        // its cell, which at this density reads as a planted grid rather
-        // than a stand of trees or a scatter of stones (user 2026-09-29: "die
-        // Steine sind viel zu uniform und gleichmässig verteilt" — the same
-        // fix [_beachDebris] already got for driftwood/pebbles, 2026-09-14).
-        final fx = ccx + math.cos(a) * r;
-        final fy = ccy + math.sin(a) * r;
-        final gx = fx.round();
-        final gy = fy.round();
-        if (!isLegal(gx, gy)) continue;
-        final imgIdx = (_hash01('$seed i$c-$i') * images.length).floor().clamp(
-          0,
-          images.length - 1,
-        );
-        final w = wMax > widthInTiles
-            ? widthInTiles + _hash01('$seed w$c-$i') * (wMax - widthInTiles)
-            : widthInTiles;
-        out.add(
-          _PropPlacement(
-            images[imgIdx],
-            gx,
-            gy,
-            w,
-            offX: fx - gx,
-            offY: fy - gy,
-            flip: mirror && _hash01('$seed flip$c-$i') < 0.5,
-          ),
-        );
-      }
-    }
-    return out;
+  /// Smooth value noise, 0..1, one lattice cell per unit.
+  static double _noise(double x, double y, int salt) {
+    final x0 = x.floorToDouble(), y0 = y.floorToDouble();
+    final fx = x - x0, fy = y - y0;
+    final u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+    final a = _h(x0, y0, salt), b = _h(x0 + 1, y0, salt);
+    final c = _h(x0, y0 + 1, salt), d = _h(x0 + 1, y0 + 1, salt);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
   }
 
-  /// A few dozen clearings scattered through the wild field, each with its
-  /// own radius — the "Lichtungen" that let sky and flowers interrupt the
-  /// canopy instead of it reading as one solid green wall (user 2026-09-08:
-  /// "gerne einige Lichtungen mit Blumen und Büschen einbauen").
-  List<(int, int, double)> _clearingCenters(
-    String seed,
-    int count,
-    double minRadius,
-    double maxRadius,
+  static double _smooth(double a, double b, double x) {
+    final t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+    return t * t * (3 - 2 * t);
+  }
+
+  /// How wooded the land is, ~0..1: broad stands, a mid-scale texture and a
+  /// fine one, so the wood has clearings and a ragged edge.
+  static double _forestAt(double x, double y) =>
+      0.55 * _noise(x / 15, y / 15, 1) +
+      0.30 * _noise(x / 6, y / 6, 2) +
+      0.15 * _noise(x / 2.6, y / 2.6, 3);
+
+  /// 0..1: water within a few cells, for the species that like wet feet and
+  /// the rocks that wash up on a bank.
+  double _wetness(int gx, int gy) {
+    var n = 0;
+    for (final (dx, dy) in _kNeighbors8) {
+      if (_isWater(gx + dx * 4, gy + dy * 4)) n++;
+      if (_isWater(gx + dx * 8, gy + dy * 8)) n++;
+    }
+    return n / 16.0;
+  }
+
+  /// Calls [visit] for one jittered point per [spacing] x [spacing] square of
+  /// the whole padded canvas — a blue-noise-ish grid, so a scatter has no
+  /// visible rows yet never piles up either.
+  void _grid(
+    double spacing,
+    int salt,
+    void Function(double fx, double fy) visit,
   ) {
-    final out = <(int, int, double)>[];
-    for (var c = 0; c < count; c++) {
-      final cx = (_hash01('${seed}cx$c') * kGridCols).floor();
-      final cy = (_hash01('${seed}cy$c') * kGridRows).floor();
-      if (!_isLegal(cx, cy)) continue;
-      final r = minRadius + _hash01('${seed}r$c') * (maxRadius - minRadius);
-      out.add((cx, cy, r));
-    }
-    return out;
-  }
-
-  bool _inClearing(int gx, int gy, List<(int, int, double)> clearings) {
-    for (final (cx, cy, r) in clearings) {
-      final dx = (gx - cx).toDouble(), dy = (gy - cy).toDouble();
-      if (dx * dx + dy * dy <= r * r) return true;
-    }
-    return false;
-  }
-
-  /// Dense, closely-packed grove centres covering the ENTIRE picture — every
-  /// dry cell, buildable or not, real grid or the canvas's off-map padding
-  /// alike — with a gap left around each of [clearings]. ONE pass, ONE
-  /// spacing, no seam (user 2026-09-14: "das Spielfeld überall, auch an den
-  /// Kanten genau gleich dicht mit dem Wald bedecken" — an earlier version
-  /// ran the padding at a coarser spacing than the real grid "since it's
-  /// scenery nobody stands on", and the density STEP right at the real
-  /// grid's own edge was exactly what that read as). [_isTreeLegal] (not the
-  /// plain [_isLegal]) screens every point, so the river is free to run
-  /// through the wood exactly as it does anywhere else on the map, and so is
-  /// the buffer around the player's own buildings.
-  List<(int, int)> _forestGrid(
-    String seed,
-    List<(int, int, double)> clearings,
-  ) {
-    // Widened alongside the per-grove count (user 2026-09-29, three rounds
-    // of "weniger Bäume"): thinning only the CLUMPS while leaving the same
-    // number of clumps everywhere eventually just makes each one look
-    // sparse rather than the wood as a whole feeling less dense. Still ONE
-    // spacing for the real grid and the off-map padding alike — see the
-    // doc comment above on why that matters.
-    // 3.6 → 4.2 (user 2026-11-03: "etwas weniger Bäume") — together with
-    // the per-grove count below, about a third fewer trees overall.
-    const spacing = 4.2;
-    final out = <(int, int)>[];
-    var i = 0;
     for (var fy = _extY0.toDouble(); fy < _extY1; fy += spacing) {
       for (var fx = _extX0.toDouble(); fx < _extX1; fx += spacing) {
-        final jx = (_hash01('${seed}jx$i') - 0.5) * spacing * 0.7;
-        final jy = (_hash01('${seed}jy$i') - 0.5) * spacing * 0.7;
-        i++;
-        final gx = (fx + jx).round();
-        final gy = (fy + jy).round();
-        if (!_isTreeLegal(gx, gy)) continue;
-        if (_inClearing(gx, gy, clearings)) continue;
-        out.add((gx, gy));
+        final jx = (_h(fx, fy, salt) - 0.5) * spacing * 0.9;
+        final jy = (_h(fx, fy, salt + 1) - 0.5) * spacing * 0.9;
+        visit(fx + jx, fy + jy);
       }
     }
-    return out;
-  }
-
-  /// Flowers and flowering bushes filling each clearing, denser than the
-  /// stray patches under the canopy elsewhere — the open ground a Lichtung
-  /// actually is. Gorse is a genuine shrub as well as a bloom, so it stands
-  /// in for both the "Blumen" and the "Büsche" asked for; there is no
-  /// separate bush prop to draw.
-  List<_PropPlacement> _clearingDecor(List<(int, int, double)> clearings) {
-    final heather = wildflowerHeatherProp;
-    final gorse = wildflowerGorseProp;
-    if (heather == null || gorse == null) return const [];
-    final out = <_PropPlacement>[];
-    for (var c = 0; c < clearings.length; c++) {
-      final (ccx, ccy, r) = clearings[c];
-      final n = (r * r * 0.85).round();
-      for (var i = 0; i < n; i++) {
-        final a = _hash01('terrain_clearing a$c-$i') * 2 * math.pi;
-        // sqrt of a uniform draw spreads points evenly over the DISC area
-        // rather than bunching them near the centre.
-        final rr = math.sqrt(_hash01('terrain_clearing r$c-$i')) * r * 0.92;
-        final gx = (ccx + math.cos(a) * rr).round();
-        final gy = (ccy + math.sin(a) * rr).round();
-        if (!_isLegal(gx, gy)) continue;
-        final img = _hash01('terrain_clearing i$c-$i') < 0.55 ? heather : gorse;
-        out.add(_PropPlacement(img, gx, gy, 0.55));
-      }
-    }
-    return out;
-  }
-
-  /// The beach's own loose detail, one independent roll per cell rather than
-  /// [_clusterScatter]'s clumping — a real strand has stray pebbles and
-  /// driftwood, not clumps of them: small stones ("kleine Steine im Sand",
-  /// user 2026-09-08, now in several shapes/sizes — see [_stoneVariants]
-  /// and 2026-09-14's "unterschiedlichen Grössen und Formen"), driftwood and
-  /// seashells (user 2026-09-14: "der Strand soll noch Holz und kleine
-  /// Muscheln haben"). Mutually exclusive per cell — a beach scattered with
-  /// all three at once would clutter rather than decorate. [_isLegal]
-  /// excludes beach cells on purpose (keeps it clear of forest clutter — see
-  /// its own doc comment), so this checks [buildableRegion] directly
-  /// instead: the only thing beach debris needs to stay off is a building
-  /// actually standing on that stretch of sand.
-  ///
-  /// Drifted off the cell's dead centre and spun to a random angle (user
-  /// 2026-09-14: "zufälliger am Strand verteilen und nicht so mechanisch wie
-  /// jetzt") — one item per eligible cell still decides WHERE debris lands,
-  /// but every earlier version then planted it exactly on the grid point,
-  /// which is what read as mechanical: a real strand has nothing lining up.
-  List<_PropPlacement> _beachDebris(Set<int> beach) {
-    final stones = _stoneVariants;
-    final wood = driftwoodProp;
-    final shell = shellProp;
-    final out = <_PropPlacement>[];
-    for (final k in beach) {
-      final (gx, gy) = _cellFromKey(k);
-      if (_isRealCell(gx, gy) &&
-          buildableRegion.contains(gy * kGridCols + gx)) {
-        continue;
-      }
-      final roll = _hash01('beach$gx,$gy');
-      // Up to two-thirds of a tile off centre — enough to drift past the
-      // cell's own boundary and break the grid alignment, not so far it
-      // reads as belonging to the neighbouring cell instead.
-      final offX = (_hash01('beachOffX$gx,$gy') - 0.5) * 0.65;
-      final offY = (_hash01('beachOffY$gx,$gy') - 0.5) * 0.65;
-      final rotation = _hash01('beachRot$gx,$gy') * 2 * math.pi;
-      if (roll < 0.10 && stones.isNotEmpty) {
-        final idx = (_hash01('beachStoneI$gx,$gy') * stones.length)
-            .floor()
-            .clamp(0, stones.length - 1);
-        // Widened (user 2026-09-29: "auch das Holz am Strand" — the same
-        // "too uniform" complaint applied to every stray pebble): a strand
-        // has both gravel-sized chips and a genuine rock washed up on it.
-        final w = 0.2 + _hash01('beachStoneW$gx,$gy') * 0.55;
-        out.add(
-          _PropPlacement(
-            stones[idx],
-            gx,
-            gy,
-            w,
-            offX: offX,
-            offY: offY,
-            rotation: rotation,
-          ),
-        );
-      } else if (roll < 0.14 && wood != null) {
-        final w = 0.35 + _hash01('beachWoodW$gx,$gy') * 0.55;
-        out.add(
-          _PropPlacement(
-            wood,
-            gx,
-            gy,
-            w,
-            offX: offX,
-            offY: offY,
-            rotation: rotation,
-          ),
-        );
-      } else if (roll < 0.18 && shell != null) {
-        final w = 0.22 + _hash01('beachShellW$gx,$gy') * 0.12;
-        out.add(
-          _PropPlacement(
-            shell,
-            gx,
-            gy,
-            w,
-            offX: offX,
-            offY: offY,
-            rotation: rotation,
-          ),
-        );
-      }
-    }
-    return out;
   }
 
   /// Every prop, depth-sorted back to front.
   List<_PropPlacement> _scatterProps() {
-    final placements = <_PropPlacement>[];
-
-    // Clearings first: their centres are used both to carve gaps out of the
-    // forest grid below and to seed the flower/bush fill inside them.
-    final clearings = _clearingCenters('terrain_clearing', 28, 3.0, 5.5);
-
-    // The forest: the whole wild field, packed densely enough that
-    // neighbouring canopies overlap into one continuous wood rather than
-    // reading as scattered groves.
-    final conifer = treeConiferProp;
-    final broadleaf = treeBroadleafProp;
-    if (conifer != null && broadleaf != null) {
-      final forestCenters = _forestGrid('terrain_forest', clearings);
-      placements.addAll(
-        _clusterScatter(
-          centers: forestCenters,
-          seed: 'terrain_forest_trees',
-          // Fewer still per grove (user 2026-09-29, a third pass: "du kannst
-          // noch mehr Bäume löschen") — was 7-12, then 5-9, then 4-7, then
-          // 3-5 (user 2026-11-03: "etwas weniger Bäume").
-          perClusterMin: 3,
-          perClusterMax: 4,
-          radius: 2.7,
-          images: [conifer, conifer, conifer, broadleaf],
-          // Bigger, and a real size RANGE (user 2026-09-29: "die Bäume sind
-          // im Verhältnis zu den Gebäuden noch zu klein... auch in
-          // unterschiedlichen Grössen und Formen darstellen") — 1.1 read as a
-          // shrub next to a two-storey building's own art. A young tree at
-          // the low end of the range and an old one at the high end read as
-          // different specimens, not one sprite copy-pasted everywhere.
-          widthInTiles: 1.5,
-          widthMax: 2.4,
-          legal: _isTreeLegal,
-          mirror: true,
+    final out = <_PropPlacement>[];
+    void add(int kind, double fx, double fy, {bool flip = false}) {
+      final gx = fx.round(), gy = fy.round();
+      out.add(
+        _PropPlacement(
+          kind,
+          gx,
+          gy,
+          1.0,
+          offX: fx - gx,
+          offY: fy - gy,
+          flip: flip,
         ),
       );
     }
 
-    placements.addAll(_clearingDecor(clearings));
+    bool flipOf(double fx, double fy, int s) => _h(fx, fy, s) < 0.5;
 
-    // Wildflower patches under the canopy itself, elsewhere in the wild
-    // field — ground cover, not just what fills a clearing.
-    final heather = wildflowerHeatherProp;
-    final gorse = wildflowerGorseProp;
-    if (heather != null && gorse != null) {
-      placements.addAll(
-        _clusterScatter(
-          centers: _clusterCenters('terrain_flower_patch', 65),
-          seed: 'terrain_flower',
-          perClusterMin: 3,
-          perClusterMax: 8,
-          radius: 1.6,
-          images: [heather, gorse],
-          widthInTiles: 0.55,
-        ),
-      );
+    final conifers = _kinds(_kConiferS, _kConiferL);
+    final broadleafs = _kinds(_kBroadleafS, _kBroadleafL);
+    final bushes = _kinds(_kBushA, _kBushD);
+    final flowers = _kinds(_kFlowersA, _kFlowersD);
+    final stones = _kinds(_kStoneA, _kStoneE);
+
+    // ── The wood, and what lives under it ───────────────────────
+    if (conifers.isNotEmpty && broadleafs.isNotEmpty) {
+      _grid(2.1, 21, (fx, fy) {
+        final gx = fx.round(), gy = fy.round();
+        if (!_isTreeLegal(gx, gy)) return;
+        final f = _forestAt(fx, fy);
+        if (_h(fx, fy, 31) > _smooth(0.43, 0.62, f) * 0.9) return;
+        final wet = _wetness(gx, gy);
+        // conifer country on one side of the map, mixed wood on the other,
+        // and the wet ground is broadleaf
+        final lean =
+            0.3 + 0.6 * _smooth(0.35, 0.65, _noise(fx / 20, fy / 20, 4));
+        final conifer = _h(fx, fy, 32) < lean * (1 - 0.6 * wet);
+        final list = conifer ? conifers : broadleafs;
+        // dense, old wood grows tall; the edge is young
+        final age = 0.4 * _h(fx, fy, 33) + 0.6 * _smooth(0.45, 0.8, f);
+        final idx = (age * list.length).floor().clamp(0, list.length - 1);
+        add(list[idx], fx, fy, flip: flipOf(fx, fy, 35));
+
+        final u = _h(fx, fy, 34);
+        final ox = fx + (_h(fx, fy, 36) - 0.5) * 1.6;
+        final oy = fy + (_h(fx, fy, 37) - 0.5) * 1.6;
+        if (!_isLegal(ox.round(), oy.round())) return;
+        if (u < 0.30 && _has(_kFern)) {
+          add(_kFern, ox, oy, flip: flipOf(fx, fy, 38));
+        } else if (u < 0.44 && _has(_kTuft)) {
+          add(_kTuft, ox, oy, flip: flipOf(fx, fy, 38));
+        } else if (u < 0.47 && _has(_kStump)) {
+          add(_kStump, ox, oy);
+        } else if (u < 0.49 && _has(_kLog)) {
+          add(_kLog, ox, oy, flip: flipOf(fx, fy, 38));
+        }
+      });
     }
 
-    // Rock outcrops: a smaller, sparser clumping — a few stones together,
-    // not a field of gravel. Every rendered shape (small/flat/boulder) is
-    // in play, at a genuine size range, not one shape rescaled.
-    //
-    // Count AND size both widened (user 2026-09-29: "die Steine sind viel zu
-    // uniform und gleichmässig verteilt"): 2-5 stones of near-identical size
-    // at every one of 32 evenly-seeded centres reads as a catalogue, not a
-    // landscape. Some outcrops are now a single boulder, others a proper
-    // scree of seven, and a stone within one can be a third the size of its
-    // neighbour — the sub-tile drift [_clusterScatter] now also applies
-    // keeps them from lining up even within a cluster.
-    final stones = _stoneVariants;
+    // ── Bushes: the forest edge, and a hedge round the player's land ──
+    if (bushes.isNotEmpty) {
+      _grid(1.5, 41, (fx, fy) {
+        final gx = fx.round(), gy = fy.round();
+        if (!_isLegal(gx, gy)) return;
+        final f = _forestAt(fx, fy);
+        final edge = _smooth(0.30, 0.43, f) * (1 - _smooth(0.56, 0.70, f));
+        final ring =
+            _isRealCell(gx, gy) && _treeClearance.contains(gy * kGridCols + gx)
+            ? 0.30
+            : 0.0;
+        if (_h(fx, fy, 43) > math.max(edge * 0.55, ring)) return;
+        final flowering = _h(fx, fy, 44) < (f < 0.5 ? 0.65 : 0.25);
+        final n = bushes.length;
+        final kind = flowering && n > 1
+            ? bushes[1 + (_h(fx, fy, 45) * (n - 1)).floor().clamp(0, n - 2)]
+            : bushes[0];
+        add(kind, fx, fy, flip: flipOf(fx, fy, 46));
+      });
+    }
+
+    // ── Meadows: flowers drift in patches over the open ground ──
+    _grid(1.1, 51, (fx, fy) {
+      final gx = fx.round(), gy = fy.round();
+      if (!_isLegal(gx, gy)) return;
+      final open = 1 - _smooth(0.38, 0.55, _forestAt(fx, fy));
+      if (open <= 0) return;
+      final patch = _smooth(0.50, 0.75, _noise(fx / 6, fy / 6, 5));
+      if (flowers.isNotEmpty && _h(fx, fy, 53) < open * patch * 0.6) {
+        // one colour family to a drift, with the odd stranger in it
+        final pick = _h(fx, fy, 54) < 0.25
+            ? _h(fx, fy, 55)
+            : _noise(fx / 9, fy / 9, 6);
+        final idx = (pick * flowers.length).floor().clamp(
+          0,
+          flowers.length - 1,
+        );
+        add(flowers[idx], fx, fy, flip: flipOf(fx, fy, 56));
+      } else if (_has(_kTuft) && _h(fx, fy, 57) < open * 0.16) {
+        add(_kTuft, fx, fy, flip: flipOf(fx, fy, 58));
+      }
+    });
+
+    // ── Outcrops: a big rock with smaller ones round it, near water ──
     if (stones.isNotEmpty) {
-      placements.addAll(
-        _clusterScatter(
-          centers: _clusterCenters('terrain_outcrop', 32),
-          seed: 'terrain_stone',
-          perClusterMin: 1,
-          perClusterMax: 7,
-          radius: 2.1,
-          images: stones,
-          widthInTiles: 0.3,
-          widthMax: 1.15,
-          mirror: true,
-        ),
-      );
+      _grid(0.9, 61, (fx, fy) {
+        final gx = fx.round(), gy = fy.round();
+        if (!_isLegal(gx, gy)) return;
+        final r = _noise(fx / 9, fy / 9, 7) + 0.12 * _wetness(gx, gy);
+        final zone = _smooth(0.68, 0.82, r);
+        if (_h(fx, fy, 62) > zone * 0.6) return;
+        final t = _h(fx, fy, 63);
+        final coin = _h(fx, fy, 64) < 0.5;
+        final kind = t < 0.06 + 0.10 * zone
+            ? (coin ? _kStoneE : _kStoneD)
+            : t < 0.30
+            ? (coin ? _kStoneC : _kStoneB)
+            : (coin ? _kStoneA : _kStoneB);
+        if (_has(kind)) add(kind, fx, fy, flip: flipOf(fx, fy, 65));
+      });
     }
-    placements.addAll(_beachDebris(_shoreBands().beach));
+
+    out.addAll(_shoreDecor(_shoreBands()));
+
+    // Landmarks last: they clear a space round themselves of whatever the
+    // other scatters put there, so no tree grows through a ruin.
+    final marks = _scatterLandmarks();
+    final blocked = <int>{};
+    for (final m in marks) {
+      final r = m.kind >= _kBoatWreck ? 3 : 4;
+      for (var dy = -r; dy <= r; dy++) {
+        for (var dx = -r; dx <= r; dx++) {
+          blocked.add(_cellKey(m.gx + dx, m.gy + dy));
+        }
+      }
+    }
+    out.removeWhere((p) => blocked.contains(_cellKey(p.gx, p.gy)));
+    out.addAll(marks);
+    for (final p in out) {
+      final k = p.kind;
+      if (k <= _kStoneE ||
+          (k >= _kBushA && k <= _kBroadleafL) ||
+          k == _kStump ||
+          k == _kLog ||
+          (k >= _kRuinWall && k <= _kFlotsam)) {
+        _solid.add(_cellKey(p.gx, p.gy));
+      }
+    }
 
     // One shared depth sort across every kind — a tree standing next to a
     // stone or another tree must still land in front of/behind it
     // correctly, which a separate pass per prop type could never guarantee.
-    placements.sort((a, b) => isoDrawOrder(a.gx, a.gy, 1, 1, b.gx, b.gy, 1, 1));
-    return placements;
+    out.sort((a, b) => isoDrawOrder(a.gx, a.gy, 1, 1, b.gx, b.gy, 1, 1));
+    return out;
+  }
+
+  // ── Landmarks and fauna (user 2026-11-05: "mache mir einige Tiere, welche
+  // sich auf der Karte bewegen und zusätzlich einige Ruinen, gestrandetes
+  // Boot etc. ... Sobald der Gegenstand durch einen Building Plot berührt
+  // wird, verschwindet es") ──
+  //
+  // Both are planned from [buildableRegion] like every other prop, and
+  // deterministically (same hashes, same grid): a Building Plot growing the
+  // region re-plans the terrain, and whatever now stands on or beside claimed
+  // land simply is not placed any more — everything else comes out exactly
+  // where it was.
+
+  /// Cells (padded keys) a standing sprite occupies — trees, bushes, stones,
+  /// landmarks. The animals keep a cell clear of them, so nothing walks
+  /// through a trunk. Filled by [_scatterProps].
+  final Set<int> _solid = {};
+
+  static const List<(int, double)> _kInlandMarks = [
+    (_kRuinWall, 0.14),
+    (_kRuinTower, 0.12),
+    (_kRuinArch, 0.10),
+    (_kRuinColumns, 0.12),
+    (_kMenhirs, 0.10),
+    (_kWagon, 0.14),
+    (_kCampfire, 0.14),
+    (_kWell, 0.14),
+  ];
+  static const List<(int, double)> _kBeachMarks = [
+    (_kBoatWreck, 0.30),
+    (_kBoatRow, 0.25),
+    (_kWhaleRibs, 0.15),
+    (_kFlotsam, 0.30),
+  ];
+
+  static int _pick(List<(int, double)> table, double r) {
+    var acc = 0.0;
+    for (final (kind, w) in table) {
+      acc += w;
+      if (r < acc) return kind;
+    }
+    return table.last.$1;
+  }
+
+  /// Ruins, camps and wells in the clearings (more of them in some "old"
+  /// regions of the map than others), wrecks and bones on the beach. Always
+  /// outside the tree clearance of the player's land, so a landmark vanishes
+  /// before a building's roof could clip it.
+  List<_PropPlacement> _scatterLandmarks() {
+    final out = <_PropPlacement>[];
+    final taken = <(double, double)>[];
+    bool far(double fx, double fy, double d) {
+      for (final (x, y) in taken) {
+        final dx = x - fx, dy = y - fy;
+        if (dx * dx + dy * dy < d * d) return false;
+      }
+      return true;
+    }
+
+    void put(int kind, double fx, double fy) {
+      if (!_has(kind)) return;
+      taken.add((fx, fy));
+      final gx = fx.round(), gy = fy.round();
+      out.add(
+        _PropPlacement(
+          kind,
+          gx,
+          gy,
+          1.0,
+          offX: fx - gx,
+          offY: fy - gy,
+          flip: _h(fx, fy, 99) < 0.5,
+        ),
+      );
+    }
+
+    _grid(10, 91, (fx, fy) {
+      final gx = fx.round(), gy = fy.round();
+      if (!_isRealCell(gx, gy)) return;
+      final zone =
+          0.03 + 0.10 * _smooth(0.55, 0.78, _noise(fx / 22, fy / 22, 9));
+      if (_h(fx, fy, 92) > zone) return;
+      if (_forestAt(fx, fy) > 0.58) return;
+      for (var dy = -2; dy <= 2; dy++) {
+        for (var dx = -2; dx <= 2; dx++) {
+          if (!_isTreeLegal(gx + dx, gy + dy)) return;
+        }
+      }
+      if (!far(fx, fy, 16)) return;
+      put(_pick(_kInlandMarks, _h(fx, fy, 93)), fx, fy);
+    });
+
+    final bands = _shoreBands();
+    final keys = bands.beach.toList()..sort();
+    for (final k in keys) {
+      final (gx, gy) = _cellFromKey(k);
+      if (!_isRealCell(gx, gy)) continue;
+      if (_treeClearance.contains(gy * kGridCols + gx)) continue;
+      if (_h(gx.toDouble(), gy.toDouble(), 95) > 0.0025) continue;
+      if (!far(gx.toDouble(), gy.toDouble(), 18)) continue;
+      put(
+        _pick(_kBeachMarks, _h(gx.toDouble(), gy.toDouble(), 96)),
+        gx.toDouble(),
+        gy.toDouble(),
+      );
+    }
+    return out;
+  }
+
+  /// One animal's route, flat: species, speed (tiles/s), pause (s at each
+  /// stop), phase (0..1 of the loop), stop count, up to five (x, y) stops,
+  /// salt. The painter walks the loop as a pure function of time, so the plan
+  /// holds no state and an animal whose route is cut by new land is just not
+  /// in the next plan.
+  Float64List _scatterFauna() {
+    final out = <double>[];
+    void emit(
+      int species,
+      double speed,
+      double pause,
+      double phase,
+      List<(double, double)> stops,
+    ) {
+      out
+        ..add(species.toDouble())
+        ..add(speed)
+        ..add(pause)
+        ..add(phase)
+        ..add(stops.length.toDouble());
+      for (var i = 0; i < 5; i++) {
+        out
+          ..add(i < stops.length ? stops[i].$1 : 0)
+          ..add(i < stops.length ? stops[i].$2 : 0);
+      }
+      out.add(_h(stops[0].$1, stops[0].$2, 199));
+    }
+
+    bool free(double fx, double fy) {
+      final gx = fx.round(), gy = fy.round();
+      if (!_isRealCell(gx, gy) || !_isLegal(gx, gy)) return false;
+      for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+          if (_solid.contains(_cellKey(gx + dx, gy + dy))) return false;
+        }
+      }
+      return true;
+    }
+
+    final bands = _shoreBands();
+    bool sand(double fx, double fy) {
+      final gx = fx.round(), gy = fy.round();
+      return _isRealCell(gx, gy) &&
+          bands.beach.contains(_cellKey(gx, gy)) &&
+          !_treeClearance.contains(gy * kGridCols + gx);
+    }
+
+    // A bird flies over land and sea alike, but not over the player's land.
+    bool air(double fx, double fy) {
+      final gx = fx.round(), gy = fy.round();
+      return !(_isRealCell(gx, gy) &&
+          _treeClearance.contains(gy * kGridCols + gx));
+    }
+
+    bool pond(double fx, double fy) {
+      final gx = fx.round(), gy = fy.round();
+      return _isRealCell(gx, gy) && bands.water.contains(_cellKey(gx, gy));
+    }
+
+    bool route(List<(double, double)> w, bool Function(double, double) ok) {
+      for (var i = 0; i < w.length; i++) {
+        final a = w[i], b = w[(i + 1) % w.length];
+        final len = math.sqrt(
+          (b.$1 - a.$1) * (b.$1 - a.$1) + (b.$2 - a.$2) * (b.$2 - a.$2),
+        );
+        final steps = math.max(1, (len / 0.5).ceil());
+        for (var s = 0; s <= steps; s++) {
+          final u = s / steps;
+          if (!ok(a.$1 + (b.$1 - a.$1) * u, a.$2 + (b.$2 - a.$2) * u)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    /// [count] animals ambling round loops of four stops near ([cx], [cy]).
+    void group(
+      double cx,
+      double cy,
+      int species,
+      int count,
+      double radius,
+      double speed,
+      double pause,
+      int salt,
+      bool Function(double, double) ok,
+    ) {
+      for (var i = 0; i < count; i++) {
+        final hx = cx + (_h(cx, cy, salt + i * 3) - 0.5) * radius;
+        final hy = cy + (_h(cx, cy, salt + i * 3 + 1) - 0.5) * radius;
+        final stops = [
+          for (var k = 0; k < 4; k++)
+            (
+              hx + (_h(hx, hy, salt + 20 + k * 2) - 0.5) * radius * 1.6,
+              hy + (_h(hx, hy, salt + 21 + k * 2) - 0.5) * radius * 1.6,
+            ),
+        ];
+        if (!route(stops, ok)) continue;
+        emit(
+          species,
+          speed * (0.85 + 0.3 * _h(hx, hy, salt + 9)),
+          pause * (0.6 + 0.8 * _h(hx, hy, salt + 10)),
+          _h(hx, hy, salt + 11),
+          stops,
+        );
+      }
+    }
+
+    double open(double fx, double fy) =>
+        1 - _smooth(0.38, 0.55, _forestAt(fx, fy));
+
+    // Flocks of sheep in the open meadows.
+    _grid(8, 111, (fx, fy) {
+      if (!free(fx, fy) || open(fx, fy) < 0.45 || _h(fx, fy, 112) > 0.8) return;
+      group(fx, fy, 0, 4 + (_h(fx, fy, 114) * 5).floor(), 2.8, 0.22, 5, 113, free);
+    });
+    // Deer where the meadow meets the wood.
+    _grid(10, 121, (fx, fy) {
+      final f = _forestAt(fx, fy);
+      if (!free(fx, fy) || f < 0.28 || f > 0.64 || _h(fx, fy, 122) > 0.8) return;
+      group(fx, fy, 1, 2 + (_h(fx, fy, 124) * 3).floor(), 3.2, 0.45, 6, 123, free);
+    });
+    // Cattle on the greener, flatter meadows.
+    _grid(14, 171, (fx, fy) {
+      if (!free(fx, fy) || open(fx, fy) < 0.4 || _h(fx, fy, 172) > 0.8) return;
+      group(fx, fy, 10, 2 + (_h(fx, fy, 174) * 3).floor(), 2.6, 0.16, 6, 173, free);
+    });
+    // Forest dwellers may pass between the trees: only the cell itself must be
+    // clear of a trunk.
+    bool loose(double fx, double fy) {
+      final gx = fx.round(), gy = fy.round();
+      return _isRealCell(gx, gy) &&
+          _isLegal(gx, gy) &&
+          !_solid.contains(_cellKey(gx, gy));
+    }
+    // Foxes at the wood's edge, boar deeper in.
+    _grid(13, 181, (fx, fy) {
+      final f = _forestAt(fx, fy);
+      if (!loose(fx, fy) || f < 0.3 || f > 0.62 || _h(fx, fy, 182) > 0.6) return;
+      group(fx, fy, 8, 1, 3.0, 0.7, 3, 183, loose);
+    });
+    _grid(11, 191, (fx, fy) {
+      final f = _forestAt(fx, fy);
+      if (!loose(fx, fy) || f < 0.34 || f > 0.78 || _h(fx, fy, 192) > 0.9) return;
+      group(fx, fy, 9, 2 + (_h(fx, fy, 194) * 3).floor(), 2.6, 0.3, 5, 193, loose);
+    });
+    // Flocks of crows, and the odd hawk, high over everything but the
+    // player's land: birds fly where they like.
+    bool sky(double fx, double fy) {
+      final gx = fx.round(), gy = fy.round();
+      return !(_isRealCell(gx, gy) &&
+          _treeClearance.contains(gy * kGridCols + gx));
+    }
+    _grid(16, 201, (fx, fy) {
+      if (!_isRealCell(fx.round(), fy.round()) || _h(fx, fy, 202) > 0.28) return;
+      final rad = 7 + _h(fx, fy, 203) * 8;
+      final a0 = _h(fx, fy, 204) * math.pi * 2;
+      final n = 3 + (_h(fx, fy, 205) * 5).floor();
+      final base = _h(fx, fy, 206);
+      for (var i = 0; i < n; i++) {
+        final j = _h(fx, fy, 210 + i);
+        final stops = [
+          for (var k = 0; k < 5; k++)
+            (
+              fx + math.cos(a0 + k * 1.2566) * rad * 1.3 + (j - 0.5) * 1.6,
+              fy + math.sin(a0 + k * 1.2566) * rad + (_h(fx, fy, 220 + i) - 0.5) * 1.6,
+            ),
+        ];
+        if (route(stops, sky)) emit(12, 1.7, 0, base + i * 0.012, stops);
+      }
+    });
+    _grid(26, 231, (fx, fy) {
+      if (!_isRealCell(fx.round(), fy.round()) || _h(fx, fy, 232) > 0.85) return;
+      final rad = 9 + _h(fx, fy, 233) * 8;
+      final a0 = _h(fx, fy, 234) * math.pi * 2;
+      final stops = [
+        for (var k = 0; k < 5; k++)
+          (
+            fx + math.cos(a0 + k * 1.2566) * rad,
+            fy + math.sin(a0 + k * 1.2566) * rad * 1.2,
+          ),
+      ];
+      if (route(stops, sky)) emit(13, 0.9, 0, _h(fx, fy, 235), stops);
+    });
+    // Rabbits, singly.
+    _grid(5, 131, (fx, fy) {
+      if (!free(fx, fy) || open(fx, fy) < 0.3 || _h(fx, fy, 132) > 0.5) return;
+      group(fx, fy, 2, 1, 1.5, 0.7, 2.5, 133, free);
+    });
+    // Butterflies over the flower patches.
+    _grid(5, 161, (fx, fy) {
+      final gx = fx.round(), gy = fy.round();
+      if (!_isRealCell(gx, gy) || !_isLegal(gx, gy)) return;
+      if (open(fx, fy) < 0.5) return;
+      if (_smooth(0.50, 0.75, _noise(fx / 6, fy / 6, 5)) < 0.5) return;
+      if (_h(fx, fy, 162) > 0.35) return;
+      group(fx, fy, 7, 2, 1.4, 0.45, 0, 163, (x, y) {
+        final cx = x.round(), cy = y.round();
+        return _isRealCell(cx, cy) && _isLegal(cx, cy);
+      });
+    });
+    // On the shore: gulls and crabs; ducks on the water; gulls in the air.
+    final keys = bands.beach.toList()..sort();
+    for (final k in keys) {
+      final (gx, gy) = _cellFromKey(k);
+      if (!_isRealCell(gx, gy)) continue;
+      final x = gx.toDouble(), y = gy.toDouble();
+      final ring = bands.beachRing[k] ?? 0;
+      final r = _h(x, y, 141);
+      if (ring <= 1 && r < 0.04) {
+        group(x, y, 3, 1 + (_h(x, y, 142) * 2).floor(), 1.4, 0.3, 4, 143, sand);
+      } else if (ring == 0 && r > 0.88) {
+        group(x, y, 4, 1, 1.0, 0.18, 3, 144, sand);
+      } else if (ring == 1 && r > 0.6 && r < 0.66) {
+        group(x, y, 11, 1, 1.2, 0.5, 2, 145, sand);
+      } else if (ring <= 1 && r > 0.7 && r < 0.73 && sand(x, y)) {
+        // a loop of the sea gulls riding the wind off the coast
+        final rad = 6 + _h(x, y, 145) * 6;
+        final a0 = _h(x, y, 146) * math.pi * 2;
+        final stops = [
+          for (var i = 0; i < 5; i++)
+            (
+              x + math.cos(a0 + i * 1.2566) * rad * 1.3,
+              y + math.sin(a0 + i * 1.2566) * rad,
+            ),
+        ];
+        if (route(stops, air)) {
+          emit(6, 1.3, 0, _h(x, y, 147), stops);
+        }
+      }
+    }
+    for (final e in bands.waterRing.entries) {
+      if (e.value < 2 || e.value > 4) continue;
+      final (gx, gy) = _cellFromKey(e.key);
+      if (!_isRealCell(gx, gy)) continue;
+      final x = gx.toDouble(), y = gy.toDouble();
+      if (_h(x, y, 151) > 0.015) continue;
+      group(x, y, 5, 2 + (_h(x, y, 152) * 2).floor(), 3.0, 0.2, 1.5, 153, pond);
+    }
+    return Float64List.fromList(out);
+  }
+
+  /// The shore's own scenery: driftwood, shells and pebbles on the sand's
+  /// wet edge, dune grass behind it, and reed beds standing in the shallows
+  /// and on the bank. One roll per cell (nothing lines up), and nothing on
+  /// the player's own claimed sand.
+  List<_PropPlacement> _shoreDecor(
+    ({
+      Set<int> water,
+      Set<int> beach,
+      Map<int, int> waterRing,
+      Map<int, int> beachRing,
+    })
+    bands,
+  ) {
+    final out = <_PropPlacement>[];
+    void add(int kind, int gx, int gy, double dx, double dy, bool flip) {
+      if (!_has(kind)) return;
+      out.add(
+        _PropPlacement(kind, gx, gy, 1.0, offX: dx, offY: dy, flip: flip),
+      );
+    }
+
+    for (final k in bands.beach) {
+      final (gx, gy) = _cellFromKey(k);
+      if (_isRealCell(gx, gy) && buildableRegion.contains(gy * kGridCols + gx)) {
+        continue;
+      }
+      final x = gx.toDouble(), y = gy.toDouble();
+      final ring = bands.beachRing[k] ?? 0;
+      final roll = _h(x, y, 71);
+      final dx = (_h(x, y, 72) - 0.5) * 0.7;
+      final dy = (_h(x, y, 73) - 0.5) * 0.7;
+      final flip = _h(x, y, 74) < 0.5;
+      final which = _h(x, y, 75) < 0.5 ? 0 : 1;
+      final reedBed = _noise(x / 5, y / 5, 8) > 0.58;
+      if (ring == 0) {
+        if (reedBed && roll < 0.5) {
+          add(_kReeds, gx, gy, dx, dy, flip);
+        } else if (roll < 0.05) {
+          add(_kDriftwoodA + which, gx, gy, dx, dy, flip);
+        } else if (roll < 0.12) {
+          add(_kShellA + which, gx, gy, dx, dy, flip);
+        } else if (roll < 0.20) {
+          add(_kStoneF, gx, gy, dx, dy, flip);
+        } else if (roll < 0.23) {
+          add(_kStoneA, gx, gy, dx, dy, flip);
+        }
+      } else if (ring == 1) {
+        if (roll < 0.03) {
+          add(_kStoneB, gx, gy, dx, dy, flip);
+        } else if (roll < 0.13) {
+          add(_kTuft, gx, gy, dx, dy, flip);
+        }
+      }
+    }
+    // reeds standing in the shallows
+    for (final entry in bands.waterRing.entries) {
+      if (entry.value != 1) continue;
+      final (gx, gy) = _cellFromKey(entry.key);
+      final x = gx.toDouble(), y = gy.toDouble();
+      if (_noise(x / 5, y / 5, 8) > 0.55 && _h(x, y, 76) < 0.4) {
+        add(
+          _kReeds,
+          gx,
+          gy,
+          (_h(x, y, 77) - 0.5) * 0.7,
+          (_h(x, y, 78) - 0.5) * 0.7,
+          _h(x, y, 79) < 0.5,
+        );
+      }
+    }
+    return out;
   }
 }
 
@@ -1549,7 +2227,8 @@ class _TerrainPainter extends CustomPainter {
       data.images[_kGrass]!,
       TileMode.repeated,
       TileMode.repeated,
-      Matrix4.identity().storage,
+      Matrix4.diagonal3Values(_kGrassTileScale, _kGrassTileScale, 1).storage,
+      filterQuality: FilterQuality.medium,
     );
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
 
@@ -1568,7 +2247,7 @@ class _TerrainPainter extends CustomPainter {
         Offset.zero & isoCanvasSize,
         Paint()..filterQuality = FilterQuality.medium,
       );
-      paintShore(canvas);
+      paintBeach(canvas);
       final shadowSheet = sheets.shadows;
       if (shadowSheet != null && shadowBatch.$1.isNotEmpty) {
         canvas.drawRawAtlas(
@@ -1581,23 +2260,14 @@ class _TerrainPainter extends CustomPainter {
           Paint()..filterQuality = FilterQuality.low,
         );
       }
-      if (propBatch.$1.isNotEmpty) {
-        canvas.drawRawAtlas(
-          sheets.props,
-          propBatch.$1,
-          propBatch.$2,
-          null,
-          null,
-          null,
-          Paint()..filterQuality = FilterQuality.medium,
-        );
-      }
+      // Water and props: the moving half ([_TerrainLivePainter]).
       return;
     }
 
     paintGrassWash(canvas, size);
-    paintShore(canvas);
+    paintBeach(canvas);
     _paintShadows(canvas);
+    paintWater(canvas, 0);
     _paintProps(canvas);
   }
 
@@ -1646,11 +2316,11 @@ class _TerrainPainter extends CustomPainter {
   /// The greens and browns every grass blob (coarse region or fine mottle)
   /// is drawn from — see [_paintGrassBlobs].
   static const List<Color> _kGrassTones = [
-    Color(0xFF5E7F38), // shaded green
-    Color(0xFF8FAE5C), // sunlit green
-    Color(0xFFB9CC7E), // pale yellow-green
-    Color(0xFF8A7A46), // dry olive
-    Color(0xFF6E5A34), // damp brown
+    Color(0xFF4C7A26), // shaded green (the buildings' leaf family, 2026-11-05)
+    Color(0xFF6F9B30), // sunlit green
+    Color(0xFF86A63A), // pale yellow-green
+    Color(0xFF7E7A3C), // dry olive
+    Color(0xFF6A5A30), // damp brown
   ];
 
   /// A blob's alpha across its own radius, as (position, fraction-of-peak)
@@ -1758,10 +2428,49 @@ class _TerrainPainter extends CustomPainter {
   /// grid, so no seams.
   @visibleForTesting
   void paintShore(Canvas canvas) {
-    final paint = Paint()..isAntiAlias = false;
-    canvas.drawVertices(data.beachMesh, BlendMode.dst, paint);
-    canvas.drawVertices(data.waterMesh, BlendMode.dst, paint);
+    paintBeach(canvas);
+    paintWater(canvas, 0);
   }
+
+  /// The sand: the VOXEL sand tile (the same block size as the grass and the
+  /// buildings) through the beach mesh, whose per-vertex colour is a tint
+  /// and, towards the grass, an alpha — `modulate` multiplies the two.
+  void paintBeach(Canvas canvas) {
+    final tile = data.images.length > _kSandTile ? data.images[_kSandTile] : null;
+    if (tile == null) return;
+    canvas.drawVertices(
+      data.beachMesh,
+      BlendMode.modulate,
+      Paint()
+        ..isAntiAlias = false
+        ..shader = _tileShader(tile, 0, 0),
+    );
+  }
+
+  /// The water: the voxel water tile, its ripples drifting slowly along the
+  /// ground's own diagonal as [t] runs, tinted by depth per vertex.
+  void paintWater(Canvas canvas, double t) {
+    final tile =
+        data.images.length > _kWaterTile ? data.images[_kWaterTile] : null;
+    if (tile == null) return;
+    canvas.drawVertices(
+      data.waterMesh,
+      BlendMode.modulate,
+      Paint()
+        ..isAntiAlias = false
+        ..shader = _tileShader(tile, t * 5.0, t * 2.5),
+    );
+  }
+
+  static Shader _tileShader(ui.Image tile, double dx, double dy) => ImageShader(
+    tile,
+    TileMode.repeated,
+    TileMode.repeated,
+    (Matrix4.translationValues(dx, dy, 0)
+          ..scaleByDouble(_kGrassTileScale, _kGrassTileScale, 1, 1))
+        .storage,
+    filterQuality: FilterQuality.medium,
+  );
 
   /// Every standing prop's shadow, ALL before any prop: a shadow lies on the
   /// ground, so it belongs under trees and stones, never over one. Each is the
@@ -1788,7 +2497,7 @@ class _TerrainPainter extends CustomPainter {
       final image = data.images[kind];
       // A turned prop (beach debris) has no upright shadow to throw.
       if (mask == null || image == null || props[o + 6] != 0) continue;
-      final destW = kIsoTileW * props[o + 3];
+      final destW = image.width / _kPropPx * props[o + 3];
       final unit = destW / image.width;
       final foot = gridToScreen(
         props[o + 1] + 0.5 + props[o + 4],
@@ -1834,7 +2543,7 @@ class _TerrainPainter extends CustomPainter {
       final image = data.images[kind];
       if (image == null) continue;
       final gx = props[o + 1], gy = props[o + 2];
-      final destW = kIsoTileW * props[o + 3];
+      final destW = image.width / _kPropPx * props[o + 3];
       final destH = destW * image.height / image.width;
       final foot = gridToScreen(
         gx + 0.5 + props[o + 4],
@@ -1887,8 +2596,485 @@ class _TerrainPainter extends CustomPainter {
       !identical(old.data, data);
 }
 
+/// The terrain's MOVING half (user 2026-11-05: "die Gebäude bewegen sich … das
+/// gleiche gilt auch für die Bäume"): the water, whose ripples drift, and
+/// every prop, those that grow swaying about their foot like the plants on the
+/// buildings do. Repainted by [time] at a modest frame rate, over the static
+/// half ([_TerrainPainter]) that never changes.
+class _TerrainLivePainter extends CustomPainter {
+  final _TerrainData data;
+  final ValueListenable<double> time;
+
+  _TerrainLivePainter(this.data, this.time) : super(repaint: time);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sheets = data.sheets;
+    final sway = data.sway;
+    if (TerrainLayer.debugDrawOneByOne || sheets == null || sway == null) {
+      return; // the static painter drew everything
+    }
+    final t = time.value;
+    _TerrainPainter(data).paintWater(canvas, t);
+    if (sway.count == 0) return;
+    canvas.drawRawAtlas(
+      sheets.props,
+      sway.transforms(t),
+      sway.src,
+      null,
+      null,
+      null,
+      Paint()..filterQuality = FilterQuality.medium,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _TerrainLivePainter old) =>
+      !identical(old.data, data);
+}
+
+/// Every drawable prop as an atlas entry that can be re-posed each frame:
+/// its source rect, its resting transform and, for the plants, a sway.
+class _SwayBatch {
+  final int count;
+  final Float32List src;
+
+  /// Per prop: scale, foot x, foot y, anchor x (image width / 2), anchor y
+  /// (image height).
+  final Float32List _geom;
+
+  /// Per prop: sway amplitude in radians (0 = stands still) and phase.
+  final Float32List _amp;
+  final Float32List _phase;
+
+  _SwayBatch._(this.count, this.src, this._geom, this._amp, this._phase);
+
+  /// How far each kind leans in the wind, in radians. Trees barely, grass a
+  /// lot — the same ordering as the amplitudes on the buildings' own plants.
+  static double ampOf(int kind) {
+    if (kind >= _kConiferS && kind <= _kConiferL) return 0.011;
+    if (kind >= _kBroadleafS && kind <= _kBroadleafL) return 0.017;
+    if (kind >= _kBushA && kind <= _kBushD) return 0.022;
+    if (kind >= _kFlowersA && kind <= _kFlowersD) return 0.035;
+    if (kind == _kTuft) return 0.04;
+    if (kind == _kFern) return 0.03;
+    if (kind == _kReeds) return 0.05;
+    return 0.0;
+  }
+
+  static _SwayBatch build(
+    Float64List props,
+    List<ui.Image?> images,
+    List<Rect?> slots,
+  ) {
+    final src = <double>[];
+    final geom = <double>[];
+    final amp = <double>[];
+    final phase = <double>[];
+    for (var o = 0; o < props.length; o += _propStride) {
+      final kind = props[o].toInt();
+      final image = kind < images.length ? images[kind] : null;
+      final flip = props[o + 7] == 0 ? 0 : 1;
+      final slot = kind * 2 + flip < slots.length ? slots[kind * 2 + flip] : null;
+      if (image == null || slot == null) continue;
+      final scale = props[o + 3] / _kPropPx;
+      final foot = gridToScreen(
+        props[o + 1] + 0.5 + props[o + 4],
+        props[o + 2] + 0.5 + props[o + 5],
+      );
+      src.addAll([slot.left, slot.top, slot.right, slot.bottom]);
+      geom.addAll([
+        scale,
+        foot.dx,
+        foot.dy,
+        image.width / 2,
+        image.height.toDouble(),
+      ]);
+      amp.add(ampOf(kind));
+      // A wave of wind crossing the map: neighbours lean together, far
+      // plants are out of step.
+      phase.add(
+        (props[o + 1] * 0.34 + props[o + 2] * 0.21) +
+            (_hash01('sway${props[o + 1]},${props[o + 2]}') - 0.5) * 0.8,
+      );
+    }
+    return _SwayBatch._(
+      amp.length,
+      Float32List.fromList(src),
+      Float32List.fromList(geom),
+      Float32List.fromList(amp),
+      Float32List.fromList(phase),
+    );
+  }
+
+  /// The [RSTransform]s (scos, ssin, tx, ty each) at time [t] seconds: every
+  /// prop turned about its foot by its own share of the wind.
+  Float32List transforms(double t) {
+    final out = Float32List(count * 4);
+    final gust = 0.7 + 0.3 * math.sin(t * 0.45);
+    for (var i = 0; i < count; i++) {
+      final g = i * 5;
+      final scale = _geom[g];
+      final amp = _amp[i];
+      final a = amp == 0
+          ? 0.0
+          : amp * gust * math.sin(t * 1.7 - _phase[i]);
+      final scos = scale * math.cos(a), ssin = scale * math.sin(a);
+      final o = i * 4;
+      out[o] = scos;
+      out[o + 1] = ssin;
+      out[o + 2] = _geom[g + 1] - scos * _geom[g + 3] + ssin * _geom[g + 4];
+      out[o + 3] = _geom[g + 2] - ssin * _geom[g + 3] - scos * _geom[g + 4];
+    }
+    return out;
+  }
+}
+
 /// Test hook: paints the shore meshes of [plan] onto [canvas].
 @visibleForTesting
 void paintShoreForTest(Canvas canvas, Object plan) => _TerrainPainter(
   _TerrainData(const {}, const [], plan as _TerrainPlan),
 ).paintShore(canvas);
+
+/// The grass tile is rendered at 4x the canvas (terrain_voxel.py TILE_SCALE: one
+/// cell = 256 px, the canvas draws a cell 64 px wide), exactly the way the
+/// buildings' art is 4x the canvas — so a ground block is a building block.
+/// (It was drawn four times too coarse until 2026-11-05.)
+const double _kGrassTileScale = 1 / _kPropPx;
+
+// ── The animals ──────────────────────────────────────────────────
+/// Draws every animal of the plan at time [time]. Their routes are loops of
+/// stops ([_TerrainPlanner._scatterFauna]); where an animal is, which way it
+/// faces and what it is doing is a pure function of the clock, so there is no
+/// state to keep and nothing to reset when the terrain is re-planned.
+///
+/// The pictures face down-right (`_Se`) or up-right (`_Ne`) on screen and are
+/// mirrored for the left-hand directions. Walking is a bob, a rabbit hops, a
+/// gull's two flying pictures alternate.
+class _FaunaPainter extends CustomPainter {
+  final _TerrainData data;
+  final ValueListenable<double> time;
+
+  _FaunaPainter(this.data, this.time) : super(repaint: time);
+
+  static const int _sheep = 0,
+      _deer = 1,
+      _rabbit = 2,
+      _gull = 3,
+      _crab = 4,
+      _duck = 5,
+      _gullFly = 6,
+      _butterfly = 7,
+      _fox = 8,
+      _boar = 9,
+      _cow = 10,
+      _frog = 11,
+      _crow = 12,
+      _hawk = 13;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final f = data.plan.fauna;
+    if (f.isEmpty) return;
+    final t = time.value;
+    final view = canvas.getDestinationClipBounds().inflate(160);
+    final poses = <_FaunaPose>[];
+    for (var o = 0; o + _faunaStride <= f.length; o += _faunaStride) {
+      final pose = _pose(f, o, t);
+      if (pose != null && view.contains(pose.foot)) poses.add(pose);
+    }
+    poses.sort((a, b) => a.foot.dy.compareTo(b.foot.dy));
+    final shadow = Paint()..color = const Color(0x2E000000);
+    final paint = Paint()..filterQuality = FilterQuality.medium;
+    for (final p in poses) {
+      final image = p.image < data.images.length ? data.images[p.image] : null;
+      if (image == null) continue;
+      final w = image.width / _kPropPx, h = image.height / _kPropPx;
+      if (p.shadow > 0) {
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: p.foot,
+            width: w * p.shadow,
+            height: w * p.shadow * 0.3,
+          ),
+          shadow,
+        );
+      }
+      final rect = Rect.fromLTWH(
+        p.foot.dx - w / 2,
+        p.foot.dy - p.lift - h,
+        w,
+        h,
+      );
+      final src = Rect.fromLTWH(
+        0,
+        0,
+        image.width.toDouble(),
+        image.height.toDouble(),
+      );
+      if (!p.flip) {
+        canvas.drawImageRect(image, src, rect, paint);
+      } else {
+        canvas.save();
+        canvas.translate(p.foot.dx, 0);
+        canvas.scale(-1, 1);
+        canvas.translate(-p.foot.dx, 0);
+        canvas.drawImageRect(image, src, rect, paint);
+        canvas.restore();
+      }
+      _redrawInFront(canvas, p.foot, rect, paint);
+    }
+  }
+
+  /// The animals live on a layer above the props, so a tree, ruin or bush
+  /// that stands in FRONT of an animal (its foot lower on screen) is drawn
+  /// again over it, clipped to the animal's own box.
+  void _redrawInFront(Canvas canvas, Offset foot, Rect box, Paint paint) {
+    final occ = data.occluders;
+    final ys = occ.footY;
+    if (ys.isEmpty) return;
+    // first prop whose foot is below the animal's
+    var lo = 0, hi = ys.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (ys[mid] <= foot.dy + 0.5) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    final hits = <int>[];
+    for (var i = lo; i < ys.length && ys[i] < foot.dy + occ.maxH; i++) {
+      hits.add(i);
+    }
+    if (hits.isEmpty) return;
+    final props = data.plan.props;
+    var clipped = false;
+    // back to front among themselves: the plan's own depth order
+    final order = [for (final i in hits) occ.offsets[i]]..sort();
+    for (final o in order) {
+      final kind = props[o].toInt();
+      final image = data.images[kind];
+      if (image == null) continue;
+      final destW = image.width / _kPropPx * props[o + 3];
+      final destH = destW * image.height / image.width;
+      final pf = gridToScreen(
+        props[o + 1] + 0.5 + props[o + 4],
+        props[o + 2] + 0.5 + props[o + 5],
+      );
+      final rect = Rect.fromLTWH(pf.dx - destW / 2, pf.dy - destH, destW, destH);
+      if (!rect.overlaps(box)) continue;
+      if (!clipped) {
+        canvas.save();
+        canvas.clipRect(box);
+        clipped = true;
+      }
+      final src = Rect.fromLTWH(
+        0,
+        0,
+        image.width.toDouble(),
+        image.height.toDouble(),
+      );
+      if (props[o + 7] == 0) {
+        canvas.drawImageRect(image, src, rect, paint);
+      } else {
+        canvas.save();
+        canvas.translate(pf.dx, 0);
+        canvas.scale(-1, 1);
+        canvas.translate(-pf.dx, 0);
+        canvas.drawImageRect(image, src, rect, paint);
+        canvas.restore();
+      }
+    }
+    if (clipped) canvas.restore();
+  }
+
+  /// Where animal [o] is at [t] and what picture it shows.
+  _FaunaPose? _pose(Float64List f, int o, double t) {
+    final species = f[o].toInt();
+    final speed = f[o + 1], pause = f[o + 2], phase = f[o + 3];
+    final n = f[o + 4].toInt();
+    final salt = f[o + 15];
+    if (n < 2 || speed <= 0) return null;
+    double sx(int i) => f[o + 5 + i * 2];
+    double sy(int i) => f[o + 6 + i * 2];
+
+    var total = 0.0;
+    final lens = List<double>.filled(n, 0);
+    for (var i = 0; i < n; i++) {
+      final j = (i + 1) % n;
+      lens[i] = math.sqrt(
+        (sx(j) - sx(i)) * (sx(j) - sx(i)) + (sy(j) - sy(i)) * (sy(j) - sy(i)),
+      );
+      total += lens[i] / speed + pause;
+    }
+    if (total <= 0) return null;
+    var u = (t + phase * total) % total;
+    var x = sx(0), y = sy(0), dx = 1.0, dy = 0.0;
+    var moving = true;
+    var stop = 0;
+    for (var i = 0; i < n; i++) {
+      final j = (i + 1) % n;
+      final len = math.max(lens[i], 1e-6);
+      dx = (sx(j) - sx(i)) / len;
+      dy = (sy(j) - sy(i)) / len;
+      final d = lens[i] / speed;
+      if (u < d) {
+        final k = u / d;
+        x = sx(i) + (sx(j) - sx(i)) * k;
+        y = sy(i) + (sy(j) - sy(i)) * k;
+        break;
+      }
+      u -= d;
+      x = sx(j);
+      y = sy(j);
+      if (u < pause) {
+        moving = false;
+        stop = i;
+        break;
+      }
+      u -= pause;
+    }
+
+    // Direction on screen: +x runs down-right, +y down-left.
+    final screenX = dx - dy, screenY = dx + dy;
+    final up = screenY < 0;
+    final flip = screenX < 0;
+    final foot = gridToScreen(x + 0.5, y + 0.5);
+    final beat = t * 7 + salt * 6.28;
+
+    switch (species) {
+      case _sheep:
+      case _deer:
+        final sheep = species == _sheep;
+        final se = sheep ? _kFSheepSe : _kFDeerSe;
+        final ne = sheep ? _kFSheepNe : _kFDeerNe;
+        final graze = sheep ? _kFSheepGraze : _kFDeerGraze;
+        if (!moving) {
+          // at each stop it either grazes or stands and looks about
+          final grazing = ((stop + (salt * 7).floor()) & 1) == 0;
+          return _FaunaPose(foot, grazing ? graze : (up ? ne : se), flip, 0, 0.7);
+        }
+        return _FaunaPose(
+          foot,
+          up ? ne : se,
+          flip,
+          math.sin(beat).abs() * 1.4,
+          0.7,
+        );
+      case _rabbit:
+        return _FaunaPose(
+          foot,
+          up ? _kFRabbitNe : _kFRabbitSe,
+          flip,
+          moving ? math.sin(t * 5 + salt * 6.28).abs() * 7 : 0,
+          0.6,
+        );
+      case _gull:
+        return _FaunaPose(
+          foot,
+          up ? _kFGullNe : _kFGullSe,
+          flip,
+          moving ? math.sin(beat * 1.3).abs() * 1.0 : 0,
+          0.6,
+        );
+      case _crab:
+        return _FaunaPose(
+          foot,
+          _kFCrab,
+          flip,
+          0,
+          0.6,
+        );
+      case _duck:
+        return _FaunaPose(
+          foot,
+          up ? _kFDuckNe : _kFDuckSe,
+          flip,
+          math.sin(t * 1.6 + salt * 6.28) * 0.8,
+          0,
+        );
+      case _gullFly:
+        final flap = ((t * 5 + salt * 10).floor() & 1) == 0;
+        final image = up
+            ? (flap ? _kFGullUpNe : _kFGullDownNe)
+            : (flap ? _kFGullUpSe : _kFGullDownSe);
+        return _FaunaPose(
+          foot,
+          image,
+          flip,
+          46 + math.sin(t * 1.3 + salt * 6.28) * 4,
+          0.5,
+        );
+      case _fox:
+      case _boar:
+        final fox = species == _fox;
+        return _FaunaPose(
+          foot,
+          fox ? (up ? _kFFoxNe : _kFFoxSe) : (up ? _kFBoarNe : _kFBoarSe),
+          flip,
+          moving ? math.sin(beat * (fox ? 1.4 : 1.0)).abs() * 1.4 : 0,
+          0.7,
+        );
+      case _cow:
+        if (!moving) {
+          final grazing = ((stop + (salt * 7).floor()) & 1) == 0;
+          return _FaunaPose(foot, grazing ? _kFCowGraze : (up ? _kFCowNe : _kFCowSe), flip, 0, 0.7);
+        }
+        return _FaunaPose(foot, up ? _kFCowNe : _kFCowSe, flip, math.sin(beat * 0.7).abs() * 1.0, 0.7);
+      case _frog:
+        return _FaunaPose(
+          foot,
+          _kFFrog,
+          flip,
+          moving ? math.sin(t * 6 + salt * 6.28).abs() * 4 : 0,
+          0.5,
+        );
+      case _crow:
+        final flap = ((t * 7 + salt * 10).floor() & 1) == 0;
+        return _FaunaPose(
+          foot,
+          up ? (flap ? _kFCrowUpNe : _kFCrowDownNe) : (flap ? _kFCrowUpSe : _kFCrowDownSe),
+          flip,
+          80 + math.sin(t * 1.7 + salt * 6.28) * 6,
+          0.4,
+        );
+      case _hawk:
+        return _FaunaPose(
+          foot,
+          up ? _kFHawkNe : _kFHawkSe,
+          flip,
+          125 + math.sin(t * 0.8 + salt * 6.28) * 5,
+          0.45,
+        );
+      case _butterfly:
+        final open = ((t * 9 + salt * 10).floor() & 1) == 0;
+        return _FaunaPose(
+          foot + Offset(math.sin(t * 3 + salt * 9) * 3, 0),
+          open ? _kFButterOpen : _kFButterShut,
+          flip,
+          12 + math.sin(t * 4 + salt * 6.28) * 5,
+          0.5,
+        );
+    }
+    return null;
+  }
+
+  @override
+  bool shouldRepaint(covariant _FaunaPainter old) =>
+      !identical(old.data, data);
+}
+
+class _FaunaPose {
+  final Offset foot;
+  final int image;
+  final bool flip;
+
+  /// Pixels the picture hovers above [foot] (a hop, a flying bird).
+  final double lift;
+
+  /// Width of the ground shadow as a fraction of the picture's; 0 for none.
+  final double shadow;
+
+  const _FaunaPose(this.foot, this.image, this.flip, this.lift, this.shadow);
+}

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'dev_foe.dart';
 import '../../creatures/models/area.dart';
@@ -12,6 +12,7 @@ import '../../creatures/services/overworld_path.dart'
 import '../services/game_defs_controller.dart';
 import 'dev_theme.dart';
 import '../../../core/ui/pressable.dart';
+import '../../../core/ui/game_text.dart';
 
 // ── Welche Monster stehen im Pfad? (user 2026-07-30) ────────
 // "Monster im Pfad, bitte nach ära unterteilen in Tabs oben. Zudem will ich dort

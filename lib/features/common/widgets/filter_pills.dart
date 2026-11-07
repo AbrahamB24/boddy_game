@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart'
     show CreamPalette, kBoxAccent, kBoxInk, kBoxInkFaint;
@@ -7,6 +7,7 @@ import '../../settlement/widgets/scroll_paper.dart'
     show kParchmentInk, kParchmentLight;
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// ONE LOOK FOR EVERY SEARCH / FILTER / SORT CONTROL (user 2026-07-27: "alle
 /// filter und sortierfunktionien sollen so aussehen wie bei den eggs").

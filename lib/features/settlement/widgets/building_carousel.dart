@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -17,6 +17,7 @@ import '../sheets/building_preview_dialog.dart';
 import 'building_icon.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // ── The Build menu, folded into the map (2026-09-18 redesign) ──────────────
 //
@@ -552,7 +553,7 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
           child: _darkPill(
             child: Text(
               'Nothing here yet — research opens new buildings.',
-              style: FoE.label(size: 12).copyWith(color: CreamPalette.paperTop),
+              style: FoE.label(size: 12).copyWith(color: kBoxInk),
             ),
           ),
         ),
@@ -712,8 +713,7 @@ class _SlotChips extends StatelessWidget {
   }
 
   static const _edge = [
-    Shadow(color: Color(0xCC000000), blurRadius: 3),
-    Shadow(color: Color(0x99000000), offset: Offset(0, 1)),
+    Shadow(color: Color(0xCC000000), offset: Offset(0, 1)),
   ];
 
   Widget _chip(IconData icon, String count, bool full) {
@@ -727,7 +727,7 @@ class _SlotChips extends StatelessWidget {
           count,
           style: TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             color: tint,
             shadows: _edge,
           ),
@@ -789,13 +789,17 @@ class _TrayCard extends StatelessWidget {
               height: artBottom,
               child: Align(
                 alignment: Alignment.bottomCenter,
-                child: def.isRoad
-                    ? Image.asset(roadAsset(15), width: artW)
-                    : ShadowedBuildingIcon(
-                        imageUrl: def.imageUrl,
-                        defId: def.id,
-                        width: artW,
-                      ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomCenter,
+                  child: def.isRoad
+                      ? Image.asset(roadAsset(15), width: artW)
+                      : ShadowedBuildingIcon(
+                          imageUrl: def.imageUrl,
+                          defId: def.id,
+                          width: artW,
+                        ),
+                ),
               ),
             ),
             Positioned(
@@ -814,7 +818,7 @@ class _TrayCard extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       color: kBoxInk,
                     ),
                   ),
@@ -825,7 +829,7 @@ class _TrayCard extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w400,
                       color: kBoxInkSoft,
                     ),
                   ),
@@ -865,7 +869,7 @@ class _CarouselCard extends StatelessWidget {
   });
 
   /// Height of the written band: name + facts row + cost/reason + padding.
-  static const double _textH = 58;
+  static const double _textH = 60;
 
   @override
   Widget build(BuildContext context) {
@@ -913,7 +917,14 @@ class _CarouselCard extends StatelessWidget {
               height: artBottom,
               child: Align(
                 alignment: Alignment.bottomCenter,
-                child: _art(enabled, artW),
+                // Tall art (a two-storey house) is scaled DOWN to the room
+                // above its feet instead of being cut off by the strip's top
+                // edge — the whole building always shows.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomCenter,
+                  child: _art(enabled, artW),
+                ),
               ),
             ),
             Positioned(
@@ -932,7 +943,7 @@ class _CarouselCard extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       color: ink,
                     ),
                   ),
@@ -943,7 +954,7 @@ class _CarouselCard extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w400,
                         color: CreamPalette.warn,
                       ),
                     )
@@ -987,7 +998,7 @@ class _CarouselCard extends StatelessWidget {
                             'i',
                             style: TextStyle(
                               fontSize: 12,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w400,
                               color: CreamPalette.ink,
                               height: 1,
                             ),
@@ -1030,7 +1041,7 @@ class _CarouselCard extends StatelessWidget {
           maxLines: 1,
           style: TextStyle(
             fontSize: 10,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             color: ink,
           ),
         ),
@@ -1064,7 +1075,7 @@ class _CarouselCard extends StatelessWidget {
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
           color: enabled ? kBoxInk : kBoxInkFaint,
         ),
       );
@@ -1089,7 +1100,7 @@ class _CarouselCard extends StatelessWidget {
                     '${e.value.toInt()}',
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       // Only the resource you are SHORT of turns red.
                       color: (stock[e.key] ?? 0) >= e.value
                           ? kBoxInk

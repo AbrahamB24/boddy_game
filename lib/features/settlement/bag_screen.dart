@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -21,6 +21,7 @@ import 'data/resource_icons.dart';
 import 'services/new_items.dart';
 import 'settlement_controller.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 /// The bag: everything the settlement owns that isn't a resource.
 ///
@@ -371,7 +372,7 @@ class _BagScreenState extends State<BagScreen>
                       overflow: TextOverflow.ellipsis,
                       style: FoE.label(size: 11).copyWith(
                         color: kBoxInk,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w400,
                         height: 1.15,
                       ),
                     ),
@@ -572,7 +573,7 @@ class _BagScreenState extends State<BagScreen>
                         '+$newCount new',
                         style: FoE.dim(size: 9).copyWith(
                           color: kBoxAccent,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ),
@@ -730,7 +731,7 @@ class _BagScreenState extends State<BagScreen>
           style: FoE.dim(size: 12).copyWith(
             color: over ? CreamPalette.warn : kBoxInkSoft,
             height: 1.4,
-            fontWeight: over ? FontWeight.w700 : null,
+            fontWeight: over ? FontWeight.w400 : null,
           ),
         ),
         const Spacer(),

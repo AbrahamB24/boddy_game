@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -12,6 +12,7 @@ import 'services/creature_power.dart';
 import 'widgets/egg_card.dart';
 import 'widgets/picker_detail_panel.dart';
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// Choosing which egg goes into the Hatchery — A SCREEN OF ITS OWN (user
 /// 2026-07-27: "Das Eimenü soll kein pop up sein, sondern ein eigener screen,

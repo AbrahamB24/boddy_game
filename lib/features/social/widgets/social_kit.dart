@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -6,6 +6,7 @@ import '../../../core/ui/pressable.dart';
 import '../models/pvp_match.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// The small parts every Social pane is built from, in the cream kit: a round
 /// avatar (there are no profile pictures — the initial on a colour the name
@@ -52,7 +53,7 @@ class SocialAvatar extends StatelessWidget {
         style: TextStyle(
           color: Colors.white,
           fontSize: size * 0.44,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           shadows: const [
             Shadow(color: Color(0x59000000), offset: Offset(0, 1)),
           ],
@@ -85,7 +86,7 @@ class CountBadge extends StatelessWidget {
         style: const TextStyle(
           color: Colors.white,
           fontSize: 10,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           height: 1.1,
         ),
       ),
@@ -124,7 +125,7 @@ class SocialGoldButton extends StatelessWidget {
         style: TextStyle(
           color: goldButtonInk(active: onTap != null),
           fontSize: fontSize,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
         ),
       ),
     ),
@@ -170,7 +171,7 @@ class SocialTileButton extends StatelessWidget {
             style: TextStyle(
               color: kBoxInk,
               fontSize: fontSize,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
             ),
           ),
           if (badge > 0) ...[const SizedBox(width: 6), CountBadge(badge)],
@@ -270,7 +271,7 @@ Widget socialSection(String text, {Widget? trailing}) => Padding(
         text.toUpperCase(),
         style: TextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           letterSpacing: 0.9,
           color: kBoxAccent,
         ),
@@ -332,7 +333,7 @@ class StageChip extends StatelessWidget {
         maxLines: 1,
         style: FoE.dim(
           size: 10,
-        ).copyWith(color: ink, fontWeight: FontWeight.w800),
+        ).copyWith(color: ink, fontWeight: FontWeight.w400),
       ),
     );
   }

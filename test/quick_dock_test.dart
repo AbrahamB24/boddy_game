@@ -43,7 +43,8 @@ void main() {
     await t.pumpAndSettle();
 
     // Opened: the drawer's buttons are there …
-    expect(find.byIcon(Icons.flag), findsOneWidget);
+    // (found by tooltip: these tiles wear rendered 3D glyphs, not flat icons)
+    expect(find.byTooltip('Daily tasks'), findsOneWidget);
     // … the main button did not move by a pixel …
     expect(t.getCenter(find.byIcon(Icons.tune)), before);
     // … the dock got wider, never taller …
@@ -51,9 +52,17 @@ void main() {
     expect(dockAfter.height, dockBefore.height);
     expect(dockAfter.width, greaterThan(dockBefore.width));
     // … and every button of the drawer sits on the SAME line as the main one.
-    for (final icon in [Icons.group, Icons.person, Icons.backpack, Icons.flag]) {
-      expect(t.getCenter(find.byIcon(icon)).dy, before.dy);
+    for (final tip in ['Social', 'Profile', 'Bag', 'Daily tasks']) {
+      expect(t.getCenter(find.byTooltip(tip)).dy, before.dy);
     }
+    // … and the same plate closes it again, back to the original width (user
+    // 2026-11-04: "ich kann es nicht schliessen").
+    await t.tap(find.byIcon(Icons.chevron_left));
+    await t.pump(Pressable.duration + const Duration(milliseconds: 50));
+    await t.pumpAndSettle();
+    expect(t.getSize(find.byType(QuickDock)).width, dockBefore.width);
+    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+    expect(t.getCenter(find.byIcon(Icons.tune)), before);
     expect(t.takeException(), isNull);
   });
 }

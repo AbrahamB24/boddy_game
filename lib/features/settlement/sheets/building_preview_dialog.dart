@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -11,9 +11,10 @@ import '../data/goods_definitions.dart' show kGoodsDefs;
 import '../data/resource_icons.dart';
 import '../data/workshop_role_effects.dart';
 import '../settlement_controller.dart';
-import '../widgets/building_icon.dart';
+import '../widgets/building_icon.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// Whether [def] can be built right now, and if not, why — ONE answer for the
 /// build strip's cards and for the preview dialog's Build button, so the two can
@@ -287,7 +288,7 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
           text,
           style: const TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             color: kBoxInk,
           ),
         ),
@@ -335,8 +336,8 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
               textAlign: TextAlign.center,
               maxLines: 2,
               style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
                 color: CreamPalette.warn,
               ),
             )
@@ -356,7 +357,7 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
         'Free',
         style: TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
           color: kBoxInk,
         ),
       );
@@ -373,7 +374,7 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
                 '${resourceEmoji(e.key)} ${e.value.toInt()}',
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: (stock[e.key] ?? 0) >= e.value
                       ? kBoxInk
                       : CreamPalette.warn,
@@ -487,7 +488,7 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
                 r.label.toUpperCase(),
                 style: const TextStyle(
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   letterSpacing: 0.9,
                   color: kBoxAccent,
                 ),

@@ -1,6 +1,6 @@
 import 'dart:async' show unawaited;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -16,6 +16,7 @@ import 'services/combat_engine.dart' show CombatOutcome;
 import 'services/overworld_path.dart' show kMaxPartySize;
 import 'services/survival_run.dart';
 import 'widgets/creature_family.dart' show CreatureAvatar;
+import '../../core/ui/game_text.dart';
 
 // ── Survival Mode (user 2026-09-06) ─────────────────────────────────────────
 // "ich hätte gerne den survival modus, aber mit 6 Monster" — pick a full
@@ -196,7 +197,7 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       color: CreamPalette.better,
                     ),
                   ),
@@ -228,7 +229,7 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       letterSpacing: 0.9,
                       color: kBoxAccent,
                     ),
@@ -265,7 +266,7 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
                         'Retreat & bank rewards',
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w400,
                           color: CreamPalette.warn,
                         ),
                       ),
@@ -300,8 +301,8 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
                   color: kBoxInk,
                 ),
               ),
@@ -321,8 +322,8 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
                 c.isKo ? 'K.O.' : '${c.hp}/${c.maxHp}',
                 textAlign: TextAlign.right,
                 style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
                   color: c.isKo ? CreamPalette.warn : kBoxInkSoft,
                 ),
               ),
@@ -354,7 +355,7 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
               'Floors cleared: $_resultFloors',
               style: const TextStyle(
                 fontSize: 14,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: kBoxInk,
               ),
             ),
@@ -363,7 +364,7 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
               '🪙 +${_resultGold.toStringAsFixed(0)} gold',
               style: const TextStyle(
                 fontSize: 14,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: CreamPalette.goldDeep,
               ),
             ),
@@ -373,7 +374,7 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
                 '🏆 New best run!',
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: CreamPalette.better,
                 ),
               ),

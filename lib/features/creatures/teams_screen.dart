@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/foe_theme.dart';
 import '../../core/theme/cream_kit.dart';
@@ -21,6 +21,7 @@ import 'widgets/roster_row.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 // Saved battle rosters. The active team is what battleTeam() hands to every
 // fight in the game, so this screen is the ONLY place the player says who
@@ -189,7 +190,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                         ? CreamPalette.warn
                         : kBoxInkSoft,
                     fontWeight: over > 0 || missing > 0
-                        ? FontWeight.w800
+                        ? FontWeight.w400
                         : null,
                   ),
                 ),
@@ -399,7 +400,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
               'Delete',
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: CreamPalette.warn,
               ),
             ),
@@ -460,8 +461,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 11.5,
-          fontWeight: FontWeight.w800,
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
           color: danger ? CreamPalette.paperTop : kBoxInk,
         ),
       ),
@@ -653,7 +654,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
                 '${i + 1}',
                 style: TextStyle(
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: kBoxAccent,
                 ),
               ),
@@ -842,7 +843,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
                         ? CreamPalette.accent
                         : kBoxInkSoft,
                     fontWeight: _replaceTarget != null
-                        ? FontWeight.w800
+                        ? FontWeight.w400
                         : FontWeight.normal,
                   ),
                 ),

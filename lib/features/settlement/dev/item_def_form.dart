@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'dev_foe.dart';
 import '../../creatures/models/area.dart' show kResourceEmoji;
@@ -11,6 +11,7 @@ import '../services/game_defs_controller.dart';
 import 'dev_theme.dart';
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // Create/edit one craftable/tradeable ItemDef (user 2026-07-25). Same
 // trusted-single-author dev pattern as AreaDefForm / PathNodeForm; saved to

@@ -1,8 +1,12 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 import '../../../core/theme/foe_theme.dart';
+import '../../settlement/widgets/building_icon.dart'
+    show castShadowImage, kShadowTint, kShadowOpacity;
 import '../models/creature_enums.dart' show CreatureElement;
 import 'creature_backdrop.dart';
 import 'creature_sprite.dart' show decodeWidthFor;
@@ -114,91 +118,277 @@ class BattleScene extends StatelessWidget {
   }
 }
 
-/// A lawn with an earthen pitch trodden into its middle — the stand-in
-/// battlefield until a region has art of its own (user request: "eine Art
-/// Kampfplatz auf dem Rasen").
+/// The battlefield: a clearing in the SAME forest the settlement map is built
+/// on (user 2026-11-04: "mache es im genau gleichen Stil wie die Karte, auf
+/// welcher gebaut wird").
 ///
-/// Painted, not a fixed picture: a single photo can only agree with ONE arena
-/// aspect ratio, and [BattleScene] is drawn at whatever the phone leaves for
-/// it. [CustomPaint] re-solves the ground and the pitch off the ACTUAL box
-/// every time, so a tall narrow arena and a short wide one both read as "a
-/// clearing sized for this fight" rather than a crop of something bigger.
-class _ArenaGround extends StatelessWidget {
+/// Not repainted by hand: it uses the map's own pictures — the grass swatch,
+/// the broadleaf and conifer trees, the stones and the heather/gorse patches
+/// (`assets/images/terrain/`) — and throws the trees' and stones' shadows with
+/// the map's own [castShadowImage] and tint, so a tree here and a tree on the
+/// map are the same object. Only the PLACEMENT is this file's: a tree line
+/// behind the enemy rank, stones and flowers at the edges and the middle left
+/// open for the fight. Placement is by fractions of the arena's own box, so
+/// every phone gets a clearing sized for it.
+class _ArenaGround extends StatefulWidget {
   const _ArenaGround();
 
   @override
-  Widget build(BuildContext context) =>
-      const CustomPaint(painter: _ArenaGroundPainter(), size: Size.infinite);
+  State<_ArenaGround> createState() => _ArenaGroundState();
 }
 
-class _ArenaGroundPainter extends CustomPainter {
-  const _ArenaGroundPainter();
-
-  static const _grassLight = Color(0xFF598349);
-  static const _grassDark = Color(0xFF33502A);
-  static const _dirt = Color(0xFF8F714C);
-  static const _dirtDark = Color(0xFF6B4F32);
+class _ArenaGroundState extends State<_ArenaGround> {
+  _ForestArt? _art = _ForestArt.cached;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [_grassLight, _grassDark],
-        ).createShader(rect),
-    );
-
-    // Mottling: a handful of soft, deterministic patches so the lawn is not
-    // one flat fill. Fixed seed — repaints (a hit's shake, the idle bob)
-    // happen every frame, and a random lawn would shimmer with them.
-    final rnd = math.Random(7);
-    for (var i = 0; i < 24; i++) {
-      final c = Offset(
-        rnd.nextDouble() * size.width,
-        rnd.nextDouble() * size.height,
-      );
-      final r = size.shortestSide * (0.04 + rnd.nextDouble() * 0.05);
-      canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..color = (rnd.nextBool() ? _grassLight : _grassDark).withValues(
-            alpha: 0.16,
-          ),
-      );
+  void initState() {
+    super.initState();
+    if (_art == null) {
+      _ForestArt.load().then((art) {
+        if (mounted && art != null) setState(() => _art = art);
+      });
     }
-
-    // The pitch itself: worn earth where the two ranks actually meet, roughly
-    // centred and sized off the arena rather than off a fixed image.
-    final pitch = Rect.fromCenter(
-      center: rect.center,
-      width: size.width * 0.94,
-      height: size.height * 0.7,
-    );
-    canvas.drawOval(
-      pitch,
-      Paint()
-        ..shader = RadialGradient(
-          colors: [_dirt, _dirtDark],
-        ).createShader(pitch),
-    );
-    // A darker worn rim — trodden ground meeting the lawn, not a sticker cut
-    // out and dropped onto it.
-    canvas.drawOval(
-      pitch,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = size.shortestSide * 0.012
-        ..color = _dirtDark.withValues(alpha: 0.55),
-    );
   }
 
   @override
-  bool shouldRepaint(covariant _ArenaGroundPainter old) => false;
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: CustomPaint(
+      painter: _ArenaGroundPainter(_art),
+      size: Size.infinite,
+    ),
+  );
+}
+
+/// The map's ground art, loaded once for the life of the app.
+class _ForestArt {
+  final ui.Image grass;
+  final Map<String, ui.Image> props;
+  final Map<String, ui.Image> shadows;
+
+  const _ForestArt(this.grass, this.props, this.shadows);
+
+  static _ForestArt? cached;
+  static Future<_ForestArt?>? _pending;
+
+  /// key → (file, decode width, shadow depth or null for "casts none"). The
+  /// decode widths are about twice the size drawn, so the pictures stay sharp
+  /// without holding the 400 px originals.
+  static const _files = <String, (String, int, double?)>{
+    // Rendered in the buildings' pipeline (tool/blender/make_prop.py); the
+    // widths are the files' own, i.e. not resized.
+    'tree1': ('prop_broadleaf_m', 300, 0.14),
+    'tree2': ('prop_conifer_m', 294, 0.14),
+    'stone': ('prop_stone_b', 106, 0.08),
+    'flat': ('prop_stone_c', 162, 0.08),
+    'boulder': ('prop_stone_d', 108, 0.08),
+    'heather': ('prop_flowers_d', 122, null),
+    'gorse': ('prop_bush_c', 100, null),
+  };
+
+  static Future<_ForestArt?> load() => _pending ??= _build();
+
+  static Future<ui.Image> _decode(String asset, {int? width}) async {
+    final data = await rootBundle.load(asset);
+    final codec = await ui.instantiateImageCodec(
+      data.buffer.asUint8List(),
+      targetWidth: width,
+    );
+    final frame = await codec.getNextFrame();
+    codec.dispose();
+    return frame.image;
+  }
+
+  static Future<_ForestArt?> _build() async {
+    try {
+      final grass = await _decode('assets/images/terrain/grass_tile.webp');
+      final props = <String, ui.Image>{};
+      final shadows = <String, ui.Image>{};
+      for (final e in _files.entries) {
+        final (file, width, depth) = e.value;
+        final image = await _decode(
+          'assets/images/terrain/$file.webp',
+          width: width,
+        );
+        props[e.key] = image;
+        if (depth != null) {
+          final shadow = await castShadowImage(image, groundDepth: depth);
+          if (shadow != null) shadows[e.key] = shadow;
+        }
+      }
+      return cached = _ForestArt(grass, props, shadows);
+    } catch (_) {
+      // Not there: the painter keeps its plain lawn, as the map does.
+      _pending = null;
+      return null;
+    }
+  }
+}
+
+class _ArenaGroundPainter extends CustomPainter {
+  final _ForestArt? art;
+  const _ArenaGroundPainter(this.art);
+
+  /// One placed picture: key, foot x and y as fractions of the arena, width as
+  /// a fraction of the arena's HEIGHT, mirrored or not.
+  static const _scatter = <(String, double, double, double, bool)>[
+    // The tree line behind the enemy rank, two depths so it is not a fence.
+    ('tree1', 0.02, 0.31, 0.28, false),
+    ('tree2', 0.14, 0.29, 0.25, true),
+    ('tree1', 0.27, 0.32, 0.27, true),
+    ('tree2', 0.40, 0.28, 0.24, false),
+    ('tree1', 0.53, 0.32, 0.28, false),
+    ('tree2', 0.66, 0.29, 0.25, true),
+    ('tree1', 0.79, 0.31, 0.27, true),
+    ('tree2', 0.91, 0.29, 0.25, false),
+    ('tree1', 1.01, 0.32, 0.28, true),
+    // Edge dressing: a tree in the front corners, stones and flower patches.
+    ('tree2', -0.01, 1.04, 0.36, false),
+    // Stepping stones in the brook (user 2026-11-04: "Bachlauf").
+    ('flat', 0.16, 0.555, 0.10, false),
+    ('stone', 0.50, 0.565, 0.09, true),
+    ('boulder', 0.82, 0.555, 0.10, false),
+    ('stone', 0.035, 0.60, 0.10, false),
+    ('boulder', 0.955, 0.96, 0.12, false),
+    ('heather', 0.09, 0.86, 0.09, false),
+    ('gorse', 0.13, 0.90, 0.08, true),
+    ('heather', 0.90, 0.66, 0.09, true),
+    ('gorse', 0.93, 0.70, 0.08, false),
+    ('heather', 0.50, 0.99, 0.08, false),
+    ('gorse', 0.07, 0.40, 0.08, true),
+  ];
+
+  static const _lawn = Color(0xFF5E9A48);
+
+  // The map's own water and sand (terrain_layer), so the brook is the same
+  // water the settlement's coast is made of.
+  static const _waterDeep = Color(0xFF2A6188);
+  static const _waterMid = Color(0xFF3E85B0);
+  static const _waterShallow = Color(0xFF6FBBC4);
+  static const _sand = Color(0xFFDCC48C);
+
+  /// The brook across the field, between the enemy's side and mine (user
+  /// 2026-11-04, background 4): sand banks, shallows at the edges, a deeper
+  /// middle, and blocky ripples — flat hard-edged blocks like the voxel ground
+  /// around it, no blur, no anti-aliasing.
+  void _paintBrook(Canvas canvas, double w, double h) {
+    Paint fill(Color c) => Paint()
+      ..isAntiAlias = false
+      ..color = c;
+    final top = (h * 0.465).roundToDouble();
+    final bank = (h * 0.022).roundToDouble();
+    final water = (h * 0.105).roundToDouble();
+    final u = math.max(2.0, (h / 90).roundToDouble());
+    canvas.drawRect(Rect.fromLTWH(0, top - bank, w, bank), fill(_sand));
+    canvas.drawRect(Rect.fromLTWH(0, top + water, w, bank), fill(_sand));
+    canvas.drawRect(Rect.fromLTWH(0, top, w, water), fill(_waterMid));
+    canvas.drawRect(Rect.fromLTWH(0, top, w, water * 0.24), fill(_waterShallow));
+    canvas.drawRect(
+      Rect.fromLTWH(0, top + water * 0.76, w, water * 0.24),
+      fill(_waterShallow),
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(0, top + water * 0.40, w, water * 0.22),
+      fill(_waterDeep),
+    );
+    // Ripples: a fixed seed, so repaints never shimmer.
+    final rnd = math.Random(5);
+    final light = fill(const Color(0xB3BFE6F5));
+    for (var i = 0; i < 26; i++) {
+      final rx = (rnd.nextDouble() * w).roundToDouble();
+      final ry = (top + u + rnd.nextDouble() * (water - 3 * u)).roundToDouble();
+      canvas.drawRect(
+        Rect.fromLTWH(rx, ry, u * (4 + rnd.nextInt(5)), u),
+        light,
+      );
+    }
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final a = art;
+    if (a == null) {
+      canvas.drawRect(Offset.zero & size, Paint()..color = _lawn);
+      return;
+    }
+    final w = size.width;
+    final h = size.height;
+
+    // The ground: the map's own swatch, tiled. Mirrored at the seams so the
+    // repeat leaves no line, at about the zoom the map is usually seen at.
+    final k = 0.5 * (h / 360).clamp(0.7, 1.4); // tile density = the original 256 px per cell
+    final shader = ImageShader(
+      a.grass,
+      TileMode.mirror,
+      TileMode.mirror,
+      Matrix4.diagonal3Values(k, k, 1).storage,
+    );
+    canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
+    _paintBrook(canvas, w, h);
+
+    // Back to front, like the map: a prop lower on the screen is nearer.
+    final order = [..._scatter]..sort((p, q) => p.$3.compareTo(q.$3));
+    final shadowPaint = Paint()
+      ..filterQuality = FilterQuality.low
+      ..colorFilter = ColorFilter.mode(
+        kShadowTint.withValues(alpha: kShadowOpacity),
+        BlendMode.srcIn,
+      );
+    final picture = Paint()..filterQuality = FilterQuality.medium;
+
+    // Every shadow before any prop: a shadow lies on the ground.
+    for (final p in order) {
+      final mask = a.shadows[p.$1];
+      final image = a.props[p.$1];
+      if (mask == null || image == null) continue;
+      _draw(canvas, mask, image, p, w, h, shadowPaint);
+    }
+    for (final p in order) {
+      final image = a.props[p.$1];
+      if (image == null) continue;
+      _draw(canvas, image, image, p, w, h, picture);
+    }
+  }
+
+  /// Draws [picture] (a prop or its shadow mask, both in the prop's own pixel
+  /// grid) anchored by the prop's FOOT, as the map does.
+  void _draw(
+    Canvas canvas,
+    ui.Image picture,
+    ui.Image prop,
+    (String, double, double, double, bool) p,
+    double w,
+    double h,
+    Paint paint,
+  ) {
+    final destW = p.$4 * h;
+    final unit = destW / prop.width;
+    final foot = Offset(p.$2 * w, p.$3 * h);
+    final dest = Rect.fromLTWH(
+      foot.dx - destW / 2,
+      foot.dy - prop.height * unit,
+      picture.width * unit,
+      picture.height * unit,
+    );
+    final src = Rect.fromLTWH(
+      0,
+      0,
+      picture.width.toDouble(),
+      picture.height.toDouble(),
+    );
+    if (!p.$5) {
+      canvas.drawImageRect(picture, src, dest, paint);
+    } else {
+      canvas.save();
+      canvas.translate(foot.dx, 0);
+      canvas.scale(-1, 1);
+      canvas.translate(-foot.dx, 0);
+      canvas.drawImageRect(picture, src, dest, paint);
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArenaGroundPainter old) => old.art != art;
 }
 
 class _Horizon extends StatelessWidget {

@@ -1,12 +1,13 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../creatures/models/creature_enums.dart';
 import '../../creatures/models/species_def.dart';
 import '../../creatures/services/creature_defs_service.dart';
 import '../../creatures/services/stat_budget.dart';
 import 'dev_foe.dart';
+import '../../../core/ui/game_text.dart';
 
 // The two bulk tools on the species roster, now buttons on the Dev menu's
 // Actions page (user 2026-09-20: every dev button lives in the Dev menu).

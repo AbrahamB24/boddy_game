@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -13,6 +13,7 @@ import 'social_controller.dart';
 import 'widgets/social_kit.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// The right half of the Messenger layout: one friend's conversation, with
 /// Visit and Challenge in its header. A friend's open PvP business (a
@@ -148,7 +149,7 @@ class _ChatPaneState extends State<ChatPane> {
                   overflow: TextOverflow.ellipsis,
                   style: FoE.label(
                     size: 14,
-                  ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+                  ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
                 ),
                 if (stats != null)
                   Text(
@@ -224,14 +225,14 @@ class _ChatPaneState extends State<ChatPane> {
             SocialGoldButton(
               'Accept',
               height: 28,
-              fontSize: 11.5,
+              fontSize: 12,
               onTap: () => acceptChallenge(context, _ctrl, m),
             ),
             const SizedBox(width: 8),
             SocialTileButton(
               'Decline',
               height: 28,
-              fontSize: 11.5,
+              fontSize: 12,
               onTap: () => _ctrl.declineChallenge(m),
             ),
           ],
@@ -258,7 +259,7 @@ class _ChatPaneState extends State<ChatPane> {
               ? 'Enter lobby'
               : 'Enter',
           height: 28,
-          fontSize: 11.5,
+          fontSize: 12,
           onTap: () => openMatch(context, _ctrl, m),
         ),
         if (!active) ...[
@@ -266,7 +267,7 @@ class _ChatPaneState extends State<ChatPane> {
           SocialTileButton(
             pending ? 'Withdraw' : 'Leave',
             height: 28,
-            fontSize: 11.5,
+            fontSize: 12,
             onTap: () async {
               if (await leaveMatchFlow(context, m, widget.friend.name)) {
                 await _ctrl.refreshPvp();
@@ -304,7 +305,7 @@ class _ChatPaneState extends State<ChatPane> {
             text,
             style: FoE.label(
               size: 12,
-            ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+            ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
           ),
           if (chip != null) ...[const SizedBox(width: 8), chip],
           const SizedBox(width: 12),
@@ -418,7 +419,7 @@ class _ChatPaneState extends State<ChatPane> {
         SocialGoldButton(
           'Send',
           height: 36,
-          fontSize: 12.5,
+          fontSize: 13,
           padding: const EdgeInsets.symmetric(horizontal: 18),
           onTap: _send,
         ),

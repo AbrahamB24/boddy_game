@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/foe_theme.dart';
 import '../../core/theme/cream_kit.dart';
@@ -9,9 +9,10 @@ import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/creature_sprite.dart';
 import '../../core/ui/pressable.dart';
-import '../common/widgets/recess_bar.dart';
+import '../common/widgets/recess_bar.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 // The bestiary (Dex) — the collection endgame.
 //
@@ -233,7 +234,7 @@ class _BestiaryScreenState extends State<BestiaryScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: FoE.label(size: 13).copyWith(
                         color: discovered ? kBoxInk : kBoxInkFaint,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ),

@@ -27,7 +27,7 @@ def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument('--view', default='front', choices=['front', 'back'])
+    ap.add_argument('--view', default='front', choices=['front', 'back', 'sidel', 'sider'])
     ap.add_argument('--out', required=True)
     ap.add_argument('--samples', type=int, default=48)
     ap.add_argument('--only')
@@ -43,6 +43,14 @@ def main():
     target = Vector((-0.05, 0, 0.25))
     if args.view == 'front':
         cam_loc = Vector((0.80, 1.0, 0.38)) * 4.0 + target
+    elif args.view == 'sidel':
+        # SIDE VIEW battle (2026-11-05): my monster stands at the LEFT of the
+        # field and faces right, a little toward the lens so the face reads.
+        cam_loc = Vector((0.86, -0.50, 0.30)) * 4.0 + target
+    elif args.view == 'sider':
+        # ...the enemy stands at the right and faces left (own lighting, not a
+        # mirrored sheet, so the sun stays upper-left on both).
+        cam_loc = Vector((-0.37, 0.93, 0.30)) * 4.0 + target
     else:
         cam_loc = Vector((-0.90, 0.55, 0.45)) * 4.0 + target
 

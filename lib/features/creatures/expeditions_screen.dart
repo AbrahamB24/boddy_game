@@ -1,7 +1,7 @@
 import '../settlement/data/resource_icons.dart';
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -23,6 +23,7 @@ import 'services/expedition_controller.dart';
 import 'services/expedition_targets.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 // ── The Expeditions hub (rebuilt 2026-07-25, redrawn 2026-07-29, reskinned
 // 2026-09-17, restructured 2026-09-17, landscape 2026-09-18) ───────────────
@@ -127,47 +128,6 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
             .where((e) => e.type == ExpeditionType.capture)
             .firstOrNull
       : null;
-
-  // ── Tile art ──────────────────────────────────────────────
-  // "Bild-Kachel" (user 2026-09-30: "Sie wirken zu leer und langweilig" —
-  // VC, the chosen one of six proposals for the Hunt/Resources/Expedition
-  // tiles). Every tile used to be one flat cream block with an emoji
-  // floating on it; now each gets its own coloured ART ZONE — a little
-  // painted "place" the glyph actually stands in — over the same cream BAND
-  // the rest of the app's tiles use for their text, so it still reads as
-  // this game rather than a random photo card.
-  //
-  // A fixed, hand-picked palette rather than one colour per resource: the
-  // roster (wood/stone/fish plus whatever Dev Mode's goods add) is open-
-  // ended, so a resource's colour is looked up by hashing its key into this
-  // list instead of naming every one — stable across a session, no upkeep
-  // as the roster grows.
-  static const List<List<Color>> _kArtGradients = [
-    [Color(0xFF8AA85E), Color(0xFF3A4E26)], // moss
-    [Color(0xFF7E8FA6), Color(0xFF384252)], // slate
-    [Color(0xFF3C8CA8), Color(0xFF1B4E63)], // teal
-    [Color(0xFFC97B4A), Color(0xFF6E3E22)], // clay
-    [Color(0xFFB85C6B), Color(0xFF5C2530)], // berry
-    [Color(0xFF9CAA55), Color(0xFF4B5729)], // olive
-    [Color(0xFFD9A441), Color(0xFF7A5218)], // amber
-  ];
-
-  /// Hunt isn't a resource — it gets its own fixed colour (a "danger/wild"
-  /// violet) rather than a hashed one, so every hunt tile reads as the same
-  /// system at a glance the way the resource tiles read as an era.
-  static const List<Color> _kHuntGradient = [
-    Color(0xFF6B4394),
-    Color(0xFF33204F),
-  ];
-
-  List<Color> _artFor(String key) =>
-      _kArtGradients[key.hashCode.abs() % _kArtGradients.length];
-
-  LinearGradient _artGradient(List<Color> stops) => LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: stops,
-  );
 
   @override
   void initState() {
@@ -287,52 +247,14 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         // pool is 0, so a settlement with no Scout Post has an empty screen
         // and no idea it is missing a building).
         if (_ctrl.noSlots) ...[_noSlotsBanner(), const SizedBox(height: 10)],
-        Expanded(
-          child: running.isEmpty
-              ? _composer(areas)
-              // The rail's width is a FRACTION of what's actually available
-              // (same reasoning as the old "out now" column's). Floored at
-              // 200 rather than the old 190 (2026-10-02 regression, caught by
-              // a widget test): a trip card's own skip/cancel chip row
-              // overflowed a narrower rail — it's secondary to the composer
-              // now, but still has to fit its own content.
-              : LayoutBuilder(
-                  builder: (context, c) {
-                    final railWidth = (c.maxWidth * 0.22).clamp(200.0, 230.0);
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: _composer(areas)),
-                        const SizedBox(width: 14),
-                        SizedBox(
-                          width: railWidth,
-                          child: zoneBox(
-                            padding: const EdgeInsets.all(10),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                sectionLabel(
-                                  'Out now',
-                                  trailing: Text(
-                                    '${_ctrl.activeCount}/${_ctrl.maxSlots}',
-                                    style: const TextStyle(
-                                      color: kBoxInk,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Expanded(child: _outNowColumn(running)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-        ),
+        // LAYOUT 2, "Drei Schritte" (user 2026-11-04): Target, Group and Start
+        // as three numbered steps side by side, and what is out as one strip
+        // along the foot — it only exists once something IS out.
+        Expanded(child: _composer(areas)),
+        if (running.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _outNowStrip(running),
+        ],
       ],
     );
   }
@@ -355,14 +277,133 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
     unlockedResources: _unlockedResources,
   ).where((t) => !t.isHunt).toList();
 
-  // ── The rail: what's out ──────────────────────────────────
-  // Only ever built once [running] is non-empty — see [_layout].
-  Widget _outNowColumn(List<Expedition> running) => ListView.separated(
-    padding: const EdgeInsets.only(bottom: 4),
-    itemCount: running.length,
-    separatorBuilder: (_, _) => const SizedBox(height: 10),
-    itemBuilder: (context, i) => _tripCard(running[i]),
+  // ── The strip: what's out ─────────────────────────────────
+  // Only ever built once [running] is non-empty — see [_layout]. One compact
+  // card per trip, side by side; the strip scrolls sideways when there are
+  // more trips than fit.
+  static const double _stripHeight = 76;
+
+  Widget _outNowStrip(List<Expedition> running) => SizedBox(
+    height: _stripHeight,
+    child: zoneBox(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Row(
+        children: [
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'OUT NOW',
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: 1.0,
+                  color: kBoxAccent,
+                ),
+              ),
+              Text(
+                '${_ctrl.activeCount}/${_ctrl.maxSlots}',
+                style: TextStyle(fontSize: 11, color: kBoxInkFaint),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: running.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (_, i) => _tripStripCard(running[i]),
+            ),
+          ),
+        ],
+      ),
+    ),
   );
+
+  /// One trip, compact: the dial, what it is and how long, and the two
+  /// buttons (play / skip with gold, and recall). Fixed width so the strip
+  /// scrolls rather than squeezing a card until its text overflows.
+  Widget _tripStripCard(Expedition e) {
+    final now = DateTime.now();
+    final ready = e.isReadyToCollect(now);
+    return Container(
+      width: 270,
+      clipBehavior: Clip.antiAlias,
+      decoration: raisedTile(lit: ready),
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: RadialTimer(
+              value: e.progress(now),
+              emoji: e.type.emoji,
+              ready: ready,
+              size: 40,
+            ),
+          ),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _tripTitle(e),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w400,
+                    fontSize: 12,
+                    color: Strategy.outline,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                PillBadge(
+                  text: ready
+                      ? 'READY'
+                      : e.isStepGated
+                      ? '${e.stepsWalked}/${e.stepsTarget} steps'
+                      : fmtTripDuration(e.remaining(now)),
+                  color: ready ? Strategy.cyan : Strategy.outline,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (e.type == ExpeditionType.capture && ready)
+                _miniChip(
+                  '▶️ Play',
+                  color: Strategy.cyan,
+                  deep: Strategy.cyanDeep,
+                  onTap: () => _openEncounter(e),
+                )
+              else if (!ready)
+                // The tutorial's own second lit control, once this IS that
+                // hunt (user 2026-10-01) — see [_tutorialHunt].
+                _tutorialHunt?.id == e.id
+                    ? KeyedSubtree(
+                        key: IntroSpotlightAnchors.of('hunt-skip-gold'),
+                        child: _skipChip(e),
+                      )
+                    : _skipChip(e),
+              const SizedBox(height: 4),
+              _miniChip(
+                '✕',
+                color: Strategy.coral,
+                deep: Strategy.coralDeep,
+                onTap: () => _confirmCancel(e),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
 
   // ── The composer: "New Expedition" ───────────────────────
   // Picking a kind and a target used to live in a tile grid that handed off
@@ -428,48 +469,67 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
             kind: ExpeditionTargetKind.hunt,
             area: _resolvedHuntArea(areas),
           );
-    return zoneBox(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          sectionLabel('New Expedition'),
-          const SizedBox(height: 10),
-          if (showTypeSwitch) ...[
-            _typeSwitch(kind),
-            const SizedBox(height: 10),
-          ],
-          kind == ExpeditionTargetKind.gather
-              ? _gatherChipsRow(gatherTargets, selectedId: target?.id)
-              : _huntPickerSection(areas),
-          const SizedBox(height: 12),
-          // The SAME panel every target tile used to open as a sheet — see
-          // that widget's own doc comment. Keyed on the target + variant so
-          // picking a different chip gets a fresh group/send state instead
-          // of carrying over a selection made for a different trip.
-          Expanded(
-            child: target == null
-                ? Center(
-                    child: Text(
-                      'Nothing to send yet.',
-                      style: TextStyle(color: kBoxInkSoft, fontSize: 12),
-                    ),
-                  )
-                : ExpeditionLaunchPanel(
-                    key: ValueKey(
-                      '${target.id}_'
-                      '${kind == ExpeditionTargetKind.hunt ? _composerHuntOptionIndex : 0}',
-                    ),
-                    target: target,
-                    initialOptionIndex: kind == ExpeditionTargetKind.hunt
-                        ? _composerHuntOptionIndex
-                        : null,
-                  ),
+    // Layout 2 (user 2026-11-04): the launch panel IS the whole composer — it
+    // lays out "1 Target" (handed to it here), "2 Group" and "3 Start" as three
+    // numbered steps. Keyed on the target + variant so picking a different
+    // target gets a fresh group/send state instead of carrying over a
+    // selection made for a different trip.
+    if (target == null) {
+      return zoneBox(
+        padding: const EdgeInsets.all(14),
+        child: Center(
+          child: Text(
+            'Nothing to send yet.',
+            style: TextStyle(color: kBoxInkSoft, fontSize: 12),
           ),
-        ],
+        ),
+      );
+    }
+    return ExpeditionLaunchPanel(
+      key: ValueKey(
+        '${target.id}_'
+        '${kind == ExpeditionTargetKind.hunt ? _composerHuntOptionIndex : 0}',
+      ),
+      target: target,
+      initialOptionIndex: kind == ExpeditionTargetKind.hunt
+          ? _composerHuntOptionIndex
+          : null,
+      stepOne: _stepOne(
+        kind,
+        gatherTargets,
+        areas,
+        selectedGatherId: target.id,
+        showTypeSwitch: showTypeSwitch,
       ),
     );
   }
+
+  /// Step 1: the Gather/Hunt switch and the choices under it, one per row.
+  Widget _stepOne(
+    ExpeditionTargetKind kind,
+    List<ExpeditionTarget> gatherTargets,
+    List<AreaDef> areas, {
+    required String selectedGatherId,
+    required bool showTypeSwitch,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (showTypeSwitch) ...[_typeSwitch(kind), const SizedBox(height: 8)],
+      Expanded(
+        child: kind == ExpeditionTargetKind.gather
+            ? ListView.separated(
+                padding: EdgeInsets.zero,
+                itemCount: gatherTargets.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 6),
+                itemBuilder: (_, i) => _gatherRow(
+                  gatherTargets[i],
+                  selected: gatherTargets[i].id == selectedGatherId,
+                ),
+              )
+            : _huntPickerSection(areas),
+      ),
+    ],
+  );
 
   Widget _typeSwitch(ExpeditionTargetKind kind) => Container(
     padding: const EdgeInsets.all(3),
@@ -516,31 +576,17 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         label,
         style: TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           color: active ? kBoxInk : kBoxInkFaint,
         ),
       ),
     ),
   );
 
-  Widget _gatherChipsRow(
-    List<ExpeditionTarget> targets, {
-    required String? selectedId,
-  }) => SizedBox(
-    height: 70,
-    child: ListView.separated(
-      scrollDirection: Axis.horizontal,
-      itemCount: targets.length,
-      separatorBuilder: (_, _) => const SizedBox(width: 8),
-      itemBuilder: (_, i) =>
-          _gatherChip(targets[i], selected: targets[i].id == selectedId),
-    ),
-  );
-
-  /// One resource, as a chip rather than a full tile — the composer's job is
-  /// picking WHICH target, not explaining it at length; [ExpeditionLaunchPanel]
-  /// below already shows the haul/carry/duration figures once one is chosen.
-  Widget _gatherChip(ExpeditionTarget t, {required bool selected}) {
+  /// One resource as a row in step 1 — the target is picked here, the
+  /// figures for it show in steps 2 and 3, so the row only names it and says
+  /// how much is left (or why it cannot be sent).
+  Widget _gatherRow(ExpeditionTarget t, {required bool selected}) {
     final spot = t.spot!;
     final stock = _ctrl.availableStock(spot);
     final busy = _busySpotIds.contains(spot.id);
@@ -560,36 +606,42 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
               _composerGatherTargetId = t.id;
             }),
       child: Container(
-        width: 92,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: raisedTile(
           radius: 10,
           locked: blocked,
           lit: selected && !blocked,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Row(
           children: [
-            Text(t.emoji, style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 3),
-            Text(
-              resourceName(spot.resource),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w800,
-                color: ink,
-              ),
-            ),
-            Text(
-              reason ?? '${stock.toStringAsFixed(0)} left',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 7.5,
-                fontWeight: FontWeight.w600,
-                color: kBoxInkFaint,
+            Text(t.emoji, style: const TextStyle(fontSize: 20)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    resourceName(spot.resource),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: ink,
+                    ),
+                  ),
+                  Text(
+                    reason ?? '${stock.toStringAsFixed(0)} left',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w400,
+                      color: kBoxInkFaint,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -610,7 +662,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
       _settlement.buildingHuntOptions + _settlement.pathHuntOptions,
     );
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (areas.length > 1)
           Padding(
@@ -624,13 +676,12 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
               ],
             ),
           ),
-        SizedBox(
-          height: 70,
+        Expanded(
           child: ListView.separated(
-            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
             itemCount: kCaptureHuntOptions.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (_, i) => _huntDurationChip(
+            separatorBuilder: (_, _) => const SizedBox(height: 6),
+            itemBuilder: (_, i) => _huntDurationRow(
               i,
               locked: i >= unlocked,
               // The tutorial's own lit control (user 2026-10-01) — only the
@@ -654,15 +705,15 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: 9.5,
-          fontWeight: FontWeight.w800,
+          fontSize: 10,
+          fontWeight: FontWeight.w400,
           color: active ? kBoxInk : kBoxInkFaint,
         ),
       ),
     ),
   );
 
-  Widget _huntDurationChip(
+  Widget _huntDurationRow(
     int i, {
     required bool locked,
     bool spotlight = false,
@@ -670,6 +721,8 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
     final option = kCaptureHuntOptions[i];
     final selected = _composerHuntOptionIndex == i;
     final ink = locked ? kBoxInkFaint : kBoxInk;
+    // ONE line per length (label left, finds right): five lengths have to fit
+    // the step without scrolling, which two-line rows cannot do.
     return GestureDetector(
       key: spotlight ? IntroSpotlightAnchors.of('hunt-10min-option') : null,
       behavior: HitTestBehavior.opaque,
@@ -680,38 +733,38 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
               _composerHuntOptionIndex = i;
             }),
       child: Container(
-        width: 84,
-        padding: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: raisedTile(
           radius: 10,
           locked: locked,
           lit: selected && !locked,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Row(
           children: [
             Text(locked ? '🔒' : '🪤', style: const TextStyle(fontSize: 16)),
-            const SizedBox(height: 3),
-            Text(
-              option.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: ink,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                option.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: ink,
+                ),
               ),
             ),
+            const SizedBox(width: 6),
             Text(
               locked
                   ? 'Locked'
                   : '${option.finds} find${option.finds > 1 ? 's' : ''}',
               maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 7.5,
-                fontWeight: FontWeight.w600,
-                color: ink,
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
+                color: kBoxInkFaint,
               ),
             ),
           ],
@@ -779,7 +832,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
                 const Text(
                   'No expedition slots',
                   style: TextStyle(
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     fontSize: 13,
                     color: Strategy.outline,
                   ),
@@ -788,8 +841,8 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
                 const Text(
                   'A Scout Post is what grants them — build one, or level it up.',
                   style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
                     color: Strategy.outline,
                   ),
                 ),
@@ -800,138 +853,6 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
       ),
     ),
   );
-
-  // ── Out now ───────────────────────────────────────────────
-  // A plain card in its own scrolling column now (2026-09-18 landscape
-  // pass) — the [RadialTimer] dial still halves the height a trip card
-  // needs versus a linear bar, but landscape's own extra height meant the
-  // swipeable carousel this replaced was solving a problem that no longer
-  // existed once "Out now" got its own column instead of sharing width
-  // with the targets below it.
-  Widget _tripCard(Expedition e) {
-    final now = DateTime.now();
-    final ready = e.isReadyToCollect(now);
-    // Same art zone the targets use, coloured by what is actually out there —
-    // the resource being gathered, or the hunt violet.
-    final art = e.type == ExpeditionType.gather
-        ? _artFor((e.payload['resource'] as String?) ?? e.type.name)
-        : _kHuntGradient;
-    return Container(
-      width: double.infinity,
-      clipBehavior: Clip.antiAlias,
-      // A raised tile on the card; READY earns the gold rim.
-      decoration: raisedTile(lit: ready),
-      // IntrinsicHeight (2026-09-30 fix): this card sits in a ListView now
-      // (`_outNowColumn`, since the 2026-09-18 landscape pass replaced a
-      // fixed-size carousel with a plain scrolling column), which hands the
-      // Row an UNBOUNDED height — `stretch` then tries to pass that
-      // infinity straight down to its children ("BoxConstraints forces an
-      // infinite height", crashed live for a user with an expedition
-      // actually out; a QA pass with an empty `running` list never hit this
-      // branch). IntrinsicHeight gives the Row a real, finite height to
-      // stretch to instead, sized off its own content.
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 58,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(gradient: _artGradient(art)),
-              // The timer's own ring reads its colours (ink track, gold/cyan
-              // fill) against CREAM — a cream medallion behind it keeps that
-              // contrast on top of whatever the art zone's colour is, rather
-              // than recolouring the dial itself.
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  shape: BoxShape.rectangle,
-                  color: CreamPalette.tileTop,
-                ),
-                child: RadialTimer(
-                  value: e.progress(now),
-                  emoji: e.type.emoji,
-                  ready: ready,
-                  size: 40,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _tripTitle(e),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                        color: Strategy.outline,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    PillBadge(
-                      text: ready
-                          ? 'READY'
-                          : e.isStepGated
-                          ? '${e.stepsWalked}/${e.stepsTarget} Schritte'
-                          : fmtTripDuration(e.remaining(now)),
-                      color: ready ? Strategy.cyan : Strategy.outline,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _tripDetailText(e, ready),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w600,
-                        color: Strategy.outline.withValues(alpha: 0.75),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        if (e.type == ExpeditionType.capture && ready)
-                          _miniChip(
-                            '▶️ Play',
-                            color: Strategy.cyan,
-                            deep: Strategy.cyanDeep,
-                            onTap: () => _openEncounter(e),
-                          )
-                        else if (!ready)
-                          // The tutorial's own second lit control, once this
-                          // IS that hunt (user 2026-10-01) — see
-                          // [_tutorialHunt]'s own doc comment.
-                          _tutorialHunt?.id == e.id
-                              ? KeyedSubtree(
-                                  key: IntroSpotlightAnchors.of(
-                                    'hunt-skip-gold',
-                                  ),
-                                  child: _skipChip(e),
-                                )
-                              : _skipChip(e),
-                        const SizedBox(width: 4),
-                        _miniChip(
-                          '✕',
-                          color: Strategy.coral,
-                          deep: Strategy.coralDeep,
-                          onTap: () => _confirmCancel(e),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _miniChip(
     String label, {
@@ -949,7 +870,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
       label,
       style: TextStyle(
         fontSize: 10,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w400,
         color: strategyTextOn(color),
       ),
     ),
@@ -961,28 +882,6 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
       return resource == null ? e.type.label : 'Gathering $resource';
     }
     return 'Hunting';
-  }
-
-  String _tripDetailText(Expedition e, bool ready) {
-    if (e.type == ExpeditionType.gather) {
-      final resource = e.payload['resource'] as String?;
-      final amount = (e.payload['amount'] as num?)?.toDouble() ?? 0;
-      if (resource == null) return '';
-      return ready
-          ? '${resourceEmoji(resource)} ${amount.toStringAsFixed(0)} '
-                '$resource delivered'
-          : 'Bringing back ${resourceEmoji(resource)} '
-                '${amount.toStringAsFixed(0)} $resource';
-    }
-    // The finds stay hidden until the player opens the encounters.
-    final total = e.captureFindSpeciesIds.length;
-    final done = e.captureFindsDone;
-    return ready
-        ? (done > 0
-              ? '🪤 Encounter ${done + 1}/$total awaits!'
-              : '🪤 Something took the bait — '
-                    '$total encounter${total > 1 ? 's' : ''} await!')
-        : '🪤 Tracking… ($total find${total > 1 ? 's' : ''} ahead)';
   }
 
   // ── Actions ───────────────────────────────────────────────

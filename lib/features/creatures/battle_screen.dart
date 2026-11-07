@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart' show HapticFeedback;
 // Warms a sprite's BYTES into the same store CreatureSprite reads from,
 // without decoding it — see the precache in initState.
@@ -55,6 +55,7 @@ import '../settlement/widgets/building_icon.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// Result popped when a capture battle ends — replaces the old single-wild
 /// [CatchSuccess] (2026-09-11): a hunt now fields several wilds in ONE
@@ -805,25 +806,6 @@ class _BattleScreenState extends State<BattleScreen>
       default:
         _engine.performAutoAction();
     }
-  }
-
-  /// The player's own deliberate End Turn press — separate from the
-  /// programmatic `_engine.endTurn()` calls elsewhere (the catch flow, the
-  /// scripted debuff beat), which don't advance the script.
-  void _endTurn() {
-    final wasBankEndTurn = _scriptBeat == _ScriptBeat.bankEndTurn;
-    if (wasBankEndTurn) {
-      setState(() => _scriptBeat = _ScriptBeat.enemyAlmostKill);
-    }
-    // Captured BEFORE endTurn() advances the queue — by the time it
-    // returns, currentActor is already whoever's turn came next.
-    final actor = _engine.currentActor;
-    _engine.endTurn();
-    _relayPvpAction(kind: 'endTurn', actor: actor);
-    // Same reasoning as the tackle/missedAttack cases in [_useAbility]: a
-    // player faster than the enemy can otherwise win the real CTB race for
-    // ITS OWN next turn before the scripted enemyAlmostKill beat ever fires.
-    if (wasBankEndTurn) _forceHandoffToEnemy();
   }
 
   /// Snaps the acting combatant to the tutorial's one enemy — the mirror of
@@ -1990,11 +1972,12 @@ class _BattleScreenState extends State<BattleScreen>
               // [_arena]). LANDSCAPE (2026-09-18): the arena takes the left, the
               // command deck the right.
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                // The field runs the FULL width and the command bar lies along
+                // its bottom edge (user 2026-11-04) — see [_commandLayer].
+                child: Stack(
                   children: [
-                    Expanded(child: _arena()),
-                    _commandDeck(context),
+                    Positioned.fill(child: _arena()),
+                    _commandLayer(context),
                   ],
                 ),
               ),
@@ -2129,60 +2112,290 @@ class _BattleScreenState extends State<BattleScreen>
   Widget _arena() => LayoutBuilder(
     builder: (context, box) => Stack(
       children: [
-        // The battlefield itself is not drawn here any more: it runs behind the
-        // WHOLE screen (see [build]).
-        //
-        // The ranks keep clear of the tile gutter on both sides (so the centre of
-        // the ranks is the centre of the turn order above them); the log runs
-        // wider, edge to edge.
+        // The battlefield itself is not drawn here: it runs behind the WHOLE
+        // screen (see [build]). SIDE VIEW (user 2026-11-04): my monsters stand
+        // at the left, the enemy's at the right, on the same ground.
         Transform.translate(
           offset: Offset(0, box.maxHeight * _kArenaDrop),
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: _kBenchGutter),
-                child: Column(
-                  children: [
-                    Expanded(child: _rank(isEnemy: true)),
-                    const Expanded(child: SizedBox()),
-                  ],
-                ),
-              ),
-              // On the seam where the two ranks face off.
-              Align(alignment: Alignment.center, child: _logLine()),
-              // MY rank last, so it stands in FRONT of the battle log (user
-              // request, kept).
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: _kBenchGutter),
-                child: Column(
-                  children: [
-                    const Expanded(child: SizedBox()),
-                    Expanded(child: _rank(isEnemy: false)),
-                  ],
-                ),
-              ),
-            ],
+          child: Stack(children: [Positioned.fill(child: _formation(box))]),
+        ),
+        // The log in the gap between the two sides, beside the brook.
+        Align(
+          alignment: const Alignment(0, -0.18),
+          child: SizedBox(
+            width: (box.maxWidth * 0.22).clamp(150.0, 220.0),
+            child: _logLine(),
           ),
         ),
         _arenaHud(box.maxWidth),
         Positioned(
           left: 6,
-          // Under the flee key in the corner.
           top: 56,
-          child: _benchColumn(_engine.benchedEnemies, isEnemy: true),
+          child: _benchColumn(_engine.benchedPlayers, isEnemy: false),
         ),
         Positioned(
-          left: 6,
-          top: box.maxHeight / 2 + _kLogHeight / 2 + 8,
-          child: _benchColumn(_engine.benchedPlayers, isEnemy: false),
+          right: 6,
+          top: 56,
+          child: _benchColumn(_engine.benchedEnemies, isEnemy: true),
         ),
       ],
     ),
   );
 
-  /// The width of the strip down each side of the arena that the ranks stay out
-  /// of — the left one holds the waiting monsters' tiles.
-  static const double _kBenchGutter = 46;
+  /// The height of the command bar along the bottom edge; the ground ends above
+  /// it.
+  static const double _kBarH = 58;
+
+  /// Where a slot's FEET stand, as fractions of the ground (its width, its
+  /// height above the bar) for MY side; the enemy's are mirrored. Three spots
+  /// staggered in depth — the one lowest on screen is nearest.
+  static const List<Offset> _kSpots = [
+    Offset(0.15, 0.86),
+    Offset(0.29, 0.955),
+    Offset(0.2125, 0.73),
+  ];
+
+  /// The two sides standing on the ground, back to front (user 2026-11-04,
+  /// side view). Each monster is a [_fieldSlot]: its plate above its head, its
+  /// feet in a shadow. A lone monster stands in the middle spot of its side.
+  Widget _formation(BoxConstraints box) {
+    final w = box.maxWidth;
+    final groundH = box.maxHeight - _kBarH;
+    final slotW = (w * 0.2).clamp(104.0, 210.0);
+    final spriteH = (groundH * 0.44).clamp(80.0, 180.0);
+    const plateH = 44.0;
+    final placed = <(double, Widget)>[];
+    for (final isEnemy in const [true, false]) {
+      final field = isEnemy ? _engine.enemyField : _engine.playerField;
+      final live = [
+        for (var i = 0; i < CombatEngine.kFieldSlots; i++)
+          // A slot whose occupant just fainted stays for the length of its
+          // K.O. presentation (user 2026-08-29).
+          if ((field[i] != null && field[i]!.alive) ||
+              _koPlaying.values.any(
+                (e) => e.slot == i && e.isEnemy == isEnemy,
+              ))
+            i,
+      ];
+      for (final i in live) {
+        var spot = _kSpots[i % _kSpots.length];
+        if (live.length == 1) spot = const Offset(0.2125, 0.86);
+        final cx = (isEnemy ? 1 - spot.dx : spot.dx) * w;
+        final foot = spot.dy * groundH;
+        final top = math.max(48.0, foot - spriteH - plateH);
+        placed.add((
+          foot,
+          Positioned(
+            left: cx - slotW / 2,
+            top: top,
+            width: slotW,
+            height: foot - top,
+            child: _fieldSlot(
+              field[i],
+              slot: i,
+              isEnemy: isEnemy,
+              width: slotW,
+              back:
+                  live.length == CombatEngine.kFieldSlots &&
+                  i == CombatEngine.kFieldSlots - 1,
+              // The HP callout points at ONE plate: the first live slot on MY
+              // side (user 2026-09-04).
+              hpAnchor: !isEnemy && i == live.first,
+            ),
+          ),
+        ));
+      }
+    }
+    placed.sort((a, b) => a.$1.compareTo(b.$1));
+    return Stack(children: [for (final p in placed) p.$2]);
+  }
+
+  // ── The command bar (user 2026-11-04, "Fußleiste 6") ────────────────────────
+  // One row along the bottom: the three tabs, the AP, and — on Attack — the
+  // abilities. Items and Change open their page as a card above the bar; the
+  // bait pick does the same. The old cream deck beside the arena is gone, the
+  // field runs the full width.
+  Widget _commandLayer(BuildContext context) {
+    const blank = Positioned.fill(child: SizedBox.shrink());
+    // Held off exactly as long as [_endOverlay] itself is.
+    if (_engine.outcome != null && _scriptInfoHint == null) return blank;
+    final forced = _engine.needsPlayerSwitch;
+    final actor = _engine.activePlayer;
+    Widget? popup;
+    double? popupH;
+    Widget bar;
+    if (_entering) {
+      bar = const Center(
+        child: Text(
+          'Get ready…',
+          style: TextStyle(fontSize: 15, color: Color(0xFFF3E6C6)),
+        ),
+      );
+    } else if (_choosingBait) {
+      popup = _baitPage();
+      bar = const SizedBox.shrink();
+    } else if (!forced && actor == null) {
+      return blank;
+    } else {
+      final tab = _shownTab;
+      if (tab == _DeckTab.items && actor != null) popup = _itemsPage(actor);
+      if (tab == _DeckTab.change) popup = _changePage(actor, forced);
+      // The (i) on a tile (or a long press) opens that ability's description
+      // above the bar; a tap on the card closes it.
+      final info = actor == null ? null : _infoAbilityFor(actor);
+      if (tab == _DeckTab.attack && _infoAbilityId != null && info != null) {
+        popup = GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _infoAbilityId = null),
+          child: _abilityInfoBox(info),
+        );
+        popupH = 210;
+      }
+      bar = Row(
+        children: [
+          SizedBox(width: 144, child: _deckTabs(tab, forced)),
+          const SizedBox(width: 12),
+          if (actor != null) ...[
+            KeyedSubtree(
+              key: IntroSpotlightAnchors.of('battle-ap'),
+              child: _apPips(actor.ap, maxActionPointsForStage(actor.stage)),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: (actor != null && !forced)
+                ? _abilityRow(actor, _myTurn, _infoAbilityFor(actor))
+                : const SizedBox.shrink(),
+          ),
+          // End turn, and Catch where this encounter can ever be caught (they
+          // lived under the ability grid in the old deck).
+          if (actor != null && !forced) ...[
+            const SizedBox(width: 8),
+            if (widget.isCapture) ...[
+              SizedBox(
+                width: 78,
+                height: 40,
+                child: _deckTile(
+                  'Catch',
+                  Icons.catching_pokemon,
+                  enabled: _myTurn && _canCatch,
+                  onTap: _startCatch,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            SizedBox(
+              width: 92,
+              child: KeyedSubtree(
+                key: IntroSpotlightAnchors.of('battle-endturn-btn'),
+                child: SocialGoldButton(
+                  'End turn',
+                  height: 40,
+                  fontSize: 13,
+                  onTap: _myTurn ? _endTurn : null,
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+    return Positioned.fill(
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final ph = (box.maxHeight - _kBarH - 64).clamp(160.0, 320.0);
+          return Stack(
+            children: [
+              if (popup != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: _kBarH + 6,
+                  child: Center(
+                    child: SizedBox(
+                      width: 340,
+                      height: popupH ?? ph,
+                      child: creamCard(
+                        padding: const EdgeInsets.all(10),
+                        child: DefaultTextStyle.merge(
+                          style: const TextStyle(height: 1.15),
+                          child: popup,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: _kBarH,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF6B4528),
+                    border: Border(
+                      top: BorderSide(color: Color(0xFF0B1E27), width: 2),
+                    ),
+                  ),
+                  child: bar,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// The abilities as ONE row of tiles (the same tiles, the same anchors as the
+  /// old 2×2 grid — see [_abilityBtn]).
+  Widget _abilityRow(Combatant actor, bool myTurn, AbilityDef? info) {
+    return KeyedSubtree(
+      key: IntroSpotlightAnchors.of('battle-actions'),
+      child: IgnorePointer(
+        ignoring:
+            _battleCallout != null &&
+            _battleCalloutAnchors[_battleCallout!] == 'battle-actions',
+        child: Builder(
+          builder: (context) {
+            final firstReal = _firstRealAbility(actor);
+            final secondReal = _secondRealAbility(actor);
+            return Row(
+              children: [
+                for (var i = 0; i < actor.abilities.length; i++) ...[
+                  if (i > 0) const SizedBox(width: _kTileGap),
+                  Expanded(
+                    child: _maybeAnchoredAbilityTile(
+                      actor.abilities[i],
+                      firstReal,
+                      secondReal,
+                      _abilityBtn(
+                        actor.abilities[i].name,
+                        _effectiveApCost(actor.abilities[i]),
+                        element: actor.abilities[i].element,
+                        enabled:
+                            myTurn &&
+                            actor.ap >= _effectiveApCost(actor.abilities[i]),
+                        onTap: () {
+                          _useAbility(actor.abilities[i]);
+                        },
+                        ability: actor.abilities[i],
+                        selected: identical(actor.abilities[i], info),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
 
   // ── The command deck (user 2026-09-20, "Variante 7 — Reiter") ──────────────
   //
@@ -2235,70 +2448,6 @@ class _BattleScreenState extends State<BattleScreen>
     return all.length > 1 ? all[1] : all.first;
   }
 
-  Widget _commandDeck(BuildContext context) {
-    final w = (MediaQuery.sizeOf(context).width * 0.34).clamp(270.0, 340.0);
-    // No brown ground under the card any more: it floats on the battlefield.
-    return Container(
-      width: w,
-      padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
-      child: creamCard(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-        child: DefaultTextStyle.merge(
-          // Material's default body height (1.43) would push the compact rows over
-          // their fixed heights.
-          style: const TextStyle(height: 1.15),
-          child: _deckBody(),
-        ),
-      ),
-    );
-  }
-
-  Widget _deckBody() {
-    // Held off exactly as long as [_endOverlay] itself is (see its own "held
-    // back while a [_scriptInfoHint] is still showing" comment) — the finisher's
-    // crit explainer can leave [_engine.outcome] set for a beat before the win
-    // screen is allowed to take over, and the deck used to collapse to nothing
-    // the instant outcome was set, leaving a dead blank strip under the
-    // still-showing hint (user 2026-09-06: "am Ende des Kampfes verschwindet
-    // das UI").
-    if (_engine.outcome != null && _scriptInfoHint == null) {
-      return const SizedBox.shrink();
-    }
-    if (_entering) {
-      // Hold input while the fighters are still sliding on.
-      return const Center(
-        child: Text(
-          'Get ready…',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            color: kBoxAccent,
-          ),
-        ),
-      );
-    }
-    // Full takeover — not a tab, nothing to browse back to mid-pick.
-    if (_choosingBait) return _baitPage();
-    final forced = _engine.needsPlayerSwitch;
-    final actor = _engine.activePlayer;
-    if (!forced && actor == null) return const SizedBox.shrink();
-    final tab = _shownTab;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _deckTabs(tab, forced),
-        const SizedBox(height: 8),
-        Expanded(
-          child: switch (tab) {
-            _DeckTab.attack => _attackPage(actor!),
-            _DeckTab.items => _itemsPage(actor!),
-            _DeckTab.change => _changePage(actor, forced),
-          },
-        ),
-      ],
-    );
-  }
-
   Widget _deckTabs(_DeckTab shown, bool forced) {
     // Tabs are always browsable — the pages grey their own actions when it is
     // not your turn — except in a forced switch (only Change makes sense) and in
@@ -2309,7 +2458,12 @@ class _BattleScreenState extends State<BattleScreen>
     Widget tab(_DeckTab t, IconData icon, String label, {String? anchor}) {
       final on = shown == t;
       Widget button = Pressable(
-        onTap: canTap && !on ? () => setState(() => _deckTab = t) : null,
+        // No Attack tab (user 2026-11-04: "die Kampffähigkeiten können so
+        // immer angezeigt werden"): the abilities are always on the bar, so
+        // Items and Change are toggles — a second tap closes the page again.
+        onTap: canTap
+            ? () => setState(() => _deckTab = on ? _DeckTab.attack : t)
+            : null,
         child: Container(
           height: _kTabH,
           alignment: Alignment.center,
@@ -2326,7 +2480,7 @@ class _BattleScreenState extends State<BattleScreen>
                   maxLines: 1,
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     color: on ? kBoxInk : kBoxInkSoft,
                   ),
                 ),
@@ -2349,8 +2503,6 @@ class _BattleScreenState extends State<BattleScreen>
       padding: const EdgeInsets.only(bottom: 3),
       child: Row(
         children: [
-          tab(_DeckTab.attack, Icons.flash_on, 'Attack'),
-          const SizedBox(width: 6),
           tab(
             _DeckTab.items,
             Icons.backpack,
@@ -2366,89 +2518,6 @@ class _BattleScreenState extends State<BattleScreen>
 
   // ── Attack page ───────────────────────────────────────────
 
-  Widget _attackPage(Combatant actor) {
-    final myTurn = _myTurn;
-    final info = _infoAbilityFor(actor);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // AP are CARRIED per monster now (user 2026-07-20), so show MY
-        // monster's real pool at all times — including during the enemy's turn,
-        // when what you banked is exactly what you're planning around.
-        _actorRow(actor, actor.ap, maxActionPointsForStage(actor.stage)),
-        const SizedBox(height: 8),
-        _abilityGrid(actor, myTurn, info),
-        const SizedBox(height: 8),
-        Expanded(
-          child: info == null ? const SizedBox.shrink() : _abilityInfoBox(info),
-        ),
-        const SizedBox(height: 8),
-        _turnRow(myTurn),
-      ],
-    );
-  }
-
-  Widget _actorRow(Combatant actor, int ap, int maxAp) {
-    final frac = actor.maxHp <= 0 ? 0.0 : actor.hp / actor.maxHp;
-    return SizedBox(
-      height: 44,
-      child: Row(
-        children: [
-          // The battle's small monster: on the arena's own podium, HP as its
-          // rim (user 2026-09-20: "Nimm die Sockelkachel für den Kampf").
-          SizedBox(
-            width: 46,
-            height: 44,
-            child: Center(
-              child: SockelAvatar.combatant(actor, size: 38, hpColor: _hpColor),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        actor.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: kBoxInk,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      'Lv ${actor.level}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: kBoxInkSoft,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                _creamHpBar(actor.hp, actor.maxHp, frac),
-                const SizedBox(height: 2),
-                // The cost, then what it buys (2026-08-01).
-                KeyedSubtree(
-                  key: IntroSpotlightAnchors.of('battle-ap'),
-                  child: _apPips(ap, maxAp),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _creamHpBar(int hp, int maxHp, double frac) => Row(
     children: [
       Expanded(
@@ -2459,7 +2528,7 @@ class _BattleScreenState extends State<BattleScreen>
         '$hp/$maxHp',
         style: TextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
           color: kBoxInkSoft,
         ),
       ),
@@ -2476,7 +2545,7 @@ class _BattleScreenState extends State<BattleScreen>
         'AP',
         style: TextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           color: kBoxAccent,
         ),
       ),
@@ -2498,73 +2567,578 @@ class _BattleScreenState extends State<BattleScreen>
     ],
   );
 
-  Widget _abilityGrid(Combatant actor, bool myTurn, AbilityDef? info) {
-    return KeyedSubtree(
-      key: IntroSpotlightAnchors.of('battle-actions'),
-      // This callout's hole is the WHOLE tile grid, unlike every other anchor
-      // here — so unlike a plain info readout (turn order, AP, HP), the real
-      // buttons underneath stay live and tappable purely because the scrim
-      // happens to be punched out around them. Not just cosmetic: firing a REAL
-      // ability here would spend AP and damage the enemy outside the script,
-      // which the exact percentages after it assume never happened (user
-      // 2026-09-03: "dürfen die Fähigkeiten nicht aktiv sein, sonst
-      // funktioniert das Tutorial nicht"). IgnorePointer only while this exact
-      // callout is up — every later step still needs these tiles live.
-      child: IgnorePointer(
-        ignoring:
-            _battleCallout != null &&
-            _battleCalloutAnchors[_battleCallout!] == 'battle-actions',
-        child: Builder(
-          builder: (context) {
-            // Attack sits at abilities[0] on every combatant now (user
-            // 2026-09-03: "attack soll eine normale Fähigkeit sein") — ONE
-            // loop, no separate hardcoded tile for it.
-            final firstReal = _firstRealAbility(actor);
-            final secondReal = _secondRealAbility(actor);
-            final tiles = [
-              for (final a in actor.abilities)
-                _maybeAnchoredAbilityTile(
-                  a,
-                  firstReal,
-                  secondReal,
-                  _abilityBtn(
-                    a.name,
-                    _effectiveApCost(a),
-                    element: a.element,
-                    enabled: myTurn && actor.ap >= _effectiveApCost(a),
-                    onTap: () {
-                      setState(() => _infoAbilityId = a.id);
-                      _useAbility(a);
-                    },
-                    ability: a,
-                    selected: identical(a, info),
-                  ),
-                ),
-            ];
-            // Up to three to a row: 4 → 2+2, 5 → 3+2, 6 → 3+3 (user
-            // 2026-08-28), see [_abilityRowSplit].
-            final split = _abilityRowSplit(tiles.length, 3);
-            var i = 0;
-            return Column(
-              mainAxisSize: MainAxisSize.min,
+  // ── Bait page (the deck turned into the bag, user 2026-10-04) ──
+
+  Widget _baitPage() {
+    if (widget.guaranteedCatch) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _pageHeading('Choose your bait', 'tutorial — never spent'),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 4),
               children: [
-                for (var r = 0; r < split.length; r++) ...[
-                  if (r > 0) const SizedBox(height: _kTileGap),
-                  Row(
-                    children: [
-                      for (var j = 0; j < split[r]; j++) ...[
-                        if (j > 0) const SizedBox(width: _kTileGap),
-                        Expanded(child: tiles[i++]),
-                      ],
-                    ],
+                _deckRow(
+                  leading: Text(
+                    practiceBait.emoji,
+                    style: const TextStyle(fontSize: 20),
                   ),
-                ],
+                  title: practiceBait.name,
+                  detail: Text(
+                    'Start ${(practiceBait.magnitude * 100).round()}%',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: kBoxInkSoft,
+                    ),
+                  ),
+                  action: 'Throw',
+                  enabled: true,
+                  onTap: () => _chooseBait(practiceBait),
+                ),
+                _baitCancelRow(),
               ],
-            );
-          },
+            ),
+          ),
+        ],
+      );
+    }
+    return ListenableBuilder(
+      listenable: SettlementController(),
+      builder: (context, _) {
+        final owned = SettlementController().items;
+        final baits = [
+          for (final d in kItemDefs.values)
+            if (d.kind == ItemKind.catchBoost) d,
+        ]..sort((a, b) => a.magnitude.compareTo(b.magnitude));
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _pageHeading('Choose your bait', 'sets your starting chance'),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 4),
+                children: [
+                  for (final d in baits)
+                    _deckRow(
+                      leading: Text(
+                        d.emoji,
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                      title: '${d.name} ×${owned[d.id] ?? 0}',
+                      detail: Text(
+                        'Start ${(d.magnitude * 100).round()}%',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w400,
+                          color: kBoxInkSoft,
+                        ),
+                      ),
+                      action: 'Throw',
+                      enabled: (owned[d.id] ?? 0) > 0,
+                      onTap: () => _chooseBait(d),
+                    ),
+                  _baitCancelRow(),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _baitCancelRow() => Padding(
+    padding: const EdgeInsets.only(top: 2),
+    child: Pressable(
+      onTap: _cancelBaitChoice,
+      child: Container(
+        height: 30,
+        alignment: Alignment.center,
+        decoration: raisedTile(radius: 10),
+        child: Text(
+          'Cancel',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: kBoxInkSoft,
+          ),
+        ),
+      ),
+    ),
+  );
+
+  // ── Change page ───────────────────────────────────────────
+
+  Widget _changePage(Combatant? actor, bool forced) {
+    final bench = _engine.benchedPlayers;
+    // A forced switch is free and always allowed; a voluntary one costs the
+    // leaving monster [kSwitchApCost] out of its own pool.
+    final canSwitch =
+        forced || (_myTurn && actor != null && actor.ap >= kSwitchApCost);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _pageHeading(
+          forced ? 'Your monster fainted' : 'Switch monster',
+          forced ? 'send in a reserve' : 'costs $kSwitchApCost AP',
+        ),
+        Expanded(
+          child: bench.isEmpty
+              ? Center(
+                  child: Text(
+                    'No reserves left.',
+                    style: TextStyle(fontSize: 12, color: kBoxInkSoft),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  children: [
+                    for (final c in bench)
+                      _deckRow(
+                        leading: SockelAvatar.combatant(
+                          c,
+                          size: 30,
+                          hpColor: _hpColor,
+                        ),
+                        title: '${c.element.emoji} ${c.name} · Lv ${c.level}',
+                        detail: _creamHpBar(
+                          c.hp,
+                          c.maxHp,
+                          c.maxHp <= 0 ? 0.0 : c.hp / c.maxHp,
+                        ),
+                        action: 'Send in',
+                        enabled: canSwitch,
+                        onTap: () => _switchTo(c),
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// One row of the Items / Change lists: a tile with the thing, what it does,
+  /// and a small gold button on the right.
+  Widget _deckRow({
+    required Widget leading,
+    required String title,
+    required Widget detail,
+    required String action,
+    required bool enabled,
+    required VoidCallback onTap,
+    String? anchor,
+  }) {
+    Widget button = Pressable(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.center,
+        decoration: goldButton(active: enabled),
+        child: Text(
+          action,
+          maxLines: 1,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: goldButtonInk(active: enabled),
+          ),
         ),
       ),
     );
+    if (anchor != null) {
+      button = KeyedSubtree(
+        key: IntroSpotlightAnchors.of(anchor),
+        child: button,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+        decoration: raisedTile(radius: 10),
+        child: Row(
+          children: [
+            SizedBox(width: 28, child: Center(child: leading)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: kBoxInk,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  detail,
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            button,
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The floating combat numbers, drawn over everything but the overlays. Each
+  /// is anchored over the monster it belongs to: its side decides the height,
+  /// its SLOT the horizontal position (user 2026-07-27 — a spread move now hits
+  /// three at once, and three numbers stacked in the middle of the half would
+  /// say nothing about who took what). A small per-id nudge keeps two numbers
+  /// in the same slot from landing exactly on top of each other.
+  ///
+  /// Nudged right of that slot now, not centred on it (user 2026-08-29: "Die
+  /// Schadenszahl soll rechts nahe dem Monster sein", then again once more
+  /// clearly: "Die Schadenszahlen sollen rechts von dem Monster sein" — 0.16
+  /// read as barely offset at all, so this is a real step right, not a
+  /// nudge) — still close enough to read as THIS monster's number, not
+  /// drifting toward its neighbour's slot.
+  static const double _kFloatRightOffset = 0.34;
+
+  /// The player's own deliberate End Turn press — separate from the
+  /// programmatic `_engine.endTurn()` calls elsewhere (the catch flow, the
+  /// scripted debuff beat), which don't advance the script.
+  void _endTurn() {
+    final wasBankEndTurn = _scriptBeat == _ScriptBeat.bankEndTurn;
+    if (wasBankEndTurn) {
+      setState(() => _scriptBeat = _ScriptBeat.enemyAlmostKill);
+    }
+    // Captured BEFORE endTurn() advances the queue — by the time it
+    // returns, currentActor is already whoever's turn came next.
+    final actor = _engine.currentActor;
+    _engine.endTurn();
+    _relayPvpAction(kind: 'endTurn', actor: actor);
+    // Same reasoning as the tackle/missedAttack cases in [_useAbility]: a
+    // player faster than the enemy can otherwise win the real CTB race for
+    // ITS OWN next turn before the scripted enemyAlmostKill beat ever fires.
+    if (wasBankEndTurn) _forceHandoffToEnemy();
+  }
+
+  /// Turns the command deck into the bait list (user 2026-10-04: "soll im
+  /// Kampfscreen die Rechte Box zum Inventar werden und dort wähle ich den
+  /// Köder aus") against the currently SELECTED wild — the wild itself was
+  /// already "the" lone enemy before hunts fielded several at once
+  /// (2026-09-11). Picking a bait there (see [_chooseBait]) is what
+  /// actually spends it and pushes [CaptureBarScreen]; cancelling (see
+  /// [_cancelBaitChoice]) spends nothing at all, as if Catch was never
+  /// pressed.
+  void _startCatch() {
+    final wild = _target;
+    if (wild == null || !_canCatch) return;
+    _catchWild = wild;
+    _catcher = _engine.activePlayer;
+    if (_catcher == null) return;
+    setState(() {
+      _catchOpen = true;
+      _choosingBait = true;
+    });
+  }
+
+  /// Uses [chosen] on the ACTIVE monster; it costs a flat [kItemApCost] AP, same
+  /// as every ability's own AP spend — NOT the whole turn (user 2026-09-05: "ein
+  /// Item benutzen, kostet immer 1 AP", replacing the older whole-turn rule from
+  /// 2026-07-18).
+  Future<void> _applyItem(ItemDef chosen) async {
+    final actor = _engine.activePlayer;
+    if (actor == null || _usingItem) return;
+    _usingItem = true;
+    try {
+      // Spend FIRST — if the item can't leave the bag, nothing happens.
+      final err = await SettlementController().consumeItem(chosen.id);
+      if (!mounted) return;
+      if (err != null) {
+        _flashMessage(err);
+        return;
+      }
+      _applyItemEffect(chosen, actor);
+    } finally {
+      _usingItem = false;
+    }
+  }
+
+  void _applyItemEffect(ItemDef chosen, Combatant actor) {
+    switch (chosen.kind) {
+      case ItemKind.buff:
+        final buff = _selfBuffForStat(chosen.buffStat);
+        // The ITEM'S OWN magnitude (fixed 2026-07-30). ItemDef.magnitude is
+        // documented as "buff fraction" and was simply dropped here: every buff
+        // item granted the catalog's +30 %/+25 %, so the number the author typed
+        // did nothing. A 0 still means "the standard strength" — applySelfBuff
+        // resolves it the same way an ability's does.
+        actor.applySelfBuff(buff, value: chosen.magnitude);
+        _flashMessage('${chosen.emoji} ${actor.name} — ${buff.name}!');
+      case ItemKind.cureStatus:
+        // The item's own magnitude IS its reliability (user 2026-09-15's
+        // weak/strong remedies — see ItemKind.cureStatus's own doc).
+        // deterministicCombat always succeeds, matching every other roll's
+        // own convention (see CombatEngine._rollAccuracy).
+        final worked =
+            _engine.deterministicCombat ||
+            _engine.rng.nextDouble() < chosen.magnitude;
+        final cured = worked && actor.cureMainStatus(chosen.cureMainStatus);
+        _flashMessage(
+          cured
+              ? '${chosen.emoji} ${actor.name} is cured!'
+              : '${chosen.emoji} ${actor.name} — no effect.',
+        );
+      case ItemKind.cureDebuffs:
+        final worked =
+            _engine.deterministicCombat ||
+            _engine.rng.nextDouble() < chosen.magnitude;
+        final cleansed = worked && actor.clearSecondaryDebuffs();
+        _flashMessage(
+          cleansed
+              ? '${chosen.emoji} ${actor.name} is cleansed!'
+              : '${chosen.emoji} ${actor.name} — no effect.',
+        );
+      default: // heal
+        final heal = healFromItem(
+          chosen,
+          (actor.maxHp - actor.hp).toDouble(),
+        ).round();
+        actor.hp = (actor.hp + heal).clamp(0, actor.maxHp).toInt();
+        _flashMessage('${chosen.emoji} ${actor.name} +$heal HP');
+    }
+    if (_scriptBeat == _ScriptBeat.healItem) {
+      // Scripted for THIS fight only: the cutscene sets AP directly rather
+      // than going through _engine.useItem, so a low roll can never block
+      // the next authored beat (user 2026-09-03: "unabhängig von den
+      // tatsächlichen Werten") — it happens to spend the exact same
+      // [kItemApCost] the real rule below now also charges (user
+      // 2026-09-05), so the two no longer diverge, they just take different
+      // paths to it.
+      actor.ap = math.max(0, actor.ap - kItemApCost);
+      // "9 regeneriert" (user 2026-09-04) tops the starter right back up to
+      // full regardless of the real potion's own formula — same fakery as
+      // every other forced HP number in this fight.
+      actor.hp = actor.maxHp;
+      _ensureApFor(_ScriptBeat.missedAttack);
+      setState(() {
+        _deckTab = _DeckTab.attack;
+        _scriptBeat = _ScriptBeat.missedAttack;
+        _scriptInfoHint =
+            'Items cost AP too — always 1, no matter which '
+            'one you use.';
+      });
+    } else {
+      // Using an item always costs a flat kItemApCost AP (user 2026-09-05) —
+      // the turn stays open for whatever's left, exactly like an ability.
+      _engine.useItem(actor);
+      // Back to the moves: the potion is the setup, the attack is the point.
+      setState(() => _deckTab = _DeckTab.attack);
+    }
+  }
+
+  /// Maps an item's buff stat onto the engine's self-buff (rage=attack,
+  /// armor=defense, haste=speed; attack/other → rage).
+  SelfBuffKind _selfBuffForStat(CreatureStat? s) => switch (s) {
+    CreatureStat.defense => SelfBuffKind.armor,
+    CreatureStat.speed => SelfBuffKind.haste,
+    _ => SelfBuffKind.rage,
+  };
+
+  /// What tapping [def] would do to [actor] RIGHT NOW — the "Use an item"
+  /// sheet's one-line preview, same job for every kind (user 2026-09-15
+  /// added the cure lines).
+  String _itemUseLabel(ItemDef def, Combatant actor) {
+    switch (def.kind) {
+      case ItemKind.buff:
+        return _selfBuffForStat(def.buffStat).name;
+      case ItemKind.cureStatus:
+        final pct = (def.magnitude * 100).round();
+        final target = def.cureMainStatus?.label ?? 'any status';
+        return actor.mainStatus == null
+            ? 'nothing to cure right now'
+            : 'cures $target · $pct%';
+      case ItemKind.cureDebuffs:
+        final pct = (def.magnitude * 100).round();
+        return actor.secondaryDebuffs.isEmpty
+            ? 'nothing to cleanse right now'
+            : 'cleanses all debuffs · $pct%';
+      default: // heal
+        return '+${healFromItem(def, (actor.maxHp - actor.hp).toDouble()).round()} HP';
+    }
+  }
+
+  /// A light tile button on the cream card — the quiet sibling of the gold one.
+  Widget _deckTile(
+    String label,
+    IconData icon, {
+    required bool enabled,
+    required VoidCallback onTap,
+  }) => Pressable(
+    onTap: enabled ? onTap : null,
+    child: Container(
+      height: 36,
+      alignment: Alignment.center,
+      decoration: raisedTile(radius: 11, locked: !enabled),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PixelIcon(icon, size: 15, color: enabled ? kBoxInk : kBoxInkFaint),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: enabled ? kBoxInk : kBoxInkFaint,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  /// A page's small-caps heading with its price on the right, over a hairline.
+  Widget _pageHeading(String title, String note) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(
+        children: [
+          Flexible(
+            child: Text(
+              title.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                color: kBoxAccent,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          const Spacer(),
+          Text(
+            note,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: kBoxInkSoft,
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 5),
+      Container(height: 1, color: CreamPalette.tan.withValues(alpha: 0.55)),
+      const SizedBox(height: 8),
+    ],
+  );
+
+  Widget _itemsPage(Combatant actor) {
+    final held = _usableItems();
+    // Every item costs a flat [kItemApCost] (user 2026-09-05); the scripted
+    // potion beat is paid for by the script itself.
+    final canPay =
+        _myTurn &&
+        (actor.ap >= kItemApCost || _scriptBeat == _ScriptBeat.healItem);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _pageHeading('Use an item', 'costs $kItemApCost AP'),
+        Expanded(
+          child: held.isEmpty
+              ? Center(
+                  child: Text(
+                    'No usable items in your bag.',
+                    style: TextStyle(fontSize: 12, color: kBoxInkSoft),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  children: [
+                    for (var i = 0; i < held.length; i++)
+                      _deckRow(
+                        leading: Text(
+                          held[i].$1.emoji,
+                          style: const TextStyle(fontSize: 20),
+                        ),
+                        title: '${held[i].$1.name} ×${held[i].$2}',
+                        detail: Text(
+                          _itemUseLabel(held[i].$1, actor),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: kBoxInkSoft,
+                          ),
+                        ),
+                        action: 'Use',
+                        enabled: canPay,
+                        onTap: () => _applyItem(held[i].$1),
+                        // The scripted potion beat lights the FIRST row's button.
+                        anchor: i == 0 ? 'battle-item-use' : null,
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// REMATCH (user 2026-09-19): one tap after a PvP result sends the same
+  /// opponent a new challenge and walks into its lobby — you can step out of it
+  /// like any other. If they already challenged you back (they were quicker),
+  /// that one is accepted instead, so two rematches never stack up.
+  Future<void> _rematch() async {
+    final match = widget.pvpMatch!;
+    final myId = supabase.auth.currentUser!.id;
+    final opponentId = match.otherUserId(myId);
+    // Held before popping: this screen is gone once the route is.
+    final nav = appNavigatorKey.currentState;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      final notifier = PvpNotifier.instance;
+      final open = notifier.openMatches.where(
+        (m) =>
+            m.otherUserId(myId) == opponentId &&
+            (m.status == PvpMatchStatus.pending ||
+                m.status == PvpMatchStatus.accepted),
+      );
+      PvpMatch rematch;
+      if (open.isEmpty) {
+        rematch = await _pvpService.createChallenge(opponentId);
+      } else {
+        final existing = open.first;
+        rematch =
+            existing.status == PvpMatchStatus.pending &&
+                existing.playerB == myId
+            ? await _pvpService.acceptChallenge(existing.id)
+            : existing;
+      }
+      notifier.remember(rematch);
+      final names = await FriendsService().usernamesFor([opponentId]);
+      if (nav == null) return;
+      final name = names[opponentId] ?? '(unknown)';
+      nav.popUntil((r) => r.isFirst);
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => PvpLobbyScreen(match: rematch, opponentName: name),
+        ),
+      );
+    } catch (e) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Could not start a rematch: $e')),
+      );
+    }
   }
 
   /// What the picked ability does — its numbers, its effects, and its live
@@ -2704,405 +3278,6 @@ class _BattleScreenState extends State<BattleScreen>
     );
   }
 
-  Widget _turnRow(bool myTurn) => Padding(
-    padding: const EdgeInsets.only(bottom: 3),
-    child: Row(
-      children: [
-        Expanded(
-          child: KeyedSubtree(
-            key: IntroSpotlightAnchors.of('battle-endturn-btn'),
-            child: SocialGoldButton(
-              'End turn',
-              height: 36,
-              fontSize: 13,
-              onTap: myTurn ? _endTurn : null,
-            ),
-          ),
-        ),
-        // Only shown when this encounter can EVER be caught — a story battle
-        // isn't [isCapture] at all and never will be this turn or any other
-        // (user 2026-08-28: "Catchbutton nur dann anzeigen, wenn das Monster
-        // theoretisch gefangen werden kann"). [_canCatch] still gates whether
-        // it's ENABLED right now (wrong turn, not worn down enough yet).
-        if (widget.isCapture) ...[
-          const SizedBox(width: _kTileGap),
-          Expanded(
-            child: _deckTile(
-              'Catch',
-              Icons.catching_pokemon,
-              enabled: myTurn && _canCatch,
-              onTap: _startCatch,
-            ),
-          ),
-        ],
-      ],
-    ),
-  );
-
-  /// A light tile button on the cream card — the quiet sibling of the gold one.
-  Widget _deckTile(
-    String label,
-    IconData icon, {
-    required bool enabled,
-    required VoidCallback onTap,
-  }) => Pressable(
-    onTap: enabled ? onTap : null,
-    child: Container(
-      height: 36,
-      alignment: Alignment.center,
-      decoration: raisedTile(radius: 11, locked: !enabled),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            PixelIcon(icon, size: 15, color: enabled ? kBoxInk : kBoxInkFaint),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              maxLines: 1,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: enabled ? kBoxInk : kBoxInkFaint,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-
-  // ── Items page ────────────────────────────────────────────
-
-  /// A page's small-caps heading with its price on the right, over a hairline.
-  Widget _pageHeading(String title, String note) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Row(
-        children: [
-          Flexible(
-            child: Text(
-              title.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.1,
-                color: kBoxAccent,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          const Spacer(),
-          Text(
-            note,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: kBoxInkSoft,
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 5),
-      Container(height: 1, color: CreamPalette.tan.withValues(alpha: 0.55)),
-      const SizedBox(height: 8),
-    ],
-  );
-
-  Widget _itemsPage(Combatant actor) {
-    final held = _usableItems();
-    // Every item costs a flat [kItemApCost] (user 2026-09-05); the scripted
-    // potion beat is paid for by the script itself.
-    final canPay =
-        _myTurn &&
-        (actor.ap >= kItemApCost || _scriptBeat == _ScriptBeat.healItem);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _pageHeading('Use an item', 'costs $kItemApCost AP'),
-        Expanded(
-          child: held.isEmpty
-              ? Center(
-                  child: Text(
-                    'No usable items in your bag.',
-                    style: TextStyle(fontSize: 12, color: kBoxInkSoft),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  children: [
-                    for (var i = 0; i < held.length; i++)
-                      _deckRow(
-                        leading: Text(
-                          held[i].$1.emoji,
-                          style: const TextStyle(fontSize: 20),
-                        ),
-                        title: '${held[i].$1.name} ×${held[i].$2}',
-                        detail: Text(
-                          _itemUseLabel(held[i].$1, actor),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: kBoxInkSoft,
-                          ),
-                        ),
-                        action: 'Use',
-                        enabled: canPay,
-                        onTap: () => _applyItem(held[i].$1),
-                        // The scripted potion beat lights the FIRST row's button.
-                        anchor: i == 0 ? 'battle-item-use' : null,
-                      ),
-                  ],
-                ),
-        ),
-      ],
-    );
-  }
-
-  // ── Bait page (the deck turned into the bag, user 2026-10-04) ──
-
-  Widget _baitPage() {
-    if (widget.guaranteedCatch) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _pageHeading('Choose your bait', 'tutorial — never spent'),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(bottom: 4),
-              children: [
-                _deckRow(
-                  leading: Text(
-                    practiceBait.emoji,
-                    style: const TextStyle(fontSize: 20),
-                  ),
-                  title: practiceBait.name,
-                  detail: Text(
-                    'Start ${(practiceBait.magnitude * 100).round()}%',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: kBoxInkSoft,
-                    ),
-                  ),
-                  action: 'Throw',
-                  enabled: true,
-                  onTap: () => _chooseBait(practiceBait),
-                ),
-                _baitCancelRow(),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-    return ListenableBuilder(
-      listenable: SettlementController(),
-      builder: (context, _) {
-        final owned = SettlementController().items;
-        final baits = [
-          for (final d in kItemDefs.values)
-            if (d.kind == ItemKind.catchBoost) d,
-        ]..sort((a, b) => a.magnitude.compareTo(b.magnitude));
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _pageHeading('Choose your bait', 'sets your starting chance'),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.only(bottom: 4),
-                children: [
-                  for (final d in baits)
-                    _deckRow(
-                      leading: Text(
-                        d.emoji,
-                        style: const TextStyle(fontSize: 20),
-                      ),
-                      title: '${d.name} ×${owned[d.id] ?? 0}',
-                      detail: Text(
-                        'Start ${(d.magnitude * 100).round()}%',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: kBoxInkSoft,
-                        ),
-                      ),
-                      action: 'Throw',
-                      enabled: (owned[d.id] ?? 0) > 0,
-                      onTap: () => _chooseBait(d),
-                    ),
-                  _baitCancelRow(),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _baitCancelRow() => Padding(
-    padding: const EdgeInsets.only(top: 2),
-    child: Pressable(
-      onTap: _cancelBaitChoice,
-      child: Container(
-        height: 30,
-        alignment: Alignment.center,
-        decoration: raisedTile(radius: 10),
-        child: Text(
-          'Cancel',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: kBoxInkSoft,
-          ),
-        ),
-      ),
-    ),
-  );
-
-  // ── Change page ───────────────────────────────────────────
-
-  Widget _changePage(Combatant? actor, bool forced) {
-    final bench = _engine.benchedPlayers;
-    // A forced switch is free and always allowed; a voluntary one costs the
-    // leaving monster [kSwitchApCost] out of its own pool.
-    final canSwitch =
-        forced || (_myTurn && actor != null && actor.ap >= kSwitchApCost);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _pageHeading(
-          forced ? 'Your monster fainted' : 'Switch monster',
-          forced ? 'send in a reserve' : 'costs $kSwitchApCost AP',
-        ),
-        Expanded(
-          child: bench.isEmpty
-              ? Center(
-                  child: Text(
-                    'No reserves left.',
-                    style: TextStyle(fontSize: 12, color: kBoxInkSoft),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  children: [
-                    for (final c in bench)
-                      _deckRow(
-                        leading: SockelAvatar.combatant(
-                          c,
-                          size: 30,
-                          hpColor: _hpColor,
-                        ),
-                        title: '${c.element.emoji} ${c.name} · Lv ${c.level}',
-                        detail: _creamHpBar(
-                          c.hp,
-                          c.maxHp,
-                          c.maxHp <= 0 ? 0.0 : c.hp / c.maxHp,
-                        ),
-                        action: 'Send in',
-                        enabled: canSwitch,
-                        onTap: () => _switchTo(c),
-                      ),
-                  ],
-                ),
-        ),
-      ],
-    );
-  }
-
-  /// One row of the Items / Change lists: a tile with the thing, what it does,
-  /// and a small gold button on the right.
-  Widget _deckRow({
-    required Widget leading,
-    required String title,
-    required Widget detail,
-    required String action,
-    required bool enabled,
-    required VoidCallback onTap,
-    String? anchor,
-  }) {
-    Widget button = Pressable(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        height: 28,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        alignment: Alignment.center,
-        decoration: goldButton(active: enabled),
-        child: Text(
-          action,
-          maxLines: 1,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: goldButtonInk(active: enabled),
-          ),
-        ),
-      ),
-    );
-    if (anchor != null) {
-      button = KeyedSubtree(
-        key: IntroSpotlightAnchors.of(anchor),
-        child: button,
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
-        decoration: raisedTile(radius: 10),
-        child: Row(
-          children: [
-            SizedBox(width: 28, child: Center(child: leading)),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: kBoxInk,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  detail,
-                ],
-              ),
-            ),
-            const SizedBox(width: 6),
-            button,
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// The floating combat numbers, drawn over everything but the overlays. Each
-  /// is anchored over the monster it belongs to: its side decides the height,
-  /// its SLOT the horizontal position (user 2026-07-27 — a spread move now hits
-  /// three at once, and three numbers stacked in the middle of the half would
-  /// say nothing about who took what). A small per-id nudge keeps two numbers
-  /// in the same slot from landing exactly on top of each other.
-  ///
-  /// Nudged right of that slot now, not centred on it (user 2026-08-29: "Die
-  /// Schadenszahl soll rechts nahe dem Monster sein", then again once more
-  /// clearly: "Die Schadenszahlen sollen rechts von dem Monster sein" — 0.16
-  /// read as barely offset at all, so this is a real step right, not a
-  /// nudge) — still close enough to read as THIS monster's number, not
-  /// drifting toward its neighbour's slot.
-  static const double _kFloatRightOffset = 0.34;
-
   Widget _floatsLayer() => Positioned.fill(
     child: IgnorePointer(
       child: Stack(
@@ -3210,26 +3385,6 @@ class _BattleScreenState extends State<BattleScreen>
     if (wild == null || !wild.alive) return false;
     final frac = wild.maxHp <= 0 ? 0.0 : wild.hp / wild.maxHp;
     return frac <= catchHpThreshold(wild.rarity);
-  }
-
-  /// Turns the command deck into the bait list (user 2026-10-04: "soll im
-  /// Kampfscreen die Rechte Box zum Inventar werden und dort wähle ich den
-  /// Köder aus") against the currently SELECTED wild — the wild itself was
-  /// already "the" lone enemy before hunts fielded several at once
-  /// (2026-09-11). Picking a bait there (see [_chooseBait]) is what
-  /// actually spends it and pushes [CaptureBarScreen]; cancelling (see
-  /// [_cancelBaitChoice]) spends nothing at all, as if Catch was never
-  /// pressed.
-  void _startCatch() {
-    final wild = _target;
-    if (wild == null || !_canCatch) return;
-    _catchWild = wild;
-    _catcher = _engine.activePlayer;
-    if (_catcher == null) return;
-    setState(() {
-      _catchOpen = true;
-      _choosingBait = true;
-    });
   }
 
   /// Backs out of the bait list without spending anything — the deck
@@ -3373,14 +3528,14 @@ class _BattleScreenState extends State<BattleScreen>
             PixelIcon(
               online ? Icons.hourglass_top : Icons.wifi_off,
               size: 13,
-              color: CreamPalette.paperTop,
+              color: kBoxInk,
             ),
             const SizedBox(width: 6),
             Text(
               online
                   ? 'Waiting for opponent… ${secondsLeft}s'
                   : 'Opponent disconnected — reconnecting… ${secondsLeft}s',
-              style: FoE.dim(size: 11).copyWith(color: CreamPalette.paperTop),
+              style: FoE.dim(size: 11).copyWith(color: kBoxInk),
             ),
           ],
         ),
@@ -3632,169 +3787,6 @@ class _BattleScreenState extends State<BattleScreen>
     );
   }
 
-  // ── Battlefield ─────────────────────────────────
-  // ONE arena, TWO ranks (redesign 2026-07-31). It used to be two halves, each
-  // tiled with its lead monster's element and meeting at a seam under the log.
-  // A rank can hold three types, so the tile was picking one of them and calling
-  // it the world; the ground is now the REGION (see BattleScene) and the type
-  // moved onto a plate under each fighter, where it can be true for all three.
-  //
-  // Each rank stands in a WEDGE (user 2026-07-31: "Das mittlere Monster ist
-  // etwas weiter vorne und die beiden anderen etwas nach hinten"): the middle
-  // steps toward the enemy, the flanks hold back and read a touch smaller for
-  // depth. Two spearheads pointed at each other, rather than six figures on one
-  // ruler line.
-  Widget _rank({required bool isEnemy}) {
-    final field = isEnemy ? _engine.enemyField : _engine.playerField;
-    return ClipRect(
-      child: LayoutBuilder(
-        builder: (context, box) {
-          final h = box.maxHeight;
-          final w = box.maxWidth;
-          // A hair of air on the rank's OUTER edge (enemy at the top, mine at the
-          // bottom). The reserve strip that used to wait here is gone — the
-          // waiting monsters are tiles down the arena's left edge now (user
-          // 2026-09-21), and the deck no longer sits below the arena — so the
-          // sprites and their plates may use the whole height.
-          final live = [
-            for (var i = 0; i < CombatEngine.kFieldSlots; i++)
-              // Also keeps a slot whose occupant just fainted in
-              // the row for the length of its K.O. presentation
-              // (user 2026-08-29) — otherwise the slot drops out of
-              // `live` and _fieldSlot is never even called for it
-              // again once the engine clears/refills it, which is
-              // exactly the moment the animation needs to run.
-              if ((field[i] != null && field[i]!.alive) ||
-                  _koPlaying.values.any(
-                    (e) => e.slot == i && e.isEnemy == isEnemy,
-                  ))
-                i,
-          ];
-          final wedge = live.length == CombatEngine.kFieldSlots;
-          final reserve = 4.0;
-          // How far the wedge opens. A fraction of the rank's own height, so it
-          // is the same shape on every phone; small on purpose — this is a step
-          // forward, not a second row.
-          final step = h * _kWedgeStep;
-          // The bottom edge of MY rank also holds the flanks, which the wedge
-          // steps back DOWN by half a step (their plates must stay on screen);
-          // the enemy's stay put.
-          final outer = isEnemy ? reserve : reserve + (wedge ? step * 0.5 : 0);
-          // CLEARANCE FOR THE LOG (user 2026-07-31: "Monster weiter nach oben,
-          // so dass es keine überschneidungen mit dem combat log gibt"). Half
-          // the log sits in each rank's half, and the wedge then steps the
-          // middle monster straight into it — so the reserved band is the log's
-          // half PLUS the step it is about to take, plus a hair of air.
-          // The step is only owed when there IS a wedge — a lone monster or a pair
-          // stands level and may come right up to the log (user 2026-09-21).
-          final seam = _kLogHeight / 2 + (wedge ? step : 0) + 4;
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              Positioned(
-                top: isEnemy ? outer : seam,
-                bottom: isEnemy ? seam : outer,
-                left: 2,
-                right: 2,
-                // ── ONLY THE OCCUPIED SLOTS, CENTRED (user 2026-08-04) ──
-                // Three Expanded cells were laid out whether or not anyone
-                // stood in them, so a lone survivor kept the seat it started
-                // in — a single monster stranded on the left of an empty rank.
-                //
-                // The WEDGE only means anything with three: it says "the middle
-                // one has stepped forward", and with two there is no middle,
-                // just two monsters at different heights for no reason. So the
-                // step applies at three and the pair stands level.
-                child: Builder(
-                  builder: (_) {
-                    // This Row sits inside the Positioned's own left:2/
-                    // right:2 inset, so its REAL available width is w - 4,
-                    // not w — using raw w for 3 equal-width slots summed to
-                    // exactly 4px more than the Row actually had (user
-                    // 2026-08-29, seen live: "Am rechten Rand gibt es noch
-                    // immer einen Overflow" — the console's own "overflowed
-                    // by 4.0 pixels" matches this exactly).
-                    final innerW = w - 4;
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        for (final i in live) ...[
-                          // Two stand a little apart (user 2026-09-21: "meine Monster
-                          // sind etwas zu nahe beisammen, wenn es 2 sind") — slots
-                          // touch edge to edge and the sprites are wider than that.
-                          if (i != live.first && live.length == 2)
-                            SizedBox(
-                              width:
-                                  innerW / CombatEngine.kFieldSlots * _kPairGap,
-                            ),
-                          SizedBox(
-                            // The slot keeps its full-rank width, so a monster
-                            // is the same size whether one stands or three do.
-                            width: innerW / CombatEngine.kFieldSlots,
-                            child: Transform.translate(
-                              // FORWARD is toward the seam: down for the enemy
-                              // rank, up for mine.
-                              offset: Offset(
-                                0,
-                                !wedge
-                                    ? 0
-                                    : (_isCentreSlot(i) ? step : -step * 0.5) *
-                                          (isEnemy ? 1 : -1),
-                              ),
-                              child: _fieldSlot(
-                                field[i],
-                                slot: i,
-                                isEnemy: isEnemy,
-                                width: innerW / CombatEngine.kFieldSlots,
-                                back: wedge && !_isCentreSlot(i),
-                                // The HP callout points at ONE ring, not the
-                                // whole rank (user 2026-09-04) — the leftmost
-                                // live slot on MY side, same one that is
-                                // always alone during the guided intro.
-                                hpAnchor: !isEnemy && i == live.first,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  /// The gap between two monsters standing alone, as a fraction of a slot's width.
-  static const double _kPairGap = 0.45;
-
-  /// How far the wedge's point steps forward, as a fraction of the rank height.
-  static const double _kWedgeStep = 0.07;
-
-  /// How far the platform is lifted off the bottom of its slot, as a fraction of
-  /// its own width — i.e. how deep the monster stands in it. Lower now (user
-  /// 2026-08-29: "jetzt den Text näher an das Podest nehmen") — this lift is
-  /// exactly the gap between the platform's own bottom and the nameplate
-  /// right after it in the Column, so less lift is less gap. Not zero: the
-  /// 2026-07-31 request this value first answered ("schiebe die plattformen
-  /// weiter nach oben") is still real — a platform flush with the slot's own
-  /// bottom read as floating above its ground, not standing in it.
-  static const double _kPlatformLift = 0.06;
-
-  /// The tip of the wedge. With an even number of slots there is no single
-  /// middle, so the two innermost both count as the point — the shape stays a
-  /// wedge whatever [CombatEngine.kFieldSlots] is dialled to.
-  static bool _isCentreSlot(int slot) {
-    final n = CombatEngine.kFieldSlots;
-    if (n <= 2) return true;
-    final mid = (n - 1) / 2;
-    return (slot - mid).abs() < 0.51;
-  }
-
   /// One place in the rank: the monster standing there with its plate, or an
   /// empty gap.
   ///
@@ -3847,7 +3839,6 @@ class _BattleScreenState extends State<BattleScreen>
     // The platform is as wide as its slot (a flank a little narrower, standing
     // further back). The slots are narrower than they were — a gutter for the
     // waiting monsters' tiles takes the edges — so it no longer holds back.
-    final podiumW = width * (back ? 0.88 : 1.0);
     // Held back while a presentation is still playing (user 2026-08-29:
     // "wenn ich mit meinem Monster angreife, greift parallel dazu bereits
     // das gegnerische Monster an") — the ENGINE's currentActor advances the
@@ -3886,10 +3877,14 @@ class _BattleScreenState extends State<BattleScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          // THE MONSTER STANDS ON THE GROUND (user 2026-11-04: "es soll in
+          // diesem Stil sein, d.h. die Monster stehen wirklich am Boden"): no
+          // podium, no bowl, no disc. The plate hangs above its head
+          // ("Schildchen 3"), the sprite's feet rest in a shadow thrown in the
+          // map's own tint — and both slide in together.
           Expanded(
-            // Entry slide (user 2026-07-24): on battle start the enemy sweeps
-            // in from the right, the player from the left, fading up. Staggered
-            // by slot so a rank of three arrives as a rank, not as one block.
+            // Entry slide (user 2026-07-24): the enemy sweeps in from the
+            // right, the player from the left, fading up, staggered by slot.
             child: AnimatedBuilder(
               animation: _entry,
               builder: (context, child) {
@@ -3901,119 +3896,83 @@ class _BattleScreenState extends State<BattleScreen>
                   child: Opacity(opacity: t, child: child),
                 );
               },
-              child: LayoutBuilder(
-                builder: (context, box) => Stack(
-                  alignment: Alignment.bottomCenter,
-                  children: [
-                    // THE TYPE, under its own monster (user 2026-07-31) — this
-                    // is what the half-wide element tile turned into. Behind the
-                    // sprite and shaped like ground, so it reads as standing
-                    // somewhere rather than as a card behind a portrait.
-                    Padding(
-                      // LIFTED (user 2026-07-31: "schiebe die plattformen
-                      // weiter nach oben"): sitting flush with the bottom of the
-                      // box, the slab was under the sprite's transparent margin
-                      // rather than under its feet, so the monster read as
-                      // floating above its own ground.
-                      key: hpAnchor
-                          ? IntroSpotlightAnchors.of('battle-hp')
-                          : null,
-                      padding: EdgeInsets.only(
-                        bottom: podiumW * _kPlatformLift,
-                      ),
-                      child: TypePodium(
-                        element: c0.element,
-                        width: podiumW,
-                        dim: back,
-                        // The half-sphere under the disc — only the big
-                        // monsters on the field have it (user 2026-09-21).
-                        bowl: true,
-                        // Mirrored for the PLAYER's own monster (user
-                        // 2026-08-28: "bei den eigenen Monster das Typicon
-                        // gespiegelt auf der rechten Seite") — the enemy
-                        // keeps the default left.
-                        watermarkLeft: isEnemy,
-                        // THE RIM IS THE HEALTH BAR (user 2026-07-31). The
-                        // straight bar under the name is gone with it — two bars
-                        // for one number is one bar too many.
-                        hpFraction: c0.maxHp <= 0
-                            ? 0.0
-                            : (c0.hp / c0.maxHp).clamp(0.0, 1.0),
-                        hpColor: _hpColor(
-                          c0.maxHp <= 0
-                              ? 0.0
-                              : (c0.hp / c0.maxHp).clamp(0.0, 1.0),
-                        ),
-                      ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  KeyedSubtree(
+                    key: hpAnchor
+                        ? IntroSpotlightAnchors.of('battle-hp')
+                        : null,
+                    child: _slotPlate(
+                      c0,
+                      acting: acting,
+                      targeted: targeted,
+                      width: width,
                     ),
-                    // THE MONSTER STANDS ON THE TOP OF THE DISC (user
-                    // 2026-09-21): its feet at the disc's middle line, not down
-                    // in the gap under the platform — the platform's own lift
-                    // plus a bit under half the disc's height.
-                    // How big it is drawn: the room above its feet in this slot
-                    // plus a little headroom — the art has a transparent margin
-                    // and may rise into the air the wedge leaves (the enemy's up
-                    // to the arena's edge, mine into the clearance above its
-                    // rank). [_kSpriteScale] is the dial.
-                    Builder(
-                      builder: (context) {
-                        final feetPad =
-                            podiumW * (_kPlatformLift + 0.24 * 0.45);
+                  ),
+                  const SizedBox(height: 2),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, box) {
+                        final spriteW = width * (back ? 0.88 : 1.0);
+                        // The feet sit a hair above the slot's bottom edge,
+                        // inside the shadow.
+                        final feetPad = box.maxHeight * 0.05;
                         final room = box.maxHeight - feetPad;
                         final target =
                             (room + (isEnemy ? 14 : 16)) *
                             (back ? 0.92 : 1.0) *
                             _kSpriteScale;
-                        return Padding(
-                          padding: EdgeInsets.only(bottom: feetPad),
-                          child: _bigSprite(
-                            c0,
-                            back: !isEnemy,
-                            height: room,
-                            targetH: target,
-                            acting: acting,
-                            targeted: targeted,
-                            koing: koing,
-                          ),
+                        return Stack(
+                          alignment: Alignment.bottomCenter,
+                          children: [
+                            // The shadow on the ground: the map's tint and
+                            // opacity, thrown a little to the lower right like
+                            // every tree's and house's.
+                            Padding(
+                              padding: EdgeInsets.only(
+                                bottom: math.max(0.0, feetPad - spriteW * 0.03),
+                              ),
+                              child: Transform.translate(
+                                offset: Offset(spriteW * 0.07, 0),
+                                child: Container(
+                                  width: spriteW * 0.74,
+                                  height: spriteW * 0.14,
+                                  decoration: BoxDecoration(
+                                    color: kShadowTint.withValues(
+                                      alpha: kShadowOpacity * 1.6,
+                                    ),
+                                    borderRadius: BorderRadius.all(
+                                      Radius.elliptical(
+                                        spriteW * 0.37,
+                                        spriteW * 0.07,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: EdgeInsets.only(bottom: feetPad),
+                              child: _bigSprite(
+                                c0,
+                                back: !isEnemy,
+                                height: room,
+                                targetH: target,
+                                acting: acting,
+                                targeted: targeted,
+                                koing: koing,
+                              ),
+                            ),
+                          ],
                         );
                       },
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-          _slotPlate(c0, acting: acting, targeted: targeted, width: width),
-          // Shifts the platform AND the nameplate up together (user
-          // 2026-08-28: "Podest und Namensbox weiter nach oben schieben") —
-          // a trailing spacer in a Column packed to `end` moves everything
-          // BEFORE it up by exactly its own height, so the podium (bottom-
-          // anchored inside the Expanded above) and the plate (the sibling
-          // right after it) both rise the same amount without needing two
-          // separate offsets that could drift apart.
-          //
-          // MINE more than the enemy's (user 2026-08-28, twice now: "beim
-          // eigenen Monster noch etwas höher", then again "näher an das
-          // Podest (höher)") — the player's own monster is what the fight
-          // is actually about; the enemy's plate stays put.
-          // Bumped again on both sides (user 2026-08-28: "Der Text näher an
-          // das Podest schieben") — this time without the "own monster
-          // only" qualifier earlier bumps had.
-          //
-          // Brought back down (user 2026-08-29: "Nur das Podest und den
-          // Text etwas nach unten schieben. Die Monsterassets dort
-          // belassen") — this spacer only moves the podium + plate (the
-          // Column siblings before it), not the sprite itself, so it's the
-          // right lever for "podium and text only": a smaller value here
-          // means less upward push, i.e. both sit lower, with the sprite's
-          // own position (set elsewhere, via [_kArenaDrop] and its own
-          // Transform.scale) completely untouched.
-          // MY monsters and their platforms move right down to the bottom edge
-          // (user 2026-09-21: "Meine Monster rücken mit dem Podest weiter nach
-          // unten") — the reserve strip and the deck no longer sit below them —
-          // and the enemy's plate sits close on its platform so the sprite gets
-          // every pixel above it.
-          SizedBox(height: isEnemy ? 4 : 2),
         ],
       ),
     );
@@ -4039,12 +3998,8 @@ class _BattleScreenState extends State<BattleScreen>
     required bool targeted,
     required double width,
   }) {
-    // One icon per ACTIVE effect (user 2026-09-08: "Buffs und Debuffs
-    // besser erklären, damit ich genau weiss, was diese machen") — every
-    // self-buff and secondary debuff now shows, not just haste/slowed's own
-    // derived arrows (which hid armor/rage/blind/weakened/exposed
-    // entirely). Tapping the strip explains each one in full — see
-    // [_showActiveEffects].
+    // One icon per ACTIVE effect (user 2026-09-08) — tapping the strip explains
+    // each one in full, see [_showActiveEffects].
     final marks = <Widget>[
       for (final e in c.selfBuffs.keys)
         Text(e.emoji, style: const TextStyle(fontSize: 10)),
@@ -4053,10 +4008,20 @@ class _BattleScreenState extends State<BattleScreen>
       if (c.mainStatus != null)
         Text(c.mainStatus!.emoji, style: const TextStyle(fontSize: 10)),
     ];
+    // THE HEALTH LIVES ON THE PLATE NOW (user 2026-11-04, "Schildchen 3"): the
+    // podium that carried it as its rim is gone, the monsters stand on the
+    // ground. Name, level and the bar — the three things you read at a glance.
+    final frac = c.maxHp <= 0 ? 0.0 : (c.hp / c.maxHp).clamp(0.0, 1.0);
+    // The two states you act on are said by the plate's own edge: gold for the
+    // monster whose turn it is, red for the enemy you are aimed at.
+    final edge = targeted
+        ? FoE.danger
+        : acting
+        ? CreamPalette.gold
+        : const Color(0xFF0B1E27);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // The status strip, only when there is something to say.
         if (marks.isNotEmpty)
           Pressable(
             onTap: () => _showActiveEffects(c),
@@ -4070,50 +4035,52 @@ class _BattleScreenState extends State<BattleScreen>
               child: Row(mainAxisSize: MainAxisSize.min, children: marks),
             ),
           ),
-        // No more box, and the level in place of the HP numbers (user
-        // 2026-08-28: "Lösche die HP Zahlen und die Box... Anstelle der HP
-        // Zahlen bitte das Level") — the platform's own rim already IS the
-        // HP bar (see TypePodium), so the plate isn't the only place it was
-        // read.
-        //
-        // White, and the level on its OWN line under the name now (user
-        // 2026-08-28, same day: "Die Namen und Level in Weiss, dafür das
-        // Level unter dem Namen") — this also DROPS the acting/targeted
-        // colour the text briefly carried in the box's ring's place; that
-        // signal has no home here any more.
-        // ONE line, name then level (user 2026-09-21): the two-line plate cost
-        // the sprite a dozen pixels of height on every monster.
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                c.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: FoE.label(size: 11).copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  shadows: const [
-                    Shadow(color: Color(0xAA000000), blurRadius: 2),
-                  ],
-                ),
-              ),
+        Container(
+          width: (width * 0.78).clamp(84.0, 132.0),
+          padding: const EdgeInsets.fromLTRB(5, 2, 5, 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3E6C6),
+            border: Border.all(
+              color: edge,
+              width: (acting || targeted) ? 3 : 2,
             ),
-            const SizedBox(width: 5),
-            Text(
-              'Lv ${c.level}',
-              maxLines: 1,
-              style: FoE.label(size: 10).copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                shadows: const [
-                  Shadow(color: Color(0xAA000000), blurRadius: 2),
+            boxShadow: const [
+              BoxShadow(color: Color(0x73000000), offset: Offset(2, 2)),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      c.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 1.1,
+                        color: kBoxInk,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'L${c.level}',
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.1,
+                      color: kBoxInkSoft,
+                    ),
+                  ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 3),
+              RecessBar(value: frac, color: _hpColor(frac), height: 7),
+            ],
+          ),
         ),
       ],
     );
@@ -4143,8 +4110,8 @@ class _BattleScreenState extends State<BattleScreen>
             '+$more',
             style: FoE.label(size: 11).copyWith(
               color: Colors.white,
-              fontWeight: FontWeight.w800,
-              shadows: const [Shadow(color: Color(0xAA000000), blurRadius: 2)],
+              fontWeight: FontWeight.w400,
+              shadows: const [Shadow(color: Color(0xCC000000), offset: Offset(0, 1))],
             ),
           ),
       ],
@@ -4202,7 +4169,7 @@ class _BattleScreenState extends State<BattleScreen>
               maxLines: 1,
               style: FoE.label(
                 size: 9,
-              ).copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+              ).copyWith(color: Colors.white, fontWeight: FontWeight.w400),
             ),
           ],
         ),
@@ -4240,11 +4207,18 @@ class _BattleScreenState extends State<BattleScreen>
   static const double _kLungePeakPx = 42.0;
   static const double _kLungeReboundPx = 6.0;
 
-  /// How far sideways the lunge angles per unit of [_slotAlignX] difference
-  /// between attacker and target — see _bigSprite's lungeDx. Slots are ±0.62
-  /// apart, so an adjacent-slot target adds ~28px of sideways swing at the
-  /// peak, a target across the whole rank (±1.24) ~56px.
-  static const double _kLungeHorizontalPxPerAlign = 45.0;
+  /// Pixels of lunge drift per unit of ground height between attacker's and
+  /// target's feet (see [_spotY]) — the full lunge shape reaches this much.
+  static const double _kLungeDepthPx = 160.0;
+
+  /// Where a combatant's feet stand in depth, as a fraction of the ground
+  /// ([_kSpots]' dy); the enemy's spots mirror mine, so the slot is enough.
+  double _spotY(Combatant c) {
+    final field = c.isPlayerSide ? _engine.playerField : _engine.enemyField;
+    final slot = field.indexWhere((f) => identical(f, c));
+    if (slot < 0) return _kSpots[0].dy;
+    return _kSpots[slot % _kSpots.length].dy;
+  }
 
   /// dy at animation-time [t] (0..1 of _fx), toward the target: negative
   /// during windup (a step AWAY), positive at the strike's peak (a step IN),
@@ -4393,17 +4367,14 @@ class _BattleScreenState extends State<BattleScreen>
         // because both read the same constant.
         final lunging = attacks && _fx.isAnimating;
         final lungeShape = lunging ? _lungeCurve(t) / _kLungePeakPx : 0.0;
-        final lungeDy = lungeShape * (back ? -1 : 1) * _kLungePeakPx;
-        // Sideways toward the ACTUAL target's slot, not just straight up/down
-        // (user 2026-08-29: "den Angriff noch in die Richtung des
-        // anvisierten Monsters machen") — the same windup/strike/rebound
-        // shape as the vertical lunge, scaled by how far off-axis the target
-        // stands (0 for a same-slot fight, so nothing changes there).
+        // SIDE VIEW (user 2026-11-04): the sides face each other across the
+        // field, so the lunge runs ACROSS it — mine to the right, the enemy's
+        // to the left — and drifts up/down toward the depth the target
+        // stands at (0 for a target on the same row).
         final lungeTarget = _fxLungeTarget;
-        final lungeDx = (lunging && lungeTarget != null)
-            ? lungeShape *
-                  (_slotAlignX(lungeTarget) - _slotAlignX(c)) *
-                  _kLungeHorizontalPxPerAlign
+        final lungeDx = lungeShape * (back ? 1 : -1) * _kLungePeakPx * 1.8;
+        final lungeDy = (lunging && lungeTarget != null)
+            ? lungeShape * (_spotY(lungeTarget) - _spotY(c)) * _kLungeDepthPx
             : 0.0;
         // Idle bob: a slow, small breathing motion, always running — "nur
         // leicht" (user request), so 2.5px rather than anything that reads as
@@ -4534,7 +4505,13 @@ class _BattleScreenState extends State<BattleScreen>
     double? decodeH,
     String anim = 'idle',
   }) {
-    final sheets = MonsterSheets.battle(c.speciesId, c.stage, back: back);
+    // SIDE VIEW (user 2026-11-04): [back] here means "my side" — it stands at
+    // the left and faces right, the enemy at the right faces left.
+    final sheets = MonsterSheets.battleSide(
+      c.speciesId,
+      c.stage,
+      mine: back,
+    );
     if (sheets == null) {
       return _spriteWithShadow(
         url,
@@ -4698,7 +4675,7 @@ class _BattleScreenState extends State<BattleScreen>
                     textAlign: TextAlign.center,
                     style: FoE.label(size: 11).copyWith(
                       color: CreamPalette.warn,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                     ),
                   )
                 : Column(
@@ -4764,7 +4741,7 @@ class _BattleScreenState extends State<BattleScreen>
             overflow: TextOverflow.ellipsis,
             style: FoE.label(
               size: 11,
-            ).copyWith(color: color, fontWeight: FontWeight.w700),
+            ).copyWith(color: color, fontWeight: FontWeight.w400),
           ),
         ),
       ],
@@ -4836,8 +4813,8 @@ class _BattleScreenState extends State<BattleScreen>
                                   style: FoE.label(size: 12).copyWith(
                                     color: newest ? kBoxInk : kBoxInkSoft,
                                     fontWeight: newest
-                                        ? FontWeight.w800
-                                        : FontWeight.w600,
+                                        ? FontWeight.w400
+                                        : FontWeight.w400,
                                   ),
                                 ),
                               ),
@@ -4866,32 +4843,6 @@ class _BattleScreenState extends State<BattleScreen>
   // Now 0 (user 2026-09-21: the arena is the full height and the player rank is
   // moved down by its own spacer instead).
   static const double _kArenaDrop = 0.0;
-
-  /// How many tiles sit on each row of the move deck. Explicit for 4/5/6
-  /// (user 2026-08-28: "Bei 4 Fähigkeiten oben und unten 2. Bei 5 oben drei,
-  /// unten 2 und bei 6 beide Zeilen 3.") — a plain [Wrap] packed rows
-  /// GREEDILY by width instead, which for 4 tiles that all fit 3-per-row
-  /// gave 3 + 1 rather than the even 2 + 2 asked for here. Falls back to the
-  /// old greedy fill when [maxPerRow] is too narrow for the explicit split
-  /// (a cramped phone), and for every other count, where greedy already
-  /// gives the same one full row.
-  static List<int> _abilityRowSplit(int boxes, int maxPerRow) {
-    final want = switch (boxes) {
-      4 when maxPerRow >= 2 => [2, 2],
-      5 when maxPerRow >= 3 => [3, 2],
-      6 when maxPerRow >= 3 => [3, 3],
-      _ => null,
-    };
-    if (want != null) return want;
-    final rows = <int>[];
-    var remaining = boxes;
-    while (remaining > 0) {
-      final take = remaining < maxPerRow ? remaining : maxPerRow;
-      rows.add(take);
-      remaining -= take;
-    }
-    return rows.isEmpty ? [0] : rows;
-  }
 
   /// A MOVE, as a faceted card (redesign 2026-08-01).
   ///
@@ -4945,7 +4896,7 @@ class _BattleScreenState extends State<BattleScreen>
           overflow: TextOverflow.ellipsis,
           style: FoE.label(
             size: 12,
-          ).copyWith(color: fg, fontWeight: FontWeight.w800, height: 1.1),
+          ).copyWith(color: fg, fontWeight: FontWeight.w400, height: 1.1),
         ),
       ),
     );
@@ -5028,7 +4979,7 @@ class _BattleScreenState extends State<BattleScreen>
                   '$ap',
                   style: FoE.value(size: 13).copyWith(
                     color: enabled ? const Color(0xFF1A1300) : kBoxInkFaint,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ),
@@ -5160,7 +5111,7 @@ class _BattleScreenState extends State<BattleScreen>
               '${c.name} — active effects',
               style: FoE.label(
                 size: 14,
-              ).copyWith(color: FoE.parchment, fontWeight: FontWeight.w700),
+              ).copyWith(color: FoE.parchment, fontWeight: FontWeight.w400),
             ),
             const SizedBox(height: 10),
             ...rows,
@@ -5195,7 +5146,7 @@ class _BattleScreenState extends State<BattleScreen>
                 maxLines: 1,
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: ink,
                 ),
               ),
@@ -5222,179 +5173,6 @@ class _BattleScreenState extends State<BattleScreen>
   ];
 
   bool _usingItem = false;
-
-  /// Uses [chosen] on the ACTIVE monster; it costs a flat [kItemApCost] AP, same
-  /// as every ability's own AP spend — NOT the whole turn (user 2026-09-05: "ein
-  /// Item benutzen, kostet immer 1 AP", replacing the older whole-turn rule from
-  /// 2026-07-18).
-  Future<void> _applyItem(ItemDef chosen) async {
-    final actor = _engine.activePlayer;
-    if (actor == null || _usingItem) return;
-    _usingItem = true;
-    try {
-      // Spend FIRST — if the item can't leave the bag, nothing happens.
-      final err = await SettlementController().consumeItem(chosen.id);
-      if (!mounted) return;
-      if (err != null) {
-        _flashMessage(err);
-        return;
-      }
-      _applyItemEffect(chosen, actor);
-    } finally {
-      _usingItem = false;
-    }
-  }
-
-  void _applyItemEffect(ItemDef chosen, Combatant actor) {
-    switch (chosen.kind) {
-      case ItemKind.buff:
-        final buff = _selfBuffForStat(chosen.buffStat);
-        // The ITEM'S OWN magnitude (fixed 2026-07-30). ItemDef.magnitude is
-        // documented as "buff fraction" and was simply dropped here: every buff
-        // item granted the catalog's +30 %/+25 %, so the number the author typed
-        // did nothing. A 0 still means "the standard strength" — applySelfBuff
-        // resolves it the same way an ability's does.
-        actor.applySelfBuff(buff, value: chosen.magnitude);
-        _flashMessage('${chosen.emoji} ${actor.name} — ${buff.name}!');
-      case ItemKind.cureStatus:
-        // The item's own magnitude IS its reliability (user 2026-09-15's
-        // weak/strong remedies — see ItemKind.cureStatus's own doc).
-        // deterministicCombat always succeeds, matching every other roll's
-        // own convention (see CombatEngine._rollAccuracy).
-        final worked =
-            _engine.deterministicCombat ||
-            _engine.rng.nextDouble() < chosen.magnitude;
-        final cured = worked && actor.cureMainStatus(chosen.cureMainStatus);
-        _flashMessage(
-          cured
-              ? '${chosen.emoji} ${actor.name} is cured!'
-              : '${chosen.emoji} ${actor.name} — no effect.',
-        );
-      case ItemKind.cureDebuffs:
-        final worked =
-            _engine.deterministicCombat ||
-            _engine.rng.nextDouble() < chosen.magnitude;
-        final cleansed = worked && actor.clearSecondaryDebuffs();
-        _flashMessage(
-          cleansed
-              ? '${chosen.emoji} ${actor.name} is cleansed!'
-              : '${chosen.emoji} ${actor.name} — no effect.',
-        );
-      default: // heal
-        final heal = healFromItem(
-          chosen,
-          (actor.maxHp - actor.hp).toDouble(),
-        ).round();
-        actor.hp = (actor.hp + heal).clamp(0, actor.maxHp).toInt();
-        _flashMessage('${chosen.emoji} ${actor.name} +$heal HP');
-    }
-    if (_scriptBeat == _ScriptBeat.healItem) {
-      // Scripted for THIS fight only: the cutscene sets AP directly rather
-      // than going through _engine.useItem, so a low roll can never block
-      // the next authored beat (user 2026-09-03: "unabhängig von den
-      // tatsächlichen Werten") — it happens to spend the exact same
-      // [kItemApCost] the real rule below now also charges (user
-      // 2026-09-05), so the two no longer diverge, they just take different
-      // paths to it.
-      actor.ap = math.max(0, actor.ap - kItemApCost);
-      // "9 regeneriert" (user 2026-09-04) tops the starter right back up to
-      // full regardless of the real potion's own formula — same fakery as
-      // every other forced HP number in this fight.
-      actor.hp = actor.maxHp;
-      _ensureApFor(_ScriptBeat.missedAttack);
-      setState(() {
-        _deckTab = _DeckTab.attack;
-        _scriptBeat = _ScriptBeat.missedAttack;
-        _scriptInfoHint =
-            'Items cost AP too — always 1, no matter which '
-            'one you use.';
-      });
-    } else {
-      // Using an item always costs a flat kItemApCost AP (user 2026-09-05) —
-      // the turn stays open for whatever's left, exactly like an ability.
-      _engine.useItem(actor);
-      // Back to the moves: the potion is the setup, the attack is the point.
-      setState(() => _deckTab = _DeckTab.attack);
-    }
-  }
-
-  /// Maps an item's buff stat onto the engine's self-buff (rage=attack,
-  /// armor=defense, haste=speed; attack/other → rage).
-  SelfBuffKind _selfBuffForStat(CreatureStat? s) => switch (s) {
-    CreatureStat.defense => SelfBuffKind.armor,
-    CreatureStat.speed => SelfBuffKind.haste,
-    _ => SelfBuffKind.rage,
-  };
-
-  /// What tapping [def] would do to [actor] RIGHT NOW — the "Use an item"
-  /// sheet's one-line preview, same job for every kind (user 2026-09-15
-  /// added the cure lines).
-  String _itemUseLabel(ItemDef def, Combatant actor) {
-    switch (def.kind) {
-      case ItemKind.buff:
-        return _selfBuffForStat(def.buffStat).name;
-      case ItemKind.cureStatus:
-        final pct = (def.magnitude * 100).round();
-        final target = def.cureMainStatus?.label ?? 'any status';
-        return actor.mainStatus == null
-            ? 'nothing to cure right now'
-            : 'cures $target · $pct%';
-      case ItemKind.cureDebuffs:
-        final pct = (def.magnitude * 100).round();
-        return actor.secondaryDebuffs.isEmpty
-            ? 'nothing to cleanse right now'
-            : 'cleanses all debuffs · $pct%';
-      default: // heal
-        return '+${healFromItem(def, (actor.maxHp - actor.hp).toDouble()).round()} HP';
-    }
-  }
-
-  /// REMATCH (user 2026-09-19): one tap after a PvP result sends the same
-  /// opponent a new challenge and walks into its lobby — you can step out of it
-  /// like any other. If they already challenged you back (they were quicker),
-  /// that one is accepted instead, so two rematches never stack up.
-  Future<void> _rematch() async {
-    final match = widget.pvpMatch!;
-    final myId = supabase.auth.currentUser!.id;
-    final opponentId = match.otherUserId(myId);
-    // Held before popping: this screen is gone once the route is.
-    final nav = appNavigatorKey.currentState;
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    try {
-      final notifier = PvpNotifier.instance;
-      final open = notifier.openMatches.where(
-        (m) =>
-            m.otherUserId(myId) == opponentId &&
-            (m.status == PvpMatchStatus.pending ||
-                m.status == PvpMatchStatus.accepted),
-      );
-      PvpMatch rematch;
-      if (open.isEmpty) {
-        rematch = await _pvpService.createChallenge(opponentId);
-      } else {
-        final existing = open.first;
-        rematch =
-            existing.status == PvpMatchStatus.pending &&
-                existing.playerB == myId
-            ? await _pvpService.acceptChallenge(existing.id)
-            : existing;
-      }
-      notifier.remember(rematch);
-      final names = await FriendsService().usernamesFor([opponentId]);
-      if (nav == null) return;
-      final name = names[opponentId] ?? '(unknown)';
-      nav.popUntil((r) => r.isFirst);
-      nav.push(
-        MaterialPageRoute(
-          builder: (_) => PvpLobbyScreen(match: rematch, opponentName: name),
-        ),
-      );
-    } catch (e) {
-      messenger?.showSnackBar(
-        SnackBar(content: Text('Could not start a rematch: $e')),
-      );
-    }
-  }
 
   // ── End overlay ───────────────────────────────────────────
   /// What "Continue" does: hand the result back to whoever launched the fight (a
@@ -5448,7 +5226,7 @@ class _BattleScreenState extends State<BattleScreen>
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 24,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w400,
                           color: kBoxInk,
                         ),
                       ),
@@ -5462,7 +5240,7 @@ class _BattleScreenState extends State<BattleScreen>
                               'Defeated $foes ${foes == 1 ? 'foe' : 'foes'}',
                               style: TextStyle(
                                 fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w400,
                                 color: kBoxInkSoft,
                               ),
                             ),
@@ -5646,7 +5424,7 @@ class _BattleScreenState extends State<BattleScreen>
                   title,
                   style: const TextStyle(
                     fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     color: kBoxInk,
                   ),
                 ),
@@ -5788,7 +5566,7 @@ class _BattleScreenState extends State<BattleScreen>
         text,
         style: FoE.label(
           size: 12,
-        ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+        ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
       ),
     );
     return Column(
@@ -5847,7 +5625,7 @@ class _BattleScreenState extends State<BattleScreen>
               'Defeated $foes ${foes == 1 ? 'foe' : 'foes'}',
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
                 color: kBoxInkSoft,
               ),
             ),
@@ -5912,7 +5690,7 @@ class _BattleScreenState extends State<BattleScreen>
             '+$_xpEach XP',
             style: const TextStyle(
               fontSize: 10,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               color: CreamPalette.goldDeep,
             ),
           ),
@@ -5937,7 +5715,7 @@ class _BattleScreenState extends State<BattleScreen>
             'Level Up!',
             style: TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               color: kBoxAccent,
             ),
           ),
@@ -5979,7 +5757,7 @@ class _BattleScreenState extends State<BattleScreen>
               'Unlocked!',
               style: TextStyle(
                 fontSize: 14,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: kBoxAccent,
               ),
             ),
@@ -6022,7 +5800,7 @@ class _BattleScreenState extends State<BattleScreen>
           text,
           style: const TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             color: kBoxInk,
           ),
         ),
@@ -6100,7 +5878,7 @@ class _BattleScreenState extends State<BattleScreen>
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w400,
                             color: kBoxInk,
                           ),
                         ),
@@ -6118,7 +5896,7 @@ class _BattleScreenState extends State<BattleScreen>
                         '${up.toLevel}',
                         style: const TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w400,
                           color: kBoxAccent,
                         ),
                       ),
@@ -6154,7 +5932,7 @@ class _BattleScreenState extends State<BattleScreen>
       '${_statAbbrev(stat)} +$gain',
       style: const TextStyle(
         fontSize: 10,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w400,
         color: CreamPalette.better,
       ),
     ),
@@ -6256,7 +6034,7 @@ class _FloatingNumberState extends State<_FloatingNumber>
                     d.text,
                     style: FoE.title(size: 20).copyWith(
                       color: d.color,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w400,
                       shadows: const [
                         Shadow(
                           color: Colors.black,
@@ -6271,7 +6049,7 @@ class _FloatingNumberState extends State<_FloatingNumber>
                       d.tag!,
                       style: FoE.label(
                         size: 10,
-                      ).copyWith(color: d.color, fontWeight: FontWeight.w800),
+                      ).copyWith(color: d.color, fontWeight: FontWeight.w400),
                     ),
                 ],
               ),
@@ -6366,7 +6144,7 @@ class _RisingCrossState extends State<_RisingCross>
                 '✚',
                 style: FoE.title(size: 16).copyWith(
                   color: FoE.positive,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w400,
                   shadows: const [
                     Shadow(
                       color: Colors.black,

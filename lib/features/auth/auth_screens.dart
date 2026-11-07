@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase/supabase_client.dart';
@@ -8,6 +8,7 @@ import '../../core/theme/fachwerk.dart';
 import '../../core/ui/pressable.dart';
 import '../settlement/widgets/building_icon.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 // ── The front door ──────────────────────────────────────────
 // "Variante 1, Karte rechts, im Holz" (user 2026-09-20): the game's name as a
@@ -116,7 +117,7 @@ class _Brand extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 44,
                     height: 1.05,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     letterSpacing: 0.4,
                     color: Fachwerk.windowGlow,
                     shadows: [
@@ -136,7 +137,7 @@ class _Brand extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               height: 1.5,
-              color: CreamPalette.paperTop.withValues(alpha: 0.66),
+              color: kBoxInk.withValues(alpha: 0.78),
             ),
           ),
         ),
@@ -197,7 +198,7 @@ class _CreamFieldState extends State<_CreamField> {
         widget.label.toUpperCase(),
         style: const TextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           letterSpacing: 1.1,
           color: kBoxAccent,
         ),
@@ -227,7 +228,7 @@ class _CreamFieldState extends State<_CreamField> {
           cursorColor: kBoxInk,
           style: const TextStyle(
             fontSize: 14,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w400,
             color: kBoxInk,
           ),
           decoration: const InputDecoration.collapsed(hintText: null),
@@ -274,7 +275,7 @@ class _SubmitButton extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 15,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: goldButtonInk(),
               ),
             ),
@@ -312,7 +313,7 @@ class _ModeSwitch extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 13,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               color: on ? kBoxInk : kBoxInkSoft,
             ),
           ),
@@ -344,7 +345,7 @@ Widget _messageLine(String text, {required bool error}) => Padding(
     textAlign: TextAlign.center,
     style: TextStyle(
       fontSize: 12,
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w400,
       color: error ? CreamPalette.warn : kBoxInkSoft,
     ),
   ),
@@ -533,7 +534,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   'Forgot password?',
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w400,
                     color: kBoxAccent,
                     decoration: TextDecoration.underline,
                   ),
@@ -594,7 +595,7 @@ class _ResetDialogState extends State<_ResetDialog> {
               'Reset password',
               style: TextStyle(
                 fontSize: 17,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: kBoxInk,
               ),
             ),
@@ -627,7 +628,7 @@ class _ResetDialogState extends State<_ResetDialog> {
                       'Cancel',
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w400,
                         color: kBoxInk,
                       ),
                     ),
@@ -645,7 +646,7 @@ class _ResetDialogState extends State<_ResetDialog> {
                       'Send link',
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w400,
                         color: goldButtonInk(),
                       ),
                     ),
@@ -723,7 +724,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           'Choose a new password',
           style: TextStyle(
             fontSize: 18,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             color: kBoxInk,
           ),
         ),

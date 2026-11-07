@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/theme/cream_kit.dart';
@@ -56,6 +56,7 @@ import 'building_upgrade_sheet.dart';
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // Training battle vs. 1-3 random wild creatures near the team's level.
 // Lives at the Training Grounds (user decision 2026-07-17, moved off the

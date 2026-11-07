@@ -263,7 +263,7 @@ class CaptureHuntOption {
   /// ladder's own comment).
   final int finds;
 
-  /// Short human label for the step count ("500 Schritte", "10.000 Schritte").
+  /// Short human label for the step count ("500 steps", "10,000 steps").
   final String label;
 
   const CaptureHuntOption({
@@ -300,15 +300,15 @@ class CaptureHuntOption {
 // efficient play (same invariant the old time ladder had, just measured in
 // steps now).
 const List<CaptureHuntOption> kCaptureHuntOptions = [
-  CaptureHuntOption(id: 'h500', steps: 500, finds: 1, label: '500 Schritte'),
-  CaptureHuntOption(id: 'h1000', steps: 1000, finds: 2, label: '1.000 Schritte'),
-  CaptureHuntOption(id: 'h2000', steps: 2000, finds: 3, label: '2.000 Schritte'),
-  CaptureHuntOption(id: 'h5000', steps: 5000, finds: 5, label: '5.000 Schritte'),
+  CaptureHuntOption(id: 'h500', steps: 500, finds: 1, label: '500 steps'),
+  CaptureHuntOption(id: 'h1000', steps: 1000, finds: 2, label: '1,000 steps'),
+  CaptureHuntOption(id: 'h2000', steps: 2000, finds: 3, label: '2,000 steps'),
+  CaptureHuntOption(id: 'h5000', steps: 5000, finds: 5, label: '5,000 steps'),
   CaptureHuntOption(
     id: 'h10000',
     steps: 10000,
     finds: 8,
-    label: '10.000 Schritte',
+    label: '10,000 steps',
   ),
 ];
 

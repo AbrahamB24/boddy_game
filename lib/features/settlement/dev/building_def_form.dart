@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'dev_foe.dart';
 import '../data/building_art.dart';
 import '../data/building_definitions.dart';
@@ -16,6 +16,7 @@ import 'dev_theme.dart';
 import 'effects_editor.dart';
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // Create/edit form for a single BuildingDef. `existing == null` means
 // creating a new one. Three tabs — Basis, Bau, Kosten & Effekte.

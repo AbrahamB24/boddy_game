@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -9,6 +9,7 @@ import '../services/star_overview.dart';
 import 'star_row.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// The whole campaign's stars at a glance (user 2026-09-28: "auf der Map braucht
 /// es eine Gesamtübersicht über die erreichten Sterne"): a card per region with

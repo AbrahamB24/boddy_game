@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../settlement/dev/dev_foe.dart';
 import '../../settlement/dev/dev_theme.dart';
@@ -14,6 +14,7 @@ import '../services/stat_budget.dart';
 import '../widgets/creature_sprite.dart' show decodeWidthFor;
 import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 // Create/edit form for one SpeciesDef: element/rarity/role, per-species
 // evolution levels, the 6 stat curves (3-stage base + one shared growth

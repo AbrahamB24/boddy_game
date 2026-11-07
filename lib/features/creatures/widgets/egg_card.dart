@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
@@ -9,6 +9,7 @@ import '../models/species_def.dart';
 import '../services/creature_power.dart';
 import 'creature_sprite.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// The parchment screens' accent gold — the same value the Hatchery, the
 /// breeding page and the building dialog each declare for their own readouts.

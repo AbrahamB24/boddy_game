@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/supabase/supabase_client.dart';
 import '../../core/theme/cream_kit.dart';
@@ -16,6 +16,7 @@ import 'data/building_definitions.dart';
 import 'settlement_controller.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// The player's page (user 2026-09-19, "Variante 2, Spielerkarte"): on the left
 /// a PLAYER CARD — avatar, @username, e-mail, "Edit username" and four figures
@@ -119,13 +120,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ── The player card ───────────────────────────────────────────────────
 
   Widget _playerCard() {
-    final s = _stats;
+    // Scrolls rather than overflows on a short phone (the stat tiles at the
+    // bottom were cut off at 430 px tall); IntrinsicHeight keeps the Spacer
+    // pushing them to the bottom whenever there IS room.
+    return LayoutBuilder(
+      builder: (context, box) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: box.maxHeight),
+          child: IntrinsicHeight(child: _playerCardBody(_stats)),
+        ),
+      ),
+    );
+  }
+
+  Widget _playerCardBody(PvpStats? s) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Column(
         children: [
-          SocialAvatar(_username ?? _email, size: 84),
-          const SizedBox(height: 10),
+          SocialAvatar(_username ?? _email, size: 64),
+          const SizedBox(height: 8),
           Text(
             _usernameLoaded
                 ? (_username == null ? 'No username yet' : '@$_username')
@@ -189,7 +203,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             overflow: TextOverflow.ellipsis,
             style: FoE.dim(
               size: 10,
-            ).copyWith(color: kBoxInkSoft, fontWeight: FontWeight.w700),
+            ).copyWith(color: kBoxInkSoft, fontWeight: FontWeight.w400),
           ),
         ],
       ),
@@ -300,7 +314,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 title,
                 style: FoE.label(
                   size: 13,
-                ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+                ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
               ),
               Text(
                 subtitle,
@@ -327,7 +341,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     onTap: onTap,
     child: Row(
       children: [
-        PixelIcon(icon, size: 19, color: danger ? CreamPalette.warn : kBoxAccent),
+        PixelIcon(
+          icon,
+          size: 19,
+          color: danger ? CreamPalette.warn : kBoxAccent,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -336,7 +354,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             overflow: TextOverflow.ellipsis,
             style: FoE.label(size: 12.5).copyWith(
               color: danger ? CreamPalette.warn : kBoxInk,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ),
@@ -498,7 +516,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             text: word,
                             style: const TextStyle(
                               color: CreamPalette.warn,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w400,
                             ),
                           ),
                           const TextSpan(text: ' to confirm'),

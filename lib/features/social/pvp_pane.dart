@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -8,6 +8,7 @@ import 'models/pvp_match.dart';
 import 'social_actions.dart';
 import 'social_controller.dart';
 import 'widgets/social_kit.dart';
+import '../../core/ui/game_text.dart';
 
 /// The PvP list: challenges waiting on you, and every match that is under way —
 /// a challenge I sent nobody accepted yet, an accepted match whose lobby anyone
@@ -109,7 +110,7 @@ class _PvpPaneState extends State<PvpPane> {
           overflow: TextOverflow.ellipsis,
           style: FoE.label(
             size: 13,
-          ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+          ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
         ),
         if (sub != null)
           Text(

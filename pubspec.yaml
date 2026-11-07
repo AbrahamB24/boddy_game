@@ -54,11 +54,12 @@ flutter:
     # list stays, because it is what keeps a stray file from silently
     # shipping again. tile_active/tile_inactive went the same way: the two
     # FoE constants naming them were the only mention left anywhere.
-    - assets/images/overworld_grass.png
     # Its own line, because a directory entry is NOT recursive — the sixteen
     # road tiles would simply not ship.
+    - assets/images/icons/
     - assets/images/roads/
     - assets/images/buildings/
+    - assets/images/ui/
     # Baked, animated 3D monsters (tool/blender/monster_anim_pro.py): one folder
     # per species, WebP sheets played by creatures/widgets/monster_sheet.dart.
     - assets/images/monsters/tidelord/

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/foe_theme.dart';
@@ -25,6 +25,7 @@ import 'services/creatures_controller.dart';
 import '../common/widgets/recess_bar.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 // One creature, Pokédex-style (user 2026-07-17): the element backdrop up top
 // with the monster art straddling into a white sheet below, a short description
@@ -215,7 +216,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                           style: const TextStyle(
                             color: _ink,
                             fontSize: 13,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -351,7 +352,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           style: GoogleFonts.outfit(
             color: _dlgInk,
             fontSize: 18,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
           ),
         ),
         content: TextField(
@@ -379,7 +380,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               style: GoogleFonts.outfit(
                 color: _dlgDim,
                 fontSize: 14,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ),
@@ -390,7 +391,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               style: GoogleFonts.outfit(
                 color: element,
                 fontSize: 14,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ),
@@ -432,7 +433,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 'Release',
                 style: FoE.label(size: 13).copyWith(
                   color: CreamPalette.warn,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ),
@@ -659,8 +660,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           style: TextStyle(
             color: fill,
             fontSize: 19,
-            fontWeight: FontWeight.w800,
-            shadows: const [Shadow(color: Color(0x99000000), blurRadius: 3)],
+            fontWeight: FontWeight.w400,
+            shadows: const [Shadow(color: Color(0xCC000000), offset: Offset(0, 1))],
           ),
         ),
         const SizedBox(height: 5),
@@ -694,7 +695,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.85),
             fontSize: 12,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w400,
           ),
         ),
       ],
@@ -812,8 +813,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                           color: _tab == i
                               ? Color.lerp(element, Colors.black, 0.55)
                               : _inkDim,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ],
@@ -868,7 +869,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     // this chip was still the kit's flat gold.
     final levelTint = Color.lerp(element, Colors.white, 0.35)!;
     const shadow = [
-      Shadow(color: Color(0x66000000), blurRadius: 4, offset: Offset(0, 1)),
+      Shadow(color: Color(0xAA000000), offset: Offset(0, 1)),
     ];
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -887,7 +888,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 style: const TextStyle(
                   color: _ink,
                   fontSize: 21,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   shadows: shadow,
                 ),
               ),
@@ -899,7 +900,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 style: TextStyle(
                   color: Color.lerp(creature.gender.color, Colors.white, 0.5),
                   fontSize: 14,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w400,
                   shadows: shadow,
                 ),
               ),
@@ -922,7 +923,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                     'NEW',
                     style: FoE.dim(size: 9).copyWith(
                       color: CreamPalette.ink,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                       letterSpacing: 0.4,
                     ),
                   ),
@@ -998,7 +999,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               style: TextStyle(
                 color: fg,
                 fontSize: 11,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
@@ -1112,7 +1113,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           style: TextStyle(
             color: _inkDim,
             fontSize: 11,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             letterSpacing: 1,
           ),
         ),
@@ -1166,7 +1167,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                   padding: EdgeInsets.only(top: care == null ? 0 : 8),
                   child: Text(
                     busy,
-                    style: const TextStyle(color: _ink, fontSize: 11.5),
+                    style: const TextStyle(color: _ink, fontSize: 12),
                   ),
                 ),
             ],
@@ -1269,14 +1270,14 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       padding: const EdgeInsets.only(top: 3),
       child: Row(
         children: [
-          Text(k, style: const TextStyle(color: _inkDim, fontSize: 11.5)),
+          Text(k, style: const TextStyle(color: _inkDim, fontSize: 12)),
           const Spacer(),
           Text(
             v,
             style: const TextStyle(
               color: _ink,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ],
@@ -1297,7 +1298,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               desc.isNotEmpty ? desc : 'No info yet — coming soon.',
               style: TextStyle(
                 color: _inkDim,
-                fontSize: 11.5,
+                fontSize: 12,
                 height: 1.3,
                 fontStyle: desc.isEmpty ? FontStyle.italic : FontStyle.normal,
               ),
@@ -1308,7 +1309,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 origin,
                 style: const TextStyle(
                   color: _ink,
-                  fontSize: 11.5,
+                  fontSize: 12,
                   height: 1.3,
                 ),
               ),
@@ -1358,7 +1359,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             style: TextStyle(
               color: _releaseTint,
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ],
@@ -1387,8 +1388,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: _inkDim,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ),
@@ -1398,7 +1399,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               style: const TextStyle(
                 color: _ink,
                 fontSize: 13,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
@@ -1456,12 +1457,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     const bigStyle = TextStyle(
       color: _ink,
       fontSize: 12,
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w400,
     );
     const smallStyle = TextStyle(
       color: _inkDim,
-      fontSize: 10.5,
-      fontWeight: FontWeight.w600,
+      fontSize: 11,
+      fontWeight: FontWeight.w400,
     );
     final valueStyle = _barsShowGrowth ? smallStyle : bigStyle;
     final growthStyle = _barsShowGrowth ? bigStyle : smallStyle;
@@ -1478,7 +1479,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         style: const TextStyle(
           color: _ink,
           fontSize: 14,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
         ),
       ),
     );
@@ -1502,7 +1503,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               text,
               textAlign: TextAlign.right,
               style: beats
-                  ? style.copyWith(color: better, fontWeight: FontWeight.w800)
+                  ? style.copyWith(color: better, fontWeight: FontWeight.w400)
                   : style,
             ),
           ],
@@ -1522,7 +1523,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 stat.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: _ink, fontSize: 11.5),
+                style: const TextStyle(color: _ink, fontSize: 12),
               ),
             ),
           ),
@@ -1668,7 +1669,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                     style: TextStyle(
                       color: i == selected ? CreamPalette.ink : _inkDim,
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                 ),
@@ -1844,7 +1845,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             style: TextStyle(
               color: revealed ? _ink : _inkDim,
               fontSize: 14,
-              fontWeight: current ? FontWeight.w800 : FontWeight.w600,
+              fontWeight: current ? FontWeight.w400 : FontWeight.w400,
             ),
           ),
         ],
@@ -1910,8 +1911,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               'Attack',
               style: TextStyle(
                 color: _ink,
-                fontSize: 13.5,
-                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ),
@@ -2002,8 +2003,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: white,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                 ),
@@ -2021,7 +2022,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                     style: const TextStyle(
                       color: white,
                       fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                 ),
@@ -2032,7 +2033,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             const SizedBox(height: 2),
             Text(
               _kindLine(a),
-              style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 11.5),
+              style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 12),
             ),
             if (a.description.isNotEmpty)
               Flexible(
@@ -2044,7 +2045,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xEBFFFFFF),
-                      fontSize: 11.5,
+                      fontSize: 12,
                       height: 1.25,
                     ),
                   ),
@@ -2139,7 +2140,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                                           '${CombatEngine.abilityApCost(current)} AP',
                                           style: FoE.label(size: 12.5).copyWith(
                                             color: _dlgInk,
-                                            fontWeight: FontWeight.w800,
+                                            fontWeight: FontWeight.w400,
                                           ),
                                         ),
                                         if (current.description.isNotEmpty) ...[
@@ -2223,7 +2224,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                               'Empty this slot',
                               style: FoE.dim(size: 13).copyWith(
                                 color: CreamPalette.warn,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w400,
                               ),
                             ),
                           ),
@@ -2238,7 +2239,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                               '📖 Learn new abilities',
                               style: FoE.label(size: 13).copyWith(
                                 color: CreamPalette.accent,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w400,
                               ),
                             ),
                           ),
@@ -2298,7 +2299,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: FoE.label(
                         size: 13,
-                      ).copyWith(color: _dlgInk, fontWeight: FontWeight.w800),
+                      ).copyWith(color: _dlgInk, fontWeight: FontWeight.w400),
                     ),
                     Text(
                       '${_kindLine(a)} · ${CombatEngine.abilityApCost(a)} AP',
@@ -2367,7 +2368,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         style: TextStyle(
           color: CreamPalette.ink,
           fontSize: 12,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
         ),
       ),
     ),
@@ -2392,7 +2393,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               style: const TextStyle(
                 color: _inkDim,
                 fontSize: 12,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w400,
               ),
             ),
             const Spacer(),
@@ -2401,7 +2402,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               style: const TextStyle(
                 color: _ink,
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
@@ -2438,7 +2439,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             style: TextStyle(
               color: filled ? ink : color,
               fontSize: 13,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ),
@@ -2478,7 +2479,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               style: TextStyle(
                 color: canPay ? Colors.white : _inkDim,
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ),
@@ -2552,7 +2553,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
           style: const TextStyle(
             color: Colors.white,
             fontSize: 11,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w400,
           ),
         ),
       ),
@@ -2627,8 +2628,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                     if (rateXpLine != null) ...[

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -23,6 +23,7 @@ import 'models/placed_building.dart';
 import 'settlement_controller.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// Posting monsters to a work post — "Sitze + Liste" (user 2026-09-22, picked from
 /// ten; it replaces the bottom sheet `AssignWorkersSheet`).
@@ -373,8 +374,8 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
           Text(
             'TOTAL HERE',
             style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w800,
+              fontSize: 10,
+              fontWeight: FontWeight.w400,
               letterSpacing: 1.1,
               color: kBoxInkFaint,
             ),

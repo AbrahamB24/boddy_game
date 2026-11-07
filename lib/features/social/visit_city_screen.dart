@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -8,6 +8,7 @@ import '../settlement/sheets/building_info_popup.dart';
 import '../settlement/widgets/visit_settlement_map.dart';
 import 'widgets/social_kit.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 /// A friend's city, read-only (user 2026-09-19, Holz palette): the real map
 /// fills the screen with a dark name plate at the top left — who, and their
@@ -101,7 +102,7 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
           'Challenge',
           icon: Icons.sports_martial_arts,
           height: 36,
-          fontSize: 12.5,
+          fontSize: 13,
           onTap: widget.onChallenge,
         ),
         const SizedBox(width: 8),
@@ -110,7 +111,7 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
         'Message',
         icon: Icons.chat_bubble_outline,
         height: 36,
-        fontSize: 12.5,
+        fontSize: 13,
         onTap: () => Navigator.pop(context, true),
       ),
       const SizedBox(width: 8),
@@ -139,7 +140,7 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
         const SizedBox(width: 10),
         Text(
           "${widget.friendName}'s city",
-          style: FoE.title(size: 15).copyWith(color: CreamPalette.paperTop),
+          style: FoE.title(size: 15).copyWith(color: kBoxInk),
         ),
         if (widget.record != null) ...[
           const SizedBox(width: 10),
@@ -147,7 +148,7 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
             'Rating ${widget.record}',
             style: FoE.dim(
               size: 11,
-            ).copyWith(color: CreamPalette.paperTop.withValues(alpha: 0.66)),
+            ).copyWith(color: kBoxInk.withValues(alpha: 0.72)),
           ),
         ],
       ],
@@ -163,7 +164,7 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
       ),
       child: Text(
         "Tap a building to look inside · visitors can't change anything",
-        style: FoE.label(size: 11.5).copyWith(color: CreamPalette.paperTop),
+        style: FoE.label(size: 11.5).copyWith(color: kBoxInk),
       ),
     ),
   );
@@ -176,7 +177,7 @@ class _VisitCityScreenState extends State<VisitCityScreen> {
           child: Text(
             _error!,
             textAlign: TextAlign.center,
-            style: FoE.label().copyWith(color: CreamPalette.paperTop),
+            style: FoE.label().copyWith(color: kBoxInk),
           ),
         ),
       );

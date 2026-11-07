@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -6,6 +6,7 @@ import '../models/combatant.dart';
 import '../models/creature_enums.dart';
 import '../models/creature_instance.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/ui/game_text.dart';
 
 /// THE VERSUS PAGE (user 2026-09-20, "Variante 8, Karten-Duell", with the power
 /// comparison bar of "Variante 2" wherever the other side's power is known).
@@ -83,7 +84,7 @@ class VsBadge extends StatelessWidget {
       'VS',
       style: TextStyle(
         fontSize: 14,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w400,
         color: kBoxInk,
       ),
     ),
@@ -134,7 +135,7 @@ class PowerVersusBar extends StatelessWidget {
         textAlign: mineSide ? TextAlign.left : TextAlign.right,
         style: TextStyle(
           fontSize: 13,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w400,
           color: mineSide ? CreamPalette.better : CreamPalette.warn,
         ),
       ),
@@ -218,7 +219,7 @@ class VersusSide extends StatelessWidget {
               caption.toUpperCase(),
               style: const TextStyle(
                 fontSize: 10,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 letterSpacing: 0.9,
                 color: kBoxAccent,
               ),
@@ -228,7 +229,7 @@ class VersusSide extends StatelessWidget {
                 power!,
                 style: const TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: kBoxInk,
                 ),
               ),

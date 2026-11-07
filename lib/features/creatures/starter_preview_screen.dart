@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart' show CreamPalette;
 import '../../core/theme/foe_theme.dart';
@@ -12,6 +12,7 @@ import 'models/creature_instance.dart';
 import 'models/species_def.dart';
 import 'services/creatures_controller.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/ui/game_text.dart';
 
 /// A look at a starter species BEFORE anything is adopted — pushed from
 /// [CollectionScreen]'s starter picker in place of the old confirm dialog.
@@ -141,8 +142,7 @@ class _StarterPreviewScreenState extends State<StarterPreviewScreen> {
                   ? null
                   : const [
                       Shadow(
-                        color: Color(0x66000000),
-                        blurRadius: 2,
+                        color: Color(0xAA000000),
                         offset: Offset(0, 1),
                       ),
                     ],

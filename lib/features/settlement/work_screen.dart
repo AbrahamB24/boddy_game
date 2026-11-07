@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
@@ -20,6 +20,7 @@ import 'sheets/building_detail_dialog.dart';
 import 'widgets/building_icon.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// THE WORKFORCE PAGE (user 2026-09-19, "Variante 6, Besetzung im Blick", with
 /// two additions the user asked for: good SORTING, and what is PRODUCED — in
@@ -187,8 +188,8 @@ class _WorkScreenState extends State<WorkScreen> {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
                     color: kBoxInk,
                   ),
                 ),
@@ -199,8 +200,8 @@ class _WorkScreenState extends State<WorkScreen> {
                   textAlign: TextAlign.center,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
                     height: 1.15,
                     color: !on && t == WorkTab.housing && full
                         ? CreamPalette.warn
@@ -269,7 +270,7 @@ class _WorkScreenState extends State<WorkScreen> {
               child: SocialGoldButton(
                 'Build a house',
                 height: 40,
-                fontSize: 12.5,
+                fontSize: 13,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 // Closes back to the map and opens the build strip on Housing.
                 onTap: () => BuildMenuRequest.open(
@@ -295,7 +296,7 @@ class _WorkScreenState extends State<WorkScreen> {
           'HOUSES · $count',
           style: const TextStyle(
             fontSize: 10,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             letterSpacing: 0.9,
             color: kBoxAccent,
           ),
@@ -370,8 +371,8 @@ class _WorkScreenState extends State<WorkScreen> {
       text,
       style: warn
           ? const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
               color: CreamPalette.warn,
             )
           : FoE.dim(size: 11.5).copyWith(color: kBoxInkSoft),
@@ -410,7 +411,7 @@ class _WorkScreenState extends State<WorkScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: FoE.label(
                     size: 12.5,
-                  ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+                  ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
                 ),
                 Text(
                   'Lv ${h.building.level}',
@@ -478,7 +479,7 @@ class _WorkScreenState extends State<WorkScreen> {
                     ? 'Fill empty seats'
                     : 'Fill ${plan.length} seat${plan.length == 1 ? '' : 's'}',
                 height: 40,
-                fontSize: 12.5,
+                fontSize: 13,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 onTap: plan.isEmpty ? null : () => _fill(plan),
               ),
@@ -520,7 +521,7 @@ class _WorkScreenState extends State<WorkScreen> {
             overflow: TextOverflow.ellipsis,
             style: FoE.dim(
               size: 10.5,
-            ).copyWith(color: kBoxInkSoft, fontWeight: FontWeight.w700),
+            ).copyWith(color: kBoxInkSoft, fontWeight: FontWeight.w400),
           ),
           if (bottom != null) ...[const SizedBox(height: 3), bottom],
         ],
@@ -595,7 +596,7 @@ class _WorkScreenState extends State<WorkScreen> {
           'SORT',
           style: TextStyle(
             fontSize: 10,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w400,
             letterSpacing: 0.9,
             color: kBoxAccent,
           ),
@@ -631,14 +632,14 @@ class _WorkScreenState extends State<WorkScreen> {
         onTap: onTap,
         child: Container(
           height: 28,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 9),
           alignment: Alignment.center,
           decoration: on ? goldButton() : raisedTile(radius: 11),
           child: Text(
             text,
             style: const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
               color: kBoxInk,
             ),
           ),
@@ -717,7 +718,7 @@ class _WorkScreenState extends State<WorkScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: FoE.label(
                     size: 12.5,
-                  ).copyWith(color: kBoxInk, fontWeight: FontWeight.w800),
+                  ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
                 ),
                 Text(
                   'Lv ${s.building.level} · '
@@ -796,7 +797,7 @@ class _WorkScreenState extends State<WorkScreen> {
                 '+',
                 style: TextStyle(
                   fontSize: 17,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: CreamPalette.goldDeep,
                   height: 1,
                 ),
@@ -819,7 +820,7 @@ class _WorkScreenState extends State<WorkScreen> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 9,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w400,
               color: c == null ? CreamPalette.warn : kBoxInkSoft,
             ),
           ),
@@ -830,7 +831,7 @@ class _WorkScreenState extends State<WorkScreen> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 9,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w400,
                 color: away ? kBoxInkFaint : kBoxInk,
               ),
             ),
@@ -858,7 +859,7 @@ class _WorkScreenState extends State<WorkScreen> {
                 '${def.name} · not connected to a road',
                 style: FoE.label(size: 12.5).copyWith(
                   color: CreamPalette.warn,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
               Text(

@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import '../../../core/theme/foe_theme.dart';
 
 import '../models/creature_enums.dart';
 import '../../../core/theme/voxel_icons.dart';
+import '../../../core/ui/game_text.dart';
 
 /// Card backdrop for a creature's art (user 2026-07-17): a smooth diagonal
 /// gradient in the creature's ELEMENT colour (lighter top-left → deeper

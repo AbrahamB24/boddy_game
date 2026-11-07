@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
-import '../../core/theme/cream_kit.dart' show goldButton;
+import '../../core/theme/cream_kit.dart' show goldButton, sectionLabel, zoneBox;
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/feel.dart';
 import '../settlement/resources_screen.dart' show romanNumeral;
@@ -25,8 +25,9 @@ import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/parchment_kit.dart';
 import '../common/widgets/recess_bar.dart';
 import '../../core/ui/pressable.dart';
-import '../../core/ui/snack.dart';
+import '../../core/ui/snack.dart';
 import '../../core/theme/voxel_icons.dart';
+import '../../core/ui/game_text.dart';
 
 /// Picks the group for [target] and sends the trip — embedded directly on
 /// the Expeditions hub's own composer (user 2026-10-02, "Konzept 24": the
@@ -45,10 +46,18 @@ class ExpeditionLaunchPanel extends StatefulWidget {
   /// inside the sheet to override it with. Clamped to a valid index.
   final int? initialOptionIndex;
 
+  /// The hub's own "1 Target" step (user 2026-11-04, layout 2 "Drei Schritte"
+  /// of ten expedition proposals). When given, the panel lays itself out as
+  /// three steps side by side — this widget, then "2 Group", then "3 Start" —
+  /// instead of the old single column. Null keeps the single column, which is
+  /// what a panel mounted on its own (no hub around it) still gets.
+  final Widget? stepOne;
+
   const ExpeditionLaunchPanel({
     super.key,
     required this.target,
     this.initialOptionIndex,
+    this.stepOne,
   });
 
   @override
@@ -231,12 +240,105 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   /// height it's actually given; [_whereRow] and [_sendBar] stay fixed top
   /// and bottom around it.
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) => widget.stepOne != null
+      ? _threeSteps()
+      : Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _whereRow(),
+            Expanded(child: _body()),
+            const SizedBox(height: 12),
+            _sendBar(),
+          ],
+        );
+
+  // ── Three steps (layout 2) ────────────────────────────────
+  // The order is real — you pick WHERE, then WHO, then press go — which is why
+  // the headings are numbered. Each step is its own zone so none of them can
+  // push another off the screen; a text too long for its zone ellipsises
+  // inside it.
+  Widget _threeSteps() => Row(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      _whereRow(),
-      Expanded(child: _body()),
-      const SizedBox(height: 12),
+      Expanded(flex: 10, child: _step('1  Target', widget.stepOne!)),
+      const SizedBox(width: 10),
+      Expanded(
+        flex: 11,
+        child: _step(
+          '2  Group',
+          _groupStep(),
+          trailing: Text(
+            '${_members.length}/$_groupCap',
+            style: FoE.dim(size: 11).copyWith(color: kInkFaint),
+          ),
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(flex: 9, child: _step('3  Start', _startStep())),
+    ],
+  );
+
+  Widget _step(String title, Widget body, {Widget? trailing}) => zoneBox(
+    padding: const EdgeInsets.all(10),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        sectionLabel(title, trailing: trailing),
+        const SizedBox(height: 8),
+        Expanded(child: body),
+      ],
+    ),
+  );
+
+  /// Step 2: the same scaled-to-fit group places as before, minus the heading
+  /// the step already carries.
+  Widget _groupStep() {
+    if (_isHunt && _pool.isEmpty) return _body();
+    final sections = _isHunt
+        ? _groupSection(
+            header: false,
+            caption: (c) => '🪤 ${c.statValue(CreatureStat.catchRate)}',
+          )
+        : _groupSection(
+            header: false,
+            hint: 'Mining speed is the group\'s gather stat.',
+            caption: (c) =>
+                '⛏️ ${gatherPowerOf(c)}   🎒 ${c.statValue(CreatureStat.carry)}',
+          );
+    return LayoutBuilder(
+      builder: (context, constraints) => FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: constraints.maxWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: sections,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Step 3: the trip's figures as label/value rows, the info button, and the
+  /// Send button at the foot.
+  Widget _startStep() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (!_isHunt)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(
+            '${_area.emoji} Level ${romanNumeral(_area.order)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: FoE.dim(size: 11).copyWith(color: kInkFaint),
+          ),
+        ),
+      for (final s in _statPairs()) _kv(s.$1, s.$2),
+      Align(alignment: Alignment.centerRight, child: _infoButton()),
+      const Spacer(),
       _sendBar(),
     ],
   );
@@ -338,56 +440,73 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   /// never change with who's picked, only the three trip figures do, so they
   /// sit in the strip and the spot's own numbers are one tap away instead of
   /// permanently on screen.
-  List<Widget> _gatherSections() {
+  /// The trip's figures — shared by the single-column strip and step 3.
+  List<(String, String)> _statPairs() {
+    if (_isHunt) {
+      final o = _option;
+      return [('Length', o.label), ('Finds', '${o.finds}')];
+    }
+    final plan = _plan;
+    return [
+      (
+        'Haul',
+        plan == null || !plan.isViable
+            ? '—'
+            : '${plan.amount.toStringAsFixed(0)} ${plan.resource}',
+      ),
+      ('Carry cap', plan?.loadCap.toStringAsFixed(0) ?? '0'),
+      (
+        'Duration',
+        plan != null && plan.isViable ? fmtTripDuration(plan.duration) : '—',
+      ),
+    ];
+  }
+
+  /// The ⓘ behind the figures: a spot's stock and regrowth for gather, the
+  /// find odds for a hunt.
+  Widget _infoButton() {
+    if (_isHunt) {
+      return ParchmentInfoButton(
+        title: 'Find odds',
+        content: (_) => _oddsRows(_pool.map((s) => s.rarity).toSet()),
+      );
+    }
     final spot = widget.target.spot!;
     final plan = _plan;
     final stock = _expeditions.availableStock(spot);
     // Capacity / regen / mining speed are per-RESOURCE dials now (Dev Mode →
     // Resources), not per spot.
     final dials = gatherDefFor(spot.resource);
-    return [
-      _statStrip(
-        [
-          (
-            'Haul',
-            plan == null || !plan.isViable
-                ? '—'
-                : '${plan.amount.toStringAsFixed(0)} ${plan.resource}',
-          ),
-          ('Carry cap', plan?.loadCap.toStringAsFixed(0) ?? '0'),
-          (
-            'Duration',
-            plan != null && plan.isViable
-                ? fmtTripDuration(plan.duration)
-                : '—',
-          ),
-        ],
-        trailing: ParchmentInfoButton(
-          title: 'Spot',
-          content: (_) => [
-            _kv(
-              'In the ground',
-              '${stock.toStringAsFixed(0)} / '
-                  '${dials.spotCapacity.toStringAsFixed(0)}',
-            ),
-            _bar(
-              dials.spotCapacity <= 0 ? 0 : stock / dials.spotCapacity,
-              kParchmentGo,
-            ),
-            const SizedBox(height: 8),
-            _kv('Regrows', '${dials.regenPerHour.toStringAsFixed(0)}/h'),
-            _kv(
-              'Carry point',
-              '${_fmtNum(dials.unitsPerCarry)} ${spot.resource}',
-            ),
-            const SizedBox(height: 8),
-            _kv(
-              'Mining rate',
-              '${plan?.ratePerHour.toStringAsFixed(1) ?? '0'}/h',
-            ),
-          ],
+    return ParchmentInfoButton(
+      title: 'Spot',
+      content: (_) => [
+        _kv(
+          'In the ground',
+          '${stock.toStringAsFixed(0)} / '
+              '${dials.spotCapacity.toStringAsFixed(0)}',
         ),
-      ),
+        _bar(
+          dials.spotCapacity <= 0 ? 0 : stock / dials.spotCapacity,
+          kParchmentGo,
+        ),
+        const SizedBox(height: 8),
+        _kv('Regrows', '${dials.regenPerHour.toStringAsFixed(0)}/h'),
+        _kv(
+          'Carry point',
+          '${_fmtNum(dials.unitsPerCarry)} ${spot.resource}',
+        ),
+        const SizedBox(height: 8),
+        _kv(
+          'Mining rate',
+          '${plan?.ratePerHour.toStringAsFixed(1) ?? '0'}/h',
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _gatherSections() {
+    return [
+      _statStrip(_statPairs(), trailing: _infoButton()),
       const SizedBox(height: 14),
       ..._groupSection(
         hint:
@@ -415,15 +534,8 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   // gepackt werden") — rather than sitting between the player and the
   // decision.
   List<Widget> _huntSections() {
-    final o = _option;
     return [
-      _statStrip(
-        [('Length', o.label), ('Finds', '${o.finds}')],
-        trailing: ParchmentInfoButton(
-          title: 'Find odds',
-          content: (_) => _oddsRows(_pool.map((s) => s.rarity).toSet()),
-        ),
-      ),
+      _statStrip(_statPairs(), trailing: _infoButton()),
       const SizedBox(height: 14),
       ..._groupSection(
         caption: (c) => '🪤 ${c.statValue(CreatureStat.catchRate)}',
@@ -499,12 +611,14 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
   // caption differ.
   List<Widget> _groupSection({
     String? hint,
+    bool header = true,
     required String Function(CreatureInstance) caption,
   }) => [
-    ParchmentSectionHeader(
-      title: 'Group',
-      hint: '${_members.length} / $_groupCap chosen',
-    ),
+    if (header)
+      ParchmentSectionHeader(
+        title: 'Group',
+        hint: '${_members.length} / $_groupCap chosen',
+      ),
     if (hint != null)
       Text(hint, style: FoE.dim(size: 10).copyWith(color: kInkFaint)),
     // "THE SAME AGAIN" (user 2026-07-30). Sending a party is the most repeated
