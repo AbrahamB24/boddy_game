@@ -27,6 +27,7 @@ import 'services/battle_rewards.dart';
 import 'services/combat_engine.dart' show CombatOutcome;
 import 'survival_screen.dart' show openSurvivalMode;
 import 'services/creatures_controller.dart';
+import 'services/lair_controller.dart';
 import 'services/overworld_layout.dart';
 import 'services/overworld_path.dart';
 import 'services/region_dungeon.dart'
@@ -623,6 +624,8 @@ class _OverworldScreenState extends State<OverworldScreen> {
       ),
       force: true,
     );
+    // The legendary moves into a lair of its own (user 2026-11-07).
+    if (caught != null) LairController().load();
     if (!mounted) return;
     // THE milestone of a region — boss down, a legendary joins, the level cap
     // rises. It used to be announced only through a snack, and snacks have

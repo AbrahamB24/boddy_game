@@ -36,7 +36,6 @@ String _resEmoji(String res) => switch (res) {
   WorkshopRole.kConstruction => '🔨',
   WorkshopRole.kCrafting => '⚗️',
   WorkshopRole.kTraining => '🏋️',
-  WorkshopRole.kLegendaryBoost => '⭐',
   _ => kResourceEmoji[res] ?? kGoodsDefs[res]?.emoji ?? '📦',
 };
 
@@ -44,7 +43,6 @@ String _resName(String res) => switch (res) {
   WorkshopRole.kConstruction => 'Construction',
   WorkshopRole.kCrafting => 'Crafting',
   WorkshopRole.kTraining => 'Training',
-  WorkshopRole.kLegendaryBoost => 'Legendary',
   _ =>
     kGoodsDefs[res]?.name ??
         (res.isEmpty ? 'Resource' : res[0].toUpperCase() + res.substring(1)),
@@ -96,8 +94,7 @@ class _BuildingUpgradeSheet extends StatelessWidget {
       (k, v) =>
           v <= 0 ||
           k == WorkshopRole.kCrafting ||
-          k == WorkshopRole.kTraining ||
-          k == WorkshopRole.kLegendaryBoost,
+          k == WorkshopRole.kTraining,
     );
 
     final housing = def.hasEffect('housing', era)
@@ -276,14 +273,6 @@ class _BuildingUpgradeSheet extends StatelessWidget {
     // Worker posts + per-worker output.
     for (final role in def.workshops) {
       final slots = effectiveSlots(role, maxLevel);
-      if (role.resource == WorkshopRole.kLegendaryBoost) {
-        row(
-          '⭐',
-          'Legendary boost · $slots slot${slots == 1 ? '' : 's'}',
-          '×${(1 + role.mult).toStringAsFixed(1)}',
-        );
-        continue;
-      }
       if (role.resource == WorkshopRole.kTraining) {
         row(
           '🏋️',

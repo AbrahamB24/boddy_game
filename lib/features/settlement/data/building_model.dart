@@ -110,10 +110,17 @@ typedef BuildingEntrance = (int cx, int cy, int dx, int dy);
 List<BuildingEntrance>? entrancesFor(String id, int gridW, int gridH) =>
     _modelFits(id, gridW, gridH) ? kBuildingEntrance[id] : null;
 
+/// Master switch for the moving building parts. While false [animFor] returns
+/// null, so the map and the precache fall back to the ordinary still render.
+const bool kBuildingAnimEnabled = true;
+
+
 /// The moving parts of [id], under the same footprint guard as
 /// [entrancesFor] — the layers are cut to the model's own picture.
 BuildingAnimSpec? animFor(String id, int gridW, int gridH) =>
-    _modelFits(id, gridW, gridH) ? kBuildingAnim[id] : null;
+    kBuildingAnimEnabled && _modelFits(id, gridW, gridH)
+        ? kBuildingAnim[id]
+        : null;
 
 /// The cells inside [id] that the monsters on the roads may walk (user
 /// 2026-11-03: the Castle's lanes from its gates to the square), relative to
@@ -194,10 +201,6 @@ const Map<String, (int, int)> kModelFootprint = {
   'breeding_hut_r1': (4, 4),
   'breeding_hut_r2': (4, 4),
   'breeding_hut_r3': (4, 4),
-  'healing_hut': (5, 4),
-  'healing_hut_r1': (4, 5),
-  'healing_hut_r2': (5, 4),
-  'healing_hut_r3': (4, 5),
   'builder_camp': (5, 5),
   'builder_camp_r1': (5, 5),
   'builder_camp_r2': (5, 5),
@@ -223,6 +226,10 @@ const Map<String, (int, int)> kModelFootprint = {
   'training_grounds_r1': (3, 3),
   'training_grounds_r2': (3, 3),
   'training_grounds_r3': (3, 3),
+  'healing_hut': (5, 4),
+  'healing_hut_r1': (4, 5),
+  'healing_hut_r2': (5, 4),
+  'healing_hut_r3': (4, 5),
 };
 
 /// A building's entrances — usually one; the Castle has a gate on every side
@@ -285,10 +292,6 @@ const Map<String, List<BuildingEntrance>> kBuildingEntrance = {
   'breeding_hut_r1': [(0, 2, -1, 0)],
   'breeding_hut_r2': [(1, 0, 0, -1)],
   'breeding_hut_r3': [(3, 1, 1, 0)],
-  'healing_hut': [(2, 3, 0, 1), (2, 0, 0, -1)],
-  'healing_hut_r1': [(0, 2, -1, 0), (3, 2, 1, 0)],
-  'healing_hut_r2': [(2, 0, 0, -1), (2, 3, 0, 1)],
-  'healing_hut_r3': [(3, 2, 1, 0), (0, 2, -1, 0)],
   'builder_camp': [(2, 4, 0, 1)],
   'builder_camp_r1': [(0, 2, -1, 0)],
   'builder_camp_r2': [(2, 0, 0, -1)],
@@ -313,6 +316,10 @@ const Map<String, List<BuildingEntrance>> kBuildingEntrance = {
   'training_grounds_r1': [(0, 1, -1, 0)],
   'training_grounds_r2': [(1, 0, 0, -1)],
   'training_grounds_r3': [(2, 1, 1, 0)],
+  'healing_hut': [(2, 3, 0, 1), (2, 0, 0, -1)],
+  'healing_hut_r1': [(0, 2, -1, 0), (3, 2, 1, 0)],
+  'healing_hut_r2': [(2, 0, 0, -1), (2, 3, 0, 1)],
+  'healing_hut_r3': [(3, 2, 1, 0), (0, 2, -1, 0)],
 };
 
 const Map<String, BuildingAnimSpec> kBuildingAnim = {
@@ -372,10 +379,6 @@ const Map<String, BuildingAnimSpec> kBuildingAnim = {
   'breeding_hut_r1': BuildingAnimSpec(0.80689, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 37, 37, 0.4257, 0.47687, 0.03805, 0.04804, 0.43409, 0.51966, 0.25, 3.4, 4.47), BuildingAnimLayer(AnimKind.sway, 0, 39, 29, 50, 0.42067, 0.57384, 0.03015, 0.06495, 0.43983, 0.62999, 0.06, 4.4, 1.06), BuildingAnimLayer(AnimKind.sway, 0, 91, 39, 59, 0.43144, 0.66281, 0.0402, 0.07562, 0.45706, 0.72608, 0.06, 4.4, 6.19), BuildingAnimLayer(AnimKind.glow, 0, 152, 20, 37, 0.72577, 0.63078, 0.02082, 0.04804, 0.5, 0.5, 0.45, 6, 4.52)]),
   'breeding_hut_r2': BuildingAnimSpec(0.80689, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 42, 32, 0.74444, 0.60854, 0.04379, 0.04093, 0.75183, 0.63486, 0.25, 3.4, 4.47), BuildingAnimLayer(AnimKind.glow, 0, 34, 21, 37, 0.3934, 0.71708, 0.02154, 0.04804, 0.5, 0.5, 0.45, 6, 4.52)]),
   'breeding_hut_r3': BuildingAnimSpec(0.80689, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 36, 39, 0.53625, 0.80516, 0.03733, 0.04982, 0.56591, 0.83175, 0.25, 3.4, 4.47), BuildingAnimLayer(AnimKind.sway, 0, 41, 46, 58, 0.54128, 0.65391, 0.0481, 0.07473, 0.56017, 0.72142, 0.06, 4.4, 1.06), BuildingAnimLayer(AnimKind.sway, 0, 101, 23, 50, 0.54415, 0.5694, 0.02441, 0.06406, 0.54293, 0.62533, 0.06, 4.4, 6.19), BuildingAnimLayer(AnimKind.glow, 0, 153, 84, 59, 0.35176, 0.60943, 0.08758, 0.07651, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 214, 15, 19, 0.5262, 0.56851, 0.01579, 0.02402, 0.5, 0.5, 0.7, 1, 4.49), BuildingAnimLayer(AnimKind.glow, 0, 235, 25, 21, 0.43575, 0.74822, 0.02656, 0.02669, 0.5, 0.5, 0.6, 3.2, 1.2)]),
-  'healing_hut': BuildingAnimSpec(0.77322, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 176, 105, 0.44907, 0.51036, 0.18322, 0.14167, 0.55244, 0.57664, 0.22, 2.6, 1.7), BuildingAnimLayer(AnimKind.sway, 0, 107, 50, 33, 0.42537, 0.78542, 0.05253, 0.04474, 0.45304, 0.81729, 0.25, 3.4, 4.35), BuildingAnimLayer(AnimKind.sway, 0, 142, 119, 71, 0.19539, 0.53853, 0.12364, 0.09611, 0.24297, 0.60382, 0.12, 3.3, 2.78), BuildingAnimLayer(AnimKind.sway, 0, 215, 117, 70, 0.15695, 0.56752, 0.12172, 0.09445, 0.20198, 0.63032, 0.12, 3.3, 2.11), BuildingAnimLayer(AnimKind.sway, 0, 287, 121, 72, 0.53363, 0.73654, 0.12556, 0.09693, 0.58113, 0.80261, 0.12, 3.3, 2.37), BuildingAnimLayer(AnimKind.sway, 0, 361, 119, 71, 0.49327, 0.76553, 0.12364, 0.09528, 0.54014, 0.82912, 0.12, 3.3, 1.7), BuildingAnimLayer(AnimKind.sway, 0, 434, 42, 49, 0.5048, 0.6744, 0.0442, 0.06628, 0.52477, 0.73114, 0.06, 4.4, 0.65), BuildingAnimLayer(AnimKind.glow, 0, 485, 145, 95, 0.4779, 0.55344, 0.15054, 0.12759, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 582, 14, 17, 0.55413, 0.62303, 0.01409, 0.0232, 0.5, 0.5, 0.7, 1, 4.49)]),
-  'healing_hut_r1': BuildingAnimSpec(0.77322, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 44, 34, 0.23254, 0.59735, 0.04612, 0.0464, 0.26013, 0.63181, 0.25, 3.4, 4.35), BuildingAnimLayer(AnimKind.sway, 0, 36, 104, 74, 0.21909, 0.65534, 0.10826, 0.09942, 0.26525, 0.70328, 0.12, 3.3, 2.37), BuildingAnimLayer(AnimKind.sway, 0, 112, 117, 74, 0.17873, 0.628, 0.12236, 0.10025, 0.22426, 0.67678, 0.12, 3.3, 1.7), BuildingAnimLayer(AnimKind.glow, 0, 188, 16, 29, 0.64382, 0.66114, 0.01666, 0.03894, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 219, 13, 17, 0.58104, 0.71997, 0.01345, 0.02237, 0.5, 0.5, 0.7, 1, 4.49)]),
-  'healing_hut_r2': BuildingAnimSpec(0.77322, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 50, 32, 0.5221, 0.47225, 0.05253, 0.04308, 0.54696, 0.50707, 0.25, 3.4, 4.35), BuildingAnimLayer(AnimKind.sway, 0, 34, 119, 74, 0.68097, 0.64954, 0.12364, 0.09942, 0.75703, 0.69781, 0.12, 3.3, 2.78), BuildingAnimLayer(AnimKind.sway, 0, 110, 117, 74, 0.72133, 0.6222, 0.12172, 0.09942, 0.79802, 0.67131, 0.12, 3.3, 2.11), BuildingAnimLayer(AnimKind.sway, 0, 186, 8, 7, 0.49648, 0.48219, 0.00833, 0.00911, 0.45985, 0.47251, 0.12, 3.3, 1.7), BuildingAnimLayer(AnimKind.glow, 0, 195, 17, 32, 0.35106, 0.66446, 0.0173, 0.04308, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 229, 13, 18, 0.27675, 0.63546, 0.01345, 0.02403, 0.5, 0.5, 0.7, 1, 4.49)]),
-  'healing_hut_r3': BuildingAnimSpec(0.77322, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 174, 105, 0.4542, 0.45568, 0.18129, 0.14085, 0.55849, 0.50491, 0.22, 2.6, 1.7), BuildingAnimLayer(AnimKind.sway, 0, 107, 44, 34, 0.72133, 0.65866, 0.04612, 0.04557, 0.73987, 0.69254, 0.25, 3.4, 4.35), BuildingAnimLayer(AnimKind.sway, 0, 143, 118, 71, 0.34978, 0.75311, 0.123, 0.09528, 0.42732, 0.81702, 0.12, 3.3, 2.78), BuildingAnimLayer(AnimKind.sway, 0, 216, 117, 73, 0.39206, 0.7763, 0.12172, 0.09859, 0.46831, 0.84353, 0.12, 3.3, 2.11), BuildingAnimLayer(AnimKind.sway, 0, 291, 119, 71, 0.65727, 0.53355, 0.12364, 0.09611, 0.73475, 0.59835, 0.12, 3.3, 2.37), BuildingAnimLayer(AnimKind.sway, 0, 364, 117, 72, 0.69955, 0.55924, 0.12172, 0.09693, 0.77574, 0.62486, 0.12, 3.3, 1.7), BuildingAnimLayer(AnimKind.sway, 0, 438, 43, 52, 0.58424, 0.58492, 0.04484, 0.07042, 0.60665, 0.64616, 0.06, 4.4, 0.65), BuildingAnimLayer(AnimKind.glow, 0, 492, 143, 76, 0.47277, 0.51284, 0.14926, 0.10191, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 570, 13, 17, 0.56118, 0.54018, 0.01345, 0.0232, 0.5, 0.5, 0.7, 1, 4.49)]),
   'builder_camp': BuildingAnimSpec(0.83962, true, [BuildingAnimLayer(AnimKind.bob, 0, 0, 31, 123, 0.60833, 0.52614, 0.03264, 0.15214, 0.62524, 0.53009, 0.05, 2.6, 4.25), BuildingAnimLayer(AnimKind.sway, 0, 125, 38, 29, 0.35453, 0.84316, 0.03995, 0.03619, 0.37183, 0.86333, 0.25, 3.4, 3.58), BuildingAnimLayer(AnimKind.sway, 0, 156, 47, 29, 0.17333, 0.71381, 0.04896, 0.03552, 0.20079, 0.74003, 0.25, 3.4, 2.86), BuildingAnimLayer(AnimKind.sway, 0, 187, 29, 42, 0.47777, 0.58914, 0.02983, 0.05228, 0.49516, 0.63442, 0.06, 4.4, 0.89), BuildingAnimLayer(AnimKind.sway, 0, 231, 17, 19, 0.88351, 0.46917, 0.01745, 0.02413, 0.88495, 0.47761, 0.5, 1.7, 2.34), BuildingAnimLayer(AnimKind.glow, 0, 252, 15, 28, 0.37648, 0.46716, 0.01519, 0.03485, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 282, 13, 14, 0.42881, 0.51676, 0.01351, 0.01743, 0.5, 0.5, 0.7, 1, 4.49)]),
   'builder_camp_r1': BuildingAnimSpec(0.85144, true, [BuildingAnimLayer(AnimKind.bob, 0, 0, 23, 116, 0.45526, 0.5889, 0.0242, 0.14144, 0.47022, 0.59271, 0.05, 2.6, 4.25), BuildingAnimLayer(AnimKind.sway, 0, 118, 31, 31, 0.18233, 0.59418, 0.03264, 0.03767, 0.20831, 0.61871, 0.25, 3.4, 3.58), BuildingAnimLayer(AnimKind.sway, 0, 151, 30, 32, 0.40068, 0.48777, 0.03095, 0.039, 0.41536, 0.51827, 0.25, 3.4, 2.86), BuildingAnimLayer(AnimKind.sway, 0, 185, 17, 19, 0.47158, 0.69531, 0.01801, 0.02379, 0.48737, 0.70354, 0.5, 1.7, 2.34)]),
   'builder_camp_r2': BuildingAnimSpec(0.852, true, [BuildingAnimLayer(AnimKind.bob, 0, 0, 26, 110, 0.36016, 0.49868, 0.02701, 0.13474, 0.37476, 0.50211, 0.05, 2.6, 4.25), BuildingAnimLayer(AnimKind.sway, 0, 112, 38, 28, 0.60551, 0.49339, 0.03995, 0.03369, 0.62817, 0.5231, 0.25, 3.4, 3.58), BuildingAnimLayer(AnimKind.sway, 0, 142, 47, 26, 0.77772, 0.62285, 0.04896, 0.0317, 0.79921, 0.64461, 0.25, 3.4, 2.86), BuildingAnimLayer(AnimKind.sway, 0, 170, 17, 19, 0.09904, 0.45443, 0.01745, 0.02312, 0.11505, 0.47052, 0.5, 1.7, 2.34), BuildingAnimLayer(AnimKind.glow, 0, 191, 15, 29, 0.57231, 0.80911, 0.01519, 0.03501, 0.5, 0.5, 0.45, 6, 4.52)]),
@@ -401,4 +404,8 @@ const Map<String, BuildingAnimSpec> kBuildingAnim = {
   'training_grounds_r1': BuildingAnimSpec(0.88956, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 37, 35, 0.36238, 0.49273, 0.04055, 0.04365, 0.403, 0.52595, 0.25, 3.4, 4.07), BuildingAnimLayer(AnimKind.sway, 0, 37, 39, 63, 0.16652, 0.58487, 0.04314, 0.07759, 0.19176, 0.64779, 0.06, 4.4, 0.72), BuildingAnimLayer(AnimKind.sway, 0, 102, 41, 41, 0.18464, 0.58875, 0.04573, 0.05044, 0.22697, 0.59075, 0.5, 1.7, 2.85), BuildingAnimLayer(AnimKind.sway, 0, 145, 41, 41, 0.4918, 0.41513, 0.04573, 0.05141, 0.53412, 0.41811, 0.5, 1.9, 2.93), BuildingAnimLayer(AnimKind.sway, 0, 188, 29, 34, 0.51251, 0.72454, 0.03192, 0.04171, 0.54215, 0.72717, 0.5, 2.1, 3.01), BuildingAnimLayer(AnimKind.sway, 0, 224, 41, 41, 0.73339, 0.59263, 0.04573, 0.05044, 0.77682, 0.59526, 0.5, 2.3, 3.09), BuildingAnimLayer(AnimKind.flicker, 0, 267, 118, 73, 0.239, 0.47139, 0.13028, 0.0902, 0.5, 0.5, 0.7, 1, 4.49)]),
   'training_grounds_r2': BuildingAnimSpec(0.8887, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 45, 39, 0.79724, 0.60874, 0.05004, 0.04854, 0.82018, 0.65091, 0.25, 3.4, 4.07), BuildingAnimLayer(AnimKind.sway, 0, 41, 29, 66, 0.58585, 0.45922, 0.03192, 0.08155, 0.60341, 0.53205, 0.06, 4.4, 0.72), BuildingAnimLayer(AnimKind.sway, 0, 109, 39, 39, 0.42623, 0.4, 0.04314, 0.04854, 0.46816, 0.41867, 0.5, 1.7, 2.85), BuildingAnimLayer(AnimKind.sway, 0, 150, 39, 39, 0.73339, 0.57282, 0.04314, 0.04854, 0.77531, 0.59148, 0.5, 1.9, 2.93), BuildingAnimLayer(AnimKind.sway, 0, 191, 41, 40, 0.18464, 0.5767, 0.04573, 0.04951, 0.22546, 0.596, 0.5, 2.1, 3.01), BuildingAnimLayer(AnimKind.sway, 0, 233, 37, 38, 0.41933, 0.70874, 0.04055, 0.04757, 0.46013, 0.72803, 0.5, 2.3, 3.09), BuildingAnimLayer(AnimKind.flicker, 0, 273, 118, 73, 0.6333, 0.47184, 0.13028, 0.09029, 0.5, 0.5, 0.7, 1, 4.49)]),
   'training_grounds_r3': BuildingAnimSpec(0.87575, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 45, 42, 0.58758, 0.84729, 0.05004, 0.0532, 0.597, 0.88416, 0.25, 3.4, 4.07), BuildingAnimLayer(AnimKind.sway, 0, 44, 45, 68, 0.78343, 0.68867, 0.05004, 0.08571, 0.80824, 0.7604, 0.06, 4.4, 0.72), BuildingAnimLayer(AnimKind.sway, 0, 114, 39, 39, 0.77222, 0.52906, 0.04314, 0.04926, 0.77303, 0.54802, 0.5, 1.7, 2.85), BuildingAnimLayer(AnimKind.sway, 0, 155, 39, 39, 0.46506, 0.70443, 0.04314, 0.04926, 0.46588, 0.72338, 0.5, 1.9, 2.93), BuildingAnimLayer(AnimKind.sway, 0, 196, 39, 39, 0.45815, 0.39113, 0.04314, 0.04926, 0.45785, 0.40945, 0.5, 2.1, 3.01), BuildingAnimLayer(AnimKind.sway, 0, 237, 39, 39, 0.22347, 0.52512, 0.04314, 0.04926, 0.22318, 0.54343, 0.5, 2.3, 3.09), BuildingAnimLayer(AnimKind.flicker, 0, 278, 122, 74, 0.6264, 0.68571, 0.1346, 0.09261, 0.5, 0.5, 0.7, 1, 4.49)]),
+  'healing_hut': BuildingAnimSpec(0.78181, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 113, 69, 0.30153, 0.61269, 0.11768, 0.09194, 0.33549, 0.68108, 0.12, 3.3, 2.75), BuildingAnimLayer(AnimKind.sway, 0, 71, 75, 67, 0.42939, 0.69569, 0.07761, 0.0895, 0.46272, 0.76245, 0.12, 3.3, 2.74), BuildingAnimLayer(AnimKind.sway, 0, 140, 106, 64, 0.42621, 0.53784, 0.11069, 0.08544, 0.45254, 0.60621, 0.12, 3.3, 1.64), BuildingAnimLayer(AnimKind.sway, 0, 206, 142, 84, 0.10369, 0.61676, 0.14758, 0.11229, 0.15991, 0.69247, 0.12, 3.3, 2.93), BuildingAnimLayer(AnimKind.sway, 0, 292, 140, 84, 0.38931, 0.80146, 0.14567, 0.11147, 0.44491, 0.87474, 0.12, 3.3, 3.39), BuildingAnimLayer(AnimKind.sway, 0, 378, 37, 50, 0.26463, 0.68023, 0.0388, 0.06672, 0.28205, 0.73618, 0.06, 4.4, 1.49), BuildingAnimLayer(AnimKind.sway, 0, 430, 40, 52, 0.37214, 0.75102, 0.04198, 0.06916, 0.39401, 0.80778, 0.06, 4.4, 1.39), BuildingAnimLayer(AnimKind.glow, 0, 484, 613, 200, 0.21501, 0.52319, 0.63804, 0.26607, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 686, 15, 16, 0.59033, 0.53702, 0.01527, 0.02116, 0.5, 0.5, 0.7, 1, 4.49)]),
+  'healing_hut_r1': BuildingAnimSpec(0.78181, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 113, 70, 0.42621, 0.51017, 0.11768, 0.09357, 0.45936, 0.54987, 0.12, 3.3, 2.75), BuildingAnimLayer(AnimKind.sway, 0, 72, 113, 78, 0.3855, 0.39382, 0.11768, 0.10334, 0.44155, 0.43758, 0.12, 3.3, 2.93), BuildingAnimLayer(AnimKind.sway, 0, 152, 84, 65, 0.10051, 0.59317, 0.08715, 0.08625, 0.15655, 0.61985, 0.12, 3.3, 3.39), BuildingAnimLayer(AnimKind.sway, 0, 219, 18, 48, 0.37214, 0.47437, 0.01908, 0.06347, 0.39066, 0.52686, 0.06, 4.4, 1.49), BuildingAnimLayer(AnimKind.glow, 0, 269, 578, 267, 0.21756, 0.46216, 0.60178, 0.35557, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 538, 15, 16, 0.67812, 0.71847, 0.01527, 0.02197, 0.5, 0.5, 0.7, 1, 4.49)]),
+  'healing_hut_r2': BuildingAnimSpec(0.78181, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 113, 67, 0.45293, 0.51343, 0.11768, 0.08869, 0.53728, 0.54772, 0.12, 3.3, 2.74), BuildingAnimLayer(AnimKind.sway, 0, 69, 84, 65, 0.80916, 0.59235, 0.08715, 0.08625, 0.84009, 0.6177, 0.12, 3.3, 2.93), BuildingAnimLayer(AnimKind.sway, 0, 136, 113, 77, 0.493, 0.39219, 0.11768, 0.10252, 0.55509, 0.43543, 0.12, 3.3, 3.39), BuildingAnimLayer(AnimKind.sway, 0, 215, 21, 41, 0.6056, 0.47925, 0.02226, 0.05452, 0.60599, 0.52471, 0.06, 4.4, 1.39), BuildingAnimLayer(AnimKind.glow, 0, 258, 500, 245, 0.21819, 0.48576, 0.52036, 0.3271, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 505, 13, 16, 0.28626, 0.70464, 0.01399, 0.02116, 0.5, 0.5, 0.7, 1, 4.49)]),
+  'healing_hut_r3': BuildingAnimSpec(0.78181, true, [BuildingAnimLayer(AnimKind.sway, 0, 0, 75, 68, 0.49618, 0.69243, 0.07761, 0.09113, 0.54064, 0.7603, 0.12, 3.3, 2.75), BuildingAnimLayer(AnimKind.sway, 0, 70, 113, 67, 0.58397, 0.61188, 0.11768, 0.0895, 0.66787, 0.67893, 0.12, 3.3, 2.74), BuildingAnimLayer(AnimKind.sway, 0, 139, 113, 63, 0.46628, 0.53702, 0.11768, 0.08381, 0.55082, 0.60407, 0.12, 3.3, 1.63), BuildingAnimLayer(AnimKind.sway, 0, 204, 142, 85, 0.46628, 0.79577, 0.14822, 0.11391, 0.55845, 0.87259, 0.12, 3.3, 2.93), BuildingAnimLayer(AnimKind.sway, 0, 291, 142, 85, 0.75191, 0.61432, 0.14822, 0.1131, 0.84345, 0.69032, 0.12, 3.3, 3.39), BuildingAnimLayer(AnimKind.sway, 0, 378, 36, 53, 0.59033, 0.74614, 0.03753, 0.06998, 0.60934, 0.80564, 0.06, 4.4, 1.49), BuildingAnimLayer(AnimKind.sway, 0, 433, 39, 51, 0.70293, 0.6786, 0.04071, 0.06835, 0.72131, 0.73403, 0.06, 4.4, 1.39), BuildingAnimLayer(AnimKind.glow, 0, 486, 416, 182, 0.31361, 0.51912, 0.43321, 0.24247, 0.5, 0.5, 0.45, 6, 4.52), BuildingAnimLayer(AnimKind.flicker, 0, 670, 15, 16, 0.41603, 0.52319, 0.01527, 0.02116, 0.5, 0.5, 0.7, 1, 4.49)]),
 };

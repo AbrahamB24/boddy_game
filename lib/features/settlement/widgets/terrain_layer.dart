@@ -173,9 +173,11 @@ class _TerrainLayerState extends State<TerrainLayer>
           RepaintBoundary(
             child: CustomPaint(painter: _TerrainLivePainter(data, _time)),
           ),
-          RepaintBoundary(
-            child: CustomPaint(painter: _FaunaPainter(data, _fauna)),
-          ),
+          // Animals temporarily disabled (user 2026-11-07); re-enable by
+          // restoring the _FaunaPainter layer here.
+          // RepaintBoundary(
+          //   child: CustomPaint(painter: _FaunaPainter(data, _fauna)),
+          // ),
         ],
       ),
     );

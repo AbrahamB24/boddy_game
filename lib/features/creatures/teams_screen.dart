@@ -493,6 +493,10 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
   );
   late final List<String> _picked = [...?widget.team?.memberIds];
 
+  /// Set when Save is tapped with an empty name — shows the error under the
+  /// field instead of letting the controller silently drop the team.
+  bool _nameError = false;
+
   /// The slot bar index currently armed for a swap-in (user 2026-10-04: "ich
   /// muss Monster austauschen können") — tap a slot (filled or the "+" of an
   /// empty one), then tap a roster monster, and THAT slot gets it, instead
@@ -817,8 +821,21 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _name,
+                  onChanged: (_) {
+                    if (_nameError) setState(() => _nameError = false);
+                  },
                   style: FoE.label(size: 14).copyWith(color: kBoxInk),
                   decoration: InputDecoration(
+                    errorText: _nameError
+                        ? 'Please enter a team name before saving.'
+                        : null,
+                    errorStyle: TextStyle(color: CreamPalette.warn),
+                    enabledBorder: _nameError
+                        ? OutlineInputBorder(
+                            borderRadius: vr(FoE.radiusSmall),
+                            borderSide: BorderSide(color: CreamPalette.warn),
+                          )
+                        : null,
                     hintText: 'Team name (e.g. Steinteam)',
                     hintStyle: FoE.dim(size: 13).copyWith(color: kBoxInkFaint),
                     filled: true,
@@ -882,8 +899,13 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
                 SizedBox(
                   width: double.infinity,
                   child: Pressable(
-                    onTap: () =>
-                        Navigator.pop(context, _TeamDraft(_name.text, _picked)),
+                    onTap: () {
+                      if (_name.text.trim().isEmpty) {
+                        setState(() => _nameError = true);
+                        return;
+                      }
+                      Navigator.pop(context, _TeamDraft(_name.text, _picked));
+                    },
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       alignment: Alignment.center,

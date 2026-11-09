@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -97,7 +96,8 @@ class BattleScene extends StatelessWidget {
         // The horizon: a band of light across the middle, where the two ranks
         // meet. It gives the field a floor without drawing a line on it, and it
         // is what keeps a photographic region image from swallowing the sprites.
-        const _Horizon(),
+        // (The horizon band that used to lie across the middle is gone with
+        // the side view: the isometric floor has no horizon line.)
         // Corner shade, so the nameplates and the log always sit on something
         // darker than themselves whatever the art behind them does.
         Positioned.fill(
@@ -183,6 +183,16 @@ class _ForestArt {
     'boulder': ('prop_stone_d', 108, 0.08),
     'heather': ('prop_flowers_d', 122, null),
     'gorse': ('prop_bush_c', 100, null),
+    // The forest arena's extra dressing (user 2026-11-08): the large trees, a
+    // few bushes, ferns and the things lying about a clearing. Native widths.
+    'tree3': ('prop_broadleaf_l', 398, 0.14),
+    'tree4': ('prop_conifer_l', 384, 0.14),
+    'bush': ('prop_bush_a', 86, null),
+    'fern': ('prop_fern', 50, null),
+    'stump': ('prop_stump', 38, 0.08),
+    'log': ('prop_log_a', 82, 0.08),
+    'tuft': ('prop_tuft', 50, null),
+    'flowers': ('prop_flowers_b', 52, null),
   };
 
   static Future<_ForestArt?> load() => _pending ??= _build();
@@ -230,75 +240,71 @@ class _ArenaGroundPainter extends CustomPainter {
 
   /// One placed picture: key, foot x and y as fractions of the arena, width as
   /// a fraction of the arena's HEIGHT, mirrored or not.
+  ///
+  /// THE FOREST CLEARING (user 2026-11-08, mockup 1 "Lichtung im Hochwald"): the
+  /// ground runs to every edge of the screen, trees and bushes close the edges
+  /// in a ring and the middle is left open for the two ranks, which stand on the
+  /// diagonals [_kSpotsMine]/[_kSpotsFoe] of the battle screen. All the
+  /// fractions below are of the SAME box those spots are, so a monster's feet
+  /// and a bush's foot are measured the same way.
   static const _scatter = <(String, double, double, double, bool)>[
     // The tree line behind the enemy rank, two depths so it is not a fence.
-    ('tree1', 0.02, 0.31, 0.28, false),
-    ('tree2', 0.14, 0.29, 0.25, true),
-    ('tree1', 0.27, 0.32, 0.27, true),
-    ('tree2', 0.40, 0.28, 0.24, false),
-    ('tree1', 0.53, 0.32, 0.28, false),
-    ('tree2', 0.66, 0.29, 0.25, true),
-    ('tree1', 0.79, 0.31, 0.27, true),
-    ('tree2', 0.91, 0.29, 0.25, false),
-    ('tree1', 1.01, 0.32, 0.28, true),
-    // Edge dressing: a tree in the front corners, stones and flower patches.
-    ('tree2', -0.01, 1.04, 0.36, false),
-    // Stepping stones in the brook (user 2026-11-04: "Bachlauf").
-    ('flat', 0.16, 0.555, 0.10, false),
-    ('stone', 0.50, 0.565, 0.09, true),
-    ('boulder', 0.82, 0.555, 0.10, false),
-    ('stone', 0.035, 0.60, 0.10, false),
-    ('boulder', 0.955, 0.96, 0.12, false),
-    ('heather', 0.09, 0.86, 0.09, false),
-    ('gorse', 0.13, 0.90, 0.08, true),
-    ('heather', 0.90, 0.66, 0.09, true),
-    ('gorse', 0.93, 0.70, 0.08, false),
-    ('heather', 0.50, 0.99, 0.08, false),
-    ('gorse', 0.07, 0.40, 0.08, true),
+    ('tree3', 0.00, 0.30, 0.36, false),
+    ('tree2', 0.12, 0.25, 0.28, true),
+    ('tree1', 0.24, 0.22, 0.27, false),
+    ('tree4', 0.37, 0.19, 0.34, true),
+    ('tree1', 0.50, 0.23, 0.27, true),
+    ('tree2', 0.62, 0.20, 0.27, false),
+    ('tree3', 0.75, 0.24, 0.32, true),
+    ('tree2', 0.87, 0.27, 0.28, false),
+    ('tree1', 1.00, 0.31, 0.34, true),
+    // The sides, down toward the corners.
+    ('tree2', 0.02, 0.50, 0.30, true),
+    ('tree1', 0.00, 0.68, 0.32, false),
+    ('tree4', 0.05, 0.86, 0.34, true),
+    ('tree3', -0.02, 1.04, 0.44, false),
+    ('tree2', 0.98, 0.46, 0.30, false),
+    ('tree3', 1.00, 0.64, 0.34, true),
+    ('tree2', 0.95, 0.82, 0.30, false),
+    ('tree4', 1.02, 1.04, 0.44, true),
+    // Bushes and the things lying about, at the clearing's edge.
+    ('bush', 0.17, 0.36, 0.07, false),
+    ('bush', 0.84, 0.40, 0.07, true),
+    ('stump', 0.19, 0.78, 0.045, false),
+    ('log', 0.89, 0.76, 0.10, true),
+    ('stone', 0.10, 0.60, 0.09, false),
+    ('boulder', 0.91, 0.58, 0.10, false),
+    ('fern', 0.15, 0.92, 0.06, false),
+    ('fern', 0.80, 0.30, 0.06, true),
+    ('flowers', 0.24, 0.90, 0.06, false),
+    ('flowers', 0.70, 0.88, 0.06, true),
+    ('heather', 0.33, 0.97, 0.09, false),
+    ('gorse', 0.66, 1.00, 0.08, true),
+    ('tuft', 0.30, 0.33, 0.05, false),
+    ('tuft', 0.58, 0.32, 0.05, true),
+    ('tuft', 0.40, 0.92, 0.05, false),
+    ('tuft', 0.60, 0.96, 0.05, true),
   ];
 
   static const _lawn = Color(0xFF5E9A48);
 
-  // The map's own water and sand (terrain_layer), so the brook is the same
-  // water the settlement's coast is made of.
-  static const _waterDeep = Color(0xFF2A6188);
-  static const _waterMid = Color(0xFF3E85B0);
-  static const _waterShallow = Color(0xFF6FBBC4);
-  static const _sand = Color(0xFFDCC48C);
-
-  /// The brook across the field, between the enemy's side and mine (user
-  /// 2026-11-04, background 4): sand banks, shallows at the edges, a deeper
-  /// middle, and blocky ripples — flat hard-edged blocks like the voxel ground
-  /// around it, no blur, no anti-aliasing.
-  void _paintBrook(Canvas canvas, double w, double h) {
-    Paint fill(Color c) => Paint()
-      ..isAntiAlias = false
-      ..color = c;
-    final top = (h * 0.465).roundToDouble();
-    final bank = (h * 0.022).roundToDouble();
-    final water = (h * 0.105).roundToDouble();
-    final u = math.max(2.0, (h / 90).roundToDouble());
-    canvas.drawRect(Rect.fromLTWH(0, top - bank, w, bank), fill(_sand));
-    canvas.drawRect(Rect.fromLTWH(0, top + water, w, bank), fill(_sand));
-    canvas.drawRect(Rect.fromLTWH(0, top, w, water), fill(_waterMid));
-    canvas.drawRect(Rect.fromLTWH(0, top, w, water * 0.24), fill(_waterShallow));
-    canvas.drawRect(
-      Rect.fromLTWH(0, top + water * 0.76, w, water * 0.24),
-      fill(_waterShallow),
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(0, top + water * 0.40, w, water * 0.22),
-      fill(_waterDeep),
-    );
-    // Ripples: a fixed seed, so repaints never shimmer.
-    final rnd = math.Random(5);
-    final light = fill(const Color(0xB3BFE6F5));
-    for (var i = 0; i < 26; i++) {
-      final rx = (rnd.nextDouble() * w).roundToDouble();
-      final ry = (top + u + rnd.nextDouble() * (water - 3 * u)).roundToDouble();
-      canvas.drawRect(
-        Rect.fromLTWH(rx, ry, u * (4 + rnd.nextInt(5)), u),
-        light,
+  /// Slanting light through the canopy: a few pale bands across the floor.
+  void _paintBeams(Canvas canvas, double w, double h) {
+    for (var k = 0; k < 4; k++) {
+      final x0 = w * (0.10 + k * 0.24);
+      final shader = ui.Gradient.linear(
+        Offset(x0, 0),
+        Offset(x0 + w * 0.28, h * 0.8),
+        const [Color(0x22FFF4B0), Color(0x00FFF4B0)],
+      );
+      canvas.drawPath(
+        Path()
+          ..moveTo(x0, 0)
+          ..lineTo(x0 + w * 0.10, 0)
+          ..lineTo(x0 + w * 0.42, h * 0.9)
+          ..lineTo(x0 + w * 0.20, h * 0.9)
+          ..close(),
+        Paint()..shader = shader,
       );
     }
   }
@@ -323,7 +329,8 @@ class _ArenaGroundPainter extends CustomPainter {
       Matrix4.diagonal3Values(k, k, 1).storage,
     );
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
-    _paintBrook(canvas, w, h);
+    // No lattice / clearing outline any more (user 2026-11-08: the arena's
+    // boundary square is gone) — the open forest floor is the arena.
 
     // Back to front, like the map: a prop lower on the screen is nearer.
     final order = [..._scatter]..sort((p, q) => p.$3.compareTo(q.$3));
@@ -347,6 +354,7 @@ class _ArenaGroundPainter extends CustomPainter {
       if (image == null) continue;
       _draw(canvas, image, image, p, w, h, picture);
     }
+    _paintBeams(canvas, w, h);
   }
 
   /// Draws [picture] (a prop or its shadow mask, both in the prop's own pixel
@@ -389,28 +397,6 @@ class _ArenaGroundPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ArenaGroundPainter old) => old.art != art;
-}
-
-class _Horizon extends StatelessWidget {
-  const _Horizon();
-
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.transparent,
-            Colors.white.withValues(alpha: 0.07),
-            Colors.transparent,
-          ],
-          stops: const [0.36, 0.5, 0.64],
-        ),
-      ),
-    ),
-  );
 }
 
 /// The PLATFORM a fighter stands on — a slab of ground wearing the monster's

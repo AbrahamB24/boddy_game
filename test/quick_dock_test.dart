@@ -35,7 +35,7 @@ void main() {
     );
     await t.pumpAndSettle();
 
-    final before = t.getCenter(find.byIcon(Icons.tune));
+    final before = t.getCenter(find.byTooltip('Manage'));
     final dockBefore = t.getSize(find.byType(QuickDock));
 
     await t.tap(find.byIcon(Icons.chevron_right));
@@ -46,7 +46,7 @@ void main() {
     // (found by tooltip: these tiles wear rendered 3D glyphs, not flat icons)
     expect(find.byTooltip('Daily tasks'), findsOneWidget);
     // … the main button did not move by a pixel …
-    expect(t.getCenter(find.byIcon(Icons.tune)), before);
+    expect(t.getCenter(find.byTooltip('Manage')), before);
     // … the dock got wider, never taller …
     final dockAfter = t.getSize(find.byType(QuickDock));
     expect(dockAfter.height, dockBefore.height);
@@ -62,7 +62,7 @@ void main() {
     await t.pumpAndSettle();
     expect(t.getSize(find.byType(QuickDock)).width, dockBefore.width);
     expect(find.byIcon(Icons.chevron_right), findsOneWidget);
-    expect(t.getCenter(find.byIcon(Icons.tune)), before);
+    expect(t.getCenter(find.byTooltip('Manage')), before);
     expect(t.takeException(), isNull);
   });
 }

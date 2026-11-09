@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -209,9 +210,18 @@ class SettlementService {
     await supabase.from('placed_buildings').upsert(rows);
   }
 
+  /// The last settlement row that actually reached the server, as JSON. The
+  /// 10 s tick used to upsert this unchanged row forever; an identical
+  /// payload is now skipped (a failed write clears it, so it retries).
+  String? _lastSettlementJson;
+
   Future<void> saveSettlement(SettlementModel s) async {
+    final json = jsonEncode(s.toMap());
+    if (json == _lastSettlementJson) return;
+    _lastSettlementJson = null;
     try {
       await supabase.from('settlements').upsert(s.toMap());
+      _lastSettlementJson = json;
     } catch (_) {
       // Fallback: omit the crafting columns if migration 0011 hasn't run yet.
       // Postgrest rejects the WHOLE row over one unknown column, so without

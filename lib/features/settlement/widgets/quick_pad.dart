@@ -4,9 +4,9 @@ import '../../../core/theme/fachwerk.dart';
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/ui_art.dart';
 import '../../../core/theme/foe_theme.dart';
-import '../../../core/ui/pressable.dart';
 import '../../../core/theme/voxel_kit.dart';
 import '../../../core/theme/voxel_icons.dart';
+import 'voxel_hud.dart';
 import '../../../core/ui/game_text.dart';
 
 /// One button on a [QuickRail].
@@ -196,17 +196,15 @@ class _QuickDockState extends State<QuickDock> {
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: Pressable(
+            child: VoxelCell(
               onTap: () => setState(() => _open = !_open),
-              child: IronButton(
-                size: 40,
-                lit: _open,
+              color: _open ? const Color(0xFFC07A1E) : VoxelHud.plate,
+              padding: EdgeInsets.zero,
+              child: Center(
                 child: PixelIcon(
                   _open ? Icons.chevron_left : Icons.chevron_right,
                   size: 19,
-                  color: _open
-                      ? const Color(0xFFFFE9B0)
-                      : const Color(0xFF8FD98F),
+                  color: VoxelHud.ink,
                 ),
               ),
             ),
@@ -300,8 +298,11 @@ class _QuickTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lit = item.active;
-    final d = item.compass ? 108.0 : QuickRail.tile;
-    final art = UiArt.iconFor(item.label);
+    const d = QuickRail.tile;
+    // The compass tile is Manage, drawn as a globe (user 2026-11-08); the rest
+    // wear their pixel glyph, or the flat icon where there is none.
+    final pxName = item.compass ? 'globe' : UiArt.iconPxFor(item.label);
+    final shown = item.compass ? 'Manage' : item.label;
     return Semantics(
       label: item.label,
       button: true,
@@ -314,42 +315,36 @@ class _QuickTile extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
-                child: Pressable(
+                // VOXEL BLOCK (user 2026-11-08): a stepped plate, amber while it
+                // is the place you are in, the pixel glyph over its label.
+                child: VoxelCell(
                   onTap: item.onTap,
-                  // Rendered iron button / compass (user 2026-11-04, painted
-                  // concept); the glyph sits on its dark dish.
-                  // The compass picture leaves 6 px of air under its ring at this
-                  // size, the iron buttons only 2.4: pushed down by the difference
-                  // so the visible bottoms of ALL icons stand on one line (user
-                  // 2026-11-04).
-                  child: item.compass
-                      // No lift any more: the timber board has no air under it.
-                      ? CompassButton(size: d)
-                      // The medal: timber ring round a beige (plaster) dish, the
-                      // glyph on it (user 2026-11-05: "bei allen Icons den beigen
-                      // Hintergrund und den Holzrahmen").
-                      : IronButton(
-                          size: d,
-                          lit: lit,
-                          // The rendered 3D glyph where there is one, else the
-                          // flat icon.
-                          child: art != null
-                              ? Image.asset(
-                                  art,
-                                  width: d * 0.64,
-                                  height: d * 0.64,
-                                  fit: BoxFit.contain,
-                                  filterQuality: FilterQuality.medium,
-                                  gaplessPlayback: true,
-                                )
+                  color: lit ? const Color(0xFFC07A1E) : VoxelHud.plate,
+                  padding: const EdgeInsets.fromLTRB(4, 5, 4, 4),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: pxName != null
+                              ? VoxelHud.px(pxName, 36)
                               : PixelIcon(
                                   item.icon,
                                   size: 26,
-                                  color: lit
-                                      ? const Color(0xFFFFE9B0)
-                                      : const Color(0xFFEFE2BC),
+                                  color: VoxelHud.ink,
                                 ),
                         ),
+                      ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          shown,
+                          maxLines: 1,
+                          style: Voxel.text(size: 15, color: VoxelHud.ink),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (item.badge > 0)

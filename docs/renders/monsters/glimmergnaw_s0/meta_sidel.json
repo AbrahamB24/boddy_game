@@ -1,0 +1,28 @@
+{
+  "monster": "glimmergnaw",
+  "stage": 0,
+  "view": "sidel",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "sidel_idle.webp",
+      "frames": 16,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "sidel_attack.webp",
+      "frames": 14,
+      "fps": 16,
+      "loop": false
+    },
+    "hurt": {
+      "sheet": "sidel_hurt.webp",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+}

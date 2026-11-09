@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -37,6 +38,14 @@ class MonsterSheetSet {
   /// never leaves its box.
   final double scale;
 
+  /// Where the creature's FEET stand inside one cell, as fractions of its width
+  /// and height. The side-view battle art is cut with the feet at the bottom
+  /// edge (1.0), the isometric art keeps its shadow below the feet, so its feet
+  /// sit higher in the cell (see [MonsterSheets.battleIso]). The player plants
+  /// this point, not the cell's edge, on the ground.
+  final double footX;
+  final double footY;
+
   const MonsterSheetSet({
     required this.frameW,
     required this.frameH,
@@ -44,6 +53,8 @@ class MonsterSheetSet {
     required this.anims,
     this.decodeScale = 1,
     this.scale = 1,
+    this.footX = 0.5,
+    this.footY = 1.0,
   });
 
   double get aspect => frameW / frameH;
@@ -132,9 +143,111 @@ abstract final class MonsterSheets {
     int stage, {
     required bool mine,
   }) {
-    if (speciesId != 'tidelord' || stage < 0 || stage > 2) return null;
+    if (stage < 0 || stage > 2) return null;
+    if (speciesId == 'glimmergnaw') {
+      return (mine ? _ggSideMine : _ggSideTheirs)[stage];
+    }
+    if (speciesId != 'tidelord') return null;
     return (mine ? _sideMine : _sideTheirs)[stage];
   }
+
+  static final Map<String, MonsterSheetSet> _isoCache = {};
+  static const List<double> _isoScale = [1.0, 1.2, 1.4];
+
+  /// Battle art for the ISOMETRIC arena (user 2026-11-08, forest arena): the
+  /// same camera as the settlement map, so a monster stands on the arena's
+  /// ground like a tree does. [mine] stands at the lower left facing up-right
+  /// (the map's 'ne' heading), the enemy at the upper right facing down-left
+  /// ('sw').
+  ///
+  /// Built from the MAP sheets, which only have idle and walk: the attack plays
+  /// the walk cycle while the battle screen lunges the monster across the
+  /// ground, and a hit is the idle with the screen's own shake and flash. Real
+  /// attack and hurt bakes in these headings would replace the two aliases here
+  /// and nothing else. Null when the creature has no baked art.
+  static MonsterSheetSet? battleIso(
+    String? speciesId,
+    int stage, {
+    required bool mine,
+  }) {
+    if (stage < 0 || stage > 2) return null;
+    final base = map(speciesId, stage, mine ? 'ne' : 'sw');
+    if (base == null) return null;
+    return _isoCache.putIfAbsent('$speciesId/$stage/$mine', () {
+      final walk = base.anims['walk']!;
+      final idle = base.anims['idle']!;
+      return MonsterSheetSet(
+        frameW: base.frameW,
+        frameH: base.frameH,
+        // Drawn ~200 px tall on a phone: 0.6 of the 435 px cells is sharp
+        // enough and holds a third less texture than the full sheets.
+        decodeScale: 0.6,
+        scale: _isoScale[stage],
+        footX: mine ? 0.55 : 0.50,
+        footY: 0.75,
+        anims: {'idle': idle, 'walk': walk, 'attack': walk, 'hurt': idle},
+      );
+    });
+  }
+
+  // ── Glimmergnaw (tool/blender/glimmergnaw_bake.py) ──
+  // One folder per stage, assets/images/monsters/glimmergnaw_s<stage>/, the
+  // same sheet layout as the Tidelord: battle cells 560 x 448, map cells as
+  // meta_map.json says. The evolutions are drawn bigger by [scale].
+  static const List<double> _ggBattleScale = [1.0, 1.2, 1.4];
+  static const List<double> _ggMapScale = [1.0, 1.15, 1.3];
+
+  static MonsterSheetSet _ggView(int stage, String v) {
+    final d = 'assets/images/monsters/glimmergnaw_s$stage';
+    return MonsterSheetSet(
+      frameW: 560,
+      frameH: 448,
+      scale: _ggBattleScale[stage],
+      anims: {
+        'idle': SheetAnim('$d/${v}_idle.webp', 16, 12),
+        'attack': SheetAnim('$d/${v}_attack.webp', 14, 16, loop: false),
+        'hurt': SheetAnim('$d/${v}_hurt.webp', 10, 14, loop: false),
+      },
+    );
+  }
+
+  static final List<MonsterSheetSet> _ggFront = [
+    for (var s = 0; s < 3; s++) _ggView(s, 'front'),
+  ];
+  static final List<MonsterSheetSet> _ggBack = [
+    for (var s = 0; s < 3; s++) _ggView(s, 'back'),
+  ];
+  static final List<MonsterSheetSet> _ggSideMine = [
+    for (var s = 0; s < 3; s++) _ggView(s, 'sidel'),
+  ];
+  static final List<MonsterSheetSet> _ggSideTheirs = [
+    for (var s = 0; s < 3; s++) _ggView(s, 'sider'),
+  ];
+
+  static Map<String, MonsterSheetSet> _ggWalkSets(int stage) {
+    final d = 'assets/images/monsters/glimmergnaw_s$stage';
+    return {
+      for (final h in const ['se', 'ne', 'nw', 'sw'])
+        h: MonsterSheetSet(
+          frameW: stage == 0 ? 543 : 544,
+          frameH: stage == 0 ? 434 : 435,
+          decodeScale: 0.5,
+          scale: _ggMapScale[stage],
+          anims: {
+            'walk': SheetAnim('$d/${h}_walk.webp', 8, 10),
+            'idle': SheetAnim('$d/${h}_idle.webp', 8, 8),
+          },
+        ),
+    };
+  }
+
+  static final List<Map<String, MonsterSheetSet>> _ggMap = [
+    for (var s = 0; s < 3; s++) _ggWalkSets(s),
+  ];
+
+  /// Species that have baked, animated art (battle, lists, map).
+  static bool hasBaked(String? speciesId) =>
+      speciesId == 'tidelord' || speciesId == 'glimmergnaw';
 
   /// The map headings, named by the screen direction of the world axis they
   /// walk along: se = +x, ne = +y, nw = -x, sw = -y.
@@ -181,6 +294,9 @@ abstract final class MonsterSheets {
         _ => null,
       };
     }
+    if (speciesId == 'glimmergnaw' && stage >= 0 && stage < 3) {
+      return (back ? _ggBack : _ggFront)[stage];
+    }
     return null;
   }
 
@@ -208,6 +324,14 @@ abstract final class MonsterSheets {
     if (url.contains('creature-images/tidelord_2.png')) {
       return (set: _titanFront, back: false);
     }
+    for (var s = 0; s < 3; s++) {
+      if (url.contains('creature-images/glimmergnaw_${s}_back.png')) {
+        return (set: _ggBack[s], back: true);
+      }
+      if (url.contains('creature-images/glimmergnaw_$s.png')) {
+        return (set: _ggFront[s], back: false);
+      }
+    }
     return null;
   }
 
@@ -216,6 +340,9 @@ abstract final class MonsterSheets {
   static MonsterSheetSet? map(String? speciesId, int stage, String heading) {
     if (speciesId == 'tidelord' && stage >= 0 && stage < _tidelordMap.length) {
       return _tidelordMap[stage][heading];
+    }
+    if (speciesId == 'glimmergnaw' && stage >= 0 && stage < _ggMap.length) {
+      return _ggMap[stage][heading];
     }
     return null;
   }
@@ -274,11 +401,27 @@ Future<void> precacheMonsterWalkSheets(String speciesId, int stage) =>
 /// map-walking sheets are not loaded: nothing on the map walks yet (see
 /// [MonsterSheets.map]). Never throws.
 Future<void> precacheMonsterSheets() => Future.wait([
-  for (final set in [MonsterSheets._tidelordFront, MonsterSheets._tidelordBack])
+  for (final set in [
+    MonsterSheets._tidelordFront,
+    MonsterSheets._tidelordBack,
+    ...MonsterSheets._ggFront,
+    ...MonsterSheets._ggBack,
+  ])
     for (final anim in set.anims.values)
       _loadSheet(anim.asset).then<void>((_) {}, onError: (Object _) {
         _sheetImages.remove(anim.asset);
       }),
+  // The isometric arena's sheets, decoded at their own (reduced) width.
+  for (final species in const ['tidelord', 'glimmergnaw'])
+    for (var stage = 0; stage < 3; stage++)
+      for (final mine in const [true, false])
+        if (MonsterSheets.battleIso(species, stage, mine: mine)
+            case final set?)
+          for (final anim in set.anims.values)
+            _loadSheet(anim.asset, width: _decodeWidthOf(set)).then<void>(
+              (_) {},
+              onError: (Object _) {},
+            ),
 ]);
 
 /// Plays one named animation of a [MonsterSheetSet].
@@ -348,6 +491,8 @@ class _MonsterSheetPlayerState extends State<MonsterSheetPlayer>
     if (old.anim != widget.anim || old.set != widget.set) {
       _t0 = _now; // a new animation starts from its first frame
       _frame.value = 0;
+      _playing = false;
+      _nextPlay = Duration.zero;
       _ensureImage();
     }
   }
@@ -371,9 +516,72 @@ class _MonsterSheetPlayerState extends State<MonsterSheetPlayer>
     }, onError: (_) {});
   }
 
+  // ── Rest between idles (user 2026-11-08) ──
+  // The idle sheet no longer loops forever: the creature rests on its first
+  // frame, breathing (a code-driven squash at the feet, no extra art), and
+  // every few seconds plays the baked idle once. Nothing to re-bake.
+  final ValueNotifier<double> _breath = ValueNotifier<double>(0);
+  final math.Random _rng = math.Random();
+  bool _playing = false;
+  Duration _nextPlay = Duration.zero;
+
+  bool get _resting => widget.anim == 'idle' && _anim.loop;
+
+  Duration _gap(Duration from) =>
+      from + Duration(milliseconds: 2500 + _rng.nextInt(5500));
+
   void _tick(Duration elapsed) {
     _now = elapsed;
     final a = _anim;
+    if (_resting) {
+      if (_nextPlay == Duration.zero) _nextPlay = _gap(elapsed);
+      // No waiting for the breath to die down first: that was a dead stop
+      // before every idle (user 2026-11-08). The breath is handed over to the
+      // idle's own motion below instead.
+      if (!_playing && elapsed >= _nextPlay) {
+        _playing = true;
+        _t0 = elapsed;
+      }
+      // How much of the breath shows: all of it at rest, fading out over the
+      // first 0.35 s of the idle while the idle's motion takes over, and back in
+      // over its last 0.35 s. The phase never stops, so the squash at the feet
+      // flows into the baked motion and out of it again without a seam.
+      var amp = 1.0;
+      if (_playing) {
+        final tp0 = (elapsed - _t0).inMicroseconds / 1e6;
+        final d0 = a.frames / a.fps;
+        final edge = (math.min(tp0, d0 - tp0) / 0.35).clamp(0.0, 1.0);
+        amp = 1 - edge * edge * (3 - 2 * edge);
+      }
+      if (_playing) {
+        final tp = (elapsed - _t0).inMicroseconds / 1e6;
+        final dur = a.frames / a.fps;
+        if (tp >= dur) {
+          _playing = false;
+          _nextPlay = _gap(elapsed);
+          if (_frame.value != 0) _frame.value = 0;
+        } else {
+          // EASED TEMPO (user 2026-11-08: "nur das Tempo der Animation sollte
+          // ease in und out sein"): the same frames, shown whole and sharp, but
+          // the clock they are picked by is eased — slower leaving the rest
+          // pose, quickest in the middle, slower settling back into it.
+          // (A cross-fade of two frames made the idle look washed out, so there
+          // is none.) Only 60 % of the smoothstep is mixed in: a full one
+          // stands almost still at both ends, and that read as a stop right
+          // before and after the idle.
+          final u = tp / dur;
+          final e = 0.4 * u + 0.6 * (u * u * (3 - 2 * u));
+          final n = math.min(a.frames - 1, (e * a.frames).floor());
+          if (n != _frame.value) _frame.value = n;
+        }
+      } else {
+        if (_frame.value != 0) _frame.value = 0;
+      }
+      // ~4.2 s per breath.
+      final v = amp * math.sin(elapsed.inMilliseconds / 1000 * 1.5);
+      if (v != _breath.value) _breath.value = v;
+      return;
+    }
     final n = ((elapsed - _t0).inMicroseconds * a.fps / 1e6).floor();
     final idx = a.loop ? n % a.frames : (n < a.frames ? n : a.frames - 1);
     if (idx != _frame.value) _frame.value = idx;
@@ -383,6 +591,7 @@ class _MonsterSheetPlayerState extends State<MonsterSheetPlayer>
   void dispose() {
     _ticker.dispose();
     _frame.dispose();
+    _breath.dispose();
     super.dispose();
   }
 
@@ -398,6 +607,7 @@ class _MonsterSheetPlayerState extends State<MonsterSheetPlayer>
           painter: _SheetPainter(
             image: _image,
             frame: _frame,
+            breath: _breath,
             set: set,
             fill: fill,
             lift: widget.lift,
@@ -419,6 +629,7 @@ class _MonsterSheetPlayerState extends State<MonsterSheetPlayer>
 class _SheetPainter extends CustomPainter {
   final ui.Image? image;
   final ValueNotifier<int> frame;
+  final ValueNotifier<double> breath;
   final MonsterSheetSet set;
   final double fill;
   final double lift;
@@ -426,10 +637,11 @@ class _SheetPainter extends CustomPainter {
   _SheetPainter({
     required this.image,
     required this.frame,
+    required this.breath,
     required this.set,
     required this.fill,
     required this.lift,
-  }) : super(repaint: frame);
+  }) : super(repaint: Listenable.merge([frame, breath]));
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -446,12 +658,23 @@ class _SheetPainter extends CustomPainter {
     );
     final dh = size.height * fill;
     final dw = dh * set.aspect;
+    // The foot point (not the cell's edge) is what stands on the box's bottom.
     final dst = Rect.fromLTWH(
-      (size.width - dw) / 2,
-      size.height - dh - size.height * lift,
+      (size.width - dw) / 2 - dw * (set.footX - 0.5),
+      size.height * (1 - lift) - dh * set.footY,
       dw,
       dh,
     );
+    final b = breath.value;
+    if (b != 0) {
+      // Breathing: grow a hair taller and narrower, pivoting on the feet.
+      final px = dst.left + dw * set.footX;
+      final py = size.height * (1 - lift);
+      canvas.save();
+      canvas.translate(px, py);
+      canvas.scale(1 - 0.008 * b, 1 + 0.025 * b);
+      canvas.translate(-px, -py);
+    }
     canvas.drawImageRect(
       img,
       src,
@@ -460,6 +683,7 @@ class _SheetPainter extends CustomPainter {
         ..filterQuality = FilterQuality.medium
         ..isAntiAlias = true,
     );
+    if (b != 0) canvas.restore();
   }
 
   @override

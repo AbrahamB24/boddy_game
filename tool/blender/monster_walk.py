@@ -131,6 +131,7 @@ def main():
                 'sheet': sheet, 'frames': n, 'fps': fps, 'loop': loop}
     with open(os.path.join(out, 'meta_map.json'), 'w') as f:
         json.dump(meta, f, indent=2)
+    ma.report_cuts('walk')
     print('done', out)
 
 

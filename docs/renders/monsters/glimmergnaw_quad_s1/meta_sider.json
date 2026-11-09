@@ -1,0 +1,28 @@
+{
+  "monster": "glimmergnaw",
+  "stage": 1,
+  "view": "sider",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "sider_idle.webp",
+      "frames": 16,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "sider_attack.webp",
+      "frames": 14,
+      "fps": 16,
+      "loop": false
+    },
+    "hurt": {
+      "sheet": "sider_hurt.webp",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+}

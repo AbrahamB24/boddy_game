@@ -32,6 +32,27 @@ void main() {
     expect(MonsterSheets.map('tidelord', 0, 'up'), isNull);
   });
 
+  test('the isometric battle art answers every animation the screen asks for',
+      () {
+    expect(MonsterSheets.battleIso('tidelord', 3, mine: true), isNull);
+    expect(MonsterSheets.battleIso('somebody_else', 0, mine: true), isNull);
+    final mine = MonsterSheets.battleIso('tidelord', 1, mine: true)!;
+    for (final a in ['idle', 'walk', 'attack', 'hurt']) {
+      expect(mine.anims[a], isNotNull, reason: a);
+    }
+    expect(mine.anims['idle']!.asset, contains('ne_idle'));
+    expect(
+      MonsterSheets.battleIso('tidelord', 1, mine: false)!.anims['idle']!.asset,
+      contains('sw_idle'),
+    );
+    // One instance per view, or the player would reload on every rebuild.
+    expect(
+      identical(mine, MonsterSheets.battleIso('tidelord', 1, mine: true)),
+      isTrue,
+    );
+    expect(mine.footY, lessThan(1.0));
+  });
+
   test('every animation names a bundled sheet with a sane frame count', () {
     final sets = <MonsterSheetSet>[
       MonsterSheets.battle('tidelord', 0, back: false)!,
@@ -42,6 +63,20 @@ void main() {
       for (var stage = 0; stage < 3; stage++)
         for (final h in ['se', 'ne', 'nw', 'sw'])
           MonsterSheets.map('tidelord', stage, h)!,
+      // The isometric arena's sheets, built from the map's idle and walk.
+      for (final species in ['tidelord', 'glimmergnaw'])
+        for (var stage = 0; stage < 3; stage++)
+          for (final mine in [true, false])
+            MonsterSheets.battleIso(species, stage, mine: mine)!,
+      // Glimmergnaw: every stage, every battle view, every map heading.
+      for (var stage = 0; stage < 3; stage++) ...[
+        MonsterSheets.battle('glimmergnaw', stage, back: false)!,
+        MonsterSheets.battle('glimmergnaw', stage, back: true)!,
+        for (final mine in [true, false])
+          MonsterSheets.battleSide('glimmergnaw', stage, mine: mine)!,
+        for (final h in ['se', 'ne', 'nw', 'sw'])
+          MonsterSheets.map('glimmergnaw', stage, h)!,
+      ],
     ];
     for (final s in sets) {
       for (final a in s.anims.values) {
@@ -107,7 +142,14 @@ void main() {
     expect(MonsterSheets.battle('tidelord', 2, back: false)!.scale,
         greaterThan(MonsterSheets.battle('tidelord', 1, back: false)!.scale));
     expect(MonsterSheets.battle('tidelord', 3, back: false), isNull);
-    expect(MonsterSheets.forUrl('$base/glimmergnaw_0.png'), isNull);
+    // Glimmergnaw has baked art too; a species without any does not.
+    expect(MonsterSheets.forUrl('$base/glimmergnaw_0.png')!.back, isFalse);
+    expect(MonsterSheets.forUrl('$base/glimmergnaw_2_back.png')!.back, isTrue);
+    expect(MonsterSheets.forUrl('$base/somebody_else_0.png'), isNull);
+    expect(MonsterSheets.battle('glimmergnaw', 3, back: false), isNull);
+    expect(MonsterSheets.map('glimmergnaw', 3, 'se'), isNull);
+    expect(MonsterSheets.hasBaked('glimmergnaw'), isTrue);
+    expect(MonsterSheets.hasBaked('somebody_else'), isFalse);
     expect(MonsterSheets.forUrl(null), isNull);
   });
 

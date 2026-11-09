@@ -91,26 +91,8 @@ class CreatureFigure extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Positioned.fill(
-          child: Transform.translate(
-            offset: const Offset(2, 4),
-            child: Transform.scale(
-              scale: 0.9,
-              alignment: Alignment.bottomCenter,
-              child: ColorFiltered(
-                colorFilter: ColorFilter.mode(
-                  element.shadowColor,
-                  BlendMode.srcATop,
-                ),
-                child: CreatureSprite(
-                  url: url,
-                  height: decodeSize,
-                  alignment: Alignment.bottomCenter,
-                ),
-              ),
-            ),
-          ),
-        ),
+        // No coloured silhouette shadow behind the sprite any more (user
+        // 2026-11-08: "den gelben Schatten rechts von dem Fuss").
         Positioned.fill(
           child: CreatureSprite(
             url: url,

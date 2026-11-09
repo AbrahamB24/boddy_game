@@ -24,7 +24,14 @@ class CreatureDefsService {
   }
 
   Future<void> upsertSpeciesDef(SpeciesDef def) async {
-    await supabase.from('species_defs').upsert(def.toDefRow());
+    try {
+      await supabase.from('species_defs').upsert(def.toDefRow());
+    } catch (_) {
+      // Migration 0068 (trainer_power) not applied yet: save without it.
+      await supabase
+          .from('species_defs')
+          .upsert(def.toDefRow()..remove('trainer_power'));
+    }
   }
 
   Future<void> upsertAbilityDef(AbilityDef def) async {

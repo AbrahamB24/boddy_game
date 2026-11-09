@@ -60,11 +60,15 @@ flutter:
     - assets/images/roads/
     - assets/images/buildings/
     - assets/images/ui/
+    - assets/images/ui_px/
     # Baked, animated 3D monsters (tool/blender/monster_anim_pro.py): one folder
     # per species, WebP sheets played by creatures/widgets/monster_sheet.dart.
     - assets/images/monsters/tidelord/
     - assets/images/monsters/tidelord_s1/
     - assets/images/monsters/tidelord_s2/
+    - assets/images/monsters/glimmergnaw_s0/
+    - assets/images/monsters/glimmergnaw_s1/
+    - assets/images/monsters/glimmergnaw_s2/
     - assets/images/terrain/
     - assets/sfx/
     - assets/music/

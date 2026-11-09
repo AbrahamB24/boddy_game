@@ -1,40 +1,70 @@
-"""The Healing Hut: a herbalist's cottage with a garden, tier B (5 x 4 tiles).
+"""The Healing Hut: a small cloister of herb gardens, tier B (5 x 4 tiles).
 
-Reads as: the sick are cured here. A half-timbered cottage with a green cross
-on its sign; raised herb beds, a cauldron bubbling over a fire, bundles of
-herbs hung to dry, two cots under an open lean-to, a stone well with a bucket.
+Reads as: the sick are cured here. Three half-timbered terracotta wings round
+a cobbled court with a well and four raised herb beds, a low stone wall with a
+gate in front, two more herb beds outside it, and the white flag with the red
+cross (on the gate pillar and on the north ridge) as the sign of an infirmary.
 
-Moving parts: the herbs sway on their line; plants sway; the cauldron fire,
-the windows and the lanterns glow by themselves.
+Replaces the herbalist's cottage (user 2026-11-08, from the mockup 'Kreuzgang-
+Hof' plus herb beds plus a healing flag, with the vivid colours of the city
+reference). Same 5 x 4 footprint and the same two doors.
+
+Moving parts: the herbs sway; the windows and lanterns glow by themselves.
 
 Layout (x east, y north; the camera looks from +x/-y):
 
-    cottage (ridge along x, door south)       chimney at the back
-    cots under a lean-to on its west side     herb beds and well in front
-              cobbled path from the door to the south cell (x = 0)
+    north wing (ridge along x), doors onto the court (s) and the road (n)
+    west + east wings (ridge along y) framing the court
+    court: cobbled cross path, well, four herb beds
+    low front wall with a gate; two herb beds outside it
 """
-import math
 import random
 
 from civic_kit import *  # noqa: F401,F403
+from pro_kit import plain, tex_mat
 import fw_kit as F
 
 ID = 'healing_hut'
 W, H = 5, 4
 # The front door (south) and a back door (north): the tutorial lays the first
-# road NORTH of the hut, so the hut has to open that way too (and a door on the
-# camera-facing side shows when it is turned).
+# road NORTH of the hut, so the hut has to open that way too.
 ENTRANCE = [('s', 2), ('n', 2)]     # both at x = 0
-HEADROOM = 0.7
+HEADROOM = 0.8
 
-X0, X1, Y0, Y1 = -0.55, 1.65, 0.10, 1.45
-EAVE = G + 0.8
-DOOR_A = 0.4
-CHX, CHY, CHZ0, CHH = 1.25, 1.1, EAVE + 0.3, 0.5
-CHIMNEY = (CHX, CHY, CHZ0 + CHH + 0.13)
+EAVE = G + 0.75
+NY0, NY1 = 1.0, 1.9                 # north wing, y range
+SY0 = -0.95                         # side wings run SY0 .. NY0
+WALL_Y = -1.2                       # the low gate wall
+CHIMNEY = (-1.45, 1.6, EAVE + 0.3 + 0.5 + 0.13)
 
 
-def herb_bed(M, x0, x1, y0, y1, seed, kind='leaf'):
+def vivid(M):
+    """The city reference's palette, over the shared one."""
+    M['roof'] = tex_mat('roof_v', 'clay_roof_tiles_02', 1.55, tint=(1.32, 0.76, 0.52),
+                        sat=1.5, val=1.32, nstr=1.5, vary=0.05)
+    M['roof2'] = tex_mat('roof2_v', 'clay_roof_tiles_02', 1.55, tint=(1.25, 0.72, 0.5),
+                         sat=1.5, val=1.2, nstr=1.5, vary=0.05)
+    M['plaster'] = tex_mat('plaster_v', 'white_plaster_rough_01', 1.0,
+                           tint=(1.0, 0.94, 0.80), sat=0.22, val=2.2, rough=1.0,
+                           nstr=0.9, vary=0.05)
+    M['timber'] = tex_mat('timber_v', 'dark_wood', 0.8, tint=(0.9, 0.58, 0.38), sat=1.25,
+                          val=0.9, nstr=0.8, vary=0.12)
+    M['teal'] = plain('teal_v', '#1fa89c', rough=0.7, vary=0.08)
+    M['red'] = plain('red_v', '#e0402a', rough=0.7, vary=0.08)
+    M['leaf'] = plain('leaf_v', '#4fb01e', rough=0.7, bump=0.5, bump_scale=70, vary=0.2,
+                      speck='#74c82e')
+    M['leaf2'] = plain('leaf2_v', '#7cc934', rough=0.7, bump=0.5, bump_scale=70, vary=0.2,
+                       speck='#a2da44')
+    M['pine'] = plain('pine_v', '#2a8c3a', rough=0.8, bump=0.5, bump_scale=60, vary=0.15,
+                      speck='#3aa24a')
+    M['pine2'] = plain('pine2_v', '#46a838', rough=0.8, bump=0.5, bump_scale=60, vary=0.15,
+                       speck='#62bd44')
+    M['flag_w'] = plain('flag_w', '#fbf8f0', rough=0.95, bump=0.15, bump_scale=120, vary=0.03)
+    M['flag_r'] = plain('flag_r', '#e32a2a', rough=0.85, bump=0.1, vary=0.04)
+    return M
+
+
+def herb_bed(M, x0, x1, y0, y1, seed):
     rnd = random.Random(seed)
     box((x0 + x1) / 2, (y0 + y1) / 2, G, x1 - x0, y1 - y0, 0.06, M['planks'], bevel=0.006)
     box((x0 + x1) / 2, (y0 + y1) / 2, G + 0.04, x1 - x0 - 0.05, y1 - y0 - 0.05, 0.03,
@@ -53,31 +83,6 @@ def herb_bed(M, x0, x1, y0, y1, seed, kind='leaf'):
                     ellipsoid(x, y, G + 0.17, 0.016, 0.016, 0.016, M['fl_pink'], seg=6, rings=4)
 
 
-def cauldron(M, x, y):
-    for k in range(3):
-        a = k * 2.09 + 0.4
-        beam((x + 0.09 * math.cos(a), y + 0.09 * math.sin(a), G),
-             (x, y, G + 0.17), 0.016, M['timber'])
-    for k in range(5):
-        a = k * 1.26
-        beam((x + 0.05 * math.cos(a), y + 0.05 * math.sin(a), G + 0.005),
-             (x + 0.04 * math.cos(a + 1.0), y + 0.04 * math.sin(a + 1.0), G + 0.03), 0.014,
-             M['log_end'], bevel=0)
-    ellipsoid(x, y, G + 0.015, 0.065, 0.065, 0.03, M['ember'], seg=10, rings=6)
-    ellipsoid(x, y, G + 0.17, 0.1, 0.1, 0.075, M['iron'], seg=14, rings=8)
-    cyl(x, y, G + 0.2, 0.082, 0.082, 0.012, M['pine'], seg=14)    # the green brew
-
-
-def cot(M, x, y):
-    rbox((x, y, G + 0.07), (0.34, 0.15, 0.04), (0, 0, 0), M['planks'], bevel=0.004)
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            beam((x + sx * 0.15, y + sy * 0.06, G), (x + sx * 0.15, y + sy * 0.06, G + 0.09),
-                 0.016, M['timber'])
-    rbox((x + 0.01, y, G + 0.1), (0.3, 0.13, 0.035), (0, 0, 0), M['linen'], bevel=0.01)
-    rbox((x - 0.12, y, G + 0.125), (0.07, 0.1, 0.03), (0, 0, 0), M['linen'], bevel=0.01)
-
-
 def well(M, x, y):
     for k in range(8):
         a = k * math.pi / 4
@@ -90,52 +95,68 @@ def well(M, x, y):
     rbox((x, y, G + 0.32), (0.26, 0.17, 0.02), (0, 0, 0), M['roof2'], bevel=0.004)
 
 
+def cross_flag(M, x, y, z0, h, w):
+    """Pole with a white cloth carrying a red cross, facing south."""
+    beam((x, y, z0), (x, y, z0 + h), 0.014, M['timber'], bevel=0.002)
+    ellipsoid(x, y, z0 + h + 0.012, 0.016, 0.016, 0.016, M['gold'], seg=8, rings=5)
+    cw, ch = w, w * 1.25
+    cx, cz = x + cw / 2 + 0.01, z0 + h - ch / 2 - 0.02
+    rbox((cx, y, cz), (cw, 0.012, ch), (0, 0, 0), M['flag_w'], bevel=0.002)
+    rbox((cx, y - 0.008, cz), (cw * 0.26, 0.012, ch * 0.9), (0, 0, 0), M['flag_r'], bevel=0.001)
+    rbox((cx, y - 0.008, cz + ch * 0.06), (cw * 0.9, 0.012, ch * 0.24), (0, 0, 0),
+         M['flag_r'], bevel=0.001)
+
+
 def build():
-    random.seed(5)
-    M = mats()
-    hall(M, X0, X1, Y0, Y1, EAVE, 'x', 'roof',
-         doors=[('s', DOOR_A, DIM['door'][0], DIM['door'][1]),
-                ('n', DOOR_A, DIM['door'][0], DIM['door'][1])],
-         wins=[('s', -0.2, 'teal', True), ('s', 1.1, 'teal', True), ('e', 0.78, 'red', False),
-               ('w', 0.78, 'red', True), ('n', 1.2, 'teal', False), ('n', -0.1, 'teal', True)])
-    F.chimney(M, CHX, CHY, CHZ0, CHH)
-    cross = [(0, 0, 0.17, 0.55, 0.0, 'pine'), (0, 0.03, 0.55, 0.17, 0.0, 'pine')]
-    F.hanging_sign(M, 's', Y0, DOOR_A + 0.38, EAVE - 0.02, flat_emblem(M, 's', cross),
-                   size=F.m(1.9))
+    random.seed(11)
+    M = vivid(mats())
+    DW, DH = DIM['door']
 
-    # the dried-herb line under the eave
-    with F.anim('driedherbs', 'sway', pivot=(0.5, Y0 - 0.08, EAVE - 0.04), amp=0.22, period=2.6):
-        for i, x in enumerate((-0.45, -0.38, 0.8, 0.9, 1.0, 1.2)):
-            ellipsoid(x, Y0 - 0.07, EAVE - 0.14, 0.025, 0.02, 0.06,
-                      M['leaf' if i % 2 else 'straw_dk'], seg=8, rings=6)
-            beam((x, Y0 - 0.07, EAVE - 0.03), (x, Y0 - 0.07, EAVE - 0.08), 0.007, M['net'],
-                 bevel=0)
+    # north wing, ridge along x
+    hall(M, -2.0, 2.0, NY0, NY1, EAVE, 'x', 'roof',
+         doors=[('s', -0.1, DW, DH), ('n', -0.1, DW, DH)],
+         wins=[('s', -1.55, 'teal', True), ('s', -0.85, 'red', False), ('s', 0.65, 'red', False),
+               ('s', 1.3, 'teal', True), ('e', 1.4, 'teal', True), ('n', -1.2, 'teal', True),
+               ('n', 0.8, 'teal', True)])
+    # west and east wings, ridge along y
+    hall(M, -2.0, -1.1, SY0, NY0, EAVE, 'y', 'roof',
+         wins=[('e', -0.6, 'teal', True), ('e', 0.2, 'red', False),
+               ('s', -1.7, 'teal', True), ('w', -0.2, 'red', True)], lanterns=False)
+    hall(M, 1.1, 2.0, SY0, NY0, EAVE, 'y', 'roof',
+         wins=[('e', -0.6, 'teal', True), ('e', 0.2, 'red', False),
+               ('s', 1.3, 'teal', True), ('w', -0.2, 'red', True)], lanterns=False)
+    F.chimney(M, -1.45, 1.6, EAVE + 0.3, 0.5)
+    F.hanging_sign(M, 's', NY0, -0.1 + DW + 0.12, EAVE - 0.04,
+                   flat_emblem(M, 's', [(0, 0, 0.17, 0.55, 0.0, 'red'),
+                                        (0, 0.03, 0.55, 0.17, 0.0, 'red')]), size=F.m(1.9))
 
-    # ── the cots under a lean-to, west of the cottage ─────
-    lean_to(M, -2.2, -0.6, 0.15, 1.1, G + 0.62, G + 0.45, 's', 'roof2')
-    cot(M, -1.75, 0.55)
-    cot(M, -1.2, 0.55)
-    rbox((-1.5, 0.95, G + 0.2), (0.7, 0.03, 0.4), (0, 0, 0), M['planks'], bevel=0.004)
+    # court: cobbled cross path, well, four raised herb beds
+    F.cobble_path(M, [(0.0, WALL_Y), (0.0, -0.25)], seed=3)
+    F.cobble_path(M, [(0.0, 0.05), (0.0, NY0 + 0.05)], seed=4)
+    well(M, 0.0, -0.1)
+    herb_bed(M, -1.0, -0.25, -0.95, -0.45, 1)
+    herb_bed(M, 0.25, 1.0, -0.95, -0.45, 2)
+    herb_bed(M, -1.0, -0.25, 0.2, 0.7, 3)
+    herb_bed(M, 0.25, 1.0, 0.2, 0.7, 4)
 
-    # ── the garden ────────────────────────────────────────
+    # low front wall with a gate, pillars, healing flag
+    for x0, x1 in ((-2.0, -0.32), (0.32, 2.0)):
+        box((x0 + x1) / 2, WALL_Y, G, x1 - x0, 0.1, 0.24, M['stone'], bevel=0.008)
+    for sx in (-1, 1):
+        box(sx * 0.32, WALL_Y, G, 0.14, 0.14, 0.5, M['stone'], bevel=0.01)
+        box(sx * 0.32, WALL_Y, G + 0.5, 0.18, 0.18, 0.04, M['stone_dk'], bevel=0.006)
+    cross_flag(M, 0.32, WALL_Y, G + 0.54, 0.95, 0.2)
+    cross_flag(M, 0.0, 1.45, EAVE + 0.55, 0.55, 0.14)
+
+    # outside the wall: path to the south cell, two more herb beds, bushes, firs
     ex, ey = F.entrance_point(W, H, *ENTRANCE[0])
-    F.cobble_path(M, [(DOOR_A, Y0 - 0.12), (DOOR_A, -0.5), (0.1, -0.95), (ex, ey + 0.02)], seed=4)
+    F.cobble_path(M, [(0.0, WALL_Y), (0.0, ey + 0.02)], seed=6)
     nx, ny = F.entrance_point(W, H, 'n', 2)
-    F.cobble_path(M, [(DOOR_A, Y1 + 0.1), (0.2, 1.8), (nx, ny - 0.02)], seed=9)
-    dirt(M, 0.4, -0.9, 1.5, 0.85, 2)
-    herb_bed(M, -2.15, -1.15, -0.85, -0.55, 1)
-    herb_bed(M, -2.15, -1.15, -1.25, -0.95, 2)
-    herb_bed(M, 1.0, 2.0, -0.7, -0.4, 3)
-    herb_bed(M, 1.0, 2.0, -1.1, -0.8, 4)
-    cauldron(M, -0.6, -0.55)
-    well(M, 1.1, 0.45)
-    F.barrel(M, 2.0, 0.5, r=0.07, h=0.17)
-    F.crate(M, 2.15, 1.1, 0.12, rot=0.2)
-    F.crate(M, -0.55, -1.4, 0.12)
-    sack(M, -0.35, -1.35)
-    for x, y, h, k in ((-2.3, 1.7, 1.4, 'pine2'), (2.25, 1.7, 1.3, 'pine'),
-                       (-2.3, -1.75, 1.0, 'pine')):
+    F.cobble_path(M, [(0.0, NY1 + 0.1), (nx, ny - 0.02)], seed=9)
+    herb_bed(M, -2.0, -0.8, -1.9, -1.55, 5)
+    herb_bed(M, 0.8, 2.0, -1.9, -1.55, 6)
+    F.bush(M, -0.55, -1.55, 0.1, 3, ['fl_white'])
+    F.bush(M, 0.55, -1.55, 0.1, 5, ['fl_pink'])
+    for x, y, h, k in ((-2.35, 1.85, 1.2, 'pine2'), (2.35, 1.85, 1.1, 'pine'),
+                       (-2.35, -0.3, 0.9, 'pine'), (2.35, -1.8, 0.8, 'pine2')):
         fir(M, x, y, h, k)
-    F.bush(M, 0.6, -0.35, 0.12, 3, ['fl_white'])
-    F.bush(M, -0.45, 0.65, 0.1, 5, ['fl_pink'])
-    F.flower_patch(M, 0.9, -1.35, 6, ['fl_blue', 'fl_white', 'fl_yel'], 7)

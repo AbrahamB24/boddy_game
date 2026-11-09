@@ -334,7 +334,6 @@ class _EffectRow extends StatelessWidget {
     WorkshopRole.kTraining,
     WorkshopRole.kBreeding,
     WorkshopRole.kHatching,
-    WorkshopRole.kLegendaryBoost,
     // The civil-service posts (user 2026-07-25): their output is a FRACTION
     // fed to a system, not units in the storehouse.
     WorkshopRole.kHealSpeed,
@@ -460,8 +459,6 @@ class _EffectRow extends StatelessWidget {
           '10 points)',
     WorkshopRole.kTraining =>
       'no effect — XP rate lives in Species budget → XP',
-    WorkshopRole.kLegendaryBoost =>
-      'Bonus per stationed legendary (0.5 = +50 %)',
     // Only shown when the building stores NOTHING yet — otherwise the row draws
     // one dial per resource instead (user 2026-07-30). Labelled as the fallback
     // it is, so a number typed here does not look per-resource.
@@ -1606,20 +1603,6 @@ class _LevelPreviewState extends State<_LevelPreview> {
             'that costs 3600 craft seconds/h.',
           ),
           calc,
-        ];
-
-      case WorkshopRole.kLegendaryBoost:
-        return [
-          _chipRow(
-            'Produktions-Bonus (voll besetzt)',
-            levels,
-            (l) => '+${_fmt(role.slots * role.mult * 100)} %',
-          ),
-          _note(
-            'Only LEGENDARIES count, and their stats do not — the bonus '
-            'does NOT grow with the building level (only the slots do). '
-            'It multiplies the building\'s worker-free production.',
-          ),
         ];
 
       default:

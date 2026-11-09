@@ -10,13 +10,23 @@ IDS = ['clay_roof_tiles_02', 'roof_tiles_14', 'thatch_roof_angled',
        'grassy_cobblestone', 'park_dirt', 'reed_roof_03', 'mossy_brick']
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'textures')
 
+# Poly Haven's API 403s the default urllib UA; any honest identifying UA
+# passes (not posing as a browser, just not the blank default).
+HEADERS = {'User-Agent': 'BoddyGame-asset-fetch/1.0'}
+
+
+def _get(url):
+    return urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS))
+
+
 for tid in IDS:
     d = os.path.join(ROOT, tid)
     os.makedirs(d, exist_ok=True)
-    meta = json.load(urllib.request.urlopen(f'https://api.polyhaven.com/files/{tid}'))
+    meta = json.load(_get(f'https://api.polyhaven.com/files/{tid}'))
     for m in ('Diffuse', 'Rough', 'nor_gl'):
         url = (meta[m].get('2k') or meta[m]['1k'])['jpg']['url']
         out = os.path.join(d, m + '.jpg')
         if not os.path.exists(out):
-            urllib.request.urlretrieve(url, out)
+            with _get(url) as r, open(out, 'wb') as f:
+                f.write(r.read())
     print('ok', tid)

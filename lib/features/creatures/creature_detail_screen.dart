@@ -20,6 +20,7 @@ import 'combat_school_screen.dart';
 import 'widgets/creature_backdrop.dart';
 import 'widgets/creature_family.dart' show CreatureFigure;
 import 'widgets/creature_sprite.dart';
+import 'widgets/monster_sheet.dart' show MonsterSheets;
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import '../common/widgets/recess_bar.dart';
@@ -724,7 +725,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       );
       // The 1.3× lift is for the baked voxel renders, whose frames leave a
       // wide margin round the monster; a plain sprite already fills its box.
-      if (!_vox || creature.speciesId != 'tidelord') return figure;
+      if (!_vox || !MonsterSheets.hasBaked(creature.speciesId)) return figure;
       // The three-step block plinth under the creature was removed (user
       // 2026-11-03: "Diese drei Balken können entfernt werden").
       return Stack(

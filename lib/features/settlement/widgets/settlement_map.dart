@@ -30,6 +30,7 @@ import 'animated_building_art.dart';
 import 'building_icon.dart';
 import 'building_life.dart';
 import 'building_occluder.dart';
+import 'day_night.dart';
 import 'road_walkers.dart';
 import 'terrain_layer.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
@@ -1910,6 +1911,9 @@ class SettlementMapState extends State<SettlementMap>
                               ),
                             ),
                           ),
+                          // Day / night: the real clock's moonlight over ground and
+                          // buildings, under the build-mode outlines.
+                          const DayNightOverlay(),
                           // ── WHICH TILES ARE TAKEN (user 2026-11-05) ──
                           // The grid under the buildings is hidden by their
                           // sprites, so in build mode the occupied cells are

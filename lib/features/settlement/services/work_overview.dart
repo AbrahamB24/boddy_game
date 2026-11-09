@@ -137,15 +137,6 @@ class WorkSummary {
     level,
   );
   final contrib = contribution[role.resource] ?? 0;
-  if (role.resource == WorkshopRole.kLegendaryBoost) {
-    final legendary = c.species?.rarity == CreatureRarity.legendary;
-    return (
-      figure: legendary
-          ? '⭐ ×${(1 + role.mult).toStringAsFixed(1)}'
-          : '⚠ not legendary',
-      score: 0,
-    );
-  }
   if (role.resource == WorkshopRole.kTraining) {
     return (figure: '+${kTrainingXpPerHour.toStringAsFixed(0)} XP/h', score: 0);
   }
@@ -237,8 +228,7 @@ List<WorkSite> buildWorkSites({
         );
         if (role.resource == WorkshopRole.kTraining) {
           trainees++;
-        } else if (role.resource == WorkshopRole.kLegendaryBoost ||
-            role.resource == WorkshopRole.kStorageRoom) {
+        } else if (role.resource == WorkshopRole.kStorageRoom) {
           // A multiplier and a ceiling: neither is an output line.
         } else if (workshopRoleFeedsSystem(role.resource)) {
           for (final e in contribution.entries) {
@@ -373,10 +363,6 @@ List<PlannedSeat> planFill({
     for (final e in open.entries) {
       final (b, def, role) = e.key;
       for (final c in pool) {
-        if (role.resource == WorkshopRole.kLegendaryBoost &&
-            c.species?.rarity != CreatureRarity.legendary) {
-          continue;
-        }
         final fig = seatFigure(def, role, c, b.level);
         // A tiny bias so a post that makes something beats one that does not.
         final value = fig.score > 0

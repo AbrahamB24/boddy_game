@@ -148,6 +148,12 @@ class SpeciesDef {
   /// the soft gate that makes each region's boss need that region's catches.
   final int tier;
 
+  /// How good a TRAINER this species is (legendaries only; user 2026-11-07).
+  /// A fixed, authored value: it scales how much a lair upgrade is sped up by
+  /// this monster, see LegendaryMath.trainerEffect. Stored in
+  /// species_defs.trainer_power (migration 0068).
+  final double trainerPower;
+
   final Map<CreatureStat, StatCurve> stats;
 
   /// Always length 3 (base, evo 1, evo 2) — padded on load if the row has
@@ -167,6 +173,7 @@ class SpeciesDef {
     this.evoLevel1 = 25,
     this.evoLevel2 = 50,
     this.tier = 1,
+    this.trainerPower = 0.5,
     required this.stats,
     required this.stages,
     this.abilities = const [],
@@ -192,6 +199,7 @@ class SpeciesDef {
     evoLevel1: evoLevel1,
     evoLevel2: evoLevel2,
     tier: tier,
+    trainerPower: trainerPower,
     stats: stats,
     stages: stages,
     abilities: abilities,
@@ -231,6 +239,7 @@ class SpeciesDef {
       evoLevel1: (row['evo_level_1'] as num?)?.toInt() ?? 25,
       evoLevel2: (row['evo_level_2'] as num?)?.toInt() ?? 50,
       tier: (row['tier'] as num?)?.toInt() ?? 1,
+      trainerPower: (row['trainer_power'] as num?)?.toDouble() ?? 0.5,
       stats: () {
         final parsed = <CreatureStat, StatCurve>{
           // Accepts the pre-rename key too — a species tuned in Dev Mode
@@ -285,6 +294,7 @@ class SpeciesDef {
     'evo_level_1': evoLevel1,
     'evo_level_2': evoLevel2,
     'tier': tier,
+    'trainer_power': trainerPower,
     'stats': {for (final e in stats.entries) e.key.name: e.value.toJson()},
     'stages': stages.map((s) => s.toJson()).toList(),
     'abilities': abilities.map((a) => a.toJson()).toList(),

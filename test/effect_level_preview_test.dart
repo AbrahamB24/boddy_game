@@ -494,20 +494,6 @@ void main() {
         expect(find.text('−20.5 %'), findsOneWidget); // L2: 36/(36+140)
       });
 
-      testWidgets('a legendary slot says the level does not scale it', (
-        tester,
-      ) async {
-        await pump(tester, {
-          'type': 'workshop',
-          'stat': 'production',
-          'resource': WorkshopRole.kLegendaryBoost,
-          'mult': 0.25,
-          'slots': 2,
-        }, maxLevel: 4);
-        // 2 slots × 25%, identical on every level.
-        expect(find.text('+50 %'), findsNWidgets(4));
-        expect(find.textContaining('does NOT grow'), findsOneWidget);
-      });
     });
 
     testWidgets('passive construction is points, not units per hour', (

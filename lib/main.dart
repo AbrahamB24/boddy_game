@@ -34,6 +34,9 @@ Future<void> main() async {
   // creatures, UI chrome) evicts a building mid-frame. 200 MB matches the
   // decode cost with room to spare rather than fighting eviction thrash.
   PaintingBinding.instance.imageCache.maximumSizeBytes = 200 << 20;
+  // Default is 1000 entries; the voxel scenery, animals and icons are many
+  // small sprites that would evict each other long before the byte cap.
+  PaintingBinding.instance.imageCache.maximumSize = 3000;
   // LANDSCAPE, APP-WIDE (2026-09-18 redesign) — one lock here rather than
   // per-screen: every screen's chrome (the phone frame, headers, sheets, the
   // settlement's own bottom carousel) is now built for a wide-short

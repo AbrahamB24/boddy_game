@@ -18,6 +18,7 @@ import '../models/ability_def.dart';
 import '../models/combatant.dart';
 import '../models/creature_enums.dart';
 import '../models/creature_instance.dart';
+import '../models/legendary_math.dart';
 import '../models/saved_team.dart';
 import '../models/species_def.dart';
 import 'creature_defs_controller.dart';
@@ -310,7 +311,11 @@ class CreaturesController extends ChangeNotifier {
   /// healing taking time (healing_cost.dart). Without this you could heal and
   /// fight with the same monster in the same breath.
   bool _isBattleReady(CreatureInstance c) =>
-      !c.isKo && !c.isHealing && !isBreeding(c.id) && !isOnExpedition(c.id);
+      !c.isKo &&
+      !c.isHealing &&
+      !c.isOnCooldown &&
+      !isBreeding(c.id) &&
+      !isOnExpedition(c.id);
 
   /// The battle roster, capped at [size] (default: the researched team-size
   /// cap). THE single team-selection rule — collection training, dungeon entry
@@ -711,7 +716,11 @@ class CreaturesController extends ChangeNotifier {
     }
     // Defensive capacity guard (the catch UI checks first, but never exceed
     // housing even if it doesn't) — skipped for a forced ceremonial award.
-    if (!force && housingFull) return null;
+    if (!force &&
+        housingFull &&
+        kSpeciesDefs[speciesId]?.rarity != CreatureRarity.legendary) {
+      return null;
+    }
     final caught = CreatureInstance(
       id: '',
       userId: userId,
@@ -1674,6 +1683,13 @@ class CreaturesController extends ChangeNotifier {
       }
       if (creature == null) continue;
       creature.hp = combatant.hp;
+      // A legendary rests after EVERY fight, the shorter the higher its lair
+      // level (user 2026-11-07) — so nobody plays only with legendaries.
+      if (creature.species?.rarity == CreatureRarity.legendary) {
+        creature.cooldownUntil = DateTime.now().add(
+          LegendaryMath.cooldownAt(creature.level),
+        );
+      }
       // Era-CAPPED (user 2026-07-22): nobody levels past the era's ceiling. The
       // reward itself is no longer era-scaled — the defeated monsters' own
       // levels are what make a later fight pay more (user 2026-07-26).

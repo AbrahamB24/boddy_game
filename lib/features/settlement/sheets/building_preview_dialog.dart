@@ -542,8 +542,7 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
     final lines = <(String, String)>[];
     for (final role in def.workshops) {
       final res = role.resource;
-      if (res == WorkshopRole.kTraining ||
-          res == WorkshopRole.kLegendaryBoost) {
+      if (res == WorkshopRole.kTraining) {
         continue;
       }
       if (res == WorkshopRole.kStorageRoom) {
@@ -635,7 +634,6 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
     WorkshopRole.kConstruction => '🔨',
     WorkshopRole.kCrafting => '⚗️',
     WorkshopRole.kTraining => '🏋️',
-    WorkshopRole.kLegendaryBoost => '⭐',
     _ => resourceEmoji(res),
   };
 

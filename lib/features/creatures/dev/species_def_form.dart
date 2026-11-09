@@ -48,6 +48,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
   late int _evoLevel1;
   late int _evoLevel2;
   late int _tier;
+  late double _trainerPower;
   late Map<CreatureStat, StatCurve> _stats;
   final _rng = math.Random();
   // Seeded from the rarity's GLOBAL budget; the Roll button re-spreads onto it.
@@ -98,6 +99,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
     _evoLevel1 = d?.evoLevel1 ?? 25;
     _evoLevel2 = d?.evoLevel2 ?? 50;
     _tier = d?.tier ?? 1;
+    _trainerPower = d?.trainerPower ?? 0.5;
     // The rarity's GLOBAL budget (combat/civil base + growth are set per rarity
     // in the Species-dev config now).
     _budget = defaultBudget(rarity: _rarity, tier: _tier);
@@ -220,6 +222,7 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
       evoLevel1: _evoLevel1,
       evoLevel2: _evoLevel2,
       tier: _tier,
+      trainerPower: _trainerPower,
       // Persist whole-number bases (clamped to each attribute's hard cap) and
       // 0.1-step growth (user 2026-07-24).
       stats: {
@@ -454,6 +457,15 @@ class _SpeciesDefFormState extends State<SpeciesDefForm>
         _budget = defaultBudget(rarity: _rarity, tier: _tier);
       }),
     ),
+    // Legendaries only (user 2026-11-07): how well this monster speeds up
+    // ANOTHER player's lair upgrade as a trainer. Fixed per species.
+    if (_rarity == CreatureRarity.legendary)
+      _numRow(
+        'Trainer stat (legendary; 0.5 = average)',
+        _trainerPower,
+        isDouble: true,
+        onChanged: (v) => _trainerPower = (v as double).clamp(0.0, 5.0),
+      ),
   ];
 
   // ── Tab 2: Evolution (levels + stage name/art) ──────────────

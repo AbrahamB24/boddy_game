@@ -19,7 +19,6 @@ import '../../creatures/healing_hut_screen.dart';
 import '../../creatures/models/combatant.dart';
 import '../../creatures/models/creature_enums.dart'
     show
-        CreatureRarity,
         kBuilderCampBuildingId,
         kScoutPostBuildingId,
         kWorkshopBuildingId,
@@ -909,7 +908,6 @@ String _resEmoji(String res) => switch (res) {
   WorkshopRole.kConstruction => '🔨',
   WorkshopRole.kCrafting => '⚗️',
   WorkshopRole.kTraining => '🏋️',
-  WorkshopRole.kLegendaryBoost => '⭐',
   // ONE table decides (user 2026-07-30) — see resource_icons.dart for why
   // this used to disagree with the header for `fur`.
   _ => resourceEmoji(res),
@@ -1185,7 +1183,6 @@ _Panels _buildPanels(
     for (final role in def.workshops)
       if (!role.isCombined &&
           role.resource != WorkshopRole.kTraining &&
-          role.resource != WorkshopRole.kLegendaryBoost &&
           role.resource != WorkshopRole.kStorageRoom &&
           !workshopRoleFeedsSystem(role.resource))
         MapEntry(role.resource, role.mult * role.levelScale(b.level)),
@@ -1326,9 +1323,6 @@ _Panels _buildPanels(
           );
     final slotCap = effectiveSlots(role, b.level);
     final training = role.resource == WorkshopRole.kTraining;
-    // A legendary-boost slot: a stationed legendary multiplies the building's
-    // production by (1 + mult), regardless of its stats (user 2026-07-24).
-    final boost = role.resource == WorkshopRole.kLegendaryBoost;
     // WHAT posting a worker here actually buys — said in plain words, not
     // just left for the tile's own bare glyph+number to imply (user
     // 2026-09-29: "Die per Worker Effekte der Gebäude sollten angegeben
@@ -1355,8 +1349,6 @@ _Panels _buildPanels(
       if (parts.isNotEmpty) improves = 'Improves ${parts.join(' · ')}';
     } else if (training) {
       improves = '🏋️ Trains for XP — produces nothing here';
-    } else if (boost) {
-      improves = '⭐ Boosts the WHOLE building\'s output';
     } else if (role.resource == WorkshopRole.kStorageRoom) {
       improves = '🏚 Adds room in this store';
     } else if (workshopRoleFeedsSystem(role.resource)) {
@@ -1386,7 +1378,6 @@ _Panels _buildPanels(
               role,
               b.level,
               training,
-              boost,
               storageKeys,
               u: u,
               onTap: lockAssignedSeats
@@ -1420,10 +1411,9 @@ _Panels _buildPanels(
         (s) => c.statValue(s).toDouble(),
         b.level,
       );
-      if (training || boost) {
-        // Training pays XP; a legendary boost multiplies the building's
-        // production — neither adds a resource line here.
-        if (training) trainees++;
+      if (training) {
+        // Training pays XP and adds no resource line here.
+        trainees++;
       } else if (workshopRoleFeedsSystem(role.resource)) {
         // Feeds a SYSTEM, not the storehouse: summed apart so the Total line
         // never reports "+60/h 📦" for a breeder post (user 2026-07-26).
@@ -1925,8 +1915,6 @@ _WorkerReadout _workerReadout(
   WorkshopRole role,
   int level,
   bool training, [
-  bool boost = false,
-
   /// The resources this building STORES — what a store post's per-resource
   /// dials are read for (user 2026-07-30). Empty for every other post.
   List<String> storageKeys = const [],
@@ -1956,8 +1944,6 @@ _WorkerReadout _workerReadout(
       ? '🩺 under treatment'
       : null;
   final absent = absence != null;
-  // Only a LEGENDARY actually boosts; a lesser creature parked here is inert.
-  final legendary = c.species?.rarity == CreatureRarity.legendary;
   // Construction is shown in POINTS, not in the build-seconds they convert to
   // (2026-07-26); the formula itself is the same as every other post's.
   final construction = role.resource == WorkshopRole.kConstruction;
@@ -1983,10 +1969,6 @@ _WorkerReadout _workerReadout(
       absence ??
       (storeRoom.isNotEmpty
           ? storeRoom.first
-          : boost
-          ? (legendary
-                ? '⭐ ×${(1 + role.mult).toStringAsFixed(1)}'
-                : '⚠ not legendary')
           : training
           ? '+${kTrainingXpPerHour.toStringAsFixed(0)} XP/h'
           : construction
@@ -2004,7 +1986,7 @@ _WorkerReadout _workerReadout(
           : '+${contrib.toStringAsFixed(1)}/h ${_resEmoji(role.resource)}');
   // The stacked form of that same value. A combined post and a STORE post have
   // more than one line; every other row keeps its single [value] string.
-  final lines = absent || training || boost || construction
+  final lines = absent || training || construction
       ? const <String>[]
       : storeRoom.isNotEmpty
       ? storeRoom
@@ -2031,12 +2013,11 @@ Widget _workerTile(
   WorkshopRole role,
   int level,
   bool training,
-  bool boost,
   List<String> storageKeys, {
   required double u,
   required VoidCallback? onTap,
 }) {
-  final r = _workerReadout(c, role, level, training, boost, storageKeys);
+  final r = _workerReadout(c, role, level, training, storageKeys);
   final absent = r.absence != null;
   // The figure, or just the glyph of why it isn't working.
   final label = absent
@@ -2180,8 +2161,7 @@ Map<String, double> _passiveOutputs(
     (k, v) =>
         v <= 0 ||
         k == WorkshopRole.kCrafting ||
-        k == WorkshopRole.kTraining ||
-        k == WorkshopRole.kLegendaryBoost,
+        k == WorkshopRole.kTraining,
   );
   return m;
 }
@@ -2501,8 +2481,6 @@ void _openAssignPicker(
 /// so the two cannot drift apart on what a post is called.
 String _workRoleLabel(WorkshopRole role) => switch (role.resource) {
   WorkshopRole.kTraining => 'Training → XP',
-  WorkshopRole.kLegendaryBoost =>
-    '⭐ Legendary → ×${(1 + role.mult).toStringAsFixed(1)}',
   _ => role.stat.label,
 };
 

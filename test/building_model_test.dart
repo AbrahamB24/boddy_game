@@ -136,7 +136,7 @@ void main() {
       final def = BuildingDef.fromDefRow(row);
       expect((def.gridW, def.gridH), kModelFootprint['small_house']);
       expect(entrancesFor(def.id, def.gridW, def.gridH), isNotNull);
-      expect(animFor(def.id, def.gridW, def.gridH), isNotNull);
+      if (kBuildingAnimEnabled) expect(animFor(def.id, def.gridW, def.gridH), isNotNull);
     });
 
     test('a database row with an old footprint gets neither entrance nor '

@@ -29,7 +29,6 @@ void main() {
       WorkshopRole.kConstruction,
       WorkshopRole.kCrafting,
       WorkshopRole.kTraining,
-      WorkshopRole.kLegendaryBoost,
     ]) {
       expect(workshopRoleFeedsSystem(r), isFalse, reason: r);
     }

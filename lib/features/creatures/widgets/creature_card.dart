@@ -112,7 +112,6 @@ class CreatureCard extends StatelessWidget {
     final frameColor = framed
         ? Color.lerp(rarity.color, Colors.white, 0.25)!
         : null;
-    final glows = framed && rarity.index >= CreatureRarity.epic.index;
     final cap = inst == null ? 0 : xpToNextLevel(inst.level);
     final xpFraction = (showXp && inst != null && cap > 0)
         ? (inst.xp / cap).clamp(0.0, 1.0)
@@ -154,16 +153,10 @@ class CreatureCard extends StatelessWidget {
                           ? BorderSide(color: frameColor!, width: 2)
                           : BorderSide.none,
                     ),
-                    shadows: [
-                      const BoxShadow(
-                        color: Color(0x4D000000),
-                        offset: Offset(0, 3),
-                      ),
-                      if (glows)
-                        BoxShadow(
-                          color: rarity.color.withValues(alpha: 0.55),
-                          blurRadius: 10,
-                        ),
+                    // Only the plain dark drop shadow: the coloured rarity glow
+                    // round epic and better cards is gone (user 2026-11-08).
+                    shadows: const [
+                      BoxShadow(color: Color(0x4D000000), offset: Offset(0, 3)),
                     ],
                   ),
                   child: Stack(

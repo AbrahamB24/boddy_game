@@ -129,6 +129,7 @@ def main():
                                'loop': loop}
     with open(os.path.join(out, f'meta_{args.view}.json'), 'w') as f:
         json.dump(meta, f, indent=2)
+    ma.report_cuts(args.view)
     print('done', out)
 
 

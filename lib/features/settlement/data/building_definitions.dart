@@ -332,13 +332,6 @@ class WorkshopRole {
   /// every creature trains at the same rate.
   static const String kTraining = 'training';
 
-  /// A LEGENDARY-only boost slot (user 2026-07-24): a stationed legendary
-  /// multiplies the building's worker-free production by (1 + [mult]) each,
-  /// INDEPENDENT of the creature's stats — [stat] is only the assignment slot
-  /// key and [slots] caps how many legendaries fit. Special buildings use this;
-  /// see SettlementController.workshopPower.
-  static const String kLegendaryBoost = 'legendary_boost';
-
   /// The three CIVIL-SERVICE posts (user 2026-07-25). Each is an ordinary
   /// workshop role — stat × mult × level, summed into workshopPower — whose
   /// output feeds a system instead of the stockpile:
@@ -475,7 +468,6 @@ class WorkshopRole {
       resource != kConstruction &&
       resource != kCrafting &&
       resource != kTraining &&
-      resource != kLegendaryBoost &&
       resource != kHealSpeed &&
       resource != kTradeRate &&
       resource != kExpCarry &&
@@ -2446,10 +2438,10 @@ const Map<String, (double, double)> kChimneyAnchor = {
   'breeding_hut_r1': (0.756, 0.589),
   'breeding_hut_r2': (0.511, 0.696),
   'breeding_hut_r3': (0.244, 0.598),
-  'healing_hut': (0.740, 0.627),
-  'healing_hut_r1': (0.475, 0.713),
-  'healing_hut_r2': (0.260, 0.607),
-  'healing_hut_r3': (0.525, 0.521),
+  'healing_hut': (0.511, 0.503),
+  'healing_hut_r1': (0.803, 0.628),
+  'healing_hut_r2': (0.489, 0.745),
+  'healing_hut_r3': (0.197, 0.619),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {

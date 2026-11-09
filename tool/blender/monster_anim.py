@@ -197,9 +197,33 @@ def load_rgba(path):
     return a
 
 
+CUTS = []
+
+
 def crop(a):
     h = a.shape[0]
-    return a[h - Y1:h - Y0, X0:X1, :]
+    out = a[h - Y1:h - Y0, X0:X1, :]
+    # Art must never be cut off at the frame edge (user 2026-11-08). Ink on the
+    # cell's border, or in the canvas outside the crop window, means it was.
+    al = a[:, :, 3]
+    inside = np.zeros_like(al, dtype=bool)
+    inside[h - Y1:h - Y0, X0:X1] = True
+    lost = float(al[~inside].max()) if (~inside).any() else 0.0
+    edge = max(out[0, :, 3].max(), out[-1, :, 3].max(),
+               out[:, 0, 3].max(), out[:, -1, 3].max())
+    if lost > 0.05 or edge > 0.05:
+        CUTS.append(1)
+    return out
+
+
+def report_cuts(what=''):
+    """Call at the end of a bake: exits non-zero if any frame was cut."""
+    if CUTS:
+        print(f'CUT-OFF ART {what}: {len(CUTS)} frame(s) touch the cell edge '
+              f'or lose pixels outside the crop - widen X0..Y1 / FW, FH '
+              f'(and the Dart frameW/frameH) before shipping this sheet.',
+              flush=True)
+        sys.exit(2)
 
 
 def save_sheet(frames, path):
@@ -287,6 +311,7 @@ def main():
                                'loop': loop}
     with open(os.path.join(out, f'meta_{args.view}.json'), 'w') as f:
         json.dump(meta, f, indent=2)
+    report_cuts()
     print('done', out)
 
 

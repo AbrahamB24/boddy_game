@@ -20,6 +20,7 @@ class CreatureService {
   static const _optionalColumns = [
     'healing_until',
     'heal_queued_at',
+    'cooldown_until',
     'is_starter',
     'learned_ability_ids',
     'equipped_ability_ids',

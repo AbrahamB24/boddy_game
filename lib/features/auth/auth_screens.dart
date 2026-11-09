@@ -176,6 +176,7 @@ class _CreamField extends StatefulWidget {
 
 class _CreamFieldState extends State<_CreamField> {
   final _focus = FocusNode();
+  bool _revealed = false;
 
   @override
   void initState() {
@@ -218,10 +219,34 @@ class _CreamFieldState extends State<_CreamField> {
             width: _focus.hasFocus ? 2 : 1.5,
           ),
         ),
-        child: TextField(
+        child: Row(
+          children: [
+            Expanded(child: _buildField(context)),
+            if (widget.obscure)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _revealed = !_revealed),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Icon(
+                    _revealed
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 18,
+                    color: kBoxAccent,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildField(BuildContext context) => TextField(
           controller: widget.controller,
           focusNode: _focus,
-          obscureText: widget.obscure,
+          obscureText: widget.obscure && !_revealed,
           autofocus: widget.autofocus,
           keyboardType: widget.keyboardType,
           textInputAction: widget.action,
@@ -241,10 +266,7 @@ class _CreamFieldState extends State<_CreamField> {
               FocusScope.of(context).nextFocus();
             }
           },
-        ),
-      ),
-    ],
-  );
+        );
 }
 
 /// The gold commit button, with a spinner while [busy].

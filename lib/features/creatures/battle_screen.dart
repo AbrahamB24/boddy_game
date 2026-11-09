@@ -1,4 +1,4 @@
-import '../../core/ui/feel.dart';
+﻿import '../../core/ui/feel.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -364,7 +364,6 @@ class _BattleScreenState extends State<BattleScreen>
   // monster — [_idlePhase] offsets each combatant round it so six fighters
   // don't bob in lockstep like a single puppet.
   late final AnimationController _idle;
-  static double _idlePhase(Combatant c) => (c.id.hashCode % 1000) / 1000.0;
 
   // Level-ups captured when the fight resolves, shown in the end overlay with
   // their stat gains (user 2026-07-24).
@@ -2119,11 +2118,13 @@ class _BattleScreenState extends State<BattleScreen>
           offset: Offset(0, box.maxHeight * _kArenaDrop),
           child: Stack(children: [Positioned.fill(child: _formation(box))]),
         ),
-        // The log in the gap between the two sides, beside the brook.
-        Align(
-          alignment: const Alignment(0, -0.18),
+        // The log sits in the free bottom-left corner above the command bar,
+        // clear of both ranks (user 2026-11-08: it was in the wrong place).
+        Positioned(
+          left: 66,
+          top: 8,
           child: SizedBox(
-            width: (box.maxWidth * 0.22).clamp(150.0, 220.0),
+            width: (box.maxWidth / 2 - 224).clamp(140.0, 300.0),
             child: _logLine(),
           ),
         ),
@@ -2147,13 +2148,73 @@ class _BattleScreenState extends State<BattleScreen>
   static const double _kBarH = 58;
 
   /// Where a slot's FEET stand, as fractions of the ground (its width, its
-  /// height above the bar) for MY side; the enemy's are mirrored. Three spots
-  /// staggered in depth — the one lowest on screen is nearest.
-  static const List<Offset> _kSpots = [
-    Offset(0.15, 0.86),
-    Offset(0.29, 0.955),
-    Offset(0.2125, 0.73),
+  /// height above the bar). ISOMETRIC FOREST ARENA (user 2026-11-08): my rank
+  /// runs along the lower-left diagonal of the clearing, the enemy's along the
+  /// upper-right one, the two facing each other across it. Index = slot; slot 2
+  /// is the one standing furthest back, the spot lowest on screen is nearest.
+  static const List<Offset> _kSpotsMine = [
+    // Neighbours are >= 0.15 of the width apart (a plate is at most ~132 px),
+    // the middle stays free, and nobody stands high enough to reach the turn
+    // order — so no plate can touch another or sit on a monster.
+    // Three DIFFERENT depths (user 2026-11-08: "in der Höhe etwas mehr versetzt,
+    // damit es mehr Platz gibt") — front, middle, back, so plates and monsters
+    // stagger instead of sharing a row.
+    // (user 2026-11-08: "die Monster stehen sich zu wenig gegenüber") Each rank
+    // is a line running up-left → down-right, and the two lines are PARALLEL,
+    // offset along the diagonal (lower-left vs upper-right) — so every monster
+    // looks across the middle at an opponent instead of standing beside it at
+    // the same height.
+    Offset(0.32, 0.72),
+    Offset(0.18, 0.58),
+    Offset(0.46, 0.86),
   ];
+  static const List<Offset> _kSpotsFoe = [
+    Offset(0.68, 0.50),
+    Offset(0.54, 0.36),
+    Offset(0.82, 0.64),
+  ];
+
+  /// The size of the ground the formation was last laid out on, so the lunge
+  /// can find where a combatant's feet are without a LayoutBuilder of its own.
+  Size? _groundSize;
+
+  Offset _spotFor(int slot, bool isEnemy, int liveCount) {
+    final spots = isEnemy ? _kSpotsFoe : _kSpotsMine;
+    // A lone monster stands in the middle spot of its rank.
+    return liveCount == 1 ? spots[0] : spots[slot % spots.length];
+  }
+
+  /// Where [c]'s feet are on screen, or null before the first layout.
+  Offset? _footOf(Combatant c) {
+    final g = _groundSize;
+    if (g == null) return null;
+    final field = c.isPlayerSide ? _engine.playerField : _engine.enemyField;
+    final slot = field.indexWhere((f) => identical(f, c));
+    if (slot < 0) return null;
+    final live = field.where((f) => f != null && f.alive).length;
+    final s = _spotFor(slot, !c.isPlayerSide, live);
+    return Offset(s.dx * g.width, s.dy * g.height);
+  }
+
+  /// Unit vector from [c] toward [target] on screen — the way a lunge runs.
+  /// Falls back to the rank's own diagonal when either is unknown.
+  Offset _lungeDir(Combatant c, Combatant? target) {
+    final a = _footOf(c);
+    final b = target == null ? null : _footOf(target);
+    final v = (a != null && b != null)
+        ? b - a
+        : Offset(c.isPlayerSide ? 1.0 : -1.0, c.isPlayerSide ? -0.5 : 0.5);
+    final d = v.distance;
+    return d < 1 ? Offset(c.isPlayerSide ? 1.0 : -1.0, 0) : v / d;
+  }
+
+  /// Whether [c] is drawn from the isometric sheets (see
+  /// [MonsterSheets.battleIso]) — those stand lower in their box and overflow
+  /// it upwards, so their slot is cut shorter than a flat sprite's.
+  bool _isIso(Combatant? c) =>
+      c == null ||
+      MonsterSheets.battleIso(c.speciesId, c.stage, mine: c.isPlayerSide) !=
+          null;
 
   /// The two sides standing on the ground, back to front (user 2026-11-04,
   /// side view). Each monster is a [_fieldSlot]: its plate above its head, its
@@ -2162,8 +2223,12 @@ class _BattleScreenState extends State<BattleScreen>
     final w = box.maxWidth;
     final groundH = box.maxHeight - _kBarH;
     final slotW = (w * 0.2).clamp(104.0, 210.0);
-    final spriteH = (groundH * 0.44).clamp(80.0, 180.0);
+    final flatH = (groundH * 0.44).clamp(80.0, 180.0);
+    // An isometric monster's body is low: its slot only has to hold the part of
+    // it standing above the feet, the sheet's empty top overflows past it.
+    final isoH = (groundH * 0.30).clamp(70.0, 170.0);
     const plateH = 44.0;
+    _groundSize = Size(w, groundH);
     final placed = <(double, Widget)>[];
     for (final isEnemy in const [true, false]) {
       final field = isEnemy ? _engine.enemyField : _engine.playerField;
@@ -2178,11 +2243,11 @@ class _BattleScreenState extends State<BattleScreen>
             i,
       ];
       for (final i in live) {
-        var spot = _kSpots[i % _kSpots.length];
-        if (live.length == 1) spot = const Offset(0.2125, 0.86);
-        final cx = (isEnemy ? 1 - spot.dx : spot.dx) * w;
+        final spot = _spotFor(i, isEnemy, live.length);
+        final cx = spot.dx * w;
         final foot = spot.dy * groundH;
-        final top = math.max(48.0, foot - spriteH - plateH);
+        final spriteH = _isIso(field[i]) ? isoH : flatH;
+        final top = math.max(64.0, foot - spriteH - plateH);
         placed.add((
           foot,
           Positioned(
@@ -2195,9 +2260,9 @@ class _BattleScreenState extends State<BattleScreen>
               slot: i,
               isEnemy: isEnemy,
               width: slotW,
-              back:
-                  live.length == CombatEngine.kFieldSlots &&
-                  i == CombatEngine.kFieldSlots - 1,
+              // No size wedge any more: the camera is orthographic, so a
+              // monster standing further back is as large as one in front.
+              back: false,
               // The HP callout points at ONE plate: the first live slot on MY
               // side (user 2026-09-04).
               hpAnchor: !isEnemy && i == live.first,
@@ -3919,10 +3984,14 @@ class _BattleScreenState extends State<BattleScreen>
                         // inside the shadow.
                         final feetPad = box.maxHeight * 0.05;
                         final room = box.maxHeight - feetPad;
-                        final target =
-                            (room + (isEnemy ? 14 : 16)) *
-                            (back ? 0.92 : 1.0) *
-                            _kSpriteScale;
+                        // The isometric sheets are laid out at exactly their
+                        // calibrated size; only a flat sprite is scaled up.
+                        final iso = _isIso(c0);
+                        final target = iso
+                            ? room
+                            : (room + (isEnemy ? 14 : 16)) *
+                                  (back ? 0.92 : 1.0) *
+                                  _kSpriteScale;
                         return Stack(
                           alignment: Alignment.bottomCenter,
                           children: [
@@ -3935,17 +4004,19 @@ class _BattleScreenState extends State<BattleScreen>
                               ),
                               child: Transform.translate(
                                 offset: Offset(spriteW * 0.07, 0),
+                                // The isometric sheets carry their own cast
+                                // shadow, so this is only a small contact patch.
                                 child: Container(
-                                  width: spriteW * 0.74,
-                                  height: spriteW * 0.14,
+                                  width: spriteW * (iso ? 0.46 : 0.74),
+                                  height: spriteW * (iso ? 0.09 : 0.14),
                                   decoration: BoxDecoration(
                                     color: kShadowTint.withValues(
                                       alpha: kShadowOpacity * 1.6,
                                     ),
                                     borderRadius: BorderRadius.all(
                                       Radius.elliptical(
-                                        spriteW * 0.37,
-                                        spriteW * 0.07,
+                                        spriteW * (iso ? 0.23 : 0.37),
+                                        spriteW * (iso ? 0.045 : 0.07),
                                       ),
                                     ),
                                   ),
@@ -4019,72 +4090,104 @@ class _BattleScreenState extends State<BattleScreen>
         : acting
         ? CreamPalette.gold
         : const Color(0xFF0B1E27);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+    // DARK plate, light ink (user 2026-11-08: the text could not be read — the
+    // light ink of the kit sat on a cream plate). The state is the plate's
+    // BACKGROUND: tinted gold on its turn, red when aimed at, and flooded with
+    // the striking move's colour while a hit lands on it.
+    const baseFill = Color(0xFF1B3445);
+    final stateFill = targeted
+        ? Color.lerp(baseFill, FoE.danger, 0.45)!
+        : acting
+        ? Color.lerp(baseFill, CreamPalette.goldDeep, 0.7)!
+        : baseFill;
+    final struck = identical(c, _fxTarget);
+    // The status strip FLOATS above the plate instead of sitting in the column:
+    // taking layout height made the slot's sprite area shrink (and the monster
+    // with it) the moment a buff such as Armor Up appeared. Sizes must never
+    // change during a fight (user 2026-11-08).
+    return Stack(
+      clipBehavior: Clip.none,
       children: [
         if (marks.isNotEmpty)
-          Pressable(
-            onTap: () => _showActiveEffects(c),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: ShapeDecoration(
-                color: FoE.bg.withValues(alpha: 0.65),
-                shape: FoE.facet(radius: 5),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: FractionalTranslation(
+              translation: const Offset(0, -1),
+              child: Center(
+                child: Pressable(
+                  onTap: () => _showActiveEffects(c),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
+                    decoration: ShapeDecoration(
+                      color: FoE.bg.withValues(alpha: 0.65),
+                      shape: FoE.facet(radius: 5),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: marks),
+                  ),
+                ),
               ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: marks),
             ),
           ),
-        Container(
-          width: (width * 0.78).clamp(84.0, 132.0),
-          padding: const EdgeInsets.fromLTRB(5, 2, 5, 4),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF3E6C6),
-            border: Border.all(
-              color: edge,
-              width: (acting || targeted) ? 3 : 2,
-            ),
-            boxShadow: const [
-              BoxShadow(color: Color(0x73000000), offset: Offset(2, 2)),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      c.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        height: 1.1,
-                        color: kBoxInk,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'L${c.level}',
-                    maxLines: 1,
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 1.1,
-                      color: kBoxInkSoft,
-                    ),
-                  ),
+        AnimatedBuilder(
+          animation: _fxReact,
+          builder: (context, child) {
+            final hit = struck && _fxReact.isAnimating
+                ? (1 - _fxReact.value)
+                : 0.0;
+            return Container(
+              width: (width * 0.78).clamp(84.0, 132.0),
+              padding: const EdgeInsets.fromLTRB(5, 2, 5, 4),
+              decoration: BoxDecoration(
+                color: Color.lerp(stateFill, _fxImpact, hit * 0.75),
+                border: Border.all(
+                  color: edge,
+                  width: (acting || targeted) ? 3 : 2,
+                ),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x73000000), offset: Offset(2, 2)),
                 ],
               ),
-              const SizedBox(height: 3),
-              RecessBar(value: frac, color: _hpColor(frac), height: 7),
-            ],
-          ),
+              child: child,
+            );
+          },
+          child: _plateBody(c, frac),
         ),
       ],
     );
   }
+
+  Widget _plateBody(Combatant c, double frac) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              c.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, height: 1.1, color: kBoxInk),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'L${c.level}',
+            maxLines: 1,
+            style: TextStyle(fontSize: 13, height: 1.1, color: kBoxInkSoft),
+          ),
+        ],
+      ),
+      const SizedBox(height: 3),
+      RecessBar(value: frac, color: _hpColor(frac), height: 7),
+    ],
+  );
+
 
   /// The monsters still waiting, as a column of small tiles (user 2026-09-21:
   /// "links oben und unterhalb des Logs die restlichen Monster anzeigen, welche
@@ -4203,22 +4306,11 @@ class _BattleScreenState extends State<BattleScreen>
   // führen") — was 4/16/2. Scaled up together, not just the peak, so the
   // windup and the rebound still read as the SAME motion at the new size
   // rather than a big swing bracketed by two small leftover twitches.
-  static const double _kLungeWindupPx = 10.0;
-  static const double _kLungePeakPx = 42.0;
-  static const double _kLungeReboundPx = 6.0;
-
-  /// Pixels of lunge drift per unit of ground height between attacker's and
-  /// target's feet (see [_spotY]) — the full lunge shape reaches this much.
-  static const double _kLungeDepthPx = 160.0;
-
-  /// Where a combatant's feet stand in depth, as a fraction of the ground
-  /// ([_kSpots]' dy); the enemy's spots mirror mine, so the slot is enough.
-  double _spotY(Combatant c) {
-    final field = c.isPlayerSide ? _engine.playerField : _engine.enemyField;
-    final slot = field.indexWhere((f) => identical(f, c));
-    if (slot < 0) return _kSpots[0].dy;
-    return _kSpots[slot % _kSpots.length].dy;
-  }
+  // Toned down (user 2026-11-08): the sprites carry their own attack/hurt
+  // animations now, so the slide only supports them instead of being the move.
+  static const double _kLungeWindupPx = 3.0;
+  static const double _kLungePeakPx = 14.0;
+  static const double _kLungeReboundPx = 2.0;
 
   /// dy at animation-time [t] (0..1 of _fx), toward the target: negative
   /// during windup (a step AWAY), positive at the strike's peak (a step IN),
@@ -4311,6 +4403,9 @@ class _BattleScreenState extends State<BattleScreen>
             width: double.infinity,
             height: height,
             child: ClipRect(
+              // Cuts only BELOW the feet: the isometric sheets overflow their
+              // box upwards and must not be cut there.
+              clipper: const _BelowFeetClipper(),
               child: Transform.translate(
                 offset: Offset(0, dy),
                 child: Opacity(
@@ -4340,7 +4435,6 @@ class _BattleScreenState extends State<BattleScreen>
     // on one of three would have shaken all three of them.
     final reacts = identical(c, _fxTarget);
     final attacks = identical(c, _fxActor) && !identical(c, _fxTarget);
-    final phase = _idlePhase(c);
     return AnimatedBuilder(
       animation: Listenable.merge([_fx, _fxReact, _fxStatus, _idle]),
       builder: (context, _) {
@@ -4349,12 +4443,11 @@ class _BattleScreenState extends State<BattleScreen>
         // "zunächst muss die Angriffsanimation kommen, wenn diese fertig ist,
         // kommt erst die Trefferanimation") — _fxReact only starts once the
         // lunge below has finished, see _playHit.
-        final tReact = _fxReact.value;
         final active = reacts && _fxReact.isAnimating;
-        final shake = active
-            ? math.sin(tReact * math.pi * 6) * 7 * (1 - tReact)
-            : 0.0;
-        final flash = active ? (1 - tReact) * 0.5 : 0.0;
+        // The hurt animation is the sprite's own; the struck monster no longer
+        // shakes or blinks — its PLATE lights up instead (see [_slotPlate]).
+        const shake = 0.0;
+        const flash = 0.0;
         // Attacker lunge: WIND UP a little away from the target first, then a
         // fast swing past the resting point, then a small rebound past 0
         // before it settles — anticipation, strike, follow-through (user
@@ -4371,15 +4464,17 @@ class _BattleScreenState extends State<BattleScreen>
         // field, so the lunge runs ACROSS it — mine to the right, the enemy's
         // to the left — and drifts up/down toward the depth the target
         // stands at (0 for a target on the same row).
-        final lungeTarget = _fxLungeTarget;
-        final lungeDx = lungeShape * (back ? 1 : -1) * _kLungePeakPx * 1.8;
-        final lungeDy = (lunging && lungeTarget != null)
-            ? lungeShape * (_spotY(lungeTarget) - _spotY(c)) * _kLungeDepthPx
-            : 0.0;
+        // ISOMETRIC (user 2026-11-08): the lunge runs along the ground toward
+        // the target's own feet, so it follows the diagonal the two ranks stand
+        // on instead of sliding straight across the screen.
+        final dir = lunging ? _lungeDir(c, _fxLungeTarget) : Offset.zero;
+        final lungeDx = lungeShape * dir.dx * _kLungePeakPx;
+        final lungeDy = lungeShape * dir.dy * _kLungePeakPx;
         // Idle bob: a slow, small breathing motion, always running — "nur
         // leicht" (user request), so 2.5px rather than anything that reads as
         // a hop.
-        final bob = math.sin((_idle.value + phase) * 2 * math.pi) * 2.5;
+        // Removed (user 2026-11-08): the sprites carry their own idle animation.
+        const bob = 0.0;
         // Whose turn it is / who's targeted (user 2026-08-29: "sehe ich noch
         // nicht gut, welches Monster an der Reihe ist" / "das gleiche gilt
         // für die Gegnerauswahl") — the monster's OWN shadow lit in an accent
@@ -4507,7 +4602,7 @@ class _BattleScreenState extends State<BattleScreen>
   }) {
     // SIDE VIEW (user 2026-11-04): [back] here means "my side" — it stands at
     // the left and faces right, the enemy at the right faces left.
-    final sheets = MonsterSheets.battleSide(
+    final sheets = MonsterSheets.battleIso(
       c.speciesId,
       c.stage,
       mine: back,
@@ -4522,14 +4617,34 @@ class _BattleScreenState extends State<BattleScreen>
         decodeH: decodeH,
       );
     }
-    return MonsterSheetPlayer(
-      set: sheets,
-      anim: anim,
+    // The sheet's cell is far taller than the creature in it (a low seal under
+    // a lot of empty air), so it is laid out in a box [_kIsoCellRatio] times the
+    // slot and overflows UPWARD out of it: the slot, and with it the plate
+    // above, stays as short as the creature itself.
+    final cell = imgH * _kIsoCellRatio;
+    return SizedBox(
       height: imgH,
-      flash: flash,
-      flashColor: flashColor,
+      child: OverflowBox(
+        alignment: Alignment.bottomCenter,
+        minHeight: cell,
+        maxHeight: cell,
+        minWidth: 0,
+        maxWidth: double.infinity,
+        child: MonsterSheetPlayer(
+          set: sheets,
+          anim: anim,
+          height: cell,
+          flash: flash,
+          flashColor: flashColor,
+        ),
+      ),
     );
   }
+
+  /// Height of an isometric sheet's cell box relative to its slot (see
+  /// [_sprite]). Tuned with the slot's 20 % of the ground: the cell then comes
+  /// out at about 29 % of it, which is one tile wide on the arena's lattice.
+  static const double _kIsoCellRatio = 2.05;
 
   /// The battlefield sprite with a drop shadow behind it — a SHARP, un-blurred
   /// silhouette in the element's own [shadowColor] (the same tone, and the same
@@ -4573,27 +4688,12 @@ class _BattleScreenState extends State<BattleScreen>
             errorBuilder: (_, _, _) =>
                 PixelIcon(Icons.pets, color: FoE.gold, size: imgH * 0.6),
           );
+    // The element-coloured silhouette that used to sit behind the sprite is gone
+    // (user 2026-11-08: "den gelben Schatten rechts von dem Fuss"); [shadowColor]
+    // is kept so the callers do not change.
     return Stack(
       alignment: Alignment.center,
       children: [
-        Transform.translate(
-          // CLOSE to the monster (user 2026-07-31: "Die effektiven Schatten der
-          // Monster sind zu weit vom Monster nach unten geschoben"). 7px down
-          // was tuned when the sprite sat flat on a type tile; on a platform the
-          // same offset reads as a second, sunken monster. A short drop keeps it
-          // an extrude of the silhouette, which is what it is.
-          offset: const Offset(1.5, 3),
-          // A bit SMALLER than the sprite, anchored at the feet, so it reads as
-          // a cast shadow hugging the base on the platform (user request).
-          child: Transform.scale(
-            scale: 0.94,
-            alignment: Alignment.bottomCenter,
-            child: ColorFiltered(
-              colorFilter: ColorFilter.mode(shadowColor, BlendMode.srcATop),
-              child: img(FilterQuality.none),
-            ),
-          ),
-        ),
         ColorFiltered(
           colorFilter: ColorFilter.mode(
             flashColor.withValues(alpha: flash),
@@ -6325,3 +6425,16 @@ class _ChargingRingPainter extends CustomPainter {
 
 /// The pages of the battle screen's command deck.
 enum _DeckTab { attack, items, change }
+
+/// A clip that cuts only below the box's bottom edge (the feet): everything
+/// above and to the sides is left alone. The K.O. sink needs the cut under the
+/// feet, but the isometric sheets overflow their slot upward.
+class _BelowFeetClipper extends CustomClipper<Rect> {
+  const _BelowFeetClipper();
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(-4000, -4000, 4000, size.height);
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
+}

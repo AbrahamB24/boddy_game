@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import '../../core/tuning/game_tuning.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/widgets.dart' as w show Text;
 import '../../core/theme/game_icon_data.dart' show kEmojiToIcon;
@@ -16,7 +17,6 @@ import 'data/resource_icons.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/ui_art.dart';
-import '../../core/theme/fachwerk.dart';
 import '../../core/ui/duration_format.dart';
 import '../../core/ui/number_format.dart';
 import '../creatures/models/species_def.dart' show kSpeciesDefs;
@@ -53,6 +53,7 @@ import '../common/widgets/parchment_page.dart';
 import '../common/events/notification_button.dart'
     show NotificationBadge, gameEventHasDestination, openGameEvent;
 import 'widgets/trips_status_builder.dart';
+import 'widgets/voxel_hud.dart';
 import '../creatures/collection_screen.dart';
 import 'build_menu_request.dart';
 import 'work_screen.dart';
@@ -1080,6 +1081,32 @@ class _SettlementScreenState extends State<SettlementScreen>
     child: Text(_ctrl.error!, style: const TextStyle(color: Colors.redAccent)),
   );
 
+  /// TEST button for the map's day / night (dial `nightMode`): auto (real clock)
+  /// -> always day -> always night. Debug builds and dev accounts only.
+  Widget _nightTestButton() => ListenableBuilder(
+    listenable: GameTuning.i,
+    builder: (context, _) {
+      final mode = GameTuning.i.count(Dials.nightMode);
+      const icons = ['🕒', '☀️', '🌙'];
+      return Material(
+        color: Colors.black54,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () =>
+              GameTuning.i.set(Dials.nightMode, ((mode + 1) % 3).toDouble()),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Text(
+              icons[mode.clamp(0, 2)],
+              style: const TextStyle(fontSize: 20),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
   Widget _layout() => Stack(
     children: [
       // The map begins UNDER the header, not behind it (user 2026-09-18: "der
@@ -1194,14 +1221,8 @@ class _SettlementScreenState extends State<SettlementScreen>
       // Hangs from the header beam's underside (user 2026-11-05), a little in
       // from the edge, its mounting block tucked up under the eave.
       Positioned(top: _mapTop - 4, right: 14, child: _newsButton()),
-      // The compass rose over the middle of the header: the door to the
-      // resource list.
-      Positioned(
-        top: _mapTop - _kEmblemUp,
-        left: 0,
-        right: 0,
-        child: _erasTab(),
-      ),
+      if (kDebugMode || _ctrl.isDev)
+        Positioned(top: _mapTop + 44, right: 14, child: _nightTestButton()),
       // One bottom stack instead of three things fighting for the corner: at
       // phone width (430) a bottom-left card and a bottom-right menu simply
       // overlap. Stacking them also keeps everything inside thumb reach.
@@ -1608,48 +1629,11 @@ class _SettlementScreenState extends State<SettlementScreen>
 
   /// The one-line strip's height. The band is nothing but this row (and the eras
   /// panel when it is unfolded) — the map starts right under it.
-  static const double _kResourceRowHeight = 30;
+  static const double _kResourceRowHeight = 66;
 
-  /// The tab under the header — belongs TO the header, not beside it (user
-  /// 2026-09-06: "dieser gehört zum Header. Daher gibt es keinen Übergang"), so it
-  /// is the header's own colour, hung from its foot with the same gold rim. ROUND
-  /// like the rest of the UI (user 2026-09-22). Opens/closes the resources
-  /// dropdown (user 2026-09-30: back to "wie früher eine Art Hovermenü",
-  /// replacing the full Resources page this used to push — see
-  /// [_resourcesDropdown]; that page is still reachable from its own "See
-  /// all" link). (It wore a coral dot while any store was full; removed on
-  /// request, 2026-09-22 — the Resources page marks full stores itself.)
-  Widget _erasTab() => Center(
-    child: SizedBox(
-      width: _kEmblemSize + 90,
-      height: _kEmblemSize,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: 45,
-            top: 0,
-            child: Semantics(
-              label: 'All resources',
-              button: true,
-              child: Pressable(
-                onTap: () => setState(() => _resourcesOpen = !_resourcesOpen),
-                behavior: HitTestBehavior.opaque,
-                // The treasure chest in a dark-steel medal in the middle of the
-                // header (user 2026-11-04/05, painted concept) is the door to
-                // the resource list, in place of the old rounded tab.
-                child: const ChestImage(size: _kEmblemSize),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  /// The emblem's size, and how far it climbs up over the header band.
-  static const double _kEmblemSize = 142;
-  static const double _kEmblemUp = 77;
+  /// The resource cells' own height inside that row — the energy block in the
+  /// middle is the tallest thing on the bar.
+  static const double _kCellHeight = 52;
 
   /// The resources dropdown itself (user 2026-09-30) — a cream panel hanging
   /// under the tab, GOLD ALONE AND CENTRED AT THE TOP ("Gold ist immer oben
@@ -2125,62 +2109,60 @@ class _SettlementScreenState extends State<SettlementScreen>
     return SizedBox(
       height: _kResourceRowHeight,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Row(
-              children: [
-                for (var i = 0; i < eraRes.length; i++) ...[
-                  if (i > 0) _cellDivider(),
-                  Expanded(
-                    child: _resCell(
-                      eraRes[i].emoji,
-                      eraRes[i].name,
-                      eraRes[i].id,
-                      _amountOf(eraRes[i].id),
-                      rates[eraRes[i].id] ?? 0,
-                      tier: _tierFromCentre(eraRes.length - 1 - i),
+            child: SizedBox(
+              height: _kCellHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < eraRes.length; i++) ...[
+                    if (i > 0) _cellDivider(),
+                    Expanded(
+                      child: _resCell(
+                        eraRes[i].emoji,
+                        eraRes[i].name,
+                        eraRes[i].id,
+                        _amountOf(eraRes[i].id),
+                        rates[eraRes[i].id] ?? 0,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
           _cellDivider(),
-          _energyBar(),
+          _energyCell(),
           _cellDivider(),
           Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  child: _resCell(
-                    '🪙',
-                    'Gold',
-                    'gold',
-                    _amountOf('gold'),
-                    rates['gold'] ?? 0,
-                    tier: _tierFromCentre(0),
+            child: SizedBox(
+              height: _kCellHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _resCell(
+                      '🪙',
+                      'Gold',
+                      'gold',
+                      _amountOf('gold'),
+                      rates['gold'] ?? 0,
+                    ),
                   ),
-                ),
-                _cellDivider(),
-                Expanded(child: _housingCell()),
-                _cellDivider(),
-                Expanded(child: _tripsCell()),
-              ],
+                  _cellDivider(),
+                  Expanded(child: _housingCell()),
+                  _cellDivider(),
+                  Expanded(child: _tripsCell()),
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
   }
-
-  /// The rim of a header cell by its distance from the chest: gold beside it,
-  /// pale gold next, silver at the far ends (user 2026-11-07).
-  int _tierFromCentre(int c) => c <= 0
-      ? 2
-      : c == 1
-      ? 1
-      : 0;
 
   /// What era [era] itself deals in: its two build resources and its two
   /// luxuries. Era I's build pair is wood and stone — ResourceModel's own
@@ -2274,37 +2256,35 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// slot around it any more (user 2026-09-22, "Variante 4"): the figures stand
   /// straight on the bar, and the cell is scaled down as a whole when a long
   /// figure would not fit its share of the width.
+  ///
+  /// A VOXEL BLOCK now (user 2026-11-08, "Voxel-Block"): stepped corners, dark
+  /// outline, hard shadow, one flat plate colour. [bar], when given, is the
+  /// store's fill as a block bar under the figure.
   Widget _headerCell({
     required VoidCallback onTap,
     required Widget child,
-    int tier = 2,
-  }) => WoodBoard(
-    tier: tier,
-    // A SQUARED TIMBER BEAM (user 2026-11-05: "der braune Hintergrund soll wie
-    // Holzbalken aussehen"): the same board the round buttons and the bell's
-    // bracket use, see [WoodBoard].
-    pegs: true,
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(7),
-      // No plaque of its own: the header bar is ONE beam now (user 2026-11-05:
-      // "ein verbundener Balken, damit alle die gleiche Form haben"), so
-      // every cell shares its shape. The scale-down still happens here, so a
-      // long figure shrinks instead of leaving its cell.
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Center(
-          // Clip.none: the pixel icons are painted a little larger than their
-          // layout box (kGameIconGrow), and FittedBox's default clip cut that
-          // overhang off at the bottom (user 2026-11-04).
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.center,
-            clipBehavior: Clip.none,
-            child: child,
+    Widget? bar,
+  }) => VoxelCell(
+    onTap: onTap,
+    padding: const EdgeInsets.fromLTRB(7, 5, 7, 6),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // The scale-down happens here, so a long figure shrinks instead of
+        // leaving its cell. Clip.none: the pixel icons are painted a little
+        // larger than their layout box.
+        Expanded(
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              child: child,
+            ),
           ),
         ),
-      ),
+        if (bar != null) ...[const SizedBox(height: 3), bar],
+      ],
     ),
   );
 
@@ -2316,10 +2296,9 @@ class _SettlementScreenState extends State<SettlementScreen>
     String title,
     String resourceId,
     double amount,
-    double rate, {
-    int tier = 2,
-  }) => _headerCell(
-    tier: tier,
+    double rate,
+  ) => _headerCell(
+    bar: _stockBar(resourceId, amount),
     onTap: () => _showResourceBreakdown(
       resourceId: resourceId,
       emoji: emoji,
@@ -2362,11 +2341,27 @@ class _SettlementScreenState extends State<SettlementScreen>
           // erreicht wurde, dies bitte in der Farbe Koralle darstellen") —
           // one colour for both, since [over] used to fall through this
           // chain with no colour of its own at all.
-          subColor: losing || full || over ? UiArt.warn : null,
+          subColor: losing || full || over ? VoxelHud.warn : null,
         );
       },
     ),
   );
+
+  /// THE STORE'S FILL, A BLOCK BAR UNDER THE FIGURE (user 2026-11-08): how much
+  /// of its ceiling the pile has used. Coral at or over the ceiling, like the
+  /// "full" text; null when the resource has no store to fill.
+  Widget? _stockBar(String resourceId, double amount) {
+    final cap = _ctrl.storageCapacity(resourceId);
+    if (cap <= 0) return null;
+    final full = amount >= cap;
+    return VoxelBar(
+      value: amount / cap,
+      color: full ? VoxelHud.warn : VoxelHud.stockColor(resourceId),
+      height: 7,
+      block: 6,
+      onDark: true,
+    );
+  }
 
   /// The shape every cell in the strip shares: ONE LINE — the glyph, the figure,
   /// the rate (user 2026-09-22, "Variante 4"). The strip is 34 px high, so a cell
@@ -2399,7 +2394,9 @@ class _SettlementScreenState extends State<SettlementScreen>
             // Our own icons, drawn directly (not through a Text) so they keep
             // their size; they are the SMOOTH set now (user 2026-11-04) —
             // see tool/icons/gen_icons.js.
-            child: UiArt.hudGlyph(emoji) != null
+            child: UiArt.pixelWood && UiArt.hudGlyphPx(emoji) != null
+                ? UiArt.pxImage(UiArt.hudGlyphPx(emoji)!)
+                : UiArt.hudGlyph(emoji) != null
                 ? Image.asset(
                     UiArt.hudGlyph(emoji)!,
                     width: _kHeaderIconSize + 7,
@@ -2431,8 +2428,8 @@ class _SettlementScreenState extends State<SettlementScreen>
             Text(
               value,
               maxLines: 1,
-              style: FoE.value(size: 13).copyWith(
-                color: valueColor ?? const Color(0xFFFFE9C2),
+              style: FoE.value(size: 17).copyWith(
+                color: valueColor ?? VoxelHud.ink,
                 shadows: _hudTextShadow,
               ),
             ),
@@ -2445,7 +2442,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                 sub,
                 maxLines: 1,
                 style: FoE.dim(size: _kHeaderSubSize).copyWith(
-                  color: subColor ?? const Color(0xFFE3C58A),
+                  color: subColor ?? VoxelHud.inkSoft,
                   shadows: _hudTextShadow,
                 ),
               ),
@@ -2469,7 +2466,6 @@ class _SettlementScreenState extends State<SettlementScreen>
     builder: (context, s) {
       final ready = s.ready > 0;
       return _headerCell(
-        tier: _tierFromCentre(2),
         onTap: _showExpeditions,
         child: _cellBody(
           emoji: '⏰',
@@ -2481,8 +2477,8 @@ class _SettlementScreenState extends State<SettlementScreen>
               : s.noSlots
               ? 'no post'
               : 'idle',
-          valueColor: ready ? HudBlocks.good : null,
-          subColor: ready ? HudBlocks.good : null,
+          valueColor: ready ? VoxelHud.good : null,
+          subColor: ready ? VoxelHud.good : null,
         ),
       );
     },
@@ -2496,43 +2492,42 @@ class _SettlementScreenState extends State<SettlementScreen>
     builder: (context, unread, open) => Semantics(
       label: 'News',
       button: true,
-      child: Pressable(
-        onTap: open,
-        // A brass bell on an iron strap from a timber block that sits on the
-        // header beam (user 2026-11-05: smaller, hung from the beam, not the
-        // side edge).
-        child: Transform.translate(
-          offset: Offset.zero,
-          child: UiBell(
-            width: 50,
-            badge: unread > 0
-                ? Container(
-                    constraints: const BoxConstraints(minWidth: 18),
-                    height: 18,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: FoE.coral,
-                      borderRadius: vr(9),
-                      border: Border.all(
-                        color: CreamPalette.paperTop,
-                        width: 2,
-                      ),
-                    ),
-                    child: Text(
-                      // Caps the badge: "99+" keeps it stable no matter how
-                      // long you were away.
-                      unread > 99 ? '99+' : '$unread',
-                      style: const TextStyle(
-                        color: CreamPalette.ink,
-                        fontWeight: FontWeight.w400,
-                        fontSize: 10,
-                      ),
-                    ),
-                  )
-                : null,
+      // A small voxel block with the pixel bell (user 2026-11-08), the unread
+      // count as a square tag on its corner.
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          VoxelCell(
+            onTap: open,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            child: SizedBox(
+              width: 22,
+              height: 26,
+              child: Center(child: VoxelHud.px('bell', 24)),
+            ),
           ),
-        ),
+          if (unread > 0)
+            Positioned(
+              top: -6,
+              right: -6,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 18),
+                height: 18,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                alignment: Alignment.center,
+                decoration: ShapeDecoration(
+                  color: FoE.coral,
+                  shape: const VoxelShape(notch: 1),
+                ),
+                child: Text(
+                  // Caps the badge: "99+" keeps it stable no matter how
+                  // long you were away.
+                  unread > 99 ? '99+' : '$unread',
+                  style: Voxel.text(size: 13, color: CreamPalette.ink),
+                ),
+              ),
+            ),
+        ],
       ),
     ),
   );
@@ -2547,7 +2542,13 @@ class _SettlementScreenState extends State<SettlementScreen>
     final cap = _ctrl.housingCapacity;
     final full = used >= cap;
     return _headerCell(
-      tier: _tierFromCentre(1),
+      bar: VoxelBar(
+        value: cap <= 0 ? 0 : used / cap,
+        color: full ? VoxelHud.warn : VoxelHud.stockColor('housing'),
+        height: 7,
+        block: 6,
+        onDark: true,
+      ),
       // Opens Work, not Housing (user 2026-09-20: "wenn ich beim Header auf
       // Housing drücke, soll Work aufgehen, da dies der wichtigere Screen
       // ist") — Housing is the page's second tab, one tap over.
@@ -2556,109 +2557,36 @@ class _SettlementScreenState extends State<SettlementScreen>
         emoji: '🏠',
         value: '$used/$cap',
         sub: full ? 'full' : '${cap - used} free',
-        valueColor: full ? HudBlocks.warn : null,
-        subColor: full ? HudBlocks.warn : null,
+        valueColor: full ? VoxelHud.warn : null,
+        subColor: full ? VoxelHud.warn : null,
       ),
     );
   }
 
-  /// ENERGY, AS THE STRIP'S CENTRE (user 2026-09-19, "Variante 4" 2026-09-22). A
-  /// wide bar on a 0–125 % scale, the figure and how many hours it will still last
-  /// written across it. Energy is a POOL that steps fill and time empties (user
-  /// 2026-09-20), and it scales every rate beside it. Amber up to 100 %; the
-  /// stretch from 100 to 125 % is cyan, with a tick at the 100 % mark. Coral only
-  /// when it is empty: everything above that is a real, working rate.
-  ///
-  /// Energy is loaded separately from the settlement, so it can genuinely be
-  /// absent for the first frames: the bar keeps its SLOT either way, so the row
-  /// must not reflow the moment it arrives.
-  Widget _energyBar() {
+  /// ENERGY, THE BIGGEST ELEMENT ON THE BAR (user 2026-11-08): a big percentage
+  /// and a wide block bar in the middle, how long the pool lasts on the right
+  /// and the treasure chest — the door to the resource list — only a small
+  /// button on its corner. Wider on a wide screen, never under 200 px.
+  Widget _energyCell() {
     final energy = _ctrl.energy;
     final percent = (energy?.percent ?? 0).toDouble();
-    final atFloor = energy != null && energy.isEmpty;
-    // How long it lasts — the countdown is the point of a pool that drains.
-    final left = energy == null || energy.isEmpty
-        ? ''
-        : energy.hoursLeft >= 1
-        ? ' · ${energy.hoursLeft.floor()}h'
-        : ' · ${(energy.hoursLeft * 60).ceil()}m';
-    return Semantics(
-      label: 'Energy',
-      button: true,
-      child: Pressable(
-        onTap: _showEnergyOverview,
-        behavior: HitTestBehavior.opaque,
-        // SPLIT BAR (user 2026-11-04, "den geteilten Balken"): the LEFT half is
-        // 0-100 %, the RIGHT half the bonus range from 100 to 125 %, with the
-        // treasure chest hanging between them. Red text when the pool is empty.
-        child: SizedBox(
-          width: _kEnergyBarWidth,
-          height: 40,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              const Positioned(
-                left: -7,
-                right: -7,
-                top: -8,
-                bottom: -8,
-                child: IgnorePointer(child: ChestSurround(bulge: 44)),
-              ),
-              Positioned.fill(
-                child: _energyBoard(percent, atFloor, energy != null, left),
-              ),
-            ],
-          ),
+    final width = (MediaQuery.sizeOf(context).width * 0.34).clamp(200.0, 320.0);
+    return SizedBox(
+      width: width,
+      height: _kResourceRowHeight,
+      child: Center(
+        child: VoxelEnergyBlock(
+          percent: percent,
+          maxPercent: kEnergyMaxPercent,
+          timeLeft: energy == null || energy.isEmpty
+              ? '–'
+              : hoursWords(energy.hoursLeft),
+          onTap: _showEnergyOverview,
+          onChest: () => setState(() => _resourcesOpen = !_resourcesOpen),
         ),
       ),
     );
   }
-
-  Widget _energyBoard(
-    double percent,
-    bool atFloor,
-    bool hasEnergy,
-    String left,
-  ) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 3),
-    child: Row(
-      children: [
-        Expanded(
-          child: UiEnergyHalf(
-            fraction: percent.clamp(0.0, 100.0) / 100,
-            label: Text(
-              !hasEnergy ? '⚡ —' : '⚡ ${percent.round()}%$left',
-              maxLines: 1,
-              style: FoE.value(size: 11.5).copyWith(
-                color: atFloor ? FoE.danger : Colors.white,
-                fontWeight: FontWeight.w400,
-                shadows: const [
-                  Shadow(color: Color(0xCC000000), offset: Offset(0, 1)),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // Room for the chest.
-        const SizedBox(width: _kChestGap),
-        Expanded(
-          child: UiEnergyHalf(
-            bonus: true,
-            fraction: ((percent - 100) / (kEnergyMaxPercent - 100)).clamp(
-              0.0,
-              1.0,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  /// The gap between the two halves, where the chest hangs.
-  static const double _kChestGap = 112;
-
-  /// The energy bar's width — wide enough for "⚡ 125% · 30h" at a glance.
-  static const double _kEnergyBarWidth = 330;
 
   // ── Quick buttons (bottom-left dock, bottom-right row) ──
   /// THE SETTLEMENT'S CONTROLS THE FORGE-OF-EMPIRES WAY (user 2026-09-19): at

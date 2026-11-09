@@ -11,6 +11,8 @@ import '../common/widgets/monster_tile_grid.dart' show kMonsterTileAspect;
 import '../settlement/settlement_controller.dart';
 import 'bestiary_screen.dart';
 import 'hatchery_screen.dart';
+import 'lair_screen.dart';
+import 'services/lair_controller.dart';
 import 'creature_detail_screen.dart';
 import 'models/creature_enums.dart';
 import 'models/creature_instance.dart';
@@ -161,6 +163,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
     _ctrl.load();
     // Blocks breeding parents out of the training-battle team.
     _breeding.load();
+    // Lairs: settle finished upgrades and collect what trainers earned.
+    LairController().load();
   }
 
   @override
@@ -300,6 +304,18 @@ class _CollectionScreenState extends State<CollectionScreen> {
               context,
               const HatcheryScreen(startOn: NurseryTab.breeding),
             ),
+          ),
+        ),
+        const SizedBox(height: 9),
+        Expanded(
+          child: _hub(
+            icon: Icons.castle,
+            title: 'Lairs',
+            line1: lairHubLine(),
+            onTap: () async {
+              await pushMenu(context, const LairScreen());
+              if (mounted) setState(() {});
+            },
           ),
         ),
         const SizedBox(height: 9),

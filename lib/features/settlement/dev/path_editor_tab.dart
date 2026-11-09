@@ -207,7 +207,7 @@ class _PathEditorTabState extends State<PathEditorTab> {
               : ReorderableListView.builder(
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
                   itemCount: nodes.length,
-                  onReorderItem: _onReorder,
+                  onReorder: _onReorder,
                   itemBuilder: (_, i) => _row(nodes[i], i),
                 ),
         ),

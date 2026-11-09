@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'ability_def.dart';
 import 'creature_enums.dart';
+import 'legendary_math.dart';
 import 'species_def.dart';
 
 /// A monster goes into a fight with at most this many moves IN TOTAL — Attack
@@ -64,6 +65,14 @@ class CreatureInstance {
 
   bool get isHealing =>
       healingUntil != null && healingUntil!.isAfter(DateTime.now());
+
+  /// A LEGENDARY rests after every battle (user 2026-11-07), the shorter the
+  /// higher its building level — so nobody plays only with legendaries. Null
+  /// for everyone else. Stored in `cooldown_until` (migration 0067).
+  DateTime? cooldownUntil;
+
+  bool get isOnCooldown =>
+      cooldownUntil != null && cooldownUntil!.isAfter(DateTime.now());
 
   /// WHEN THIS MONSTER WAS PUT IN LINE for the Healing Hut, or null when it is
   /// not queued (migration 0029, user 2026-07-27: "treat all sollte nicht
@@ -214,6 +223,7 @@ class CreatureInstance {
     int? currentHp,
     this.healingUntil,
     this.healQueuedAt,
+    this.cooldownUntil,
     this.assignedBuildingId,
     this.assignedStat,
     this.parentAId,
@@ -276,7 +286,12 @@ class CreatureInstance {
   int statValueAtLevel(CreatureStat stat, int atLevel) {
     final base = statBase[stat] ?? 10;
     final slope = statSlope[stat] ?? 1;
-    final raw = base + slope * (atLevel - 1);
+    // A legendary has no level cap but approaches a maximum instead of growing
+    // linearly (user 2026-11-07) — see LegendaryMath.
+    final effective = species?.rarity == CreatureRarity.legendary
+        ? LegendaryMath.equivalentLevel(atLevel) - 1
+        : (atLevel - 1).toDouble();
+    final raw = base + slope * effective;
     return math.max(1, raw.round());
   }
 
@@ -294,6 +309,9 @@ class CreatureInstance {
   /// monster at N×10). XP past the cap is FORFEITED — the pool zeroes, so a
   /// capped monster banks nothing toward the next era.
   int gainXp(int amount, {int? levelCap}) {
+    // A legendary's level IS its building's level (user 2026-11-07): battles
+    // and passive training never move it.
+    if (species?.rarity == CreatureRarity.legendary) return 0;
     final cap = (levelCap ?? kCreatureMaxLevel).clamp(1, kCreatureMaxLevel);
     var gained = 0;
     xp += amount;
@@ -332,15 +350,29 @@ class CreatureInstance {
     math.Random rng,
   ) => {
     for (final stat in CreatureStat.values)
-      stat: _sample(species.statCurve(stat).baseAt(0), kBaseSigmaPct, rng),
+      stat: _sample(
+        species.statCurve(stat).baseAt(0),
+        _sigmaFor(species, kBaseSigmaPct),
+        rng,
+      ),
   };
+
+  /// A LEGENDARY has FIXED values — exactly the species curve, no spread
+  /// (user 2026-11-07): there is only one per player and no breeding, so a
+  /// roll would be pure luck nobody could correct.
+  static double _sigmaFor(SpeciesDef species, double sigmaPct) =>
+      species.rarity == CreatureRarity.legendary ? 0.0 : sigmaPct;
 
   static Map<CreatureStat, double> rollSlopeGenes(
     SpeciesDef species,
     math.Random rng,
   ) => {
     for (final stat in CreatureStat.values)
-      stat: _sample(species.statCurve(stat).growth, kSlopeSigmaPct, rng),
+      stat: _sample(
+        species.statCurve(stat).growth,
+        _sigmaFor(species, kSlopeSigmaPct),
+        rng,
+      ),
   };
 
   /// One-time legacy migration: fills any gene missing from [statBase]/
@@ -355,7 +387,7 @@ class CreatureInstance {
       if (!statBase.containsKey(stat)) {
         statBase[stat] = _sample(
           s.statCurve(stat).baseAt(0),
-          kBaseSigmaPct,
+          _sigmaFor(s, kBaseSigmaPct),
           rng,
         );
         changed = true;
@@ -363,7 +395,7 @@ class CreatureInstance {
       if (!statSlope.containsKey(stat)) {
         statSlope[stat] = _sample(
           s.statCurve(stat).growth,
-          kSlopeSigmaPct,
+          _sigmaFor(s, kSlopeSigmaPct),
           rng,
         );
         changed = true;
@@ -437,6 +469,9 @@ class CreatureInstance {
       healQueuedAt: row['heal_queued_at'] == null
           ? null
           : DateTime.tryParse(row['heal_queued_at'] as String)?.toLocal(),
+      cooldownUntil: row['cooldown_until'] == null
+          ? null
+          : DateTime.tryParse(row['cooldown_until'] as String)?.toLocal(),
       statSlope: {
         for (final stat in CreatureStat.values)
           if (stat.readJson(slopeJson) != null)
@@ -487,6 +522,7 @@ class CreatureInstance {
     'current_hp': currentHp,
     'healing_until': healingUntil?.toUtc().toIso8601String(),
     'heal_queued_at': healQueuedAt?.toUtc().toIso8601String(),
+    'cooldown_until': cooldownUntil?.toUtc().toIso8601String(),
     'assigned_building_id': assignedBuildingId,
     'assigned_stat': assignedStat?.name,
     'is_starter': isStarter,

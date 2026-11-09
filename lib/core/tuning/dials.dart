@@ -30,6 +30,8 @@ abstract final class Dials {
   static const barterFee = 'barterFee';
   static const baseStorage = 'baseStorage';
   static const baseGoldStorage = 'baseGoldStorage';
+  static const nightMode = 'nightMode';
+  static const nightStrength = 'nightStrength';
 
   // ── Kampagne ──
   static const battlesBeforeBoss = 'battlesBeforeBoss';
@@ -84,6 +86,21 @@ abstract final class Dials {
   static const qteWindowCatchK = 'qteWindowCatchK';
   static const qteMaxWidthBonus = 'qteMaxWidthBonus';
   static const speciesMaturitySwing = 'speciesMaturitySwing';
+  static const lairQ = 'lairQ';
+  static const lairMaxEquivLevels = 'lairMaxEquivLevels';
+  static const lairBaseDays = 'lairBaseDays';
+  static const lairTimeGrowth = 'lairTimeGrowth';
+  static const lairCostBase = 'lairCostBase';
+  static const lairGoldBase = 'lairGoldBase';
+  static const lairCostGrowth = 'lairCostGrowth';
+  static const lairTrainerScale = 'lairTrainerScale';
+  static const lairCooldownMaxHours = 'lairCooldownMaxHours';
+  static const lairCooldownMinHours = 'lairCooldownMinHours';
+  static const lairShare1 = 'lairShare1';
+  static const lairShare2 = 'lairShare2';
+  static const lairShare3 = 'lairShare3';
+  static const lairShare4 = 'lairShare4';
+  static const lairShare5 = 'lairShare5';
   static const buffArmorPct = 'buffArmorPct';
   static const buffRagePct = 'buffRagePct';
   static const buffHastePct = 'buffHastePct';
@@ -351,6 +368,33 @@ final List<Dial> kDials = [
     help: 'Wie viel Gold die Siedlung ohne Goldlager halten kann.',
     def: 2000,
     min: 1,
+  ),
+  Dial(
+    id: Dials.nightMode,
+    group: TuningGroup.settlement,
+    section: 'Tag und Nacht',
+    label: 'Nachtmodus der Karte',
+    help:
+        '0 = folgt der echten Uhrzeit · 1 = immer Tag · 2 = immer Nacht '
+        '(zum Ansehen).',
+    def: 0,
+    min: 0,
+    kind: DialKind.count,
+    felt: (v) => switch (v.round()) {
+      0 => 'Die Karte folgt der Uhrzeit des Geräts.',
+      1 => 'Immer Tag.',
+      _ => 'Immer Nacht.',
+    },
+  ),
+  Dial(
+    id: Dials.nightStrength,
+    group: TuningGroup.settlement,
+    section: 'Tag und Nacht',
+    label: 'Wie dunkel die Nacht ist',
+    help: '100 % = volle Mondnacht, 0 % = es wird nie dunkel.',
+    def: 1,
+    min: 0,
+    kind: DialKind.percent,
   ),
 
   // ══ Kampagne ═════════════════════════════════════════════════
@@ -850,6 +894,146 @@ final List<Dial> kDials = [
         'Chance, dass ein Gen vom stärkeren statt vom schwächeren Elternteil '
         'kommt.',
     def: 0.60,
+    kind: DialKind.percent,
+  ),
+  // ── Legendäre Gebäude (user 2026-11-07) ──
+  Dial(
+    id: Dials.lairQ,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Annäherung ans Maximum (q pro Level)',
+    help:
+        'Jedes Level schliesst diesen Anteil der verbleibenden Lücke zum '
+        'Maximum NICHT: Wert = Max × (1 − q^Level). Näher an 1 = langsamer.',
+    def: 0.93,
+    min: 0.5,
+  ),
+  Dial(
+    id: Dials.lairMaxEquivLevels,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Grenzwert der Stats (in Level-Äquivalenten)',
+    help:
+        'Ein Legendäres nähert sich den Stats, die ein normales Monster auf '
+        'diesem Level hätte.',
+    def: 80,
+    kind: DialKind.count,
+  ),
+  Dial(
+    id: Dials.lairBaseDays,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Aufstieg Level 1→2 ohne Trainer (Tage)',
+    help: 'Wartezeit ohne jede Hilfe.',
+    def: 7,
+  ),
+  Dial(
+    id: Dials.lairTimeGrowth,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Wartezeit wächst pro Level (×)',
+    help: 'Faktor pro Level auf die Wartezeit.',
+    def: 1.25,
+    min: 1,
+  ),
+  Dial(
+    id: Dials.lairCostBase,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Luxusgut-Kosten Level 1→2',
+    help: 'Menge des Luxusguts der Region der Art.',
+    def: 40,
+    kind: DialKind.count,
+  ),
+  Dial(
+    id: Dials.lairGoldBase,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Gold-Kosten Level 1→2',
+    help: 'Zusätzliches Gold, das an die Trainer geht.',
+    def: 200,
+    kind: DialKind.count,
+  ),
+  Dial(
+    id: Dials.lairCostGrowth,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Kosten wachsen pro Level (×)',
+    help: 'Faktor pro Level auf Luxusgut und Gold.',
+    def: 1.4,
+    min: 1,
+  ),
+  Dial(
+    id: Dials.lairTrainerScale,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Trainer-Stärke (Beschleunigung pro Trainer)',
+    help:
+        'Beschleunigung eines Trainers = Trainer-Stat × (1 − q^Level) × '
+        'dieser Wert. Alle Trainer addieren sich zu 1 + Σ.',
+    def: 6,
+  ),
+  Dial(
+    id: Dials.lairCooldownMaxHours,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Kampf-Cool-down bei Level 1 (Std.)',
+    help: 'Ruhezeit nach jedem Kampf.',
+    def: 24,
+    kind: DialKind.hours,
+  ),
+  Dial(
+    id: Dials.lairCooldownMinHours,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Kampf-Cool-down Grenzwert (Std.)',
+    help: 'Dem nähert sich die Ruhezeit mit steigendem Level.',
+    def: 2,
+    kind: DialKind.hours,
+  ),
+  Dial(
+    id: Dials.lairShare1,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Belohnungsanteil 1. Trainer',
+    help: 'Wer zuerst einsteigt, trägt das grösste Risiko.',
+    def: 0.40,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.lairShare2,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Belohnungsanteil 2. Trainer',
+    help: 'Bei weniger Trainern werden die Anteile neu normalisiert.',
+    def: 0.25,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.lairShare3,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Belohnungsanteil 3. Trainer',
+    help: '',
+    def: 0.18,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.lairShare4,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Belohnungsanteil 4. Trainer',
+    help: '',
+    def: 0.10,
+    kind: DialKind.percent,
+  ),
+  Dial(
+    id: Dials.lairShare5,
+    group: TuningGroup.monster,
+    section: 'Legendäre',
+    label: 'Belohnungsanteil 5. Trainer',
+    help: '',
+    def: 0.07,
     kind: DialKind.percent,
   ),
   Dial(

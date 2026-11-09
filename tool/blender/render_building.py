@@ -6401,6 +6401,107 @@ def healing_hut(w, h):
         scale_all(k)
 
 
+def _herb_bed(name, x, y, w, d, bloom='bloom_white'):
+    """A raised herb bed: an oak frame, dark soil, rows of leafy tufts and the
+    odd bloom. The healing hut's own planting — it says 'remedies' faster than
+    any flower bed does."""
+    box(f'{name}_fn', x, y - d / 2, 0, w + 0.1, 0.1, 0.17, mat('oak'))
+    box(f'{name}_fs', x, y + d / 2, 0, w + 0.1, 0.1, 0.17, mat('oak'))
+    box(f'{name}_fl', x - w / 2, y, 0, 0.1, d, 0.17, mat('oak_light'))
+    box(f'{name}_fr', x + w / 2, y, 0, 0.1, d, 0.17, mat('oak_light'))
+    box(f'{name}_soil', x, y, 0.03, w, d, 0.11, mat('dirt'))
+    nx, ny = max(2, round(w / 0.22)), max(2, round(d / 0.22))
+    for i in range(nx):
+        for j in range(ny):
+            px = x - w / 2 + w * (i + 0.5) / nx
+            py = y - d / 2 + d * (j + 0.5) / ny
+            k = (i * 7 + j * 3) % 5
+            if k == 0:
+                box(f'{name}_s{i}{j}', px, py, 0.13, 0.04, 0.04, 0.12,
+                    mat('herb'))
+                box(f'{name}_b{i}{j}', px, py, 0.24, 0.1, 0.1, 0.08,
+                    mat(bloom if (i + j) % 2 else 'bloom_blue'))
+            else:
+                orb(f'{name}_h{i}{j}', px, py, 0.1, 0.17, 0.17, 0.15,
+                    key='herb' if k % 2 else 'leaf', wobble=0.3, seed=k + i)
+
+
+def healing_hut_cloister(w, h):
+    """Healing Hut as a small cloister (user 2026-11-07, mockup 'Kreuzgang-Hof'
+    + herb beds + a healing flag). Three timbered terracotta wings round a
+    paved court with a well and four herb beds, a low gated wall in front,
+    two more beds outside it, and the red-cross flag on the gate pillar and
+    again on the back wing's bell turret. Experimental: NOT the shipped
+    'healing_hut' art."""
+    wall_h, roof_h = 1.25, 0.95
+    # back wing (ridge along x)
+    half_timber('cbk', 0, 1.55, 0, 4.2, 1.1, wall_h, bays=7)
+    _fachwerk_lattice('cbk', 0, 1.55, 4.2, 1.1, wall_h)
+    shingle_gable('cbkroof', 0, 1.55, wall_h, 4.2, 1.1, roof_h, overhang=0.15,
+                  rows=18, key='tile', dark='tile_dark', ridge_along='x')
+    ridge_crest('cbkcrest', 0, 1.55, wall_h + roof_h - 0.06, 4.6, axis='x')
+    # side wings (ridge along y)
+    for s, nm in ((-1, 'L'), (1, 'R')):
+        wx = s * 1.55
+        half_timber(f'c{nm}w', wx, -0.2, 0, 1.1, 2.4, wall_h, bays=4)
+        _fachwerk_lattice(f'c{nm}w', wx, -0.2, 1.1, 2.4, wall_h)
+        shingle_gable(f'c{nm}roof', wx, -0.2, wall_h, 1.1, 2.4, roof_h,
+                      overhang=0.15, rows=14, key='tile', dark='tile_dark',
+                      ridge_along='y')
+        ridge_crest(f'c{nm}crest', wx, -0.2, wall_h + roof_h - 0.06, 2.8,
+                    axis='y')
+    chimney('cchim', -1.3, 1.9, 0, 0.24, wall_h + roof_h * 0.7 + 0.6)
+    # bell turret with a tiled spire on the back ridge
+    box('cbell', 0, 1.55, wall_h + roof_h - 0.2, 0.42, 0.42, 0.55,
+        mat('stucco'))
+    box('cbellw', 0, 1.33, wall_h + roof_h + 0.0, 0.16, 0.04, 0.22,
+        mat('dark'))
+    spire('cspire', 0, 1.55, wall_h + roof_h + 0.35, 0.34, 0.95, key='tile',
+          dark='tile_dark')
+    # openings
+    doorway('cdoor', 0, 1.0, 0.0, 0.5, 0.86)
+    arched_door('cleaf', 0, 0.95, 0.02, 0.44, 0.8, boards=9)
+    for x in (-1.35, -0.7, 0.7, 1.35):
+        leaded_window(f'cbkw{x}', x, 1.0, 0.5, 0.3, 0.38, facing='y',
+                      open=True)
+    for yy in (-0.9, -0.2, 0.5):
+        leaded_window(f'clw{yy}', -1.0, yy, 0.5, 0.26, 0.36, facing='x',
+                      open=True)
+        leaded_window(f'crw{yy}', 2.1, yy, 0.5, 0.26, 0.36, facing='x',
+                      open=True)
+    for s in (-1, 1):
+        leaded_window(f'cfw{s}', s * 1.55, -1.4, 0.5, 0.3, 0.38, facing='y',
+                      open=True)
+    # court: paving, well, four herb beds
+    paving('cpav', 0, -0.2, 0.0, 2.0, 2.4, key_a='ashlar',
+           key_b='ashlar_dark', tile=0.2)
+    well('cwell', 0, -0.2, 0.0, r=0.24)
+    for bx in (-0.58, 0.58):
+        _herb_bed(f'cbedA{bx}', bx, 0.45, 0.62, 0.8)
+        _herb_bed(f'cbedB{bx}', bx, -0.85, 0.62, 0.8, bloom='bloom_pink')
+    # low front wall with a gate
+    ashlar_courses('cfwL', -1.28, -1.55, 0, 1.64, 0.16, 0.5)
+    ashlar_courses('cfwR', 1.28, -1.55, 0, 1.64, 0.16, 0.5)
+    box('cfwLt', -1.28, -1.55, 0.5, 1.7, 0.2, 0.05, mat('limestone'))
+    box('cfwRt', 1.28, -1.55, 0.5, 1.7, 0.2, 0.05, mat('limestone'))
+    for s in (-1, 1):
+        ashlar_courses(f'cpil{s}', s * 0.5, -1.55, 0, 0.24, 0.24, 0.95)
+        box(f'cpilt{s}', s * 0.5, -1.55, 0.95, 0.32, 0.32, 0.07,
+            mat('limestone'))
+    # THE HEALING FLAG: white field, red cross — on the gate pillar, and again
+    # on the bell turret so it shows over the roofs.
+    cross_flag('cflagA', 0.5, -1.55, 1.02, w=0.5, h=0.62)
+    cross_flag('cflagB', 0.0, 1.55, wall_h + roof_h + 1.25, w=0.34, h=0.42)
+    banner('cgban', -0.5, -1.7, 0.9, 0.2, 0.34, key='banner')
+    # outside the wall: two more herb beds, a pot at each gate side
+    _herb_bed('cbedOL', -1.45, -2.2, 1.3, 0.55)
+    _herb_bed('cbedOR', 1.45, -2.2, 1.3, 0.55, bloom='bloom_pink')
+    plant('cpotL', -0.75, -1.9, 0.0)
+    plant('cpotR', 0.75, -1.9, 0.0)
+    paving('cgpath', 0, -2.15, 0.0, 0.8, 0.8, key_a='ashlar',
+           key_b='ashlar_dark', tile=0.2)
+
+
 def _healing_hut_plan(w, h):
     """Healing Hut — a timbered apothecary's compound round a walled
     dooryard, built to match a reference photo exactly (user 2026-08-20,
@@ -8108,6 +8209,7 @@ PRESETS = {
     # usual roof/gantry overhang margin, and nowhere near filling a 6 x 6).
     'builder_camp': (builder_camp, 5, 5),
     'healing_hut': (healing_hut, 5, 4),
+    'healing_hut_cloister': (healing_hut_cloister, 5, 5),
     'scout_post': (scout_post, 2, 2),
     'trading_post': (trade_center, 4, 3),
     'caravanserai': (caravanserai, 4, 3),
@@ -8605,6 +8707,45 @@ def show_in_viewport():
     bpy.app.timers.register(once, first_interval=0.4)
 
 
+def vivid(amount, lift=1.12):
+    """Render-time colour push toward the HUD/city reference (user 2026-11-07:
+    "die Farben sind mir zu wenig, wie beim Vorbild, mache es noch kräftiger").
+    Same formula as _boost_saturation.py (close a FRACTION of the gap to full
+    saturation, so already-vivid tones don't clip flat) plus a value lift, and
+    a brighter, less purple ambient fill so the shadow sides stop greying the
+    picture. Applied to the live scene only — PALETTE and every shipped .blend
+    stay untouched."""
+    import colorsys
+
+    def push(c):
+        h, s, v = colorsys.rgb_to_hsv(c[0], c[1], c[2])
+        if s < 1e-4:
+            return tuple(c)
+        s = min(1.0, s + (1.0 - s) * amount)
+        v = min(1.0, v * lift)
+        r, g, b = colorsys.hsv_to_rgb(h, s, v)
+        return (r, g, b, c[3] if len(c) > 3 else 1.0)
+
+    for m in bpy.data.materials:
+        if not m.use_nodes or not m.node_tree:
+            continue
+        bsdf = m.node_tree.nodes.get('Principled BSDF')
+        if bsdf is None:
+            continue
+        for name in ('Base Color', 'Emission Color'):
+            inp = bsdf.inputs.get(name)
+            if inp is None:
+                continue
+            if not inp.is_linked:
+                inp.default_value = push(inp.default_value)
+            elif inp.links[0].from_node.type == 'VALTORGB':
+                for el in inp.links[0].from_node.color_ramp.elements:
+                    el.color = push(el.color)
+    bg = bpy.context.scene.world.node_tree.nodes['Background']
+    bg.inputs['Color'].default_value = (0.62, 0.66, 0.80, 1)
+    bg.inputs['Strength'].default_value = 0.42
+
+
 def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     ap = argparse.ArgumentParser()
@@ -8630,6 +8771,9 @@ def main():
                          'modifier artefacts apart in one render')
     ap.add_argument('--no-render', action='store_true',
                     help='build the scene and stop — for opening it in the GUI')
+    ap.add_argument('--vivid', type=float, default=0.0,
+                    help='push saturation toward 1.0 by this fraction of the '
+                         'remaining headroom (try 0.5) and lift value + fill')
     ap.add_argument('--blend', help='also save the scene to this .blend')
     ap.add_argument('--glb', help='also export the model to this .glb — the '
                                   'geometry itself, for a 3D renderer')
@@ -8648,6 +8792,8 @@ def main():
         # way, so nothing that ships changes.
         bevel_everything(viewport=not args.no_render)
     light(args.azimuth)
+    if args.vivid > 0:
+        vivid(args.vivid)
     frame(w, h, args.scale, args.headroom, args.azimuth)
 
     scene = bpy.context.scene

@@ -56,7 +56,7 @@ const double _kSpeed = 0.85;
 
 /// How tall a pup's sprite box is, in map pixels (a cell is 64 wide); an
 /// evolution's box is its walk sheets' [MonsterSheetSet.scale] times this.
-const double kWalkerHeight = 58;
+const double kWalkerHeight = 43.5; // 58 * 0.75 (user 2026-11-08: 25% smaller)
 
 /// Where the monster stands inside a walk frame, as a fraction of the frame's
 /// height from its top: the baked sheets leave open air below the body for

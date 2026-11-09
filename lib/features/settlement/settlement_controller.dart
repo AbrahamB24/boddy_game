@@ -630,7 +630,11 @@ class SettlementController extends ChangeNotifier {
       ? 0
       : GameEngine.housingCapacity(buildings, eraOrder: dungeonMaxStage);
 
-  int get housingUsed => CreaturesController().creatures.length;
+  /// A legendary lives in its own lair and takes no housing (user
+  /// 2026-11-07: "kein Housing sonst").
+  int get housingUsed => CreaturesController().creatures
+      .where((c) => c.species?.rarity != CreatureRarity.legendary)
+      .length;
 
   int get housingFree =>
       (housingCapacity - housingUsed).clamp(0, housingCapacity);
@@ -1079,37 +1083,6 @@ class SettlementController extends ChangeNotifier {
     return (percent / 100 + staffed).clamp(0.0, kMaxTradeDiscount);
   }
 
-  /// Production multiplier from LEGENDARY creatures stationed in [def]'s
-  /// legendary-boost slots (user 2026-07-24): 1 + Σ role.mult per present
-  /// legendary, capped at each role's slot count. Only Legendary rarity counts
-  /// — a lesser creature parked here adds nothing. Stats are irrelevant.
-  double _legendaryBoostFactor(
-    PlacedBuilding b,
-    BuildingDef def,
-    CreaturesController creatures,
-  ) {
-    var boost = 1.0;
-    for (final role in def.workshops) {
-      if (role.resource != WorkshopRole.kLegendaryBoost) continue;
-      var filled = 0;
-      for (final c in creatures.creatures) {
-        if (filled >= role.slots) break;
-        if (c.assignedBuildingId != b.id || c.assignedStat != role.stat) {
-          continue;
-        }
-        if (c.species?.rarity != CreatureRarity.legendary) continue;
-        if (c.isKo ||
-            creatures.isBreeding(c.id) ||
-            creatures.isOnExpedition(c.id)) {
-          continue;
-        }
-        boost += role.mult;
-        filled++;
-      }
-    }
-    return boost;
-  }
-
   /// Combined `breeding`-stat power of the creatures stationed in the MATING
   /// posts of the (complete, road-connected) building(s) of [buildingTypeId] —
   /// the Breeding Hut (user 2026-07-24). This is the magnitude that shortens a
@@ -1244,7 +1217,6 @@ class SettlementController extends ChangeNotifier {
     final matched = roles.any((r) => r.stat == stat);
     for (final role in roles) {
       if (matched ? role.stat != stat : roles.length != 1) continue;
-      if (role.resource == WorkshopRole.kLegendaryBoost) return null;
       return role;
     }
     return null;
@@ -1355,10 +1327,6 @@ class SettlementController extends ChangeNotifier {
       if (!b.isComplete || b.isPaused || !connected.contains(b.id)) continue;
       final def = placedDefOf(b);
       if (def == null) continue;
-      // A stationed LEGENDARY multiplies this building's worker-free production
-      // by a fixed factor per creature, regardless of its stats (user
-      // 2026-07-24) — the special buildings' legendary-boost slot.
-      final legendaryBoost = _legendaryBoostFactor(b, def, creatures);
       // Dev-authored per-era `production` effects add on top (level scaling is
       // baked into the effect now — per-effect factor or the global curve).
       for (final res in def.effectKeys('production')) {
@@ -1370,7 +1338,7 @@ class SettlementController extends ChangeNotifier {
         // ein Monster mit dieser Stufe dort arbeiten würde"). No conversion:
         // both sides of the sum have been plain points since the build time
         // became a percentage cut rather than a seconds budget.
-        power[res] = (power[res] ?? 0) + v * legendaryBoost;
+        power[res] = (power[res] ?? 0) + v;
       }
     }
     // NOTE: the hall's automatic build points are gone with the rest of the
@@ -2881,7 +2849,7 @@ class SettlementController extends ChangeNotifier {
     }
     final effVal = def.effectAt('production', resourceId, era, level: b.level);
     if (effVal != 0) {
-      amount += effVal * _legendaryBoostFactor(b, def, creatures);
+      amount += effVal;
     }
     return amount;
   }

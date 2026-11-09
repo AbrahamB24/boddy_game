@@ -1,0 +1,47 @@
+<!doctype html><meta charset=utf-8><title>Glimmergnaw – alle Animationen</title>
+<style>
+body{background:#2b2f36;color:#ddd;font:13px system-ui;margin:16px}
+h2{margin:24px 0 6px;color:#fff} h3{margin:12px 0 4px;color:#9ab}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+.c{background:#e9edf0;border-radius:6px;padding:4px;text-align:center;color:#333}
+.c div.f{margin:0 auto}
+label{margin-right:12px}
+</style>
+<label>Grösse <input id=z type=range min=0.3 max=1 step=0.05 value=0.5></label>
+<label><input id=bg type=checkbox checked> heller Hintergrund</label>
+<div id=out></div>
+<script>
+const B='../../../assets/images/monsters/glimmergnaw_s';
+const bat=[['idle',16,12],['attack',14,16],['hurt',10,14]];
+const mapA=[['walk',8,10],['idle',8,8]];
+const items=[];
+for(const s of [0,1,2]){
+ const sec=[];
+ for(const v of ['front','back','sidel','sider'])for(const [a,n,fps] of bat)sec.push({f:B+s+'/'+v+'_'+a+'.webp',n,fps,w:560,h:448,l:v+' '+a});
+ for(const h of ['se','ne','nw','sw'])for(const [a,n,fps] of mapA)sec.push({f:B+s+'/'+h+'_'+a+'.webp',n,fps,w:s?544:543,h:s?435:434,l:'map '+h+' '+a});
+ items.push([s,sec]);
+}
+const out=document.getElementById('out'),els=[];
+for(const [s,sec] of items){
+ out.insertAdjacentHTML('beforeend','<h2>Stufe '+s+'</h2><div class=row id=r'+s+'></div>');
+ const row=document.getElementById('r'+s);
+ for(const it of sec){
+  const c=document.createElement('div');c.className='c';
+  const f=document.createElement('div');f.className='f';
+  f.style.background='url('+it.f+') 0 0 no-repeat';
+  c.appendChild(f);c.appendChild(document.createTextNode(it.l));row.appendChild(c);
+  it.el=f;els.push(it);
+ }
+}
+function size(){const z=+document.getElementById('z').value;
+ for(const it of els){const e=it.el;e.style.width=it.w*z+'px';e.style.height=it.h*z+'px';
+  e.style.backgroundSize=(it.w*8*z)+'px '+(it.h*Math.ceil(it.n/8)*z)+'px';}}
+document.getElementById('z').oninput=size;size();
+document.getElementById('bg').onchange=e=>document.querySelectorAll('.c').forEach(c=>c.style.background=e.target.checked?'#e9edf0':'#223');
+const t0=performance.now();
+function tick(){const t=(performance.now()-t0)/1000;
+ for(const it of els){const z=+document.getElementById('z').value;
+  const k=Math.floor(t*it.fps)%it.n;it.el.style.backgroundPosition=(-(k%8)*it.w*z)+'px '+(-Math.floor(k/8)*it.h*z)+'px';}
+ requestAnimationFrame(tick);}
+tick();
+</script>

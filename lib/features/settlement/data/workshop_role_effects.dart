@@ -448,7 +448,6 @@ String? workshopRoleName(String resource) => switch (resource) {
   WorkshopRole.kConstruction => 'Construction',
   WorkshopRole.kCrafting => 'Crafting',
   WorkshopRole.kTraining => 'Training',
-  WorkshopRole.kLegendaryBoost => 'Legendary bonus',
   WorkshopRole.kBreeding => 'Mating time',
   WorkshopRole.kHatching => 'Incubation time',
   WorkshopRole.kHealSpeed => 'Healing time',
