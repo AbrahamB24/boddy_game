@@ -88,9 +88,9 @@ BoxDecoration chunkyDecoration({
   Color? borderColor,
   double shadowOffset = 4,
 }) => BoxDecoration(
-  // VOXEL (2026-11-03): one flat tone, a two-pixel dark outline, a hard slab of
-  // shadow. No gradient, no round corners.
-  color: fill,
+  // VOXEL (2026-11-03): a two-pixel dark outline and a hard slab of shadow;
+  // the fill is the kit's one lit-top-to-shaded-bottom gradient (2026-11-09).
+  gradient: Voxel.shaded(fill, up: 0.18, down: 0.24),
   borderRadius: vr(radius),
   border: borderWidth > 0
       ? Border.all(color: borderColor ?? Voxel.outline, width: borderWidth)

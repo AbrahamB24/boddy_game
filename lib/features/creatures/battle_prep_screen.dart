@@ -808,7 +808,7 @@ class _TeamPickerScreenState extends State<_TeamPickerScreen> {
     trailing: PixelIcon(
       _descending ? Icons.arrow_downward : Icons.arrow_upward,
       size: 14,
-      color: CreamPalette.goldDeep,
+      color: CreamPalette.goldInk,
     ),
     selectedTrailing: _descending ? '↓' : '↑',
     onSelected: (v) => setState(() {

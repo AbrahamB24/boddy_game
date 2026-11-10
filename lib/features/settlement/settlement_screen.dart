@@ -1047,8 +1047,7 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// [_progress], which [_bootstrap] actually advances as each real step
   /// finishes, so a slow phone shows a bar that is genuinely crawling rather
   /// than a spinner that gives no sense of how much longer.
-  Widget _loading() => DecoratedBox(
-    decoration: const BoxDecoration(gradient: kMenuGround),
+  Widget _loading() => VoxelGround(
     child: Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2395,7 +2394,7 @@ class _SettlementScreenState extends State<SettlementScreen>
             // their size; they are the SMOOTH set now (user 2026-11-04) —
             // see tool/icons/gen_icons.js.
             child: UiArt.pixelWood && UiArt.hudGlyphPx(emoji) != null
-                ? UiArt.pxImage(UiArt.hudGlyphPx(emoji)!)
+                ? VoxelHud.px(UiArt.hudGlyphPx(emoji)!, 24)
                 : UiArt.hudGlyph(emoji) != null
                 ? Image.asset(
                     UiArt.hudGlyph(emoji)!,
@@ -2503,7 +2502,7 @@ class _SettlementScreenState extends State<SettlementScreen>
             child: SizedBox(
               width: 22,
               height: 26,
-              child: Center(child: VoxelHud.px('bell', 24)),
+              child: Center(child: VoxelHud.px('icon_bell', 24)),
             ),
           ),
           if (unread > 0)

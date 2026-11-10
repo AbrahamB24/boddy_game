@@ -23,6 +23,25 @@ abstract final class Voxel {
 
   static const Color outline = Color(0xFF0B1E27);
 
+  /// The lit top/left rim every block wears: the loading bar's blue, see-through
+  /// so it stays close to the plate (user 2026-11-09).
+  static const Color rim = Color(0x663FD0D0);
+
+  /// THE one fill of the UI: [base] lit from the top, shaded at the bottom — the
+  /// loading screen's blue gradient, whatever the base colour. Every panel,
+  /// tile and button takes its fill from here so they read as one family.
+  static LinearGradient shaded(Color base, {double up = 0.16, double down = 0.3}) =>
+      LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color.lerp(base, Colors.white, up)!,
+          base,
+          Color.lerp(base, Colors.black, down)!,
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      );
+
   /// A text style in the pixel face. [weight] 700 uses the bold cut.
   static TextStyle text({
     double size = 11,
@@ -74,11 +93,21 @@ class VoxelShape extends OutlinedBorder {
   /// Outline thickness in blocks.
   final double lines;
 
+  /// Colour of the lit top/left strips; null = the default faint white.
+  final Color? light;
+
+  /// Lay the kit's light-to-shade gradient over the fill (lit at the top,
+  /// shaded at the bottom), whatever colour the fill is. This is what makes
+  /// every panel, tile and button of the app wear the same finish.
+  final bool shade;
+
   const VoxelShape({
     this.notch = 2,
     this.bevel = true,
     this.edge,
     this.lines = 1,
+    this.light,
+    this.shade = true,
   });
 
   double get _n => notch * Voxel.unit;
@@ -90,7 +119,14 @@ class VoxelShape extends OutlinedBorder {
 
   @override
   ShapeBorder scale(double t) =>
-      VoxelShape(notch: notch, bevel: bevel, edge: edge, lines: lines);
+      VoxelShape(
+        notch: notch,
+        bevel: bevel,
+        edge: edge,
+        lines: lines,
+        light: light,
+        shade: shade,
+      );
 
   // The outline is part of the shape (see [paint]); a Material side is
   // accepted and ignored.
@@ -161,17 +197,33 @@ class VoxelShape extends OutlinedBorder {
         ..strokeJoin = StrokeJoin.miter
         ..isAntiAlias = false,
     );
-    if (!bevel) return;
+    if (!bevel && !shade) return;
     final b = Voxel.unit * 2;
     final clip = inner;
     canvas.save();
     canvas.clipPath(clip);
     final r = rect.deflate(w);
+    if (shade && rect.height > 6) {
+      canvas.drawRect(
+        r,
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x26FFFFFF), Color(0x00FFFFFF), Color(0x00000000), Color(0x38000000)],
+            stops: [0.0, 0.4, 0.55, 1.0],
+          ).createShader(r),
+      );
+    }
+    if (!bevel) {
+      canvas.restore();
+      return;
+    }
     // lit top and left strips, shaded bottom and right strips
-    final light = Paint()..color = const Color(0x2EFFFFFF);
+    final lit = Paint()..color = light ?? const Color(0x2EFFFFFF);
     final dark = Paint()..color = const Color(0x38000000);
-    canvas.drawRect(Rect.fromLTWH(r.left, r.top, r.width, b), light);
-    canvas.drawRect(Rect.fromLTWH(r.left, r.top, b, r.height), light);
+    canvas.drawRect(Rect.fromLTWH(r.left, r.top, r.width, b), lit);
+    canvas.drawRect(Rect.fromLTWH(r.left, r.top, b, r.height), lit);
     canvas.drawRect(Rect.fromLTWH(r.left, r.bottom - b, r.width, b), dark);
     canvas.drawRect(Rect.fromLTWH(r.right - b, r.top, b, r.height), dark);
     canvas.restore();
@@ -183,10 +235,12 @@ class VoxelShape extends OutlinedBorder {
       other.notch == notch &&
       other.bevel == bevel &&
       other.edge == edge &&
+      other.light == light &&
+      other.shade == shade &&
       other.lines == lines;
 
   @override
-  int get hashCode => Object.hash(notch, bevel, edge, lines);
+  int get hashCode => Object.hash(notch, bevel, edge, lines, light, shade);
 }
 
 /// The hard offset shadow a block casts: one solid slab, no blur.
@@ -289,16 +343,23 @@ class _VoxelBarPainter extends CustomPainter {
 /// toward the edges.
 class VoxelBackdrop extends StatelessWidget {
   final Color color;
-  const VoxelBackdrop({super.key, required this.color});
+
+  /// How much the edges darken: 1 = the monster page's full vignette, 0 = none.
+  /// A menu only shows a thin frame of it, so it takes a gentler one.
+  final double vignette;
+  const VoxelBackdrop({super.key, required this.color, this.vignette = 1});
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(painter: _BackdropPainter(color), size: Size.infinite);
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _BackdropPainter(color, vignette),
+    size: Size.infinite,
+  );
 }
 
 class _BackdropPainter extends CustomPainter {
   final Color color;
-  _BackdropPainter(this.color);
+  final double vignette;
+  _BackdropPainter(this.color, this.vignette);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -315,7 +376,7 @@ class _BackdropPainter extends CustomPainter {
           math.min(y, rows - 1 - y) / 3.0,
         ).clamp(0.0, 1.0);
         final base = Color.lerp(color, Colors.black, 0.46 - 0.10 * jitter)!;
-        final c = Color.lerp(Colors.black, base, 0.55 + 0.45 * edge)!;
+        final c = Color.lerp(Colors.black, base, 1 - vignette * 0.45 * (1 - edge))!;
         canvas.drawRect(
           Rect.fromLTWH(x * cell, y * cell, cell, cell),
           Paint()..color = c,
@@ -334,7 +395,8 @@ class _BackdropPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BackdropPainter o) => o.color != color;
+  bool shouldRepaint(_BackdropPainter o) =>
+      o.color != color || o.vignette != vignette;
 }
 
 /// Pixel-grid icons for the tab rail and small marks. Each is a string bitmap:
@@ -489,7 +551,7 @@ class _GlyphPainter extends CustomPainter {
 /// apart in it. Everything steps up by a fifth, and nothing is drawn below
 /// [floor] logical pixels, however small the code asked for.
 class VoxelTextScaler extends TextScaler {
-  const VoxelTextScaler({this.factor = 1.1, this.floor = 11.5});
+  const VoxelTextScaler({this.factor = 1.12, this.floor = 13});
 
   final double factor;
   final double floor;

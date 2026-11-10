@@ -346,7 +346,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
-                  color: CreamPalette.goldDeep,
+                  color: CreamPalette.goldInk,
                 ),
               ),
           ],
@@ -926,7 +926,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
     // Full but not done: the goods to pay for it are missing.
     final waiting = progress >= 1;
     return Container(
-      padding: const EdgeInsets.fromLTRB(9, 6, 4, 7),
+      padding: const EdgeInsets.fromLTRB(9, 3, 4, 3),
       decoration: raisedTile(radius: 10),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

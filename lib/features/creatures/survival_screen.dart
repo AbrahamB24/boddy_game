@@ -365,7 +365,7 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w400,
-                color: CreamPalette.goldDeep,
+                color: CreamPalette.goldInk,
               ),
             ),
             if (_isNewBest) ...[

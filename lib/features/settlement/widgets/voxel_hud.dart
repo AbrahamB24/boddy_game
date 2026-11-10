@@ -11,6 +11,19 @@ import '../../../core/ui/pressable.dart';
 abstract final class VoxelHud {
   /// The one plate colour every cell shares, and the deeper one behind the
   /// energy block.
+  /// The lit rim: the loading bar's blue (3FD0D0), translucent so it stays
+  /// close to the plate.
+  static const Color rim = Voxel.rim;
+
+  /// The loading screen's blue, pushed harder: a bright teal top falling to
+  /// near-black navy.
+  static const LinearGradient gradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF2A7A90), Color(0xFF1D566A), Color(0xFF133848)],
+    stops: [0.0, 0.5, 1.0],
+  );
+
   static const Color plate = Color(0xFF2A6A80);
   static const Color plateDeep = Color(0xFF1F4A5C);
 
@@ -48,7 +61,11 @@ abstract final class VoxelHud {
 class VoxelCell extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
-  final Color color;
+
+  /// A flat fill, or null for the loading screen's blue gradient
+  /// ([kMenuGround], user 2026-11-09: "Farbverlauf vom Ladescreen inkl. der
+  /// Farbe übernehmen").
+  final Color? color;
   final EdgeInsetsGeometry padding;
   final int notch;
 
@@ -56,7 +73,7 @@ class VoxelCell extends StatelessWidget {
     super.key,
     required this.child,
     this.onTap,
-    this.color = VoxelHud.plate,
+    this.color,
     this.padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
     this.notch = 2,
   });
@@ -66,7 +83,8 @@ class VoxelCell extends StatelessWidget {
     final block = DecoratedBox(
       decoration: ShapeDecoration(
         color: color,
-        shape: VoxelShape(notch: notch),
+        gradient: color == null ? VoxelHud.gradient : null,
+        shape: VoxelShape(notch: notch, light: VoxelHud.rim, shade: color != null),
         shadows: voxelDrop(depth: 2),
       ),
       child: Padding(padding: padding, child: child),
@@ -109,7 +127,6 @@ class VoxelEnergyBlock extends StatelessWidget {
           button: true,
           child: VoxelCell(
             onTap: onTap,
-            color: VoxelHud.plateDeep,
             padding: const EdgeInsets.fromLTRB(8, 6, 30, 6),
             child: Row(
               children: [
@@ -121,7 +138,7 @@ class VoxelEnergyBlock extends StatelessWidget {
                   child: SizedBox(
                     width: 44,
                     height: 44,
-                    child: Center(child: VoxelHud.px('badge_bolt_bare', 30)),
+                    child: Center(child: VoxelHud.px('badge_bolt_bare', 36)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -137,9 +154,9 @@ class VoxelEnergyBlock extends StatelessWidget {
                           Text(
                             '${percent.round()}%',
                             style: Voxel.text(
-                              size: 32,
+                              size: 28,
                               color: over ? bar : VoxelHud.ink,
-                            ),
+                            ).copyWith(height: 1.0),
                           ),
                           const SizedBox(width: 8),
                           Text(
@@ -151,7 +168,7 @@ class VoxelEnergyBlock extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 1),
                       VoxelBar(
                         value: percent / maxPercent,
                         color: bar,
@@ -191,7 +208,7 @@ class VoxelEnergyBlock extends StatelessWidget {
               onTap: onChest,
               color: const Color(0xFFA8821A),
               padding: const EdgeInsets.all(6),
-              child: VoxelHud.px('chest_s', 22),
+              child: VoxelHud.px('chest_s', 24),
             ),
           ),
         ),

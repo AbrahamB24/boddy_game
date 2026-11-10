@@ -226,7 +226,7 @@ class _PoolCard extends StatelessWidget {
 }
 
 /// The deep cyan the bonus range is written in on cream.
-const Color _cyanInk = Color(0xFF1C7FA1);
+const Color _cyanInk = Color(0xFF6ED3EE);
 
 /// The battery: cells of equal share, amber up to 100 %, cyan from there to
 /// the ceiling, the cell the pool ends in filled to its height, and (unless
@@ -608,7 +608,7 @@ class _StepsCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 22,
+          width: 28,
           child: Text(emoji, style: const TextStyle(fontSize: 13)),
         ),
         Expanded(

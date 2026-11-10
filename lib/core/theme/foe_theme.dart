@@ -173,6 +173,7 @@ class FoE {
     double radius = FoE.radius,
     BorderSide side = BorderSide.none,
   }) => VoxelShape(
+    light: Voxel.rim,
     notch: radius >= 14 ? 3 : (radius >= 8 ? 2 : 1),
     // A near-opaque side (a selection ring, a gold edge) keeps its colour as
     // the block outline; a faint hairline just means "an edge" and gets the

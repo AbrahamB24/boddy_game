@@ -15,7 +15,8 @@ import '../models/placed_building.dart';
 import '../settlement_controller.dart';
 import '../sheets/building_preview_dialog.dart';
 import 'building_icon.dart';
-import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_kit.dart';
+import 'voxel_hud.dart' show VoxelHud;
 import '../../../core/theme/voxel_icons.dart';
 import '../../../core/ui/game_text.dart';
 
@@ -470,32 +471,12 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
           child: Container(
             width: _kDot,
             height: _kDot,
-            decoration: active
-                ? BoxDecoration(
-                    shape: BoxShape.rectangle,
-                    color: CreamPalette.gold,
-                    boxShadow: [
-                      BoxShadow(
-                        color: CreamPalette.goldDeep,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  )
-                : BoxDecoration(
-                    shape: BoxShape.rectangle,
-                    gradient: const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [CreamPalette.tileTop, CreamPalette.tileBottom],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: CreamPalette.tanShadow,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-            child: PixelIcon(cat.icon, size: 18, color: CreamPalette.ink),
+            decoration: _tabDecoration(active),
+            child: PixelIcon(
+              cat.icon,
+              size: 24,
+              color: active ? CreamPalette.ink : kBoxInk,
+            ),
           ),
         ),
       ),
@@ -519,21 +500,8 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
         child: Container(
           width: _kDot,
           height: _kDot,
-          decoration: BoxDecoration(
-            shape: BoxShape.rectangle,
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [CreamPalette.tileTop, CreamPalette.tileBottom],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: CreamPalette.tanShadow,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: const PixelIcon(Icons.open_with, size: 18, color: CreamPalette.ink),
+          decoration: _tabDecoration(false),
+          child: const PixelIcon(Icons.open_with, size: 24, color: kBoxInk),
         ),
       ),
     ),
@@ -663,6 +631,23 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
   }
 }
 
+/// A round-button plate of the build strip in the HUD's finish: the loading
+/// blue with the light rim, or the kit's cyan while it is the chosen one.
+ShapeDecoration _tabDecoration(bool active) => ShapeDecoration(
+  gradient: active
+      ? Voxel.shaded(CreamPalette.gold, up: 0.18, down: 0.24)
+      : VoxelHud.gradient,
+  shape: VoxelShape(
+    notch: 2,
+    light: active ? const Color(0x66FFFFFF) : Voxel.rim,
+    shade: false,
+  ),
+  shadows: voxelDrop(
+    depth: 3,
+    color: active ? CreamPalette.goldDeep : CreamPalette.tanShadow,
+  ),
+);
+
 /// A small dark plate for text that sits straight on the map, where bare cream
 /// text would vanish — the build slots, the empty-category note.
 Widget _darkPill({required Widget child, EdgeInsetsGeometry? padding}) =>
@@ -778,7 +763,7 @@ class _TrayCard extends StatelessWidget {
               // Baumenü nicht, dort die Vierecke behalten") — every other
               // screen switched to the plain gradient default.
               child: creamCard(
-                pattern: CreamPatternStyle.diamond,
+                pattern: CreamPatternStyle.blocks,
                 child: const SizedBox.expand(),
               ),
             ),
@@ -903,7 +888,7 @@ class _CarouselCard extends StatelessWidget {
               // build card above.
               child: enabled
                   ? creamCard(
-                      pattern: CreamPatternStyle.diamond,
+                      pattern: CreamPatternStyle.blocks,
                       child: const SizedBox.expand(),
                     )
                   : DecoratedBox(

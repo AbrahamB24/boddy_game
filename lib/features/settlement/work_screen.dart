@@ -8,6 +8,7 @@ import '../creatures/services/creatures_controller.dart';
 import '../creatures/widgets/creature_family.dart' show CreatureAvatar;
 import '../social/social_actions.dart' show confirmDialog;
 import '../social/widgets/social_kit.dart';
+import '../common/widgets/recess_bar.dart';
 import 'build_menu_request.dart';
 import 'data/building_definitions.dart' show BuildingCategory, BuildingDef;
 import 'data/workshop_role_effects.dart' show workshopRoleEmoji;
@@ -242,7 +243,7 @@ class _WorkScreenState extends State<WorkScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
       child: SizedBox(
-        height: 58,
+        height: 68,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -295,28 +296,41 @@ class _WorkScreenState extends State<WorkScreen> {
         Text(
           'HOUSES · $count',
           style: const TextStyle(
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: FontWeight.w400,
             letterSpacing: 0.9,
             color: kBoxAccent,
           ),
         ),
-        const Spacer(),
-        for (final s in HouseSort.values) ...[
-          _pill(
-            s.label + (s == _houseSort ? (_houseReversed ? '  ↑' : '  ↓') : ''),
-            on: s == _houseSort,
-            onTap: () => setState(() {
-              if (s == _houseSort) {
-                _houseReversed = !_houseReversed;
-              } else {
-                _houseSort = s;
-                _houseReversed = false;
-              }
-            }),
+        const SizedBox(width: 10),
+        // The pills scroll sideways when the width runs out, instead of
+        // overflowing (the text floor of the voxel UI made them wider).
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            reverse: true,
+            child: Row(
+              children: [
+                for (final s in HouseSort.values) ...[
+                  _pill(
+                    s.label +
+                        (s == _houseSort ? (_houseReversed ? '  ↑' : '  ↓') : ''),
+                    on: s == _houseSort,
+                    onTap: () => setState(() {
+                      if (s == _houseSort) {
+                        _houseReversed = !_houseReversed;
+                      } else {
+                        _houseSort = s;
+                        _houseReversed = false;
+                      }
+                    }),
+                  ),
+                  if (s != HouseSort.values.last) const SizedBox(width: 6),
+                ],
+              ],
+            ),
           ),
-          if (s != HouseSort.values.last) const SizedBox(width: 6),
-        ],
+        ),
       ],
     ),
   );
@@ -450,7 +464,7 @@ class _WorkScreenState extends State<WorkScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
       child: SizedBox(
-        height: 58,
+        height: 68,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -531,22 +545,12 @@ class _WorkScreenState extends State<WorkScreen> {
 
   Widget _bar(double fraction, {double width = 120, Color? color}) => SizedBox(
     width: width,
-    height: 7,
-    child: ClipRRect(
-      borderRadius: vr(4),
-      child: Stack(
-        children: [
-          ColoredBox(color: kBoxInk.withValues(alpha: 0.15)),
-          FractionallySizedBox(
-            widthFactor: fraction.clamp(0.0, 1.0),
-            child: ColoredBox(
-              color:
-                  color ??
-                  (fraction >= 1 ? CreamPalette.better : CreamPalette.gold),
-            ),
-          ),
-        ],
-      ),
+    child: RecessBar(
+      value: fraction,
+      color: color ?? (fraction >= 1 ? CreamPalette.better : CreamPalette.gold),
+      height: 8,
+      onDark: true,
+      animationDuration: Duration.zero,
     ),
   );
 
@@ -595,29 +599,38 @@ class _WorkScreenState extends State<WorkScreen> {
         Text(
           'SORT',
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: FontWeight.w400,
             letterSpacing: 0.9,
             color: kBoxAccent,
           ),
         ),
         const SizedBox(width: 8),
-        for (final s in WorkSort.values) ...[
-          _pill(
-            s.label + (s == _sort ? (_reversed ? '  ↑' : '  ↓') : ''),
-            on: s == _sort,
-            onTap: () => setState(() {
-              if (s == _sort) {
-                _reversed = !_reversed;
-              } else {
-                _sort = s;
-                _reversed = false;
-              }
-            }),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final s in WorkSort.values) ...[
+                  _pill(
+                    s.label + (s == _sort ? (_reversed ? '  ↑' : '  ↓') : ''),
+                    on: s == _sort,
+                    onTap: () => setState(() {
+                      if (s == _sort) {
+                        _reversed = !_reversed;
+                      } else {
+                        _sort = s;
+                        _reversed = false;
+                      }
+                    }),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+              ],
+            ),
           ),
-          const SizedBox(width: 6),
-        ],
-        const Spacer(),
+        ),
+        const SizedBox(width: 6),
         _pill(
           'Needs workers only',
           on: _needsOnly,
@@ -798,7 +811,7 @@ class _WorkScreenState extends State<WorkScreen> {
                 style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w400,
-                  color: CreamPalette.goldDeep,
+                  color: CreamPalette.goldInk,
                   height: 1,
                 ),
               ),

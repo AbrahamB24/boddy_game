@@ -57,6 +57,10 @@ abstract final class CreamPalette {
   static const Color gold = Color(0xFF3FD0D0);
   static const Color goldDeep = Color(0xFF1C8C8C);
 
+  /// Gold as TEXT or glyph colour on a card: [goldDeep] is a shadow tone and is
+  /// too dim to read on the dark cards.
+  static const Color goldInk = Color(0xFF7DE8E8);
+
   /// A raised tile standing on a card — fresh plaster.
   static const Color tileTop = Color(0xFF2C6A80);
   static const Color tileBottom = Color(0xFF265C70);
@@ -86,8 +90,8 @@ abstract final class CreamPalette {
 const Color kBoxInk = Color(0xFFEAF4F8);
 // Voxel pass (2026-11-03): a pixel face has thin strokes, so ink that was fine
 // for a smooth face at 78 % / 50 % is too faint now. Raised to read at 11-12 px.
-final Color kBoxInkSoft = kBoxInk.withValues(alpha: 0.86);
-final Color kBoxInkFaint = kBoxInk.withValues(alpha: 0.6);
+final Color kBoxInkSoft = kBoxInk.withValues(alpha: 0.92);
+final Color kBoxInkFaint = kBoxInk.withValues(alpha: 0.72);
 const Color kBoxAccent = CreamPalette.accent;
 
 /// Which texture [_CreamPatternPainter] draws (user 2026-09-30, picked from
@@ -98,7 +102,7 @@ const Color kBoxAccent = CreamPalette.accent;
 /// default now; [diamond] (the map's own iso grid, faint) is kept ONLY for
 /// the build menu's own cards (`building_carousel.dart`), the one place the
 /// user asked to leave alone.
-enum CreamPatternStyle { none, diamond }
+enum CreamPatternStyle { none, diamond, blocks }
 
 /// The card surface. Still the build menu's cream and tan — but not a flat fill:
 /// a warm gradient from paper to sand, a faint background texture (see
@@ -134,28 +138,26 @@ Widget creamCard({
   Container(
     decoration: ShapeDecoration(
       color: CreamPalette.paperTop,
-      shape: VoxelShape(notch: framed ? 3 : 2, lines: framed ? 2 : 1),
+      shape: VoxelShape(
+        notch: framed ? 3 : 2,
+        lines: framed ? 2 : 1,
+        light: Voxel.rim,
+      ),
       shadows: voxelDrop(
         depth: framed ? 4 : 3,
         color: deep ?? CreamPalette.tanShadow,
       ),
     ),
-    child: pattern == CreamPatternStyle.diamond
+    child: pattern != CreamPatternStyle.none
         ? CustomPaint(
-            painter: const _CreamPatternPainter(
+            painter: _CreamPatternPainter(
               radius: 2,
               frame: false,
-              pattern: CreamPatternStyle.diamond,
+              pattern: pattern,
             ),
-            child: Padding(
-              padding: padding,
-              child: child,
-            ),
+            child: Padding(padding: padding, child: child),
           )
-        : Padding(
-            padding: padding,
-            child: child,
-          ),
+        : Padding(padding: padding, child: child),
   ),
 );
 
@@ -197,6 +199,7 @@ class _CreamPatternPainter extends CustomPainter {
     canvas.clipRRect(card);
 
     if (pattern == CreamPatternStyle.diamond) _paintDiamond(canvas, size);
+    if (pattern == CreamPatternStyle.blocks) _paintBlocks(canvas, size);
     // Plaster grain (Fachwerk, 2026-11-02).
     paintPlaster(canvas, Offset.zero & size);
 
@@ -233,6 +236,36 @@ class _CreamPatternPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
+  }
+
+  // The block wall of the monster page, faint enough for text to sit on: every
+  // 26 px block a little lighter or darker than the card, by a stable hash.
+  void _paintBlocks(Canvas canvas, Size size) {
+    const cell = 26.0;
+    final cols = (size.width / cell).ceil();
+    final rows = (size.height / cell).ceil();
+    for (var y = 0; y < rows; y++) {
+      for (var x = 0; x < cols; x++) {
+        final h = ((x * 73856093) ^ (y * 19349663)) & 0xFFFF;
+        final j = (h % 5) / 4.0 - 0.5; // -0.5 .. 0.5
+        final r = Rect.fromLTWH(x * cell, y * cell, cell, cell);
+        canvas.drawRect(
+          r,
+          Paint()
+            ..color = (j >= 0 ? Colors.white : Colors.black).withValues(
+              alpha: j.abs() * 0.10,
+            ),
+        );
+        canvas.drawRect(
+          Rect.fromLTWH(r.left, r.top, cell, 1.5),
+          Paint()..color = const Color(0x12FFFFFF),
+        );
+        canvas.drawRect(
+          Rect.fromLTWH(r.left, r.top, 1.5, cell),
+          Paint()..color = const Color(0x0DFFFFFF),
+        );
+      }
+    }
   }
 
   // The iso grid: two families of 2:1 diagonals, the slope every cell on the
@@ -285,18 +318,21 @@ Widget sectionCard({
         Row(
           children: [
             if (icon != null) ...[
-              PixelIcon(icon, size: 15, color: kBoxAccent),
+              PixelIcon(icon, size: 17, color: kBoxAccent),
               const SizedBox(width: 6),
             ],
-            Text(
-              title.toUpperCase(),
-              style: TextStyle(
-                fontSize: 11,
-                letterSpacing: 1.0,
-                color: kBoxAccent,
+            Expanded(
+              child: Text(
+                title.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  letterSpacing: 1.0,
+                  color: kBoxAccent,
+                ),
               ),
             ),
-            const Spacer(),
             if (trailing != null) trailing,
           ],
         ),
@@ -344,16 +380,12 @@ Widget pageCard({
 Widget sectionLabel(String title, {IconData? icon, Widget? trailing}) => Row(
   children: [
     if (icon != null) ...[
-      PixelIcon(icon, size: 15, color: kBoxAccent),
+      PixelIcon(icon, size: 17, color: kBoxAccent),
       const SizedBox(width: 6),
     ],
     Text(
       title.toUpperCase(),
-      style: TextStyle(
-        fontSize: 11,
-        letterSpacing: 1.0,
-        color: kBoxAccent,
-      ),
+      style: TextStyle(fontSize: 13, letterSpacing: 1.0, color: kBoxAccent),
     ),
     const Spacer(),
     if (trailing != null) trailing,
@@ -408,10 +440,16 @@ BoxDecoration raisedTile({
 }) => BoxDecoration(
   // One flat tone, a two-pixel outline and a hard slab of shadow: a block
   // standing on the card.
-  color: locked ? CreamPalette.lockedTop : CreamPalette.tileTop,
+  gradient: Voxel.shaded(
+    locked ? CreamPalette.lockedTop : CreamPalette.tileTop,
+    up: 0.12,
+    down: 0.22,
+  ),
   borderRadius: vr(radius),
   border: Border.all(
-    color: lit ? CreamPalette.goldDeep : CreamPalette.tan.withValues(alpha: 0.5),
+    color: lit
+        ? CreamPalette.goldDeep
+        : CreamPalette.tan.withValues(alpha: 0.5),
   ),
   boxShadow: [
     BoxShadow(
@@ -448,6 +486,22 @@ const LinearGradient kMenuGround = LinearGradient(
   end: Alignment.bottomCenter,
   colors: [CreamPalette.groundTop, CreamPalette.groundBottom],
 );
+
+/// The ground of a screen that is not a [MenuScaffold] (the sign-in, the
+/// loading screen): the block wall of the monster page over the menu gradient.
+class VoxelGround extends StatelessWidget {
+  final Widget child;
+  const VoxelGround({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      const VoxelBackdrop(color: CreamPalette.groundTop, vignette: 0.45),
+      child,
+    ],
+  );
+}
 
 /// Pushes [page] as an ordinary full screen, with a short fade. Every
 /// [MenuScaffold] page is pushed with this so the whole app opens its menus the
@@ -530,113 +584,9 @@ class MenuScaffold extends StatelessWidget {
     this.timber = false,
   });
 
-  /// [timber]'s layout: a bar across the top like the main screen's header,
-  /// the board under it.
-  Widget _timberBody(BuildContext context, bool nested) {
-    final side = MediaQuery.paddingOf(context);
-    final board = Padding(padding: const EdgeInsets.fromLTRB(6, 4, 4, 4), child: child);
-    if (!showHeader) {
-      return Padding(
-        padding: EdgeInsets.fromLTRB(
-          8 + side.left,
-          8 + side.top,
-          8 + side.right,
-          10 + side.bottom,
-        ),
-        child: board,
-      );
-    }
-    final goesBack = back ?? nested;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        UiBar(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              18 + side.left,
-              side.top + 31,
-              18 + side.right,
-              10,
-            ),
-            child: SizedBox(
-              height: 34,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        letterSpacing: 0.4,
-                        color: UiArt.ink,
-                      ),
-                    ),
-                  ),
-                  if (trailing != null) ...[
-                    trailing!,
-                    const SizedBox(width: 10),
-                  ],
-                  if (showClose)
-                    Semantics(
-                      label: goesBack ? 'Back' : 'Close',
-                      button: true,
-                      child: Pressable(
-                        onTap:
-                            onClose ?? () => Navigator.of(context).maybePop(),
-                        child: IronButton(
-                          size: 34,
-                          child: VoxelIcon(
-                            goesBack ? VoxelGlyph.back : VoxelGlyph.close,
-                            size: 17,
-                            color: UiArt.ink,
-                            shadow: false,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              8 + side.left,
-              6,
-              8 + side.right,
-              10 + side.bottom,
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxWidth),
-                child: board,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
+  // [timber] is ignored: every menu wears the main screen's blue (2026-11-09).
   @override
-  Widget build(BuildContext context) => timber
-      ? _MenuDepth(
-          builder: (nested) => Scaffold(
-            backgroundColor: UiWood.groundBottom,
-            floatingActionButton: floatingActionButton,
-            body: Stack(
-              fit: StackFit.expand,
-              children: [
-                const Positioned.fill(child: UiGround()),
-                _timberBody(context, nested),
-              ],
-            ),
-          ),
-        )
-      : _buildCream(context);
+  Widget build(BuildContext context) => _buildCream(context);
 
   Widget _buildCream(BuildContext context) => _MenuDepth(
     builder: (nested) => Scaffold(
@@ -645,68 +595,75 @@ class MenuScaffold extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          const Positioned.fill(child: VoxelBackdrop(color: CreamPalette.groundTop)),
+          const Positioned.fill(
+            child: VoxelBackdrop(color: CreamPalette.groundTop, vignette: 0.3),
+          ),
           SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxWidth),
-              // ONE card for the whole screen now, the title included (user
-              // 2026-09-29: "überall ist noch der Header abgetrennt, dieser
-              // soll aber auch in den gleichen Kasten. Resp. diese Kasten
-              // gibt es nicht mehr" — the last holdout of the old
-              // several-boxes-per-menu look, after the "Trennlinien und
-              // Zonen gemischt" pass folded every screen's OWN several
-              // section cards into one), and FULL BLEED (user 2026-09-29,
-              // seeing the card still framed by a brown margin: "es soll
-              // wirklich ganz bis nach aussen gehen ohne den dunkelbraunen
-              // Hintergrund") — no outer padding left for [kMenuGround] to
-              // show through at all; it now only ever paints the sliver
-              // behind a notch/home-indicator SafeArea has to leave clear.
-              child: creamCard(
-                padding: const EdgeInsets.fromLTRB(14, 9, 10, 10),
-                pattern: pattern,
-                // Fachwerk (2026-11-02): the screen is a house wall — a beam
-                // round it and the roof's tiles over its title.
-                framed: true,
-                roof: showHeader,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (showHeader) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 21,
-                                letterSpacing: 0.3,
-                                color: kBoxInk,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                // ONE card for the whole screen now, the title included (user
+                // 2026-09-29: "überall ist noch der Header abgetrennt, dieser
+                // soll aber auch in den gleichen Kasten. Resp. diese Kasten
+                // gibt es nicht mehr" — the last holdout of the old
+                // several-boxes-per-menu look, after the "Trennlinien und
+                // Zonen gemischt" pass folded every screen's OWN several
+                // section cards into one), and FULL BLEED (user 2026-09-29,
+                // seeing the card still framed by a brown margin: "es soll
+                // wirklich ganz bis nach aussen gehen ohne den dunkelbraunen
+                // Hintergrund") — no outer padding left for [kMenuGround] to
+                // show through at all; it now only ever paints the sliver
+                // behind a notch/home-indicator SafeArea has to leave clear.
+                // The block wall (the monster page's background, user 2026-11-09)
+                // shows round the card now: a frame of 8 px instead of nothing.
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: creamCard(
+                    padding: const EdgeInsets.fromLTRB(14, 9, 10, 10),
+                    pattern: pattern,
+                    // Fachwerk (2026-11-02): the screen is a house wall — a beam
+                    // round it and the roof's tiles over its title.
+                    framed: true,
+                    roof: showHeader,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (showHeader) ...[
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 21,
+                                    letterSpacing: 0.3,
+                                    color: kBoxInk,
+                                  ),
+                                ),
                               ),
-                            ),
+                              if (trailing != null) ...[
+                                trailing!,
+                                const SizedBox(width: 10),
+                              ],
+                              if (showClose)
+                                KitCloseButton(
+                                  back: back ?? nested,
+                                  onTap: onClose,
+                                ),
+                            ],
                           ),
-                          if (trailing != null) ...[
-                            trailing!,
-                            const SizedBox(width: 10),
-                          ],
-                          if (showClose)
-                            KitCloseButton(
-                              back: back ?? nested,
-                              onTap: onClose,
-                            ),
+                          hairline(gap: 8),
                         ],
-                      ),
-                      hairline(gap: 8),
-                    ],
-                    Expanded(child: child),
-                  ],
+                        Expanded(child: child),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
         ],
       ),
     ),
@@ -852,7 +809,7 @@ class CreamHeading extends StatelessWidget {
       Row(
         children: [
           if (icon != null) ...[
-            PixelIcon(icon, size: 15, color: kBoxAccent),
+            PixelIcon(icon, size: 17, color: kBoxAccent),
             const SizedBox(width: 6),
           ],
           // EXPANDED, not Flexible + Spacer (user 2026-09-28: "das X ist nicht
@@ -865,7 +822,7 @@ class CreamHeading extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w400,
                 letterSpacing: 1.1,
                 color: kBoxAccent,
@@ -948,16 +905,20 @@ class EmptySeat extends StatelessWidget {
                 ),
               ],
             ),
-            child: const PixelIcon(Icons.add, size: 18, color: CreamPalette.ink),
+            child: const PixelIcon(
+              Icons.add,
+              size: 18,
+              color: CreamPalette.ink,
+            ),
           ),
           if (label != null) ...[
             const SizedBox(height: 5),
             Text(
               label!,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w400,
-                color: CreamPalette.tan,
+                color: CreamPalette.accent,
               ),
             ),
           ],

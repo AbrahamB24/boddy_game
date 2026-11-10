@@ -281,7 +281,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
   // Only ever built once [running] is non-empty — see [_layout]. One compact
   // card per trip, side by side; the strip scrolls sideways when there are
   // more trips than fit.
-  static const double _stripHeight = 76;
+  static const double _stripHeight = 92;
 
   Widget _outNowStrip(List<Expedition> running) => SizedBox(
     height: _stripHeight,
@@ -297,7 +297,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
                 'OUT NOW',
                 maxLines: 1,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   letterSpacing: 1.0,
                   color: kBoxAccent,
                 ),

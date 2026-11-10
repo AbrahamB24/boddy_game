@@ -1,3 +1,4 @@
+import '../common/widgets/recess_bar.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
@@ -8,7 +9,6 @@ import 'data/goods_definitions.dart';
 import 'data/resource_icons.dart';
 import 'resource_detail_screen.dart';
 import 'settlement_controller.dart';
-import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/ui/game_text.dart';
 
 /// ALL RESOURCES AT ONE GLANCE — "Epochen-Regale" (user 2026-09-22): one shelf per
@@ -234,7 +234,7 @@ class ResourceTile extends StatelessWidget {
           ),
         ),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
+          padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
           decoration: raisedTile(radius: 10).copyWith(
             border: full
                 ? Border.all(color: CreamPalette.warn, width: 1.6)
@@ -262,28 +262,12 @@ class ResourceTile extends StatelessWidget {
               ),
               if (cap > 0) ...[
                 const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: vr(3),
-                  child: SizedBox(
-                    height: 6,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        ColoredBox(color: kBoxInk.withValues(alpha: 0.16)),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: FractionallySizedBox(
-                            widthFactor: frac,
-                            child: ColoredBox(
-                              color: full
-                                  ? CreamPalette.warn
-                                  : CreamPalette.gold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                RecessBar(
+                  value: frac,
+                  color: full ? CreamPalette.warn : CreamPalette.gold,
+                  height: 6,
+                  onDark: true,
+                  animationDuration: Duration.zero,
                 ),
               ],
             ],

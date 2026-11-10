@@ -159,26 +159,6 @@ String gameIconAsset(String key) => 'assets/images/icons/$key.webp';
 /// anything around it (Transform only affects painting).
 const double kGameIconGrow = 1.4;
 
-/// Colour boost for every picture (user 2026-11-05: "kräftigere Farben"):
-/// saturation x1.45 plus a touch of contrast. 1.0 = untouched sprites.
-const double kGameIconSaturation = 1.45;
-const double kGameIconContrast = 1.08;
-
-List<double> _boostMatrix(double sat, double con) {
-  const r = 0.2126, g = 0.7152, b = 0.0722;
-  final ir = (1 - sat) * r, ig = (1 - sat) * g, ib = (1 - sat) * b;
-  final off = 128 * (1 - con);
-  return <double>[
-    (ir + sat) * con, ig * con, ib * con, 0, off, //
-    ir * con, (ig + sat) * con, ib * con, 0, off, //
-    ir * con, ig * con, (ib + sat) * con, 0, off, //
-    0, 0, 0, 1, 0,
-  ];
-}
-
-final ColorFilter _gameIconBoost =
-    ColorFilter.matrix(_boostMatrix(kGameIconSaturation, kGameIconContrast));
-
 /// A coloured icon by key (e.g. 'coin', 'wood'). Layout box [size] square, the
 /// picture itself painted [grow] times larger around the same centre.
 class GameIcon extends StatelessWidget {
@@ -189,26 +169,38 @@ class GameIcon extends StatelessWidget {
   const GameIcon(this.name,
       {super.key, this.size = 24, this.grow = kGameIconGrow, this.semanticLabel});
 
+  /// What the picture really occupies. The art is 24x24 pixels:
+  ///  * asked for under 20 px (a glyph inside a line of text) it is shrunk
+  ///    smoothly to exactly that, so it never pushes the words around;
+  ///  * otherwise it is drawn at a WHOLE multiple of 24 (24, 48 ...), the only
+  ///    scales at which every pixel is the same width.
+  /// The layout box is always this size, so an icon never overlaps its
+  /// neighbours (it used to be painted bigger than its box).
+  static double boxSize(double size) {
+    if (size < 20) return size;
+    final k = (size / 24).round();
+    return (k < 1 ? 1 : k) * 24.0;
+  }
+
   @override
-  Widget build(BuildContext context) => SizedBox(
-        width: size,
-        height: size,
-        child: Transform.scale(
-          scale: grow,
-          child: ColorFiltered(
-            colorFilter: _gameIconBoost,
-            child: Image.asset(
-              gameIconAsset(name),
-              width: size,
-              height: size,
-              filterQuality: FilterQuality.medium,
-              semanticLabel: semanticLabel,
-              gaplessPlayback: true,
-              errorBuilder: (_, __, ___) => SizedBox(width: size, height: size),
-            ),
-          ),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final box = boxSize(size);
+    final crisp = size >= 20;
+    return SizedBox(
+      width: box,
+      height: box,
+      child: Image.asset(
+        gameIconAsset(name),
+        width: box,
+        height: box,
+        filterQuality: crisp ? FilterQuality.none : FilterQuality.medium,
+        isAntiAlias: !crisp,
+        semanticLabel: semanticLabel,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => SizedBox(width: box, height: box),
+      ),
+    );
+  }
 }
 
 /// Drop-in for [Icon]: our coloured picture where one exists, else the

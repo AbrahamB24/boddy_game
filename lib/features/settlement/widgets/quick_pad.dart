@@ -198,7 +198,7 @@ class _QuickDockState extends State<QuickDock> {
           Positioned.fill(
             child: VoxelCell(
               onTap: () => setState(() => _open = !_open),
-              color: _open ? const Color(0xFFC07A1E) : VoxelHud.plate,
+              color: _open ? const Color(0xFFC07A1E) : null,
               padding: EdgeInsets.zero,
               child: Center(
                 child: PixelIcon(
@@ -319,7 +319,7 @@ class _QuickTile extends StatelessWidget {
                 // is the place you are in, the pixel glyph over its label.
                 child: VoxelCell(
                   onTap: item.onTap,
-                  color: lit ? const Color(0xFFC07A1E) : VoxelHud.plate,
+                  color: lit ? const Color(0xFFC07A1E) : null,
                   padding: const EdgeInsets.fromLTRB(4, 5, 4, 4),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,

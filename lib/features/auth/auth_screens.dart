@@ -41,8 +41,7 @@ class AuthShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: CreamPalette.groundBottom,
-    body: DecoratedBox(
-      decoration: const BoxDecoration(gradient: kMenuGround),
+    body: VoxelGround(
       child: SafeArea(
         child: Center(
           child: SingleChildScrollView(

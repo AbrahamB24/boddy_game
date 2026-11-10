@@ -307,20 +307,23 @@ class UiBar extends StatelessWidget {
 
 /// Walnut colours, sampled from bar.webp / divider.webp.
 abstract final class UiWood {
-  static const Color groundTop = Color(0xFF3E2415);
-  static const Color groundBottom = Color(0xFF22130A);
-  static const Color beamLight = Color(0xFF9A5530);
-  static const Color beam = Color(0xFF7A4023);
-  static const Color beamDark = Color(0xFF4E2713);
-  static const Color well = Color(0xFF2B190D);
-  static const Color wellDeep = Color(0xFF1E1109);
-  static const Color gold = Color(0xFFE2B53E);
-  static const Color goldDeep = Color(0xFF9C7418);
-  static const Color glow = Color(0xFFFFD27A);
+  // 2026-11-09: no longer walnut. Every screen wears the main screen's blue now,
+  // so the pieces that were drawn in wood take the blue family's colours (the
+  // names stay, the screens still ask for them).
+  static const Color groundTop = Color(0xFF1E5266);
+  static const Color groundBottom = Color(0xFF0E2530);
+  static const Color beamLight = Color(0xFF4C8CA6);
+  static const Color beam = Color(0xFF2C6A80);
+  static const Color beamDark = Color(0xFF1B4558);
+  static const Color well = Color(0xFF123848);
+  static const Color wellDeep = Color(0xFF0B2330);
+  static const Color gold = Color(0xFF3FD0D0);
+  static const Color goldDeep = Color(0xFF1C8C8C);
+  static const Color glow = Color(0xFF9CF4F4);
 
-  /// Text on the dark wood.
-  static const Color onWood = Color(0xFFF6EFE0);
-  static final Color onWoodSoft = onWood.withValues(alpha: 0.8);
+  /// Text on the dark plates.
+  static const Color onWood = Color(0xFFEAF4F8);
+  static final Color onWoodSoft = onWood.withValues(alpha: 0.86);
 }
 
 /// A light plaster plaque with a wooden rim and a hard shadow: a shortcut, a

@@ -166,7 +166,7 @@ class FreeSlotCard extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const PixelIcon(Icons.add, size: 24, color: CreamPalette.goldDeep),
+              const PixelIcon(Icons.add, size: 24, color: CreamPalette.goldInk),
               const SizedBox(height: 2),
               Text(
                 label,
@@ -174,7 +174,7 @@ class FreeSlotCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
-                  color: CreamPalette.goldDeep,
+                  color: CreamPalette.goldInk,
                 ),
               ),
             ],
@@ -305,11 +305,11 @@ class SlotTile extends StatelessWidget {
     behavior: HitTestBehavior.opaque,
     onTap: onTap,
     child: Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
       decoration: raisedTile(lit: highlighted),
       child: Column(
         children: [
-          SizedBox(height: 42, child: Center(child: avatar)),
+          SizedBox(height: 40, child: Center(child: avatar)),
           const SizedBox(height: 2),
           Text(
             name,
