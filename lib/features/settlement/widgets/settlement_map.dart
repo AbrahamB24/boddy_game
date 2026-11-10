@@ -31,6 +31,7 @@ import 'building_icon.dart';
 import 'building_life.dart';
 import 'building_occluder.dart';
 import 'day_night.dart';
+import '../../../core/tuning/game_tuning.dart';
 import 'road_walkers.dart';
 import 'terrain_layer.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
@@ -1914,6 +1915,39 @@ class SettlementMapState extends State<SettlementMap>
                           // Day / night: the real clock's moonlight over ground and
                           // buildings, under the build-mode outlines.
                           const DayNightOverlay(),
+                          // Lit windows and lanterns ABOVE the darkness.
+                          _NightLights(
+                            build: () => [
+                              for (final b in widget.ctrl.buildings)
+                                if (!b.isStored && b.isComplete && !b.isPaused)
+                                  if (placedDefOf(b) case final d?)
+                                    if (!d.isRoad && !d.isBuildPlot)
+                                      if (animFor(d.artId, d.gridW, d.gridH)
+                                          case final spec?)
+                                        if (spec.layers.any(
+                                          (l) =>
+                                              l.kind == AnimKind.glow ||
+                                              l.kind == AnimKind.flicker,
+                                        ))
+                                          if (isoBounds(
+                                            b.gridX,
+                                            b.gridY,
+                                            d.gridW,
+                                            d.gridH,
+                                          ) case final iso)
+                                            Positioned(
+                                              left: iso.left,
+                                              top: iso.top,
+                                              width: iso.width,
+                                              height: iso.height,
+                                              child: _NightLightsOf(
+                                                def: d,
+                                                spec: spec,
+                                                seed: b.id.hashCode,
+                                              ),
+                                            ),
+                            ],
+                          ),
                           // ── WHICH TILES ARE TAKEN (user 2026-11-05) ──
                           // The grid under the buildings is hidden by their
                           // sprites, so in build mode the occupied cells are
@@ -2912,7 +2946,7 @@ class SettlementMapState extends State<SettlementMap>
             ? 'Tap an arrow to pull up the next road'
             : laying
             // Reminds the player WHERE, not just how (user 2026-09-06).
-            ? 'Keep going until it reaches the Healing Hut'
+            ? 'Keep going until it reaches the Hospital'
             : 'Tap an arrow to lay the next road',
         ok: true,
         onOk: _endChain,
@@ -3451,6 +3485,95 @@ class _PulsePainter extends CustomPainter {
   @override
   bool shouldRepaint(_PulsePainter old) =>
       old.t != t || old.w != w || old.h != h;
+}
+
+/// The NIGHT LIGHTS (2026-11-09, "die Lichter beim Hospital funktionieren
+/// nicht"): the lit windows and lanterns of every finished, running building
+/// with moving parts, drawn in a pass ABOVE [DayNightOverlay]. Under the
+/// multiply a light can only ever be the night's own cool tone; above it, it is
+/// lamp-orange with a halo. Absent by day.
+class _NightLights extends StatefulWidget {
+  final List<Widget> Function() build;
+  const _NightLights({required this.build});
+
+  @override
+  State<_NightLights> createState() => _NightLightsState();
+}
+
+class _NightLightsState extends State<_NightLights> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+    GameTuning.i.addListener(_changed);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    GameTuning.i.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (nightK() <= 0.02) return const SizedBox.shrink();
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Stack(clipBehavior: Clip.none, children: widget.build()),
+      ),
+    );
+  }
+}
+
+/// One building's light layers, in the same sprite box [_LifeOverlay] uses.
+class _NightLightsOf extends StatelessWidget {
+  final BuildingDef def;
+  final BuildingAnimSpec spec;
+  final int seed;
+
+  const _NightLightsOf({
+    required this.def,
+    required this.spec,
+    required this.seed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final local = isoLocalBounds(def.gridW, def.gridH);
+    final box = artBoxOf(def);
+    final art = artPlacement(
+      local,
+      baseWidth: box.baseWidth,
+      anchorX: box.anchorX,
+      lift: box.lift,
+    );
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: art.left,
+          width: art.width,
+          bottom: local.height - art.bottom,
+          child: AnimatedBuildingArt(
+            defId: def.artId,
+            spec: spec,
+            width: art.width,
+            phaseSeed: seed,
+            lightsOnly: true,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Smoke and lamplight over one building, placed in the SPRITE's box rather

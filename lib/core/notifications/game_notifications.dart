@@ -43,7 +43,7 @@ class GameNotifications {
     NotifyKind.caravan: ('caravans', 'Trade caravans'),
     NotifyKind.breeding: ('breeding', 'Breeding & hatching'),
     NotifyKind.crafting: ('crafting', 'Workshop'),
-    NotifyKind.healing: ('healing', 'Healing Hut'),
+    NotifyKind.healing: ('healing', 'Hospital'),
     NotifyKind.building: ('building', 'Construction'),
     NotifyKind.training: ('training', 'Combat School'),
     NotifyKind.social: ('social', 'PvP & messages'),

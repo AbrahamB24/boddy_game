@@ -959,7 +959,19 @@ class _BattleScreenState extends State<BattleScreen>
             _onEngineChanged();
           }
         });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _entry.forward());
+    // The fighters walk on only once their sheets are decoded (capped at 2.5 s
+    // so a slow phone never hangs here): otherwise they slid in as empty boxes
+    // and popped in mid-walk. Mostly instant - the player's own monsters were
+    // decoded behind the loading screen, only the enemy's may still be cold.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await Future.wait([
+          for (final c in {..._engine.players, ..._engine.enemies})
+            precacheBattleSheets(c.speciesId, c.stage),
+        ]).timeout(const Duration(milliseconds: 2500));
+      } catch (_) {}
+      if (mounted) _entry.forward();
+    });
     _idle = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1900),
@@ -5791,7 +5803,7 @@ class _BattleScreenState extends State<BattleScreen>
             style: const TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w400,
-              color: CreamPalette.goldDeep,
+              color: CreamPalette.goldInk,
             ),
           ),
         ],

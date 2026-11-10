@@ -65,23 +65,22 @@ class MonsterSheetSet {
 abstract final class MonsterSheets {
   static const String _t = 'assets/images/monsters/tidelord';
 
+  // Every 560 x 448 battle sheet decodes at HALF size (user 2026-11-09: slow on
+  // phones). A full 16-frame sheet is 4480 x 896 = 16 MB of texture; at 0.5 it
+  // is 4 MB, decodes ~4x faster, and is still sharp at the ~200 px it is shown.
+  static const double _battleDecode = 0.5;
+
   static const MonsterSheetSet _tidelordFront = MonsterSheetSet(
     frameW: 560,
     frameH: 448,
-    anims: {
-      'idle': SheetAnim('$_t/front_idle.webp', 16, 12),
-      'attack': SheetAnim('$_t/front_attack.webp', 14, 16, loop: false),
-      'hurt': SheetAnim('$_t/front_hurt.webp', 10, 14, loop: false),
-    },
+    decodeScale: _battleDecode,
+    anims: {'idle': SheetAnim('$_t/front_idle.webp', 16, 12)},
   );
   static const MonsterSheetSet _tidelordBack = MonsterSheetSet(
     frameW: 560,
     frameH: 448,
-    anims: {
-      'idle': SheetAnim('$_t/back_idle.webp', 16, 12),
-      'attack': SheetAnim('$_t/back_attack.webp', 14, 16, loop: false),
-      'hurt': SheetAnim('$_t/back_hurt.webp', 10, 14, loop: false),
-    },
+    decodeScale: _battleDecode,
+    anims: {'idle': SheetAnim('$_t/back_idle.webp', 16, 12)},
   );
 
   /// Evolutions: Oceanking (stage 1) and Abyssal Titan (stage 2). Same sheet
@@ -92,12 +91,9 @@ abstract final class MonsterSheets {
     return MonsterSheetSet(
       frameW: 560,
       frameH: 448,
+      decodeScale: _battleDecode,
       scale: scale,
-      anims: {
-        'idle': SheetAnim('$d/${v}_idle.webp', 16, 12),
-        'attack': SheetAnim('$d/${v}_attack.webp', 14, 16, loop: false),
-        'hurt': SheetAnim('$d/${v}_hurt.webp', 10, 14, loop: false),
-      },
+      anims: {'idle': SheetAnim('$d/${v}_idle.webp', 16, 12)},
     );
   }
 
@@ -105,51 +101,6 @@ abstract final class MonsterSheets {
   static final MonsterSheetSet _oceankingBack = _evo(1, true, 1.2);
   static final MonsterSheetSet _titanFront = _evo(2, false, 1.4);
   static final MonsterSheetSet _titanBack = _evo(2, true, 1.4);
-
-  /// The SIDE-VIEW battle sheets (user 2026-11-04: my monsters stand at the left
-  /// of the field, the enemy's at the right, facing each other). Baked per side
-  /// - sidel faces right, sider faces left - rather than mirrored, so the sun
-  /// stays upper-left on both.
-  static MonsterSheetSet _side(int stage, bool mine, double scale) {
-    final d = stage == 0 ? _t : '${_t}_s$stage';
-    final v = mine ? 'sidel' : 'sider';
-    return MonsterSheetSet(
-      frameW: 560,
-      frameH: 448,
-      scale: scale,
-      anims: {
-        'idle': SheetAnim('$d/${v}_idle.webp', 16, 12),
-        'attack': SheetAnim('$d/${v}_attack.webp', 14, 16, loop: false),
-        'hurt': SheetAnim('$d/${v}_hurt.webp', 10, 14, loop: false),
-      },
-    );
-  }
-
-  static final List<MonsterSheetSet> _sideMine = [
-    _side(0, true, 1.0),
-    _side(1, true, 1.2),
-    _side(2, true, 1.4),
-  ];
-  static final List<MonsterSheetSet> _sideTheirs = [
-    _side(0, false, 1.0),
-    _side(1, false, 1.2),
-    _side(2, false, 1.4),
-  ];
-
-  /// Battle art for the side-view field: [mine] stands at the left facing right,
-  /// the enemy at the right facing left. Null when the creature has none.
-  static MonsterSheetSet? battleSide(
-    String? speciesId,
-    int stage, {
-    required bool mine,
-  }) {
-    if (stage < 0 || stage > 2) return null;
-    if (speciesId == 'glimmergnaw') {
-      return (mine ? _ggSideMine : _ggSideTheirs)[stage];
-    }
-    if (speciesId != 'tidelord') return null;
-    return (mine ? _sideMine : _sideTheirs)[stage];
-  }
 
   static final Map<String, MonsterSheetSet> _isoCache = {};
   static const List<double> _isoScale = [1.0, 1.2, 1.4];
@@ -179,9 +130,9 @@ abstract final class MonsterSheets {
       return MonsterSheetSet(
         frameW: base.frameW,
         frameH: base.frameH,
-        // Drawn ~200 px tall on a phone: 0.6 of the 435 px cells is sharp
-        // enough and holds a third less texture than the full sheets.
-        decodeScale: 0.6,
+        // Same 0.5 as the map walkers: the arena draws the very same files, so
+        // map and battle share ONE decoded texture per sheet, not two.
+        decodeScale: 0.5,
         scale: _isoScale[stage],
         footX: mine ? 0.55 : 0.50,
         footY: 0.75,
@@ -202,12 +153,9 @@ abstract final class MonsterSheets {
     return MonsterSheetSet(
       frameW: 560,
       frameH: 448,
+      decodeScale: _battleDecode,
       scale: _ggBattleScale[stage],
-      anims: {
-        'idle': SheetAnim('$d/${v}_idle.webp', 16, 12),
-        'attack': SheetAnim('$d/${v}_attack.webp', 14, 16, loop: false),
-        'hurt': SheetAnim('$d/${v}_hurt.webp', 10, 14, loop: false),
-      },
+      anims: {'idle': SheetAnim('$d/${v}_idle.webp', 16, 12)},
     );
   }
 
@@ -216,12 +164,6 @@ abstract final class MonsterSheets {
   ];
   static final List<MonsterSheetSet> _ggBack = [
     for (var s = 0; s < 3; s++) _ggView(s, 'back'),
-  ];
-  static final List<MonsterSheetSet> _ggSideMine = [
-    for (var s = 0; s < 3; s++) _ggView(s, 'sidel'),
-  ];
-  static final List<MonsterSheetSet> _ggSideTheirs = [
-    for (var s = 0; s < 3; s++) _ggView(s, 'sider'),
   ];
 
   static Map<String, MonsterSheetSet> _ggWalkSets(int stage) {
@@ -394,35 +336,66 @@ Future<void> precacheMonsterWalkSheets(String speciesId, int stage) =>
             ),
     ]).then<void>((_) {});
 
-/// Decodes every BATTLE sheet up front (user 2026-11-03: "alle Assets beim
-/// Ladescreen vorladen"). Lists, cards and battles all draw from these, and a
-/// sheet decoded on demand left the first attack or hit of a fight playing
-/// against the previous animation's picture until its own one arrived. The
-/// map-walking sheets are not loaded: nothing on the map walks yet (see
-/// [MonsterSheets.map]). Never throws.
-Future<void> precacheMonsterSheets() => Future.wait([
-  for (final set in [
-    MonsterSheets._tidelordFront,
-    MonsterSheets._tidelordBack,
-    ...MonsterSheets._ggFront,
-    ...MonsterSheets._ggBack,
-  ])
-    for (final anim in set.anims.values)
-      _loadSheet(anim.asset).then<void>((_) {}, onError: (Object _) {
-        _sheetImages.remove(anim.asset);
-      }),
-  // The isometric arena's sheets, decoded at their own (reduced) width.
-  for (final species in const ['tidelord', 'glimmergnaw'])
-    for (var stage = 0; stage < 3; stage++)
+/// Decodes the art of the given creatures up front (user 2026-11-03: "alle
+/// Assets beim Ladescreen vorladen"). Never throws.
+///
+/// REWORKED 2026-11-09 (user: "läuft auf dem Handy ziemlich schlecht"): this
+/// used to decode EVERY species at EVERY stage, front and back, all three
+/// animations, at full size - hundreds of MB of textures, on the loading
+/// screen. Now it takes only the creatures asked for ([creatures]: species id
+/// + stage), loads the resting pose lists/cards draw, plus the map walkers'
+/// and the arena's sheets, all at the reduced decode width. Attack/hurt of the
+/// old side-view art load on demand.
+Future<void> precacheMonsterSheets(
+  Iterable<({String speciesId, int stage})> creatures,
+) {
+  final seen = <String>{};
+  final jobs = <Future<void>>[];
+  final background = <({String speciesId, int stage})>[];
+  for (final c in creatures) {
+    if (!seen.add('${c.speciesId}#${c.stage}')) continue;
+    for (final back in const [false, true]) {
+      final set = MonsterSheets.battle(c.speciesId, c.stage, back: back);
+      final idle = set?.anims['idle'];
+      if (set != null && idle != null) {
+        jobs.add(
+          _loadSheet(idle.asset, width: _decodeWidthOf(set)).then<void>(
+            (_) {},
+            onError: (Object _) {},
+          ),
+        );
+      }
+    }
+    // Walkers and arena sheets are the bulk (~15 MB per species/stage): they
+    // load in the BACKGROUND, one after the other, and are not waited for - the
+    // loading screen only blocks on the resting poses above. The battle screen
+    // waits for its own combatants' sheets anyway.
+    background.add(c);
+  }
+  () async {
+    for (final c in background) {
+      await precacheMonsterWalkSheets(c.speciesId, c.stage);
+      await precacheBattleSheets(c.speciesId, c.stage);
+    }
+  }();
+  return Future.wait(jobs).then<void>((_) {});
+}
+
+/// The isometric arena's sheets (idle + walk, both sides) for one creature -
+/// what a fight draws. Shares its textures with the map walkers. The battle
+/// screen calls this for every combatant before the fighters walk on. Never
+/// throws.
+Future<void> precacheBattleSheets(String? speciesId, int stage) =>
+    Future.wait([
       for (final mine in const [true, false])
-        if (MonsterSheets.battleIso(species, stage, mine: mine)
+        if (MonsterSheets.battleIso(speciesId, stage, mine: mine)
             case final set?)
-          for (final anim in set.anims.values)
+          for (final anim in {set.anims['idle']!, set.anims['walk']!})
             _loadSheet(anim.asset, width: _decodeWidthOf(set)).then<void>(
               (_) {},
               onError: (Object _) {},
             ),
-]);
+    ]).then<void>((_) {});
 
 /// Plays one named animation of a [MonsterSheetSet].
 ///

@@ -1103,7 +1103,7 @@ class CreaturesController extends ChangeNotifier {
       if (cap != null) {
         final freeSlots = cap - healingCreatures.length;
         if (freeSlots <= 0) {
-          return 'The Healing Hut is full — wait for a treatment to finish.';
+          return 'The Hospital is full — wait for a treatment to finish.';
         }
         if (hurt.length > freeSlots) {
           hurt = (List.of(hurt)..sort(_healPriority)).take(freeSlots).toList();
@@ -1155,7 +1155,7 @@ class CreaturesController extends ChangeNotifier {
             key: c.id,
             at: c.healingUntil!,
             title: '🩺 Patched up',
-            body: '${c.displayName} is out of the Healing Hut.',
+            body: '${c.displayName} is out of the Hospital.',
           ),
         );
       }

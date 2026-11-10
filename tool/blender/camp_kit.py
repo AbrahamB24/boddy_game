@@ -29,10 +29,10 @@ def mats():
     M['bark'] = tex_mat('bark', 'dark_wood', 0.6, tint=(0.8, 0.6, 0.45), val=0.75)
     M['log_end'] = plain('log_end', '#dcb47c', rough=0.9, bump=0.3, bump_scale=80,
                          vary=0.15)
-    M['pine'] = plain('pine', '#2f6b3a', rough=0.8, bump=0.5, bump_scale=60,
-                      vary=0.15, speck='#3f8045')
-    M['pine2'] = plain('pine2', '#3d7a34', rough=0.8, bump=0.5, bump_scale=60,
-                       vary=0.15, speck='#58923f')
+    M['pine'] = plain('pine', '#2a8c3a', rough=0.8, bump=0.5, bump_scale=60,
+                      vary=0.15, speck='#3aa24a')
+    M['pine2'] = plain('pine2', '#46a838', rough=0.8, bump=0.5, bump_scale=60,
+                       vary=0.15, speck='#62bd44')
     M['rock'] = plain('rock', '#6f6c66', rough=0.85, bump=0.7, bump_scale=30,
                       vary=0.12, speck='#6f6b64')
     M['rock_cut'] = plain('rock_cut', '#d9cdb5', rough=0.8, bump=0.45,
@@ -395,7 +395,7 @@ def hut(M, x0, x1, y0, y1, eave, axis='y', door=None, wins=(), roof='roof', sign
     if door:
         holes[door[0]].append((door[1], DIM['door'][0]))
     for f, a, *_ in wins:
-        holes[f].append((a, DIM['window'][0]))
+        holes[f].append((a, F.window_w(DIM['window'][0])))
     for f, (fx, a0, a1) in faces.items():
         nb = max(2, round((a1 - a0) / 0.3))
         F.wall_frame(M, f, fx, a0, a1, zpl, eave, nb, braces=(0, nb - 1), holes=holes[f])

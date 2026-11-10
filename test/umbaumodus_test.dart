@@ -193,7 +193,7 @@ void main() {
     });
     tearDown(() => ctrl.buildings = []);
 
-    // Inside the starting plot (kInitialPlotX/Y 20,10, size 20) — buildable
+    // Inside the starting plot (kInitialPlotX/Y 20,10, size 24) — buildable
     // unconditionally, so isPlacementValid's answer here is ONLY about
     // occupancy, the thing isStored is supposed to change.
     test('isAreaFree ignores a stored building sitting right there', () {

@@ -230,6 +230,144 @@ def _cell_turned(W, H, cell, r):
     return (int(math.floor(x + w / 2)), int(math.floor(-y + h / 2)))
 
 
+def check_overlaps(bid, depth=0.04):
+    """Report every part that PIERCES a roof slab (user 2026-11-09: 'keine
+    Stuecke, die das Dach durchstossen'). Runs on the smooth model, before
+    voxelising. A roof piece is any mesh whose material name starts with
+    'roof' or 'shingle'. A vertex of another part counts when it lies more than
+    `depth` INSIDE a slab - judged by the nearest surface point's outward
+    normal - so timber that merely sits on or touches a roof is not reported.
+    Chimneys are meant to pass through a roof: they are listed, but as such."""
+    from mathutils import Vector
+    dg = bpy.context.evaluated_depsgraph_get()
+
+    def is_roof(o):
+        return any(s.material and s.material.name.startswith(('roof', 'shingle'))
+                   for s in o.material_slots)
+
+    meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+    roofs = [o for o in meshes if is_roof(o) and max(o.dimensions) > 0.3]
+    trees = []
+    for r in roofs:
+        bb = [r.matrix_world @ Vector(c) for c in r.bound_box]
+        lo = Vector((min(b[i] for b in bb) for i in range(3)))
+        hi = Vector((max(b[i] for b in bb) for i in range(3)))
+        trees.append((r, BVHTree.FromObject(r, dg), lo, hi, r.matrix_world.inverted()))
+    hits = {}
+    for o in meshes:
+        if is_roof(o) or o.name.startswith('maptree'):
+            continue
+        ev = o.evaluated_get(dg)
+        me = ev.to_mesh()
+        mw = o.matrix_world
+        pts = [mw @ v.co for v in me.vertices]
+        for e in me.edges:                      # a post pierces a slab with its middle, not its ends
+            a, b = me.vertices[e.vertices[0]].co, me.vertices[e.vertices[1]].co
+            pts += [mw @ a.lerp(b, k / 8) for k in range(1, 8)]
+        ev.to_mesh_clear()
+        for r, t, lo, hi, inv in trees:
+            n, worst, where = 0, 0.0, None
+            for p in pts:
+                if not all(lo[i] - 0.02 <= p[i] <= hi[i] + 0.02 for i in range(3)):
+                    continue
+                lp = inv @ p                    # the BVH lives in the roof's LOCAL space
+                loc, nrm, idx, dist = t.find_nearest(lp)
+                if loc is not None and (lp - loc).dot(nrm) < 0 and dist > depth:
+                    n += 1
+                    if dist > worst:
+                        worst, where = dist, p
+            if n:
+                hits.setdefault(o.name, (n, worst, where, r.name))
+    print(f'OVERLAPS {bid}: {len(hits)} parts pierce a roof')
+    for name, (n, worst, p, rn) in sorted(hits.items(), key=lambda kv: -kv[1][1]):
+        print('  OVERLAP %-10s at x=%.2f y=%.2f z=%.2f  %d vertices, deepest %.3f, in %s'
+              % (name, p.x, p.y, p.z, n, worst, rn))
+
+
+def _tile_grid(W, H, lw=0.025, z=0.03):
+    """The footprint's tile lines as thin flat strips (the base is W x H tiles
+    centred on the origin), so the review sheet shows where the tiles are
+    (user 2026-11-09). Only the sheet calls this."""
+    verts, faces = [], []
+
+    def strip(x0, y0, x1, y1):
+        i = len(verts)
+        verts.extend([(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)])
+        faces.append((i, i + 1, i + 2, i + 3))
+
+    for k in range(W + 1):
+        x = -W / 2 + k
+        strip(x - lw, -H / 2 - lw, x + lw, H / 2 + lw)
+    for k in range(H + 1):
+        y = -H / 2 + k
+        strip(-W / 2 - lw, y - lw, W / 2 + lw, y + lw)
+    me = bpy.data.meshes.new('tile_grid')
+    me.from_pydata(verts, [], faces)
+    ob = bpy.data.objects.new('tile_grid', me)
+    bpy.context.scene.collection.objects.link(ob)
+    mt = bpy.data.materials.new('tile_grid')
+    mt.diffuse_color = (1.0, 1.0, 1.0, 1.0)
+    mt.use_nodes = True
+    bsdf = mt.node_tree.nodes.get('Principled BSDF')
+    if bsdf:
+        bsdf.inputs['Base Color'].default_value = (1.0, 1.0, 1.0, 1.0)
+        bsdf.inputs['Roughness'].default_value = 1.0
+    me.materials.append(mt)
+    return ob
+
+
+def sheet(mod, headroom, samples, bid):
+    """The four quarter turns of the building, side by side, for the user's
+    review BEFORE the full render (user 2026-11-09)."""
+    import numpy as np
+    out_dir = os.path.join(ROOT, 'docs', 'renders', 'review')
+    os.makedirs(out_dir, exist_ok=True)
+    scale = 3
+    paths = []
+    grid = _tile_grid(mod.W, mod.H)             # review only: the real renders never get it
+    for r in range(4):
+        az = 90.0 * r
+        for o in list(bpy.data.objects):
+            if o.type == 'CAMERA' or (o.type == 'LIGHT' and o.data.type == 'SUN'):
+                bpy.data.objects.remove(o)
+        K.lighting(azimuth=az)
+        rb.frame(mod.W, mod.H, scale, headroom, az)
+        p = os.path.join(out_dir, f'_{bid}_v{r}.png')
+        K.render(p)
+        paths.append(p)
+    imgs = []
+    for p in paths:
+        im = bpy.data.images.load(p)
+        w, h = im.size
+        a = np.empty(w * h * 4, np.float32)
+        im.pixels.foreach_get(a)
+        imgs.append(a.reshape(h, w, 4))
+        bpy.data.images.remove(im)
+    # the four views differ by a few pixels (the frame re-solves per turn):
+    # centre each in a common cell
+    h = max(a.shape[0] for a in imgs)
+    w = max(a.shape[1] for a in imgs)
+    canvas = np.zeros((2 * h, 2 * w, 4), np.float32)
+    canvas[:, :] = (0.45, 0.70, 0.25, 1.0)          # a grass green
+    for i, a in enumerate(imgs):
+        row, col = divmod(i, 2)
+        ih, iw = a.shape[:2]
+        y0 = (1 - row) * h + (h - ih) // 2          # row 0 on top (bottom-up image)
+        x0 = col * w + (w - iw) // 2
+        tile = canvas[y0:y0 + ih, x0:x0 + iw]
+        al = a[:, :, 3:4]
+        tile[:, :, :3] = a[:, :, :3] * al + tile[:, :, :3] * (1 - al)
+    res = bpy.data.images.new('sheet', 2 * w, 2 * h, alpha=True)
+    res.pixels.foreach_set(canvas.ravel())
+    res.filepath_raw = os.path.join(out_dir, f'{bid}_4views.png')
+    res.file_format = 'PNG'
+    res.save()
+    bpy.data.objects.remove(grid)
+    for p in paths:
+        os.remove(p)
+    print('SHEET', res.filepath_raw)
+
+
 def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     ap = argparse.ArgumentParser()
@@ -241,6 +379,11 @@ def main():
     ap.add_argument('--remesh', action='store_true',
                     help='old Remesh voxeliser, for comparison')
     ap.add_argument('--turns', help='only these quarter turns, e.g. 2,3 (to finish an interrupted run)')
+    ap.add_argument('--overlaps', action='store_true',
+                    help='list the parts that touch a roof, then stop')
+    ap.add_argument('--sheet', action='store_true',
+                    help='review sheet: all four quarter turns in one 2x2 PNG '
+                         '(docs/renders/review/<id>_4views.png), touches nothing else')
     ap.add_argument('--anchors-only', action='store_true',
                     help='build + voxelise + frame, write the art box and the '
                          'chimney anchor, render nothing')
@@ -252,6 +395,9 @@ def main():
     fw_kit.reset_anims()
     mod.build()
     lower_to_yard()
+    if args.overlaps:
+        check_overlaps(args.id)
+        return
     groups = {}
     if args.remesh:
         voxelize_remesh(args.id)
@@ -282,6 +428,9 @@ def main():
     chim = getattr(mod, 'CHIMNEY', None)
     anchor = chimney_anchor(chim) if chim else None
 
+    if args.sheet:
+        sheet(mod, headroom, args.samples, args.id)
+        return
     if args.preview or args.out:
         out = args.out or os.path.join(HERE, '_out', f'{args.id}_preview.png')
         K.render(out)

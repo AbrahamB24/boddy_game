@@ -689,6 +689,12 @@ const kGridCols = 200;
 const kGridRows = 120;
 const kCellSize = 12.0;
 
+// 24x24 since 2026-11-09 (was 20x20): the Hospital grew to 7x6 and the tutorial
+// stacks road + Hospital off the Castle (10x10), which needs 1 + 6 = 7 free
+// cells per side. The plot grew from the SAME top-left corner (20,10): growing around
+// the old one would have run into the western coast (water_cells). New accounts
+// get the Castle at (27,17); existing ones keep theirs.
+//
 // Starting buildable territory: a zone centred on the map, containing the
 // Castle. 20×20 (user request 2026-07-17: "mache das Anfangsgebiet
 // 4x so gross" — 4× the former 10×10 area): the era-I roster now fits
@@ -698,7 +704,7 @@ const kCellSize = 12.0;
 // isBuildPlot / touchesBuildableRegion) stays meaningful content.
 const kInitialPlotX = 20;
 const kInitialPlotY = 10;
-const kInitialPlotSize = 20;
+const kInitialPlotSize = 24;
 
 /// Top-left cell of the auto-placed Castle — centred in the starting
 /// plot, derived from the hall's OWN footprint.
@@ -732,9 +738,10 @@ BuildingDef get _healingHutDef =>
 // the Castle on screen, since +y runs further from the viewer than the
 // Castle's own near corner; see iso_grid.dart's projection comment).
 //
-// SOUTH, not east: the Castle is 10×10 inside a 20×20 starting plot, so it
-// clears only (20-10)/2 = 5 cells on every side — enough room for the
-// Healing Hut's 4-tall footprint plus the road's own cell (5 exactly) only
+// SOUTH, not east: the Castle is 10×10 inside a 24×24 starting plot (20×20 until
+// 2026-11-09, when the 7×6 Hospital needed 1 + 6 = 7 cells of clearance), so it
+// clears (24-10)/2 = 7 cells on every side — enough room for the
+// Hospital's 6-tall footprint plus the road's own cell (7 exactly) only
 // on the sides that measure the Castle's SHORT way. East measures the
 // Castle's own width, so "one road cell, then the hut" put the hut's far
 // edge one cell past the plot's own boundary — unbuildable ground the
@@ -2012,16 +2019,17 @@ List<BuildingDef> _buildRoster() {
       defs.add(
         BuildingDef(
           id: 'healing_hut',
-          name: 'Healing Hut',
+          name: 'Hospital',
           color: const Color(0xFF4FAE6B),
-          // 5x4, not 4x4 (user 2026-08-23: first "nur 4x4", then "müsste wohl
+          // 7x6 since 2026-11-09 (the Hospital, docs/building_gold_standard.md).
+          // History: 5x4, not 4x4 (user 2026-08-23: first "nur 4x4", then "müsste wohl
           // 5 (x) und 4 (y) sein"). The hand-authored plan is still the 6x5 it
           // grew to (4x4→5x4→6x5, see prior history in git blame) — it now
           // gets scaled onto this smaller tile instead of redrawn, matching
           // the castle's own plan-scaling trick (tool/blender/render_building.py
           // HEALING_HUT_PLAN_W/H).
-          gridW: 5,
-          gridH: 4,
+          gridW: 7,
+          gridH: 6,
           resourceCost: _rosterCost(1, 0.6),
           constructionHours: _eraBuildHours(120, 1),
           eraIds: const ['era_1'],
@@ -2438,10 +2446,10 @@ const Map<String, (double, double)> kChimneyAnchor = {
   'breeding_hut_r1': (0.756, 0.589),
   'breeding_hut_r2': (0.511, 0.696),
   'breeding_hut_r3': (0.244, 0.598),
-  'healing_hut': (0.511, 0.503),
-  'healing_hut_r1': (0.803, 0.628),
-  'healing_hut_r2': (0.489, 0.745),
-  'healing_hut_r3': (0.197, 0.619),
+  'healing_hut': (0.460, 0.523),
+  'healing_hut_r1': (0.771, 0.597),
+  'healing_hut_r2': (0.540, 0.733),
+  'healing_hut_r3': (0.229, 0.627),
 };
 
 const Map<String, int> kBuildingUnlockBattle = {

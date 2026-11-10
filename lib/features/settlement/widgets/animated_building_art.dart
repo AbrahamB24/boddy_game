@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../data/building_model.dart';
+import 'day_night.dart';
 import 'building_icon.dart';
 import 'building_life.dart';
 
@@ -34,12 +35,18 @@ class AnimatedBuildingArt extends StatefulWidget {
   /// Distinct per placed building, so a row of houses never sways in step.
   final int phaseSeed;
 
+  /// The NIGHT-LIGHT pass: draws only the light layers (windows, lanterns)
+  /// and only at night, with a halo. The map stacks it ABOVE the night
+  /// multiply so lights shine instead of being darkened with everything else.
+  final bool lightsOnly;
+
   const AnimatedBuildingArt({
     super.key,
     required this.defId,
     required this.spec,
     required this.width,
     required this.phaseSeed,
+    this.lightsOnly = false,
   });
 
   /// The base picture's provider, at the same decode width the widget uses —
@@ -141,6 +148,7 @@ class _AnimatedBuildingArtState extends State<AnimatedBuildingArt> {
             atlas: _atlas,
             spec: widget.spec,
             seed: widget.phaseSeed,
+            lightsOnly: widget.lightsOnly,
           ),
         ),
       ),
@@ -154,6 +162,7 @@ class _AnimPainter extends CustomPainter {
   final ui.Image? atlas;
   final BuildingAnimSpec spec;
   final int seed;
+  final bool lightsOnly;
 
   _AnimPainter({
     required this.clock,
@@ -161,6 +170,7 @@ class _AnimPainter extends CustomPainter {
     required this.atlas,
     required this.spec,
     required this.seed,
+    this.lightsOnly = false,
   }) : super(repaint: clock);
 
   static final Paint _img = Paint()..filterQuality = FilterQuality.medium;
@@ -168,8 +178,98 @@ class _AnimPainter extends CustomPainter {
     ..filterQuality = FilterQuality.medium
     ..blendMode = BlendMode.plus;
 
+  // ── Night lights (lightsOnly) ──
+  // Lights are drawn in a pass ABOVE the night multiply, so they are not
+  // darkened with the rest of the map and keep their warm colour. Any light
+  // layer's brightness becomes lamp-orange (rgb is the sum of the source's
+  // channels), and a blurred second draw gives a halo.
+  static final ColorFilter _warm = ColorFilter.matrix(<double>[
+    0.45, 0.45, 0.45, 0, 0, //
+    0.26, 0.26, 0.26, 0, 0, //
+    0.08, 0.08, 0.08, 0, 0, //
+    0, 0, 0, 1, 0, //
+  ]);
+  static final ColorFilter _haloGain = ColorFilter.matrix(<double>[
+    1, 0, 0, 0, 0, //
+    0, 1, 0, 0, 0, //
+    0, 0, 1, 0, 0, //
+    0, 0, 0, 4, 0, //
+  ]);
+  static final Paint _haloLayer = Paint()
+    ..blendMode = BlendMode.plus
+    ..colorFilter = _haloGain;
+  static final Paint _haloDraw = Paint()
+    ..filterQuality = FilterQuality.medium
+    ..colorFilter = _warm;
+  static double _haloSigma = -1;
+  final List<(Rect, Rect, double)> _halo = [];
+
+  void _lit(Canvas canvas, ui.Image a, Rect src, Rect dst, double alpha) {
+    _light.color = Color.fromRGBO(255, 255, 255, alpha.clamp(0.0, 1.0));
+    canvas.drawImageRect(a, src, dst, _light);
+    _halo.add((src, dst, alpha));
+  }
+
+  void _paintHalo(Canvas canvas, ui.Image a, double w) {
+    if (_halo.isEmpty) return;
+    var bounds = _halo.first.$2;
+    for (final h in _halo) {
+      bounds = bounds.expandToInclude(h.$2);
+    }
+    final sigma = (w * 0.012).clamp(1.5, 14.0);
+    if ((sigma - _haloSigma).abs() > 0.01) {
+      _haloSigma = sigma;
+      _haloLayer.imageFilter = ui.ImageFilter.blur(
+        sigmaX: sigma,
+        sigmaY: sigma,
+        tileMode: TileMode.decal,
+      );
+    }
+    canvas.saveLayer(bounds.inflate(sigma * 3), _haloLayer);
+    for (final h in _halo) {
+      _haloDraw.color = Color.fromRGBO(
+        255, 255, 255, h.$3.clamp(0.0, 1.0));
+      canvas.drawImageRect(a, h.$1, h.$2, _haloDraw);
+    }
+    canvas.restore();
+    _halo.clear();
+  }
+
+  void _paintLights(Canvas canvas, Size size, double night) {
+    final a = atlas;
+    if (a == null) return;
+    final w = size.width, h = size.height;
+    final tb = clock.seconds + (seed % 997) * 0.37;
+    _light.colorFilter = _warm;
+    for (final L in spec.layers) {
+      if (L.kind != AnimKind.glow && L.kind != AnimKind.flicker) continue;
+      final src = Rect.fromLTWH(L.sx, L.sy, L.sw, L.sh);
+      final dst = Rect.fromLTWH(L.l * w, L.t * h, L.w * w, L.h * h);
+      final wave = 2 * math.pi * tb / L.period + L.phase;
+      final double k;
+      if (L.kind == AnimKind.glow) {
+        k = 0.5 + 0.5 * math.sin(wave);
+      } else {
+        final n =
+            math.sin(tb * 7.3 + L.phase) * 0.45 +
+            math.sin(tb * 12.9 + L.phase * 2) * 0.35 +
+            math.sin(tb * 3.1 + L.phase * 3) * 0.2;
+        k = (0.55 + 0.45 * n).clamp(0.0, 1.0);
+      }
+      // A steady lit window with a slight breath, a lantern with a flicker.
+      _lit(canvas, a, src, dst, (0.7 + 0.3 * k) * night);
+    }
+    _light.colorFilter = null;
+    _paintHalo(canvas, a, w);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
+    if (lightsOnly) {
+      final night = nightK();
+      if (night > 0.02) _paintLights(canvas, size, night);
+      return;
+    }
     final w = size.width, h = size.height;
     canvas.drawImageRect(
       base,
@@ -229,5 +329,5 @@ class _AnimPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_AnimPainter old) =>
-      old.base != base || old.atlas != atlas || old.spec != spec;
+      old.base != base || old.atlas != atlas || old.spec != spec || old.lightsOnly != lightsOnly;
 }

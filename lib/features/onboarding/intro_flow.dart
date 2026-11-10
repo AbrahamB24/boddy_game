@@ -155,7 +155,7 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     // (building_detail_dialog's gold-rush action) still works, just
     // undocumented here now, by the same request.
     body:
-        'Injured monsters can be treated at the Healing Hut. Build one '
+        'Injured monsters can be treated at the Hospital. Build one '
         'now.',
     // No CTA of its own (user 2026-09-06, same reasoning as firstNode) —
     // the bottom build carousel itself is the lit target now (2026-09-18:
@@ -186,7 +186,7 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     // darin arbeiten und sonst nicht funktionieren").
     body:
         'Most buildings only work once a monster is stationed inside — '
-        'without one, they sit idle. Open the Healing Hut and post a '
+        'without one, they sit idle. Open the Hospital and post a '
         'monster to its medicine role.',
     // No CTA of its own (user 2026-09-06, same reasoning as buildHealingHut):
     // the Healing Hut ON THE MAP is the lit target instead — see
@@ -205,9 +205,9 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
     // the Healing Hut's own construction did, with the same gold pill to
     // skip the wait.
     body:
-        'The hut is ready. Healing always consumes resources, scaled to '
+        'The Hospital is ready. Healing always consumes resources, scaled to '
         'the missing HP — a K.O. costs double. It takes real time to '
-        'finish — gold can speed it up, same as the hut itself did.',
+        'finish — gold can speed it up, same as the Hospital itself did.',
     ctaLabel: '🌿 Heal it now',
     destination: IntroDestination.healingHut,
   ),

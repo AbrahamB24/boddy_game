@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart' hide Text;
 import '../../../core/theme/foe_theme.dart';
 
-import '../models/creature_enums.dart';
+import '../models/creature_enums.dart';
 import '../../../core/theme/voxel_icons.dart';
 import '../../../core/ui/game_text.dart';
 
@@ -84,7 +84,11 @@ class CreatureBackdrop extends StatelessWidget {
                     : null,
                 top: watermarkTop ? -s * 0.15 : null,
                 bottom: watermarkTop ? null : -s * 0.06,
-                child: Opacity(opacity: 0.36, child: _embossedSymbol(s)),
+                // Its own layer: three filtered emoji passes, rastered once
+                // instead of with every frame a monster on top animates.
+                child: RepaintBoundary(
+                  child: Opacity(opacity: 0.36, child: _embossedSymbol(s)),
+                ),
               ),
               Padding(padding: padding, child: child),
             ],

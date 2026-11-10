@@ -7,9 +7,9 @@ import 'package:boddygame/features/creatures/services/overworld_path.dart';
 // battleRewardsFor lists what CLEARING a battle unlocks — previewed before the
 // fight and celebrated after it.
 void main() {
-  test('the first battle unlocks the Healing Hut, no party line', () {
+  test('the first battle unlocks the Hospital, no party line', () {
     final r = battleRewardsFor(1);
-    expect(r.any((l) => l.text.contains('Healing')), isTrue);
+    expect(r.any((l) => l.text.contains('Hospital')), isTrue);
     // Party doesn't grow at battle 1 (it's the opener).
     expect(r.any((l) => l.emoji == '👥'), isFalse);
   });

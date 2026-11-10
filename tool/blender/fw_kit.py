@@ -69,24 +69,26 @@ TP = math.tan(math.radians(PITCH))
 def base_materials():
     """The shared palette. Building scripts add their own keys to the dict."""
     M = {}
+    # CHEERIER + MORE SATURATED (user 2026-11-09): the Hospital's 'vivid' set
+    # is now the shared palette for every building.
     M['plaster'] = tex_mat('plaster', 'white_plaster_rough_01', 1.0,
-                           tint=(1.0, 0.90, 0.72), sat=0.30, val=2.05,
+                           tint=(1.0, 0.94, 0.80), sat=0.22, val=2.2,
                            rough=1.0, nstr=0.9, vary=0.05)
-    M['timber'] = tex_mat('timber', 'dark_wood', 0.8, tint=(0.95, 0.70, 0.52),
-                          sat=1.0, val=0.95, nstr=0.8, vary=0.12)
+    M['timber'] = tex_mat('timber', 'dark_wood', 0.8, tint=(0.9, 0.58, 0.38),
+                          sat=1.25, val=0.9, nstr=0.8, vary=0.12)
     M['planks'] = tex_mat('planks', 'weathered_planks', 0.7,
-                          tint=(1.7, 1.2, 0.8), sat=1.2, val=1.25, nstr=0.9)
+                          tint=(1.8, 1.15, 0.7), sat=1.35, val=1.3, nstr=0.9)
     M['roof'] = tex_mat('roof', 'clay_roof_tiles_02', 1.55,
-                        tint=(1.12, 0.92, 0.78), sat=1.05, val=1.15,
+                        tint=(1.32, 0.76, 0.52), sat=1.5, val=1.32,
                         nstr=1.5, vary=0.05)
     M['roof2'] = tex_mat('roof2', 'clay_roof_tiles_02', 1.55,
-                         tint=(1.0, 0.80, 0.70), sat=1.1, val=1.0,
+                         tint=(1.25, 0.72, 0.5), sat=1.5, val=1.2,
                          nstr=1.5, vary=0.05)
     M['stone'] = tex_mat('stone', 'old_stone_wall', 1.2,
-                         tint=(1.18, 1.04, 0.88), sat=0.9, val=1.2,
+                         tint=(1.2, 1.04, 0.86), sat=1.0, val=1.25,
                          nstr=1.2, vary=0.06)
     M['stone_dk'] = tex_mat('stone_dk', 'old_stone_wall', 1.2,
-                            tint=(0.95, 0.85, 0.74), sat=0.9, val=0.95,
+                            tint=(0.98, 0.86, 0.72), sat=1.0, val=1.0,
                             nstr=1.2, vary=0.10)
     M['cobble'] = plain('cobble', '#d2c4a6', rough=0.85, bump=0.55,
                         bump_scale=40, vary=0.14, speck='#a89878')
@@ -108,14 +110,14 @@ def base_materials():
                         bump_scale=140, vary=0.04)
     M['sack'] = plain('sack', '#c9ac78', rough=0.95, bump=0.35,
                       bump_scale=90, vary=0.12)
-    M['leaf'] = plain('leaf', '#4f8a24', rough=0.7, bump=0.5, bump_scale=70,
-                      vary=0.2, speck='#6a9a2a')
-    M['leaf2'] = plain('leaf2', '#6a9a2a', rough=0.7, bump=0.5, bump_scale=70,
-                       vary=0.2, speck='#8aa636')
+    M['leaf'] = plain('leaf', '#4fb01e', rough=0.7, bump=0.5, bump_scale=70,
+                      vary=0.2, speck='#74c82e')
+    M['leaf2'] = plain('leaf2', '#7cc934', rough=0.7, bump=0.5, bump_scale=70,
+                       vary=0.2, speck='#a2da44')
     M['stem'] = plain('stem', '#4f7a22', rough=0.8, bump=0.0)
-    M['teal'] = plain('teal', '#3c7d78', rough=0.7, vary=0.1)
-    M['red'] = plain('red', '#a8402c', rough=0.7, vary=0.1)
-    M['mustard'] = plain('mustard', '#d09a2a', rough=0.7, vary=0.1)
+    M['teal'] = plain('teal', '#1fa89c', rough=0.7, vary=0.1)
+    M['red'] = plain('red', '#e0402a', rough=0.7, vary=0.1)
+    M['mustard'] = plain('mustard', '#f0b020', rough=0.7, vary=0.1)
     M['pane'] = plain('pane', '#15232a', rough=0.12, bump=0.0, vary=0.0)
     M['pane_glow'] = plain('pane_glow', '#ffb14a', rough=0.4, bump=0.0,
                            emit='#ff9a2e', emit_strength=3.0, vary=0.0)
@@ -151,7 +153,7 @@ def D(face, along, depth, h):
 
 
 def wall_frame(M, face, fixed, a0, a1, z0, z1, nb, braces=(), t=0.052,
-               mid=False, holes=()):
+               mid=False, holes=(), mid_through=False):
     """The half-timber: sill, plate, posts and diagonal braces on one wall.
 
     holes = [(a, w)] - openings (windows, doors) on this wall. Posts, braces
@@ -163,7 +165,8 @@ def wall_frame(M, face, fixed, a0, a1, z0, z1, nb, braces=(), t=0.052,
     off = 0.012
     spans = [(a - (w / 2 + w * 0.36 + 0.02), a + (w / 2 + w * 0.36 + 0.02))
              for a, w in holes]
-    pspans = [(a - (w / 2 + 0.03), a + (w / 2 + 0.03)) for a, w in holes]
+    # posts keep out of the shutters too (they used to hide them)
+    pspans = [(a - (w / 2 + w * 0.36 + 0.04), a + (w / 2 + w * 0.36 + 0.04)) for a, w in holes]
 
     def hit(lo, hi):
         return any(hi > l and lo < h for l, h in spans)
@@ -175,7 +178,9 @@ def wall_frame(M, face, fixed, a0, a1, z0, z1, nb, braces=(), t=0.052,
         zm = (z0 + z1) / 2
         segs = []
         cur = a0
-        for l, h in sorted(spans):
+        # mid_through: the storey rail is one unbroken beam, the openings above
+        # and below it do not cut it (user 2026-11-09: two walls lacked it)
+        for l, h in ([] if mid_through else sorted(spans)):
             if l > cur + 0.05:
                 segs.append((cur, min(l, a1)))
             cur = max(cur, h)
@@ -207,22 +212,58 @@ def wall_frame(M, face, fixed, a0, a1, z0, z1, nb, braces=(), t=0.052,
     return xs
 
 
+def window_w(w):
+    """The width a window really gets: a whole number of voxels (12 for a
+    normal one, 7 for a small one), so the openings come out the same each time."""
+    return (7 if w < 0.15 else 12) * VOX
+
+
 def window(M, face, fixed, a, zc, w, h, shut='teal', glow=False, planter=None):
-    """A framed window with a cross bar, stone sill, shutters, flower box."""
-    t = 0.034
-    off = 0.010
+    """A framed window with a cross, stone sill, shutters, flower box.
+
+    BUILT ON THE VOXEL GRID (user 2026-11-09: some lit windows came out wrong -
+    panes of 1 to 3 voxels, the frame lit, half a pane). Every edge sits on a
+    voxel boundary: frame and cross are 2 voxels, each pane 3 voxels wide, the
+    pane is one layer deep and the frame two layers proud of it. A small window
+    is one pane in a frame. The voxel grid is world-aligned, so the centre is
+    snapped to it (the yard is lowered by G before voxelising)."""
+    V = VOX
+    small = w < 0.15
+    nfr, ncr = 2, (0 if small else 2)
+    if small:
+        nw, nh = 7, 10
+    else:
+        pw = 3
+        ph = 5 if h > 0.24 else 4
+        nw, nh = 2 * nfr + ncr + 2 * pw, 2 * nfr + ncr + 2 * ph
+    w, h = nw * V, nh * V
+    a = round((a - w / 2) / V) * V + w / 2
+    zc = round((zc - G - h / 2) / V) * V + h / 2 + G
+    sg = OUT[face][0] + OUT[face][1]
+    if sg > 0:                                  # the first voxel layer outside the wall
+        c1 = (math.floor(fixed / V - 0.5 + 1e-6) + 1.5) * V
+    else:
+        c1 = (math.ceil(fixed / V - 0.5 - 1e-6) - 0.5) * V
+    d1 = abs(c1 - fixed)
     pane = M['pane_glow'] if glow else M['pane']
-    rbox(P(face, fixed, a, zc, 0.002), D(face, w, 0.012, h), (0, 0, 0), pane)
-    for da in (-w / 2, w / 2):
-        beam(P(face, fixed, a + da, zc - h / 2, off),
-             P(face, fixed, a + da, zc + h / 2, off), t, M['timber'])
-    for dz in (-h / 2, h / 2):
-        beam(P(face, fixed, a - w / 2, zc + dz, off),
-             P(face, fixed, a + w / 2, zc + dz, off), t, M['timber'])
-    beam(P(face, fixed, a, zc - h / 2, off), P(face, fixed, a, zc + h / 2, off),
-         0.016, M['timber'])
-    beam(P(face, fixed, a - w / 2, zc, off), P(face, fixed, a + w / 2, zc, off),
-         0.016, M['timber'])
+    # the pane fills ONLY the opening: under the frame its edge would tie with the
+    # frame's outer face and light the rim (user 2026-11-09)
+    rbox(P(face, fixed, a, zc, d1), D(face, w - 2 * nfr * V, 0.9 * V, h - 2 * nfr * V), (0, 0, 0), pane, bevel=0)
+
+    def part(u0, u1, v0, v1):                   # voxel units from the window's lower left
+        uc = a - w / 2 + (u0 + u1) / 2 * V
+        vc = zc - h / 2 + (v0 + v1) / 2 * V
+        rbox(P(face, fixed, uc, vc, d1 + V / 2), D(face, (u1 - u0) * V, 1.9 * V, (v1 - v0) * V),
+             (0, 0, 0), M['timber'], bevel=0)
+    part(0, nfr, 0, nh)
+    part(nw - nfr, nw, 0, nh)
+    part(nfr, nw - nfr, 0, nfr)
+    part(nfr, nw - nfr, nh - nfr, nh)
+    if not small:                               # the cross: as strong as the frame
+        pw_ = (nw - 2 * nfr - ncr) // 2
+        ph_ = (nh - 2 * nfr - ncr) // 2
+        part(nfr + pw_, nfr + pw_ + ncr, nfr, nh - nfr)
+        part(nfr, nw - nfr, nfr + ph_, nfr + ph_ + ncr)
     sill = P(face, fixed, a, zc - h / 2 - 0.02, 0.03)
     rbox(sill, D(face, w + 0.1, 0.07, 0.03), (0, 0, 0), M['stone'])
     if shut:
@@ -410,12 +451,18 @@ def hanging_sign(M, face, fixed, a, z, emblem, size=m(1.4), reach=None,
 # ── yard props ───────────────────────────────────────────────
 def barrel(M, x, y, r=0.085, h=0.2, z=None):
     z0 = G if z is None else z
-    cyl(x, y, z0, r * 0.88, r, h * 0.5, M['planks'], seg=16)
-    cyl(x, y, z0 + h * 0.5, r, r * 0.88, h * 0.5, M['planks'], seg=16)
-    for fz in (0.14, 0.5, 0.86):
-        rr = r * (0.88 + 0.12 * (1 - abs(fz - 0.5) * 2))
-        cyl(x, y, z0 + h * fz - 0.008, rr + 0.004, rr + 0.004, 0.016, M['iron'],
-            seg=16)
+    # The hoops sit ON the barrel's real profile (user 2026-11-09: the straps did
+    # not fit): it bulges from 0.88 r at the ends to r in the middle, and each
+    # hoop takes the radius of the body at its height, plus a clear 0.012 on top.
+    def prof(f):
+        return r * (0.88 + 0.12 * (1 - abs(f - 0.5) * 2))
+    cyl(x, y, z0, prof(0), prof(0.5), h * 0.5, M['planks'], seg=24)
+    cyl(x, y, z0 + h * 0.5, prof(0.5), prof(1), h * 0.5, M['planks'], seg=24)
+    # whole rings (user 2026-11-09: no single dots): wide, clearly proud of the
+    # staves so the voxeliser keeps every one as a closed circle
+    for fz in (0.10, 0.30, 0.70, 0.90):
+        rr = prof(fz) + 0.02
+        cyl(x, y, z0 + h * fz - 0.018, rr, rr, 0.036, M['iron'], seg=24)
     cyl(x, y, z0 + h - 0.002, r * 0.86, r * 0.86, 0.006, M['timber'], seg=16)
 
 
@@ -566,6 +613,67 @@ class anim:
 
 def reset_anims():
     ANIMS.clear()
+
+
+# ── trees like the map's (user 2026-11-09) ───────────────────
+# ONE tree size for every building (user 2026-11-09: proportions identical
+# everywhere; if there is no room the footprint grows, the tree does not shrink).
+TREE_S = {'conifer': 1.6, 'broadleaf': 1.5}
+
+
+def map_tree(M, x, y, kind='conifer', s=None, name=None):
+    """The MAP's own tree (terrain_voxel's voxel props), scaled by s. At s = 1
+    it is ~0.65 tiles tall — already much smaller than the old firs, so it
+    never hides the building. It sways like every other plant."""
+    import terrain_voxel as TV
+    s = TREE_S[kind] if s is None else s
+    v = TV.tree_conifer() if kind == 'conifer' else TV.tree_broadleaf()
+    with anim(name or f'tree{x:+.2f}{y:+.2f}', 'sway', pivot=(x, y, G), amp=0.05,
+              period=5.0):
+        ob = TV.build_mesh(v, 'maptree')
+        ob.location = (x, y, G)
+        ob.scale = (s, s, s)
+    return ob
+
+
+# ── the road apron (user 2026-11-09) ──────────────────────────
+ROAD_STEP = 1 / 18      # make_roads.STEP
+ROAD_HALF_W = 0.28      # make_roads.HALF_W
+
+
+def road_apron(M, W, H, face, k, depth=0.5):
+    """The building's path IS the road: from the entrance cell's outer edge
+    `depth` tiles inwards, the very carriageway of make_roads.py (0.56 wide,
+    dirt bed, rounded cobbles on the same 1/18 grid, kerb stones outside), so
+    the road tile in front of the entrance continues into it seamlessly."""
+    if 'bed' not in M:
+        M['bed'] = tex_mat('road_bed', 'park_dirt', 1.0, tint=(0.85, 0.70, 0.52),
+                           sat=1.0, val=0.75, nstr=1.0, vary=0.05)
+        M['cobble2'] = plain('cobble2', '#bfae8e', rough=0.85, bump=0.55,
+                             bump_scale=40, vary=0.14, speck='#988a70')
+    ex, ey = entrance_point(W, H, face, k)
+    inward = {'s': (0, 1), 'n': (0, -1), 'e': (-1, 0), 'w': (1, 0)}[face]
+    tang = (-inward[1], inward[0])
+    rnd = random.Random(77 + k)
+    n_u = round(1 / ROAD_STEP)
+    n_v = int(round(depth / ROAD_STEP))
+    for j in range(n_v):
+        v = ROAD_STEP * (j + 0.5)
+        for i in range(n_u):
+            u = -0.5 + ROAD_STEP * (i + 0.5)
+            px = ex + tang[0] * u + inward[0] * v
+            py = ey + tang[1] * u + inward[1] * v
+            if abs(u) <= ROAD_HALF_W:
+                box(px, py, G, ROAD_STEP, ROAD_STEP, 0.014, M['bed'], bevel=0)
+                r = ROAD_STEP * rnd.uniform(0.40, 0.47)
+                sl = ROAD_STEP / 2 - r
+                ellipsoid(px + rnd.uniform(-sl, sl), py + rnd.uniform(-sl, sl),
+                          G + 0.016, r, r * rnd.uniform(0.85, 1.0), 0.022,
+                          M['cobble' if rnd.random() < 0.7 else 'cobble2'],
+                          seg=12, rings=7, tilt=(0, 0, rnd.uniform(0, 3.14)))
+            elif abs(u) <= ROAD_HALF_W + ROAD_STEP:
+                box(px, py, G, ROAD_STEP * 0.9, ROAD_STEP * 0.9, 0.032,
+                    M['stone_dk'], bevel=0)
 
 
 # ── the entrance (user 2026-11-03) ──────────────────────────

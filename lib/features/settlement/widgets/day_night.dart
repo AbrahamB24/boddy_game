@@ -17,6 +17,23 @@ double nightAmount(DateTime t) {
   return 1 - smooth((h - 5) / 3);
 }
 
+/// Full-night multiply colour (see [DayNightOverlay]).
+const Color kNightColor = Color(0xFF4A5C9C);
+
+/// The night multiply's current strength 0..1 (dials `nightMode` and
+/// `nightStrength` included) - what [DayNightOverlay] paints with. Buildings
+/// read it to light their windows and lanterns ABOVE the darkness.
+double nightK() {
+  final mode = GameTuning.i.count('nightMode');
+  final strength = GameTuning.i.raw('nightStrength').clamp(0.0, 1.0);
+  final n = switch (mode) {
+    1 => 0.0,
+    2 => 1.0,
+    _ => nightAmount(DateTime.now()),
+  };
+  return n * strength;
+}
+
 /// The map's day / night: a moonlit blue MULTIPLIED over everything inside it,
 /// following the device's real clock (re-read every minute).
 ///
@@ -55,18 +72,11 @@ class _DayNightOverlayState extends State<DayNightOverlay> {
 
   /// Full night: dark, cold blue. Window-light-warm things stay readable
   /// because the red channel is kept highest.
-  static const _night = Color(0xFF4A5C9C);
+  static const _night = kNightColor;
 
   @override
   Widget build(BuildContext context) {
-    final mode = GameTuning.i.count('nightMode');
-    final strength = GameTuning.i.raw('nightStrength').clamp(0.0, 1.0);
-    final n = switch (mode) {
-      1 => 0.0,
-      2 => 1.0,
-      _ => nightAmount(DateTime.now()),
-    };
-    final k = n * strength;
+    final k = nightK();
     if (k <= 0.002) return const SizedBox.shrink();
     return Positioned.fill(
       child: IgnorePointer(

@@ -237,7 +237,7 @@ enum CreatureStat {
     CreatureStat.construction => 'On a building site — speeds construction.',
     CreatureStat.crafting => 'At the workbench, making items.',
     CreatureStat.breeding => 'In the Breeding Hut or the Hatchery.',
-    CreatureStat.medicine => 'In the Healing Hut — cuts the heal timer.',
+    CreatureStat.medicine => 'In the Hospital — cuts the heal timer.',
     CreatureStat.trade => 'In the Trade Center.',
     CreatureStat.logistics =>
       'Inside a store, making room — Storehouse and Gold Vault capacity.',

@@ -89,9 +89,27 @@ class CreatureSprite extends StatelessWidget {
     // art the two are close enough that either is a sensible cap, and most
     // callers here only ever pass one of the two anyway.
     final knownWidth = width ?? height;
-    final memWidth = knownWidth == null
-        ? null
-        : decodeWidthFor(context, knownWidth);
+    if (knownWidth == null) {
+      // Neither dimension given (the monster cards, avatars): take the box the
+      // parent hands us. Without this the sprite decoded at its FULL native
+      // size - every tile of the Monsters screen (user 2026-11-09: "sehr viele
+      // assets"). Falls back to the old uncapped decode only for unbounded
+      // parents.
+      return LayoutBuilder(
+        builder: (context, c) {
+          final box = [
+            if (c.maxWidth.isFinite) c.maxWidth,
+            if (c.maxHeight.isFinite) c.maxHeight,
+          ];
+          final side = box.isEmpty ? null : box.reduce((a, b) => a > b ? a : b);
+          return _network(context, side == null ? null : decodeWidthFor(context, side));
+        },
+      );
+    }
+    return _network(context, decodeWidthFor(context, knownWidth));
+  }
+
+  Widget _network(BuildContext context, int? memWidth) {
     // FLUTTER WEB (user 2026-09-02): cached_network_image/flutter_cache_manager
     // is built around a real on-disk cache, which the browser doesn't have —
     // in practice this made creature art fail to load intermittently on

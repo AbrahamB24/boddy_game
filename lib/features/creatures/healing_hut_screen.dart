@@ -14,7 +14,7 @@ import 'models/creature_instance.dart';
 import 'services/creatures_controller.dart';
 import 'services/healing_cost.dart';
 import 'widgets/creature_family.dart';
-import 'widgets/slot_kit.dart';
+import 'widgets/slot_kit.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/ui/game_text.dart';
 
@@ -158,7 +158,7 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
       return Stack(
         children: [
           MenuScaffold(
-            title: 'Healing Hut',
+            title: 'Hospital',
             trailing: _readout(treating.length, cap, queued.length, qCap),
             child: SlotFamilyLayout(
               slots: [

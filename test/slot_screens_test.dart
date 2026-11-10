@@ -46,7 +46,7 @@ void main() {
   ) async {
     CreaturesController().creatures = [hurt('a'), hurt('b', hp: 9)];
     await pump(t, const HealingHutScreen());
-    expect(find.text('Healing Hut'), findsOneWidget);
+    expect(find.text('Hospital'), findsOneWidget);
     expect(find.textContaining('WOUNDED'), findsOneWidget);
     expect(find.textContaining('Heal all'), findsOneWidget);
     expect(find.text('Free bed'), findsWidgets);

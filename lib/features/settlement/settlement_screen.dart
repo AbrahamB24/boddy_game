@@ -304,7 +304,13 @@ class _SettlementScreenState extends State<SettlementScreen>
     // battle draws from, the sound effects and music, and the one runtime
     // font (Outfit, used by the creature detail screen) — so the first
     // visit to any of them is as smooth as the tenth.
-    local.add(precacheMonsterSheets());
+    // Only the player's own monsters - not every species at every stage.
+    local.add(
+      precacheMonsterSheets([
+        for (final c in CreaturesController().creatures)
+          (speciesId: c.speciesId, stage: c.stage),
+      ]),
+    );
     local.add(Feel.preloadClips());
     local.add(_preloadFonts());
     local.add(_preloadOwnMonsterArt());
@@ -1424,7 +1430,7 @@ class _SettlementScreenState extends State<SettlementScreen>
   String? get _introSpotlightHint => switch (_soloQuickPadAnchor) {
     'quick-monsters' => 'Tap Monsters to choose your starter',
     'quick-map' => 'Tap Map to open the overworld',
-    'map-healing-hut' => 'Tap the Healing Hut to open it',
+    'map-healing-hut' => 'Tap the Hospital to open it',
     'quick-trips' => 'Tap Expedition to send a hunt.',
     _ => null,
   };

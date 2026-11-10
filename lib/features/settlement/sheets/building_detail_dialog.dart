@@ -279,7 +279,7 @@ Future<void> showBuildingDetailDialog(
                                   // user 2026-09-30: "ein kurzer Text, dass
                                   // das Healing Hut nun funktioniert und ich
                                   // nun mein Monster heilen soll".
-                                  ? 'The Healing Hut is up and running — '
+                                  ? 'The Hospital is up and running — '
                                         'tap Healing and treat your monster.'
                                   : 'A building only works once it has a '
                                         'worker posted to it — this Healing '

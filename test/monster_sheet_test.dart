@@ -58,9 +58,6 @@ void main() {
       MonsterSheets.battle('tidelord', 0, back: false)!,
       MonsterSheets.battle('tidelord', 0, back: true)!,
       for (var stage = 0; stage < 3; stage++)
-        for (final mine in [true, false])
-          MonsterSheets.battleSide('tidelord', stage, mine: mine)!,
-      for (var stage = 0; stage < 3; stage++)
         for (final h in ['se', 'ne', 'nw', 'sw'])
           MonsterSheets.map('tidelord', stage, h)!,
       // The isometric arena's sheets, built from the map's idle and walk.
@@ -72,8 +69,6 @@ void main() {
       for (var stage = 0; stage < 3; stage++) ...[
         MonsterSheets.battle('glimmergnaw', stage, back: false)!,
         MonsterSheets.battle('glimmergnaw', stage, back: true)!,
-        for (final mine in [true, false])
-          MonsterSheets.battleSide('glimmergnaw', stage, mine: mine)!,
         for (final h in ['se', 'ne', 'nw', 'sw'])
           MonsterSheets.map('glimmergnaw', stage, h)!,
       ],
