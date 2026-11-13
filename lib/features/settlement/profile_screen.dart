@@ -11,6 +11,7 @@ import '../social/services/alert_prefs.dart';
 import '../social/services/friends_service.dart';
 import '../social/services/pvp_service.dart';
 import '../social/social_actions.dart' show confirmDialog;
+import '../avatar/avatar_creator_screen.dart';
 import '../social/widgets/social_kit.dart';
 import 'data/building_definitions.dart';
 import 'settlement_controller.dart';
@@ -133,12 +134,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// The avatar creator; the player card picks the new look up through
+  /// [AvatarService], so nothing has to be passed back.
+  Future<void> _editAvatar() async {
+    await pushMenu<Object>(context, const AvatarCreatorScreen());
+    if (mounted) setState(() {});
+  }
+
   Widget _playerCardBody(PvpStats? s) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Column(
         children: [
-          SocialAvatar(_username ?? _email, size: 64),
+          Pressable(
+            onTap: _editAvatar,
+            child: SocialAvatar(_username ?? _email, size: 72),
+          ),
           const SizedBox(height: 8),
           Text(
             _usernameLoaded
@@ -156,10 +167,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
           ),
           const SizedBox(height: 10),
-          SocialTileButton(
-            _username == null ? 'Set a username' : 'Edit username',
-            height: 30,
-            onTap: _editUsername,
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            alignment: WrapAlignment.center,
+            children: [
+              SocialTileButton(
+                _username == null ? 'Set a username' : 'Edit username',
+                height: 30,
+                onTap: _editUsername,
+              ),
+              SocialTileButton('Avatar', height: 30, onTap: _editAvatar),
+            ],
           ),
           const Spacer(),
           Row(

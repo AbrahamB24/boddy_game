@@ -8,6 +8,9 @@ import '../models/pvp_match.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
 import '../../../core/ui/game_text.dart';
+import '../../avatar/avatar_service.dart';
+import '../../avatar/avatar_spec.dart';
+import '../../avatar/avatar_view.dart';
 
 /// The small parts every Social pane is built from, in the cream kit: a round
 /// avatar (there are no profile pictures — the initial on a colour the name
@@ -24,16 +27,96 @@ const List<Color> _avatarColors = [
   Color(0xFF4F8A8B),
 ];
 
-/// A round avatar: the first letter of [name] on a colour derived from the
-/// name, so the same person always looks the same.
-class SocialAvatar extends StatelessWidget {
+/// A player's avatar: their voxel figure (head and shoulders) when they have made
+/// one in the creator, otherwise the first letter of [name] on a colour derived
+/// from the name, so the same person always looks the same.
+///
+/// [SocialAvatar.letter] never looks anything up — for things that are not
+/// players (a guild's emblem).
+class SocialAvatar extends StatefulWidget {
   final String name;
   final double size;
+  final bool _player;
 
-  const SocialAvatar(this.name, {super.key, this.size = 34});
+  const SocialAvatar(this.name, {super.key, this.size = 34}) : _player = true;
+  const SocialAvatar.letter(this.name, {super.key, this.size = 34})
+    : _player = false;
+
+  @override
+  State<SocialAvatar> createState() => _SocialAvatarState();
+}
+
+class _SocialAvatarState extends State<SocialAvatar> {
+  AvatarSpec? _spec;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget._player) {
+      AvatarService.instance.addListener(_changed);
+      _lookUp();
+    }
+  }
+
+  @override
+  void didUpdateWidget(SocialAvatar old) {
+    super.didUpdateWidget(old);
+    if (widget._player && old.name != widget.name) {
+      _spec = null;
+      _lookUp();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget._player) AvatarService.instance.removeListener(_changed);
+    super.dispose();
+  }
+
+  /// Takes what is already known; otherwise asks (batched, see [AvatarService]).
+  void _lookUp() {
+    final svc = AvatarService.instance;
+    final hit = svc.peek(widget.name);
+    if (hit.known) {
+      _spec = hit.spec;
+      return;
+    }
+    final asked = widget.name;
+    svc.fetch(asked).then((spec) {
+      if (mounted && widget.name == asked && spec != _spec) {
+        setState(() => _spec = spec);
+      }
+    });
+  }
+
+  /// Someone saved a new avatar (mine, from the creator).
+  void _changed() {
+    final hit = AvatarService.instance.peek(widget.name);
+    if (mounted && hit.known && hit.spec != _spec) {
+      setState(() => _spec = hit.spec);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final name = widget.name;
+    final size = widget.size;
+    final spec = _spec;
+    if (spec != null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: CreamPalette.tan.withValues(alpha: 0.35),
+          border: Border.all(color: CreamPalette.tan, width: 1.5),
+        ),
+        child: AvatarView(
+          spec: spec,
+          size: size - 3,
+          bust: true,
+        ),
+      );
+    }
     final seed = name.codeUnits.fold<int>(0, (a, b) => (a * 31 + b) & 0xFFFF);
     final color = _avatarColors[seed % _avatarColors.length];
     final letter = name.isEmpty ? '?' : name.characters.first.toUpperCase();

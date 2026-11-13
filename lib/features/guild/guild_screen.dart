@@ -9,6 +9,7 @@ import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/ui/game_text.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/ui/snack.dart';
+import '../settlement/settlement_controller.dart';
 import '../social/social_actions.dart' show confirmDialog;
 import '../social/widgets/social_kit.dart';
 import 'guild_models.dart';
@@ -89,6 +90,7 @@ class _GuildScreenState extends State<GuildScreen> {
   Future<void> _reload() async {
     try {
       final g = await _svc.loadMyGuild();
+      unawaited(GuildMembership.instance.refresh());
       if (g == null) {
         _chatChannel?.unsubscribe();
         _chatChannel = null;
@@ -174,7 +176,16 @@ class _GuildScreenState extends State<GuildScreen> {
         : _pill('${_members.length}/$kGuildMaxMembers members'),
     child: _loading
         ? const Center(child: CircularProgressIndicator(color: CreamPalette.gold))
-        : (_guild == null ? _noGuild() : _guildPage()),
+        : (_guild == null
+              ? (SettlementController().introStep.isActive
+                    ? Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: socialHint(
+                          'Guilds open up once you have finished the tutorial.',
+                        ),
+                      )
+                    : _noGuild())
+              : _guildPage()),
   );
 
   Widget _pill(String text) => Container(
@@ -351,7 +362,7 @@ class _GuildScreenState extends State<GuildScreen> {
       height: 54,
       child: Row(
         children: [
-          SocialAvatar(g.name),
+          SocialAvatar.letter(g.name),
           const SizedBox(width: 10),
           _name(
             g.name,
@@ -385,7 +396,7 @@ class _GuildScreenState extends State<GuildScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
             children: [
-              SocialAvatar(g.name, size: 40),
+              SocialAvatar.letter(g.name, size: 40),
               const SizedBox(width: 10),
               _name(
                 'Level ${g.level}${g.isOpen ? '' : ' · by request'}',
