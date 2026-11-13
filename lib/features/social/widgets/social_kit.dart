@@ -9,8 +9,7 @@ import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
 import '../../../core/ui/game_text.dart';
 import '../../avatar/avatar_service.dart';
-import '../../avatar/avatar_spec.dart';
-import '../../avatar/avatar_view.dart';
+import '../../avatar/player_portrait.dart';
 
 /// The small parts every Social pane is built from, in the cream kit: a round
 /// avatar (there are no profile pictures — the initial on a colour the name
@@ -27,8 +26,8 @@ const List<Color> _avatarColors = [
   Color(0xFF4F8A8B),
 ];
 
-/// A player's avatar: their voxel figure (head and shoulders) when they have made
-/// one in the creator, otherwise the first letter of [name] on a colour derived
+/// A player's avatar: the monster portrait they picked from their bestiary,
+/// otherwise the first letter of [name] on a colour derived
 /// from the name, so the same person always looks the same.
 ///
 /// [SocialAvatar.letter] never looks anything up — for things that are not
@@ -47,7 +46,7 @@ class SocialAvatar extends StatefulWidget {
 }
 
 class _SocialAvatarState extends State<SocialAvatar> {
-  AvatarSpec? _spec;
+  PortraitRef? _ref;
 
   @override
   void initState() {
@@ -62,7 +61,7 @@ class _SocialAvatarState extends State<SocialAvatar> {
   void didUpdateWidget(SocialAvatar old) {
     super.didUpdateWidget(old);
     if (widget._player && old.name != widget.name) {
-      _spec = null;
+      _ref = null;
       _lookUp();
     }
   }
@@ -78,22 +77,22 @@ class _SocialAvatarState extends State<SocialAvatar> {
     final svc = AvatarService.instance;
     final hit = svc.peek(widget.name);
     if (hit.known) {
-      _spec = hit.spec;
+      _ref = hit.ref;
       return;
     }
     final asked = widget.name;
-    svc.fetch(asked).then((spec) {
-      if (mounted && widget.name == asked && spec != _spec) {
-        setState(() => _spec = spec);
+    svc.fetch(asked).then((ref) {
+      if (mounted && widget.name == asked && ref != _ref) {
+        setState(() => _ref = ref);
       }
     });
   }
 
-  /// Someone saved a new avatar (mine, from the creator).
+  /// Someone saved a new portrait (mine, from the picker).
   void _changed() {
     final hit = AvatarService.instance.peek(widget.name);
-    if (mounted && hit.known && hit.spec != _spec) {
-      setState(() => _spec = hit.spec);
+    if (mounted && hit.known && hit.ref != _ref) {
+      setState(() => _ref = hit.ref);
     }
   }
 
@@ -101,8 +100,8 @@ class _SocialAvatarState extends State<SocialAvatar> {
   Widget build(BuildContext context) {
     final name = widget.name;
     final size = widget.size;
-    final spec = _spec;
-    if (spec != null) {
+    final ref = _ref;
+    if (ref != null) {
       return Container(
         width: size,
         height: size,
@@ -110,11 +109,7 @@ class _SocialAvatarState extends State<SocialAvatar> {
           color: CreamPalette.tan.withValues(alpha: 0.35),
           border: Border.all(color: CreamPalette.tan, width: 1.5),
         ),
-        child: AvatarView(
-          spec: spec,
-          size: size - 3,
-          bust: true,
-        ),
+        child: PortraitView(ref: ref, size: size - 3),
       );
     }
     final seed = name.codeUnits.fold<int>(0, (a, b) => (a * 31 + b) & 0xFFFF);

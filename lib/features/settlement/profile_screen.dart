@@ -11,7 +11,7 @@ import '../social/services/alert_prefs.dart';
 import '../social/services/friends_service.dart';
 import '../social/services/pvp_service.dart';
 import '../social/social_actions.dart' show confirmDialog;
-import '../avatar/avatar_creator_screen.dart';
+import '../avatar/portrait_picker_screen.dart';
 import '../social/widgets/social_kit.dart';
 import 'data/building_definitions.dart';
 import 'settlement_controller.dart';
@@ -134,10 +134,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// The avatar creator; the player card picks the new look up through
+  /// The portrait picker; the player card picks the new portrait up through
   /// [AvatarService], so nothing has to be passed back.
   Future<void> _editAvatar() async {
-    await pushMenu<Object>(context, const AvatarCreatorScreen());
+    await pushMenu<Object>(context, const PortraitPickerScreen());
     if (mounted) setState(() {});
   }
 
@@ -177,7 +177,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 height: 30,
                 onTap: _editUsername,
               ),
-              SocialTileButton('Avatar', height: 30, onTap: _editAvatar),
+              SocialTileButton('Portrait', height: 30, onTap: _editAvatar),
             ],
           ),
           const Spacer(),
