@@ -3,7 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
-import '../../core/theme/ui_art.dart';
+import '../../core/theme/voxel_kit.dart'
+    show VoxelBackdrop, VoxelBar, VoxelShape, Voxel, vr;
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/pressable.dart';
 import '../common/widgets/filter_pills.dart';
@@ -23,6 +24,7 @@ import 'services/creatures_controller.dart';
 import 'starter_preview_screen.dart';
 import 'teams_screen.dart';
 import 'widgets/creature_card.dart';
+import 'widgets/creature_family.dart' show CreatureFigure, creatureHpColor;
 import '../../core/theme/voxel_icons.dart';
 import '../../core/ui/game_text.dart';
 
@@ -93,16 +95,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
 
-  /// The pills' own palette on a cream card — the shared look the egg picker and
+  /// The pills' own palette on the blue card — the shared look the egg picker and
   /// the breeding screen wear.
-  static final PillPalette _pills = PillPalette(
-    ink: UiArt.ink,
-    inkFaint: UiArt.inkSoft,
-    accent: UiArt.plaqueRim,
-    fill: UiArt.plaqueLight,
-    border: UiArt.plaqueRim,
-    menuSurface: UiArt.plaqueLight,
-  );
+  static final PillPalette _pills = PillPalette.cream;
 
   /// Starter preview drafts, one per species, cached so the picker's tile
   /// doesn't reroll a new gender/genes on every rebuild — see [_starterDraft].
@@ -189,8 +184,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
       // below that renders [_starterPicker] instead of the grid.
       final showingStarterPicker = !_ctrl.isLoading && _ctrl.creatures.isEmpty;
       return MenuScaffold(
-        timber: true,
         showHeader: !showingStarterPicker,
+        bare: true,
         title: 'Monsters',
         trailing: _headerTools(),
         // No card of its own any more (user 2026-09-30, spotting the outer
@@ -207,37 +202,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Column(
-                children: [
-                  if (_searchOpen && _ctrl.creatures.isNotEmpty) _searchRow(),
-                  Expanded(
-                    child: _ctrl.isLoading && _ctrl.creatures.isEmpty
-                        ? const Center(
-                            child: CircularProgressIndicator(
-                              color: UiWood.gold,
-                            ),
-                          )
-                        : _ctrl.creatures.isEmpty
-                        ? _starterPicker()
-                        : _collectionGrid(),
-                  ),
-                ],
-              ),
-            ),
-            // The three doors, with their state. Nothing to show until
-            // there is a first monster.
+            Expanded(child: _content()),
+            // The doors: one small button each. Nothing to show until there is
+            // a first monster.
             if (_ctrl.creatures.isNotEmpty) ...[
               const SizedBox(width: 10),
-              SizedBox(
-                // Narrower still (user 2026-09-30: "können noch schmaler
-                // werden, so dass noch ein Monster mehr Platz hat pro
-                // Zeile") — the hubs' own text already ellipsized at 176, so
-                // shaving more off here just hands the grid another column's
-                // worth of room instead of sitting unused in this panel.
-                width: 132,
-                child: _hubs(),
-              ),
+              SizedBox(width: 54, child: _hubs()),
             ],
           ],
         ),
@@ -245,20 +215,35 @@ class _CollectionScreenState extends State<CollectionScreen> {
     },
   );
 
+  Widget _content() => Column(
+    children: [
+      if (_searchOpen && _ctrl.creatures.isNotEmpty) _searchRow(),
+      Expanded(
+        child: _ctrl.isLoading && _ctrl.creatures.isEmpty
+            ? const Center(
+                child: CircularProgressIndicator(color: CreamPalette.gold),
+              )
+            : _ctrl.creatures.isEmpty
+            ? _starterPicker()
+            : _collectionGrid(),
+      ),
+    ],
+  );
+
   /// "14 · housing 12/16" at the right of the title card — how many monsters
   /// you have and how many the settlement can shelter.
   Widget _housingReadout() => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    // A recess in the header's plaster, like the cells of the main screen.
+    // A recess in the card, like the cells of the main screen.
     decoration: BoxDecoration(
-      color: UiArt.plaqueRim.withValues(alpha: 0.16),
-      borderRadius: BorderRadius.circular(3),
-      border: Border.all(color: UiArt.plaqueRim.withValues(alpha: 0.5)),
+      color: Colors.black.withValues(alpha: 0.22),
+      borderRadius: vr(8),
+      border: Border.all(color: CreamPalette.tan.withValues(alpha: 0.6)),
     ),
     child: Text(
       '${_ctrl.creatures.length} · housing '
       '${_settlement.housingUsed}/${_settlement.housingCapacity}',
-      style: FoE.value(size: 12).copyWith(color: UiArt.ink),
+      style: FoE.value(size: 12).copyWith(color: kBoxInk),
     ),
   );
 
@@ -275,148 +260,90 @@ class _CollectionScreenState extends State<CollectionScreen> {
     final bestiaryPct = bestiary.total == 0
         ? 0
         : (bestiary.seen / bestiary.total * 100).round();
+    final lairs = lairHubLine();
 
-    return Column(
-      children: [
-        Expanded(
-          child: _hub(
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          _hub(
             icon: Icons.shield,
-            title: 'Teams',
-            // Shows once the first team exists — before that there is
-            // nothing to count.
-            line1: teams.isEmpty ? 'No team yet' : '${teams.length} Teams',
+            tip: teams.isEmpty ? 'Teams · none yet' : 'Teams · ${teams.length}',
+            stat: '${teams.length}',
             onTap: () async {
               await pushMenu(context, const TeamsScreen());
               if (mounted) setState(() {});
             },
           ),
-        ),
-        const SizedBox(height: 9),
-        Expanded(
-          child: _hub(
+          _hub(
             icon: Icons.egg,
-            title: 'Breeding',
-            line1: '${mating.length}/${_breeding.breedingSlots}',
-            // Something to collect is what the amber rim is for — no text
-            // needed alongside it any more.
+            tip: 'Breeding · ${mating.length}/${_breeding.breedingSlots}',
+            stat: '${mating.length}/${_breeding.breedingSlots}',
+            // Something to collect: the gold button.
             highlight: ready > 0,
             onTap: () => pushMenu(
               context,
               const HatcheryScreen(startOn: NurseryTab.breeding),
             ),
           ),
-        ),
-        const SizedBox(height: 9),
-        Expanded(
-          child: _hub(
+          _hub(
             icon: Icons.castle,
-            title: 'Lairs',
-            line1: lairHubLine(),
+            tip: 'Lairs · $lairs',
+            stat: lairs.split(' ').first,
             onTap: () async {
               await pushMenu(context, const LairScreen());
               if (mounted) setState(() {});
             },
           ),
-        ),
-        const SizedBox(height: 9),
-        Expanded(
-          child: _hub(
+          _hub(
             icon: Icons.menu_book,
-            title: 'Bestiary',
-            line1: '$bestiaryPct%',
-            // Directly under the "13%" now that line2 is gone — same slot
-            // the other two hubs' progress bar would sit in, if they had one.
-            progress: bestiary.total == 0
-                ? null
-                : bestiary.seen / bestiary.total,
+            tip: 'Bestiary · $bestiaryPct%',
+            stat: '$bestiaryPct%',
             onTap: () => pushMenu(context, const BestiaryScreen()),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  /// One hub: a round amber glyph, the door's name and a line of state, a
-  /// chevron, and under it the number that matters (and, for the Bestiary, how
-  /// far along it is). The whole card is the tap target.
-  /// One hub: a round amber glyph, the door's name and its ONE stat beside
-  /// it — same slot for all three hubs (2026-09-30 redesign, narrower boxes),
-  /// so "n Teams" / "n/n" / "13%" line up at the same height. The Bestiary's
-  /// progress bar sits directly under that row; the other two have none.
+  /// One hub = ONE small button (user 2026-11-10): the door's glyph with its
+  /// one figure underneath; the full name is the tooltip.
   Widget _hub({
     required IconData icon,
-    required String title,
-    required String line1,
+    required String tip,
+    required String stat,
     required VoidCallback onTap,
-    double? progress,
     bool highlight = false,
-  }) => Pressable(
-    onTap: onTap,
-    // A raised tile, not a card of its own — the three hubs are all the
-    // same kind of thing (a shortcut), standing on the shared [zoneBox]
-    // the way a trip or a target tile stands on its page.
-    // The main screen's plaque: plaster in a wooden rim, with the bronze
-    // medal its quick buttons wear for the glyph.
-    child: Container(
-      decoration: uiPlaque(lit: highlight),
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Tooltip(
+      message: tip,
+      child: Pressable(
+        onTap: onTap,
+        child: Container(
+          width: 54,
+          height: 54,
+          alignment: Alignment.center,
+          decoration: highlight ? goldButton() : menuButton(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              IronButton(
-                size: 36,
-                lit: highlight,
-                child: PixelIcon(icon, size: 15, color: UiArt.ink),
+              PixelIcon(
+                icon,
+                size: 20,
+                color: highlight ? CreamPalette.ink : kBoxInk,
               ),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: FoE.title(size: 13).copyWith(color: UiArt.ink),
-                    ),
-                    Text(
-                      line1,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: FoE.label(size: 11).copyWith(
-                        color: highlight ? UiArt.warn : UiArt.inkSoft,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 3),
+              Text(
+                stat,
+                maxLines: 1,
+                style: FoE.label(size: 10).copyWith(
+                  color: highlight ? CreamPalette.ink : kBoxInkFaint,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ],
           ),
-          if (progress != null) ...[
-            const SizedBox(height: 6),
-            // A dark well with a gold fill, like the energy bar's.
-            Container(
-              height: 8,
-              decoration: BoxDecoration(
-                color: UiWood.wellDeep,
-                borderRadius: BorderRadius.circular(2),
-                border: Border.all(color: UiArt.plaqueRim, width: 1),
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FractionallySizedBox(
-                  widthFactor: progress.clamp(0.0, 1.0),
-                  heightFactor: 1,
-                  child: const ColoredBox(color: UiWood.gold),
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     ),
   );
@@ -460,7 +387,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                       'Starters are the three fire/water/plant epics — add '
                       'them in Dev Mode (Species tab).',
             textAlign: TextAlign.center,
-            style: FoE.label(size: 13).copyWith(color: UiWood.onWood),
+            style: FoE.label(size: 13).copyWith(color: kBoxInk),
           ),
         ),
       );
@@ -482,7 +409,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
           child: Text(
             'Choose your starter!',
             textAlign: TextAlign.center,
-            style: FoE.title(size: 18).copyWith(color: UiWood.onWood),
+            style: FoE.title(size: 18).copyWith(color: kBoxInk),
           ),
         ),
         Padding(
@@ -491,7 +418,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
             'Your first creature — the three starters are fire, water and '
             'plant; pick your element.',
             textAlign: TextAlign.center,
-            style: FoE.dim(size: 12).copyWith(color: UiWood.onWoodSoft),
+            style: FoE.dim(size: 12).copyWith(color: kBoxInkFaint),
           ),
         ),
         Expanded(
@@ -580,7 +507,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
           padding: const EdgeInsets.only(right: 10),
           child: Text(
             '${_sort.label}${_sortReversed ? ' ↑' : ''}',
-            style: FoE.label(size: 12).copyWith(color: UiArt.inkSoft),
+            style: FoE.label(size: 12).copyWith(color: kBoxInkFaint),
           ),
         ),
         _housingReadout(),
@@ -604,7 +531,20 @@ class _CollectionScreenState extends State<CollectionScreen> {
     ),
   );
 
-  /// One small button: raised cream, amber when engaged.
+  /// A 34 px plate with a glyph: the main menu's blue, gold when [engaged].
+  Widget _plate(IconData icon, bool engaged) => Container(
+    width: 34,
+    height: 34,
+    alignment: Alignment.center,
+    decoration: engaged ? goldButton() : menuButton(),
+    child: PixelIcon(
+      icon,
+      size: 17,
+      color: engaged ? CreamPalette.ink : kBoxInk,
+    ),
+  );
+
+  /// One small button: blue plate, gold when engaged.
   Widget _glyphBtn(
     IconData icon,
     VoidCallback onTap, {
@@ -617,16 +557,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
       message: tooltip,
       child: Pressable(
         onTap: onTap,
-        // The bronze medal the main screen's quick buttons wear; lit while
-        // the control is doing something (a filter, a search).
+        // The main menu's plate; gold while the control is doing something
+        // (a filter, a search).
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IronButton(
-              size: 34,
-              lit: engaged,
-              child: PixelIcon(icon, size: 17, color: UiArt.ink),
-            ),
+            _plate(icon, engaged),
             if (badge != null) ...[
               const SizedBox(width: 3),
               Text(
@@ -634,7 +570,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w400,
-                  color: UiWood.onWood,
+                  color: kBoxInk,
                 ),
               ),
             ],
@@ -682,13 +618,13 @@ class _CollectionScreenState extends State<CollectionScreen> {
         message: 'Sort: ${_sort.label}${_sortReversed ? ' (reversed)' : ''}',
         child: PopupMenuButton<String>(
           tooltip: '',
-          color: UiArt.plaqueLight,
+          color: CreamPalette.paperTop,
           elevation: 10,
           position: PopupMenuPosition.under,
           padding: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(3),
-            side: const BorderSide(color: UiArt.plaqueRim, width: 2),
+            borderRadius: vr(8),
+            side: const BorderSide(color: CreamPalette.tan, width: 2),
           ),
           onSelected: (name) => setState(() {
             final mode = _SortMode.values.byName(name);
@@ -712,14 +648,17 @@ class _CollectionScreenState extends State<CollectionScreen> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
-                          color: mode == _sort ? UiArt.warn : UiArt.ink,
+                          color: mode == _sort ? CreamPalette.warn : kBoxInk,
                         ),
                       ),
                     ),
                     if (mode == _sort)
                       Text(
                         _sortReversed ? '↑' : '↓',
-                        style: const TextStyle(fontSize: 13, color: UiArt.warn),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: CreamPalette.warn,
+                        ),
                       ),
                   ],
                 ),
@@ -727,11 +666,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
           ],
           // A plain decorated box — PopupMenuButton already wraps this in its
           // own tap handler to open the menu.
-          child: IronButton(
-            size: 34,
-            lit: engaged,
-            child: const PixelIcon(Icons.swap_vert, size: 17, color: UiArt.ink),
-          ),
+          child: _plate(Icons.swap_vert, engaged),
         ),
       ),
     );
@@ -802,7 +737,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
         // A cream card of its own, on top of the page — the kit's, not a
         // separate material.
         child: DecoratedBox(
-          decoration: uiPlaque(),
+          decoration: raisedTile(),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.7,
@@ -856,7 +791,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   Widget _menuDivider() => Container(
     height: 1,
-    color: UiArt.plaqueRim.withValues(alpha: 0.5),
+    color: CreamPalette.tan.withValues(alpha: 0.6),
     margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
   );
 
@@ -874,7 +809,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
           PixelIcon(
             active ? Icons.check_box : Icons.check_box_outline_blank,
             size: 16,
-            color: active ? (color ?? UiArt.warn) : UiArt.inkSoft,
+            color: active ? (color ?? CreamPalette.warn) : kBoxInkFaint,
           ),
           const SizedBox(width: 8),
           Text(
@@ -885,7 +820,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w400,
-              color: active && color == null ? UiArt.warn : UiArt.ink,
+              color: active && color == null ? CreamPalette.warn : kBoxInk,
             ),
           ),
         ],
@@ -893,331 +828,346 @@ class _CollectionScreenState extends State<CollectionScreen> {
     ),
   );
 
-  // ── Collection album ───────────────────────────────────────
-  // Concept 2 "Sammelalbum" (user 2026-11-05): the collection is a book. Two
-  // pages per spread (one on a narrow window), six pockets per page; owned
-  // monsters first, then a shrouded pocket for every species not yet found,
-  // and empty pockets to the end of the last page. The element tabs on the
-  // book's right edge are the element filter. Turn pages with the arrows or a
-  // swipe.
-  static const _perPage = 6;
-  static const _albumCols = 3;
-  static const _tabW = 34.0;
-  static const _leather = Color(0xFF5A3A20);
+  // ── Designs 1 and 6 ────────────────────────────────────────
 
-  int _spread = 0;
-
-  List<({CreatureInstance? c, SpeciesDef? s})> _albumSlots(
-    List<CreatureInstance> list,
-  ) {
-    final slots = <({CreatureInstance? c, SpeciesDef? s})>[
-      for (final c in list) (c: c, s: null),
+  /// The element filter as a rail of pixel-icon buttons. Never scrolls: the
+  /// nine buttons share whatever height there is (user 2026-11-10), the icons
+  /// shrinking with them.
+  Widget _elementRail() {
+    final entries = <(String, String, bool, VoidCallback)>[
+      (
+        'All',
+        'star',
+        _elementFilters.isEmpty,
+        () {
+          setState(_elementFilters.clear);
+        },
+      ),
+      for (final e in CreatureElement.values)
+        if (e != CreatureElement.neutral)
+          (
+            e.label,
+            _elementIconKey(e),
+            _elementFilters.length == 1 && _elementFilters.contains(e),
+            () => setState(() {
+              _elementFilters
+                ..clear()
+                ..add(e);
+            }),
+          ),
     ];
-    // Undiscovered species only when nothing narrows the book.
-    if (_elementFilters.isEmpty &&
-        _rarityFilters.isEmpty &&
-        _searchQuery.trim().isEmpty) {
-      final owned = {for (final c in _ctrl.creatures) c.speciesId};
-      final missing =
-          kSpeciesDefs.values.where((s) => !owned.contains(s.id)).toList()
-            ..sort((a, b) {
-              final r = a.rarity.index.compareTo(b.rarity.index);
-              return r != 0 ? r : a.name.compareTo(b.name);
-            });
-      for (final s in missing) {
-        slots.add((c: null, s: s));
-      }
-    }
-    return slots;
-  }
-
-  Widget _collectionGrid() {
-    final list = _visibleCreatures();
-    final slots = _albumSlots(list);
-    if (slots.isEmpty) {
-      return Center(
-        child: Text(
-          'Nothing matches the filter.',
-          style: TextStyle(color: UiWood.onWoodSoft, fontSize: 12),
-        ),
-      );
-    }
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final two = constraints.maxWidth >= 560;
-        final pages = two ? 2 : 1;
-        final perSpread = _perPage * pages;
-        final spreads = math.max(1, (slots.length / perSpread).ceil());
-        final spread = _spread.clamp(0, spreads - 1);
-        Widget page(int p) {
-          final first = spread * perSpread + p * _perPage;
-          return Expanded(
-            child: _albumPage(
-              slots: [
-                for (var i = first; i < first + _perPage; i++)
-                  i < slots.length ? slots[i] : null,
-              ],
-              number: spread * pages + p + 1,
-              left: p == 0 && two,
-              right: p == pages - 1 && two,
-            ),
-          );
-        }
-
-        void turn(int by) {
-          final to = (spread + by).clamp(0, spreads - 1);
-          if (to != _spread) setState(() => _spread = to);
-        }
-
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
-          child: Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onHorizontalDragEnd: (d) {
-                    final v = d.primaryVelocity ?? 0;
-                    if (v < -200) turn(1);
-                    if (v > 200) turn(-1);
-                  },
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: _leather,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: const Color(0xFF3A2410),
-                              width: 2,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x80000000),
-                                blurRadius: 8,
-                                offset: Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 180),
-                            child: Row(
-                              key: ValueKey(spread),
-                              children: [page(0), if (two) page(1)],
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (spread > 0)
-                        Positioned(
-                          left: 0,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: _turner(Icons.chevron_left, -1, turn),
-                          ),
-                        ),
-                      if (spread < spreads - 1)
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: _turner(Icons.chevron_right, 1, turn),
-                          ),
-                        ),
-                    ],
+      builder: (context, box) {
+        const gap = 4.0;
+        final n = entries.length;
+        final side = ((box.maxHeight - gap * (n - 1)) / n).clamp(22.0, 40.0);
+        final icon = side >= 34 ? 24.0 : 16.0;
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            for (var i = 0; i < n; i++) ...[
+              if (i > 0) const SizedBox(height: gap),
+              Tooltip(
+                message: entries[i].$1,
+                child: Pressable(
+                  onTap: entries[i].$4,
+                  child: Container(
+                    width: side + 4,
+                    height: side,
+                    alignment: Alignment.center,
+                    // The kit's stepped plate: gold while this element is on.
+                    decoration: entries[i].$3 ? goldButton() : menuButton(),
+                    child: GameIcon(entries[i].$2, size: icon),
                   ),
                 ),
               ),
-              SizedBox(width: _tabW, child: _albumTabs()),
             ],
-          ),
+          ],
         );
       },
     );
   }
 
-  Widget _turner(IconData icon, int by, void Function(int) turn) => Pressable(
-    onTap: () => turn(by),
-    child: Container(
-      width: 28,
-      height: 56,
-      decoration: BoxDecoration(
-        color: const Color(0xCC2A170A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: UiWood.gold.withValues(alpha: 0.7)),
-      ),
-      child: Icon(icon, color: UiWood.gold, size: 22),
+  static String _elementIconKey(CreatureElement e) => switch (e) {
+    CreatureElement.fire => 'flame',
+    CreatureElement.ice => 'ice',
+    CreatureElement.plant => 'sprout',
+    CreatureElement.lightning => 'bolt',
+    CreatureElement.water => 'drop',
+    CreatureElement.stone => 'stone',
+    CreatureElement.light => 'sun',
+    CreatureElement.shadow => 'moon',
+    CreatureElement.neutral => 'star',
+  };
+
+  void _openCreature(CreatureInstance c) =>
+      pushMenu(context, CreatureDetailScreen(creatureId: c.id));
+
+  Widget _nothingMatches() => Center(
+    child: Text(
+      'Nothing matches the filter.',
+      style: TextStyle(color: kBoxInkFaint, fontSize: 12),
     ),
   );
 
-  Widget _albumPage({
-    required List<({CreatureInstance? c, SpeciesDef? s})?> slots,
-    required int number,
-    required bool left,
-    required bool right,
-  }) {
-    final shade = Color.lerp(UiArt.plaqueLight, Colors.black, 0.14)!;
-    return Container(
-      margin: EdgeInsets.only(left: right ? 1 : 0, right: left ? 1 : 0),
+  /// Element rail at the left, then a scrolling grid of trading cards
+  /// (user 2026-11-10): a foil frame in the rarity colour, the monster on a
+  /// glow of its element, name and facts on a dark band underneath.
+  Widget _collectionGrid() {
+    final list = _visibleCreatures();
+    if (list.isEmpty) return _nothingMatches();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(width: 46, child: _elementRail()),
+        const SizedBox(width: 10),
+        Expanded(
+          // Cards scroll up to the hairline under the title: the viewport's
+          // own clip would cut them 8 px below it (the hairline's gap), so
+          // the grid paints unclipped and this clip reaches up to the line.
+          child: ClipRect(
+            clipper: const _ReachUpClipper(8),
+            child: GridView.builder(
+              clipBehavior: Clip.none,
+              padding: const EdgeInsets.only(top: 14, bottom: 10, right: 6),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 156,
+                childAspectRatio: 0.7,
+                mainAxisSpacing: 14,
+                crossAxisSpacing: 14,
+              ),
+              itemCount: list.length,
+              itemBuilder: (_, i) => _tradingCard(list[i]),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tradingCard(CreatureInstance c) {
+    final rarity = c.species?.rarity;
+    final rc = rarity?.color ?? const Color(0xFF9FB0BD);
+    final element = c.species?.element ?? CreatureElement.fire;
+    final ko = c.isKo;
+    final hp = c.maxHp <= 0 ? 0.0 : (c.hp / c.maxHp).clamp(0.0, 1.0);
+    Widget badge(Widget child) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.horizontal(
-          left: Radius.circular(right ? 0 : 6),
-          right: Radius.circular(left ? 0 : 6),
-        ),
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: left
-              ? [UiArt.plaqueLight, UiArt.plaqueLight, shade]
-              : right
-              ? [shade, UiArt.plaqueLight, UiArt.plaqueLight]
-              : [UiArt.plaqueLight, UiArt.plaqueLight],
-        ),
+        color: const Color(0xCC061219),
+        borderRadius: vr(8),
       ),
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
-      child: Column(
-        children: [
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, box) {
-                const gap = 10.0;
-                // The monsters' heads reach above the tile.
-                const topRoom = 14.0;
-                final tileW =
-                    (box.maxWidth - gap * (_albumCols - 1)) / _albumCols;
-                final rows = _perPage ~/ _albumCols;
-                final fitH =
-                    (box.maxHeight - topRoom - gap * (rows - 1)) / rows;
-                final tileH = math.min(tileW / kMonsterTileAspect, fitH);
-                return Padding(
-                  padding: const EdgeInsets.only(top: topRoom),
-                  child: GridView.builder(
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: EdgeInsets.zero,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: _albumCols,
-                      mainAxisSpacing: gap,
-                      crossAxisSpacing: gap,
-                      mainAxisExtent: tileH,
-                    ),
-                    itemCount: _perPage,
-                    itemBuilder: (_, i) => _pocket(slots[i]),
-                  ),
-                );
-              },
-            ),
-          ),
-          Text(
-            '— $number —',
-            style: FoE.dim(size: 10).copyWith(color: UiArt.inkSoft),
-          ),
-        ],
-      ),
+      child: child,
     );
-  }
-
-  Widget _pocket(({CreatureInstance? c, SpeciesDef? s})? slot) {
-    if (slot == null) {
-      return DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: UiArt.plaqueRim.withValues(alpha: 0.3),
-            width: 1.5,
-          ),
-        ),
-      );
-    }
-    final c = slot.c;
-    if (c == null) {
-      return CreatureCard.shrouded(shroudImageUrl: slot.s?.stageAt(0).imageUrl);
-    }
     return _HoverLift(
-      child: CreatureCard(
-        creature: c,
-        rarityFrame: true,
-        showXp: true,
-        onTap: () => pushMenu(context, CreatureDetailScreen(creatureId: c.id)),
-      ),
-    );
-  }
-
-  /// The element tabs on the book's right edge — the element filter.
-  Widget _albumTabs() {
-    Widget tab({
-      required String glyph,
-      required Color color,
-      required bool active,
-      required VoidCallback onTap,
-      required String tip,
-    }) => Padding(
-      padding: const EdgeInsets.only(bottom: 3),
-      child: Tooltip(
-        message: tip,
-        child: Pressable(
-          onTap: onTap,
-          child: Container(
-            width: active ? _tabW : _tabW - 6,
-            height: 30,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: const BorderRadius.horizontal(
-                right: Radius.circular(9),
-              ),
-              border: Border.all(
-                color: active ? UiWood.gold : const Color(0xFF3A2410),
-                width: active ? 2 : 1,
-              ),
+      child: Pressable(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _openCreature(c),
+        child: Container(
+          // Neutral steel frame, tinted a little by the TYPE (no rarity glow).
+          decoration: ShapeDecoration(
+            shape: VoxelShape(notch: 3, light: Voxel.rim),
+            gradient: Voxel.shaded(
+              Color.lerp(CreamPalette.tileTop, element.color, 0.55)!,
             ),
-            child: Text(glyph, style: const TextStyle(fontSize: 14)),
-          ),
-        ),
-      ),
-    );
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              tab(
-                glyph: '★',
-                color: const Color(0xFF8A6A3A),
-                active: _elementFilters.isEmpty,
-                tip: 'All',
-                onTap: () => setState(() {
-                  _elementFilters.clear();
-                  _spread = 0;
-                }),
-              ),
-              for (final e in CreatureElement.values)
-                if (e != CreatureElement.neutral)
-                  tab(
-                    glyph: e.emoji,
-                    color: Color.lerp(e.color, Colors.black, 0.25)!,
-                    active:
-                        _elementFilters.length == 1 &&
-                        _elementFilters.contains(e),
-                    tip: e.label,
-                    onTap: () => setState(() {
-                      _elementFilters
-                        ..clear()
-                        ..add(e);
-                      _spread = 0;
-                    }),
-                  ),
+            shadows: const [
+              BoxShadow(color: Color(0x73000000), offset: Offset(3, 3)),
             ],
           ),
+          padding: const EdgeInsets.fromLTRB(1, 4, 1, 4),
+          child: ClipRRect(
+            borderRadius: vr(8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Color.lerp(element.color, Colors.black, 0.7),
+              ),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        // TRY-OUT (user 2026-11-10): the card's picture sits on
+                        // the block tiles in the monster's own colour, replacing
+                        // the painted element scene.
+                        Positioned.fill(
+                          child: VoxelBackdrop(
+                            color: element.color,
+                            vignette: 0.7,
+                            darken: 0.22,
+                            cell: 18,
+                          ),
+                        ),
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(6, 18, 6, 4),
+                            child: Opacity(
+                              opacity: ko ? 0.35 : 1,
+                              child: CreatureFigure(
+                                imageUrl: c.imageUrl,
+                                element: element,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 5,
+                          left: 5,
+                          child: badge(
+                            Text(
+                              'Lv ${c.level}',
+                              style: FoE.value(
+                                size: 11,
+                              ).copyWith(color: const Color(0xFFE6F4F8)),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 4,
+                          right: 7,
+                          child: Text(
+                            c.gender.symbol,
+                            style: TextStyle(
+                              color: Color.lerp(
+                                c.gender.color,
+                                Colors.white,
+                                0.3,
+                              ),
+                              fontSize: 17,
+                              shadows: const [
+                                Shadow(color: Colors.black87, blurRadius: 3),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (c.canEvolve)
+                          const Positioned(
+                            right: 4,
+                            bottom: 2,
+                            child: PixelIcon(
+                              Icons.arrow_upward_rounded,
+                              size: 22,
+                              color: Color(0xFF2FD37A),
+                              shadows: [
+                                Shadow(
+                                  color: Color(0xCC000000),
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (ko)
+                          Positioned.fill(
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: ShapeDecoration(
+                                  color: FoE.danger,
+                                  shape: FoE.facet(radius: 6),
+                                ),
+                                child: Text(
+                                  'K.O.',
+                                  style: FoE.title(
+                                    size: 11,
+                                  ).copyWith(color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // The name band.
+                  Container(
+                    color: Color.alphaBlend(
+                      const Color(0x73040E14),
+                      Color.lerp(element.color, Colors.black, 0.7)!,
+                    ),
+                    padding: const EdgeInsets.fromLTRB(8, 5, 8, 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          c.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: FoE.title(size: 14).copyWith(color: kBoxInk),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            // Rarity: a small gem and the word — the only place
+                            // the rarity colour shows on the card.
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(right: 5),
+                              decoration: BoxDecoration(
+                                color: rc,
+                                border: Border.all(color: Voxel.outline),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                (rarity?.label ?? '').toUpperCase(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: FoE.dim(size: 8.5).copyWith(
+                                  color: Color.lerp(rc, Colors.white, 0.35),
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '⚡${totalPower(c)}',
+                              style: FoE.value(
+                                size: 12,
+                              ).copyWith(color: const Color(0xFFFFD45A)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // HP as the blocky bar of the monster detail screen.
+                  Container(
+                    color: Color.alphaBlend(
+                      const Color(0x73040E14),
+                      Color.lerp(element.color, Colors.black, 0.7)!,
+                    ),
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+                    child: VoxelBar(
+                      value: hp,
+                      color: creatureHpColor(hp),
+                      height: 8,
+                      block: 6,
+                      onDark: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+/// Clips to the child's box, but [up] pixels taller at the top.
+class _ReachUpClipper extends CustomClipper<Rect> {
+  final double up;
+  const _ReachUpClipper(this.up);
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTWH(0, -up, size.width, size.height + up);
+
+  @override
+  bool shouldReclip(_ReachUpClipper old) => old.up != up;
 }
 
 /// Lifts its child a few pixels while the mouse is over it (web/desktop);

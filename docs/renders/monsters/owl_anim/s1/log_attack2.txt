@@ -1,0 +1,46 @@
+00:31.859  cycles           | WARNING CUEW initialization failed: Error opening the library
+00:50.297  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_00.png'
+frame front attack 0
+01:12.172  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_01.png'
+frame front attack 1
+01:36.312  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_02.png'
+frame front attack 2
+02:01.312  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_03.png'
+frame front attack 3
+02:24.265  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_04.png'
+frame front attack 4
+02:47.797  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_05.png'
+frame front attack 5
+03:12.484  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_06.png'
+frame front attack 6
+03:36.828  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_07.png'
+frame front attack 7
+04:00.312  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_08.png'
+frame front attack 8
+04:23.312  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_09.png'
+frame front attack 9
+04:48.047  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_10.png'
+frame front attack 10
+05:10.968  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_11.png'
+frame front attack 11
+05:33.984  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_12.png'
+frame front attack 12
+05:57.781  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_13.png'
+frame front attack 13
+06:19.218  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_14.png'
+frame front attack 14
+06:39.422  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_15.png'
+frame front attack 15
+06:55.922  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_16.png'
+frame front attack 16
+07:11.750  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_17.png'
+frame front attack 17
+07:26.500  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_18.png'
+frame front attack 18
+07:41.593  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1\_frames\front_attack_19.png'
+frame front attack 19
+WARNING front_attack: art touches the cell edge (cut off): [(2, 'R'), (3, 'R'), (4, 'R'), (5, 'R'), (6, 'R'), (7, 'L'), (8, 'L'), (10, 'L'), (11, 'L'), (13, 'L'), (14, 'L')]
+done C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s1
+Blender 5.2.2 LTS (hash d13f752e3b9c built 2026-09-15 01:37:04)
+
+Blender quit

@@ -23,6 +23,7 @@ import 'services/creatures_controller.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/gene_bar_toggle.dart';
 import 'widgets/picker_detail_panel.dart';
+import 'widgets/picker_stage.dart';
 import '../common/widgets/recess_bar.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
@@ -1001,87 +1002,61 @@ class _BreedingPaneState extends State<BreedingPane> {
                       ),
                       const SizedBox(height: 10),
                       Expanded(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            PickerDetailPanel(
-                              placeholder: 'Tap a monster to see its genes.',
-                              art: preview == null
-                                  ? null
-                                  : CreatureCard(
-                                      creature: preview!,
-                                      showHp: false,
-                                      atLevel: _refLevel,
-                                    ),
-                              title: preview?.displayName,
-                              subtitle: preview == null
-                                  ? null
-                                  : '${preview!.gender.symbol} · Lv ${preview!.level}',
-                              rows: preview == null
-                                  ? const []
-                                  : [
-                                      pickerStatRow(
-                                        'Genes',
-                                        '⚡ ${_geneScore(preview!).round()}',
-                                      ),
-                                      pickerStatRow(
-                                        'Type',
-                                        preview!.species?.element.label ?? '—',
-                                      ),
-                                    ],
-                              action: preview == null
-                                  ? null
-                                  : pickerChooseButton(
-                                      label: preview!.id == chosenId
-                                          ? 'Already chosen'
-                                          : 'Choose this parent',
-                                      onTap: preview!.id == chosenId
-                                          ? null
-                                          : () =>
-                                                Navigator.pop(ctx, preview!.id),
-                                    ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: options.isEmpty
-                                  ? Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 18,
-                                      ),
-                                      child: Text(
-                                        filterSpeciesId == null
-                                            ? 'Nobody available.'
-                                            : 'None of those available.',
-                                        style: FoE.dim(
-                                          size: 12,
-                                        ).copyWith(color: _inkSoft),
-                                      ),
-                                    )
-                                  // The SAME tiles as the Monsters screen (user
-                                  // 2026-07-27), three to a row — so choosing a
-                                  // parent looks like browsing the collection,
-                                  // not filling a form field. Through
-                                  // [monsterTileGrid] now (user 2026-08-31:
-                                  // "genau gleich gross sein wie die Kacheln
-                                  // beim Monstersscreen"), not this sheet's own
-                                  // copy of the sizing maths.
-                                  : SingleChildScrollView(
-                                      padding: const EdgeInsets.only(
-                                        top: 6,
-                                        bottom: 6,
-                                      ),
-                                      child: monsterTileGrid([
-                                        for (final c in options)
-                                          _candidateTile(
-                                            c,
-                                            c.id == chosenId,
-                                            c.id == preview?.id,
-                                            sortStat,
-                                            (p) => setSheet(() => preview = p),
-                                          ),
-                                      ]),
-                                    ),
-                            ),
+                        child: PickerStage(
+                          currentLabel: 'CHOSEN',
+                          current: _byId(chosenId) == null
+                              ? null
+                              : CreatureCard(
+                                  creature: _byId(chosenId)!,
+                                  showHp: false,
+                                  atLevel: _refLevel,
+                                ),
+                          preview: preview == null
+                              ? null
+                              : CreatureCard(
+                                  creature: preview!,
+                                  showHp: false,
+                                  atLevel: _refLevel,
+                                ),
+                          plateTitle: preview?.displayName,
+                          placeholder: 'Tap a card below to see its genes.',
+                          rows: preview == null
+                              ? null
+                              : [
+                                  pickerCompareRow(
+                                    'Genes',
+                                    from: _byId(chosenId) == null
+                                        ? null
+                                        : _geneScore(_byId(chosenId)!).round(),
+                                    to: _geneScore(preview!).round(),
+                                  ),
+                                  pickerPlateRow(
+                                    'Type',
+                                    preview!.species?.element.label ?? '—',
+                                  ),
+                                ],
+                          action: preview == null
+                              ? null
+                              : pickerChooseButton(
+                                  label: preview!.id == chosenId
+                                      ? 'Already chosen'
+                                      : 'Choose this parent',
+                                  onTap: preview!.id == chosenId
+                                      ? null
+                                      : () => Navigator.pop(ctx, preview!.id),
+                                ),
+                          emptyText: filterSpeciesId == null
+                              ? 'Nobody available.'
+                              : 'None of those available.',
+                          tiles: [
+                            for (final c in options)
+                              _candidateTile(
+                                c,
+                                c.id == chosenId,
+                                c.id == preview?.id,
+                                sortStat,
+                                (p) => setSheet(() => preview = p),
+                              ),
                           ],
                         ),
                       ),
@@ -1225,11 +1200,15 @@ class _BreedingPaneState extends State<BreedingPane> {
   ) => Pressable(
     behavior: HitTestBehavior.opaque,
     onTap: () => onPreview(c),
-    child: pickerPreviewFrame(
-      active: previewed,
-      child: Column(
-        children: [
-          Expanded(
+    // The picker lays its tiles out in a Wrap: no height is handed down, so the
+    // tile is given its own proportions (the caption sits BELOW the frame).
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AspectRatio(
+          aspectRatio: kMonsterTileAspect,
+          child: pickerPreviewFrame(
+            active: previewed,
             // LayoutBuilder OUTSIDE the Stack: the badges are placed off the
             // tile's own pop-out reserve (17 % of its height), and Positioned
             // only works as a direct child of the Stack.
@@ -1264,21 +1243,21 @@ class _BreedingPaneState extends State<BreedingPane> {
               },
             ),
           ),
-          // Only the figure the list is SORTED by (user 2026-07-27). The line
-          // used to fall back to the Breeding gene, which decides nothing
-          // about which parent to pick — the tile's own ⚡ at level 1 already
-          // says everything the default order is based on.
-          if (sortStat != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              '${sortStat.label} ${(c.statBase[sortStat] ?? 0).round()}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: FoE.dim(size: 10).copyWith(color: _inkSoft),
-            ),
-          ],
+        ),
+        // Only the figure the list is SORTED by (user 2026-07-27). The line
+        // used to fall back to the Breeding gene, which decides nothing
+        // about which parent to pick — the tile's own ⚡ at level 1 already
+        // says everything the default order is based on.
+        if (sortStat != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            '${sortStat.label} ${(c.statBase[sortStat] ?? 0).round()}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: FoE.dim(size: 10).copyWith(color: _inkSoft),
+          ),
         ],
-      ),
+      ],
     ),
   );
 }

@@ -6,6 +6,7 @@ import '../../core/ui/feel.dart';
 import '../../core/ui/snack.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/ui/scroll_cue.dart';
+import '../common/widgets/monster_tile_grid.dart';
 import '../common/widgets/filter_pills.dart';
 import '../creatures/models/creature_enums.dart';
 import '../creatures/models/creature_instance.dart';
@@ -13,7 +14,7 @@ import '../creatures/services/creatures_controller.dart';
 import '../creatures/widgets/creature_card.dart';
 import '../creatures/widgets/creature_family.dart' show CreatureAvatar;
 import '../creatures/widgets/picker_detail_panel.dart';
-import '../creatures/widgets/roster_row.dart';
+import '../creatures/widgets/picker_stage.dart';
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
 import 'data/building_definitions.dart';
@@ -498,7 +499,11 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
                   color: CreamPalette.warn,
                   shape: BoxShape.rectangle,
                 ),
-                child: const PixelIcon(Icons.close, size: 13, color: Colors.white),
+                child: const PixelIcon(
+                  Icons.close,
+                  size: 13,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -572,148 +577,121 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
                   ),
                 ],
               ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                'Tap a monster to see its details',
-                style: FoE.dim(size: 11).copyWith(color: kBoxInkFaint),
-              ),
             ),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _detail(),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: candidates.isEmpty
-                      ? RosterRow.emptyState('No other monsters.')
-                      : ScrollCue(
-                          builder: (context, controller) => ListView(
-                            controller: controller,
-                            padding: const EdgeInsets.only(bottom: 4),
-                            children: [
-                              for (var i = 0; i < candidates.length; i++)
-                                _isTutorial && i == 0
-                                    ? KeyedSubtree(
-                                        key: IntroSpotlightAnchors.of(
-                                          'assignworkers-candidate',
-                                        ),
-                                        child: _rosterRow(candidates[i]),
-                                      )
-                                    : _rosterRow(candidates[i]),
-                            ],
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ),
+          Expanded(child: _stage(candidates)),
         ],
       ),
     );
   }
 
-  /// The left panel: the stat THIS post reads, status (free / posted
-  /// elsewhere / away / unfit) and what it would make here — the detail
-  /// panel every monster picker now shares. [action] is the only thing that
-  /// actually posts or swaps a worker now; tapping a roster row just fills
-  /// this in first.
-  Widget _detail() {
+  /// The card stage (user 2026-11-11): who stands in the seat being swapped
+  /// (or the free seat), the previewed candidate, what the stat this post
+  /// reads would do, every other monster as a card along the bottom.
+  /// [pickerChooseButton] is still the only thing that posts or swaps.
+  Widget _stage(List<CreatureInstance> candidates) {
     final c = _preview;
-    if (c == null) {
-      return const PickerDetailPanel(
-        placeholder: 'Tap a monster to see its details.',
-      );
-    }
-    final creatures = CreaturesController();
-    final away = creatures.isOnExpedition(c.id);
-    final idle = c.isKo || creatures.isBreeding(c.id);
-    final elsewhere = _postedElsewhere(c);
-    final taken = elsewhere != null && !away && !idle;
-    final unavailable = away || idle;
-    final (status, statusColor) = away
-        ? ('Away', CreamPalette.warn)
-        : idle
-        ? ('Unfit', CreamPalette.warn)
-        : taken
-        ? ('At $elsewhere', CreamPalette.warn)
-        : ('Free', CreamPalette.better);
-    final gain = unavailable ? null : _figureOf(_power(c));
-    return PickerDetailPanel(
-      art: CreatureCard(creature: c, showHp: false),
-      title: c.displayName,
-      subtitle: _training ? 'Lv ${c.level}' : null,
-      rows: [
-        pickerStatRow(
+    final swapping = _swapTarget;
+    int statOf(CreatureInstance m) =>
+        _training ? m.level : m.statValue(_role.stat);
+    List<Widget>? rows;
+    Widget? action;
+    if (c != null) {
+      final creatures = CreaturesController();
+      final away = creatures.isOnExpedition(c.id);
+      final idle = c.isKo || creatures.isBreeding(c.id);
+      final elsewhere = _postedElsewhere(c);
+      final taken = elsewhere != null && !away && !idle;
+      final (status, statusColor) = away
+          ? ('Away', CreamPalette.warn)
+          : idle
+          ? ('Unfit', CreamPalette.warn)
+          : taken
+          ? ('At $elsewhere', CreamPalette.warn)
+          : ('Free', CreamPalette.better);
+      final gain = (away || idle) ? null : _figureOf(_power(c));
+      rows = [
+        pickerCompareRow(
           _training ? 'Level' : _role.stat.label,
-          '${_training ? c.level : c.statValue(_role.stat)}',
+          from: swapping == null ? null : statOf(swapping),
+          to: statOf(c),
         ),
-        pickerStatRow('Status', status, valueColor: statusColor),
-        if (gain != null) pickerStatRow('Yield here', gain),
-      ],
-      action: pickerChooseButton(
+        pickerPlateRow('Status', status, valueColor: statusColor),
+        if (gain != null) pickerPlateRow('Yield', gain),
+      ];
+      action = pickerChooseButton(
         label: _swapTargetId != null ? 'Swap in' : 'Post here',
         onTap: () => _swapTargetId == null ? _set(c, true) : _swapWith(c),
-      ),
+      );
+    }
+    return PickerStage(
+      showCurrent: swapping != null,
+      tileExtra: 14,
+      currentLabel: 'SWAPPING OUT',
+      current: swapping == null
+          ? null
+          : CreatureCard(creature: swapping, showHp: false),
+      preview: c == null ? null : CreatureCard(creature: c, showHp: false),
+      plateTitle: c?.displayName,
+      rows: rows,
+      action: action,
+      emptyText: 'No other monsters.',
+      tiles: [
+        for (var i = 0; i < candidates.length; i++)
+          _stageTile(candidates[i], i),
+      ],
     );
   }
 
-  /// One row via the shared [RosterRow] (user 2026-10-05: "wirklich überall
-  /// den gleichen [Monsterpicker] nehmen") — the stat THIS post reads (bar
-  /// and number — that number is the whole reason to sort the list), a
-  /// status pill, what the monster would make here, and the honest action
-  /// icon (a TRANSFER arrow when it means taking the monster off another
-  /// post). A tap only PREVIEWS it in [_detail] now — that panel's own
-  /// button is what actually posts or swaps it.
-  Widget _rosterRow(CreatureInstance c) {
+  Widget _stageTile(CreatureInstance c, int index) {
     final creatures = CreaturesController();
     final away = creatures.isOnExpedition(c.id);
     final idle = c.isKo || creatures.isBreeding(c.id);
     final elsewhere = _postedElsewhere(c);
     final taken = elsewhere != null && !away && !idle;
-    final unavailable = away || idle;
-    final (status, pill) = away
-        ? ('🎒 Away', RosterPillKind.no)
+    final (status, statusColor) = away
+        ? ('🎒 Away', CreamPalette.warn)
         : idle
-        ? ('💤 Unfit', RosterPillKind.no)
+        ? ('💤 Unfit', CreamPalette.warn)
         : taken
-        ? ('At $elsewhere', RosterPillKind.warn)
-        : ('Free', RosterPillKind.free);
-    final statValue = _training ? c.level : c.statValue(_role.stat);
-    final statMax = creatures.creatures.fold<int>(
-      1,
-      (m, o) => (_training ? o.level : o.statValue(_role.stat)) > m
-          ? (_training ? o.level : o.statValue(_role.stat))
-          : m,
-    );
-    // Stat bars read against the largest value in the collection.
-    final gain = unavailable ? null : _figureOf(_power(c));
-    return pickerPreviewFrame(
+        ? ('At $elsewhere', CreamPalette.warn)
+        : ('Free', CreamPalette.better);
+    final card = pickerPreviewFrame(
       active: _preview?.id == c.id,
-      child: RosterRow(
-        creature: c,
-        statValue: statValue,
-        statMax: statMax,
-        status: status,
-        statusKind: pill,
-        figureText: gain,
-        dimmed: unavailable,
-        // The honest icon (user 2026-07-26): a TRANSFER arrow in the warning
-        // colour instead of the plus, because that is what the tap does.
-        actionIcon: taken ? Icons.swap_horiz : Icons.add,
-        actionColor: taken ? _takenInk : CreamPalette.gold,
-        actionIconColor: taken ? Colors.white : CreamPalette.ink,
-        // The tutorial's one candidate still posts on a single tap (user
-        // 2026-09-30: its spotlight hint literally says "Tap to station
-        // it") — everywhere else, a tap only previews.
-        onTap: () => _isTutorial
-            ? (_swapTargetId == null ? _set(c, true) : _swapWith(c))
-            : setState(() => _preview = c),
+      child: Opacity(
+        opacity: (away || idle) ? 0.45 : 1,
+        child: CreatureCard(
+          creature: c,
+          showHp: false,
+          // The tutorial's scripted pick still posts on one tap.
+          onTap: () => _isTutorial
+              ? (_swapTargetId == null ? _set(c, true) : _swapWith(c))
+              : setState(() => _preview = c),
+        ),
       ),
     );
+    final tile = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AspectRatio(aspectRatio: kMonsterTileAspect, child: card),
+        SizedBox(
+          height: 14,
+          child: Center(
+            child: Text(
+              status,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: FoE.dim(size: 10).copyWith(color: statusColor),
+            ),
+          ),
+        ),
+      ],
+    );
+    return _isTutorial && index == 0
+        ? KeyedSubtree(
+            key: IntroSpotlightAnchors.of('assignworkers-candidate'),
+            child: tile,
+          )
+        : tile;
   }
 
   // ── Search, sort, filter ──────────────────────────────────

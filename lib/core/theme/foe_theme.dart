@@ -64,15 +64,15 @@ class FoE {
   // roles are unchanged; only the values moved. Element colours (water, ice) and
   // the energy bar's 100–125 % cyan stay: they carry meaning.
   static const bg = Color(
-    0xFF12313C,
+    0xFF18383E,
   ); // the page (Fachwerk 2026-11-02: timber in shade)
 
   static const panelDark = Color(
-    0xFF1B4756,
+    0xFF23474F,
   ); // recessed / bars — bg→panelMid, closer to bg
-  static const panelMid = Color(0xFF25596B); // the card surface
+  static const panelMid = Color(0xFF275058); // the card surface
 
-  static const panelLight = Color(0xFF3A7F96); // raised / active
+  static const panelLight = Color(0xFF447681); // raised / active
   static const border = Color(0x33EDE3CB); // hairline
 
   /// Dim accent hairline — the accent taken down, so an accented edge belongs
@@ -89,20 +89,20 @@ class FoE {
   // hue family instead of a warm one, but distinct in saturation/lightness
   // rather than in hue. [danger] is unaffected either time — still its own
   // red-orange, for alerts only.
-  static const gold = Color(0xFF3FD0D0); // the kit's gold (was cyan-blue)
-  static const goldBright = Color(0xFF7FE8E8); // lit version of gold
-  static const accentBlue = Color(0xFF3FD0D0); // name kept; it is gold now
+  static const gold = Color(0xFFEBB752); // the kit's gold (was cyan-blue)
+  static const goldBright = Color(0xFFF2CD7E); // lit version of gold
+  static const accentBlue = Color(0xFFEBB752); // name kept; it is gold now
 
   /// Primary body text. Named `parchment` from the old fantasy palette, then the
   /// ink of the light theme, and now the cream that ink was written on — the
   /// name has outlived two palettes and is kept for API stability. It has always
   /// meant "the colour text is".
-  static const parchment = Color(0xFFF1F6F8);
-  static const textDim = Color(0xFFB4CEDB); // faded — secondary text
-  static const textMuted = Color(0xFF8FAEBD); // lifted for the pixel face (2026-11-03) // dimmer — disabled
+  static const parchment = Color(0xFFEEF6F6);
+  static const textDim = Color(0xFFB7CBCC); // faded — secondary text
+  static const textMuted = Color(0xFF90A9AB); // lifted for the pixel face (2026-11-03) // dimmer — disabled
 
-  static const mapBase = Color(0xFF1B4756); // == panelDark
-  static const mapAlt = Color(0xFF21505F); // panelDark→panelMid midpoint
+  static const mapBase = Color(0xFF23474F); // == panelDark
+  static const mapAlt = Color(0xFF264C53); // panelDark→panelMid midpoint
   static const mapGrid = Color(0x14FFFFFF);
   // Coral now (user 2026-09-06: "alle Warnhinweise sollen in der Farbe
   // Koralle sein"), not its own red-orange — every alert in the app reads
@@ -135,8 +135,8 @@ class FoE {
   // Wood, grey for Stone, gold for Gold) before this; now every tile shares
   // this same pair regardless of what it targets. Dark ink ([bg]) belongs on
   // both, the same rule [parchmentButtonInk] uses for a fill this light.
-  static const cream = Color(0xFF1F4E63);
-  static const tan = Color(0xFF4C8CA6);
+  static const cream = Color(0xFF244B52);
+  static const tan = Color(0xFF5F9AA3);
 
   // ── Shape & metrics ───────────────────────────────────────
   // ── LOW POLY (user 2026-07-31) ──

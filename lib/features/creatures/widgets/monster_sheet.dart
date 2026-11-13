@@ -187,9 +187,239 @@ abstract final class MonsterSheets {
     for (var s = 0; s < 3; s++) _ggWalkSets(s),
   ];
 
+
+  // ── Phoenix line (tool/blender/phoenix_anim.py, phoenix_anim12.py) ──
+  // Cinderchick, Flamewing, Solarphoenix, wired to the species id 'blazeling'
+  // (supabase/rename_blazeling_to_phoenix.sql renames it). One idle per stage:
+  // peck, ruffle, rear up and roar. Battle front also has attack and hurt, the
+  // back view only idle. Folders: assets/images/monsters/phoenix_s<stage>/.
+  static const String _phoenixId = 'blazeling';
+  static const List<int> _pxIdleFrames = [28, 30, 30];
+  static const List<double> _pxBattleScale = [1.0, 1.2, 1.4];
+  static const List<double> _pxMapScale = [1.0, 1.15, 1.3];
+
+  static MonsterSheetSet _pxView(int stage, bool back) {
+    final d = 'assets/images/monsters/phoenix_s$stage';
+    final v = back ? 'back' : 'front';
+    return MonsterSheetSet(
+      frameW: 560,
+      frameH: 448,
+      decodeScale: _battleDecode,
+      scale: _pxBattleScale[stage],
+      anims: {
+        'idle': SheetAnim('$d/${v}_idle.webp', _pxIdleFrames[stage], 12),
+        if (!back) ...{
+          'attack': SheetAnim('$d/front_attack.webp', 16, 16, loop: false),
+          'hurt': SheetAnim('$d/front_hurt.webp', 10, 14, loop: false),
+        },
+      },
+    );
+  }
+
+  static final List<MonsterSheetSet> _pxFront = [
+    for (var s = 0; s < 3; s++) _pxView(s, false),
+  ];
+  static final List<MonsterSheetSet> _pxBack = [
+    for (var s = 0; s < 3; s++) _pxView(s, true),
+  ];
+
+  static Map<String, MonsterSheetSet> _pxWalkSets(int stage) {
+    final d = 'assets/images/monsters/phoenix_s$stage';
+    return {
+      for (final h in const ['se', 'ne', 'nw', 'sw'])
+        h: MonsterSheetSet(
+          frameW: stage == 0 ? 543 : 544,
+          frameH: stage == 0 ? 434 : 435,
+          decodeScale: 0.5,
+          scale: _pxMapScale[stage],
+          anims: {
+            'walk': SheetAnim('$d/${h}_walk.webp', 8, 10),
+            'idle': SheetAnim('$d/${h}_idle.webp', _pxIdleFrames[stage], 12),
+          },
+        ),
+    };
+  }
+
+  static final List<Map<String, MonsterSheetSet>> _pxMap = [
+    for (var s = 0; s < 3; s++) _pxWalkSets(s),
+  ];
+
+  // ── Dragon line (tool/blender/dragon_anim.py) ──
+  // Hatchling, Young dragon, Great dragon, wired to the species id 'cinderhawk'
+  // (supabase/rename_cinderhawk_to_dragon.sql renames it). One idle per stage.
+  // Battle front also has attack and hurt, the back view only idle.
+  // Folders: assets/images/monsters/dragon_s<stage>/.
+  static const String _dragonId = 'cinderhawk';
+  static const List<int> _drIdleFrames = [30, 30, 30];
+  static const List<double> _drBattleScale = [0.95, 1.1, 1.3];
+  static const List<double> _drMapScale = [0.95, 1.1, 1.3];
+
+  static MonsterSheetSet _drView(int stage, bool back) {
+    final d = 'assets/images/monsters/dragon_s$stage';
+    final v = back ? 'back' : 'front';
+    return MonsterSheetSet(
+      frameW: 560,
+      frameH: 448,
+      decodeScale: _battleDecode,
+      scale: _drBattleScale[stage],
+      anims: {
+        'idle': SheetAnim('$d/${v}_idle.webp', _drIdleFrames[stage], 12),
+        if (!back) ...{
+          'attack': SheetAnim('$d/front_attack.webp', 16, 16, loop: false),
+          'hurt': SheetAnim('$d/front_hurt.webp', 10, 14, loop: false),
+        },
+      },
+    );
+  }
+
+  static final List<MonsterSheetSet> _drFront = [
+    for (var s = 0; s < 3; s++) _drView(s, false),
+  ];
+  static final List<MonsterSheetSet> _drBack = [
+    for (var s = 0; s < 3; s++) _drView(s, true),
+  ];
+
+  static Map<String, MonsterSheetSet> _drWalkSets(int stage) {
+    final d = 'assets/images/monsters/dragon_s$stage';
+    return {
+      for (final h in const ['se', 'ne', 'nw', 'sw'])
+        h: MonsterSheetSet(
+          frameW: stage == 0 ? 543 : 544,
+          frameH: stage == 0 ? 434 : 435,
+          decodeScale: 0.5,
+          scale: _drMapScale[stage],
+          anims: {
+            'walk': SheetAnim('$d/${h}_walk.webp', 8, 10),
+            'idle': SheetAnim('$d/${h}_idle.webp', _drIdleFrames[stage], 12),
+          },
+        ),
+    };
+  }
+
+  static final List<Map<String, MonsterSheetSet>> _drMap = [
+    for (var s = 0; s < 3; s++) _drWalkSets(s),
+  ];
+
+  // ── Duck line (tool/blender/duck_anim.py) ──
+  // Quackling, Paddlewing, Stormduck, wired to the species id 'droplet'
+  // (supabase/rename_droplet_to_duck.sql renames it). One idle per stage.
+  // Folders: assets/images/monsters/duck_s<stage>/.
+  static const String _duckId = 'droplet';
+  static const List<int> _dkIdleFrames = [28, 30, 30];
+  static const List<double> _dkBattleScale = [1.0, 1.2, 1.4];
+  static const List<double> _dkMapScale = [1.0, 1.15, 1.3];
+
+  static MonsterSheetSet _dkView(int stage, bool back) {
+    final d = 'assets/images/monsters/duck_s$stage';
+    final v = back ? 'back' : 'front';
+    return MonsterSheetSet(
+      frameW: 560,
+      frameH: 448,
+      decodeScale: _battleDecode,
+      scale: _dkBattleScale[stage],
+      anims: {
+        'idle': SheetAnim('$d/${v}_idle.webp', _dkIdleFrames[stage], 12),
+        if (!back) ...{
+          'attack': SheetAnim('$d/front_attack.webp', 16, 16, loop: false),
+          'hurt': SheetAnim('$d/front_hurt.webp', 10, 14, loop: false),
+        },
+      },
+    );
+  }
+
+  static final List<MonsterSheetSet> _dkFront = [
+    for (var s = 0; s < 3; s++) _dkView(s, false),
+  ];
+  static final List<MonsterSheetSet> _dkBack = [
+    for (var s = 0; s < 3; s++) _dkView(s, true),
+  ];
+
+  static Map<String, MonsterSheetSet> _dkWalkSets(int stage) {
+    final d = 'assets/images/monsters/duck_s$stage';
+    return {
+      for (final h in const ['se', 'ne', 'nw', 'sw'])
+        h: MonsterSheetSet(
+          frameW: stage == 1 ? 543 : 544,
+          frameH: stage == 1 ? 434 : 435,
+          decodeScale: 0.5,
+          scale: _dkMapScale[stage],
+          anims: {
+            'walk': SheetAnim('$d/${h}_walk.webp', 8, 10),
+            'idle': SheetAnim('$d/${h}_idle.webp', _dkIdleFrames[stage], 12),
+          },
+        ),
+    };
+  }
+
+  static final List<Map<String, MonsterSheetSet>> _dkMap = [
+    for (var s = 0; s < 3; s++) _dkWalkSets(s),
+  ];
+
+  // ── Owl line (tool/blender/owl_anim.py) ──
+  // Three stages of the Gemini owl sheet. ONE idle per stage: s0 looks around
+  // and hops with a wing flap, s1 turns its head 180 degrees and back, s2 opens
+  // its wings, flaps once and folds them. Folders: assets/images/monsters/owl_s<stage>/.
+  // The owl takes over the legendary species 'solarion' (user 2026-11-13); the
+  // ids stay, supabase/rename_solarion_to_owl.sql renames the three stages.
+  static const String _owlId = 'solarion';
+  static const List<int> _owIdleFrames = [40, 40, 36];
+  static const List<double> _owBattleScale = [1.0, 1.2, 1.4];
+  static const List<double> _owMapScale = [1.0, 1.15, 1.3];
+
+  static MonsterSheetSet _owView(int stage, bool back) {
+    final d = 'assets/images/monsters/owl_s$stage';
+    final v = back ? 'back' : 'front';
+    return MonsterSheetSet(
+      frameW: 560,
+      frameH: 448,
+      decodeScale: _battleDecode,
+      scale: _owBattleScale[stage],
+      anims: {
+        'idle': SheetAnim('$d/${v}_idle.webp', _owIdleFrames[stage], 12),
+        if (!back) ...{
+          'attack': SheetAnim('$d/front_attack.webp', 20, 16, loop: false),
+          'hurt': SheetAnim('$d/front_hurt.webp', 10, 14, loop: false),
+        },
+      },
+    );
+  }
+
+  static final List<MonsterSheetSet> _owFront = [
+    for (var s = 0; s < 3; s++) _owView(s, false),
+  ];
+  static final List<MonsterSheetSet> _owBack = [
+    for (var s = 0; s < 3; s++) _owView(s, true),
+  ];
+
+  static Map<String, MonsterSheetSet> _owWalkSets(int stage) {
+    final d = 'assets/images/monsters/owl_s$stage';
+    return {
+      for (final h in const ['se', 'ne', 'nw', 'sw'])
+        h: MonsterSheetSet(
+          frameW: stage == 1 ? 543 : 544,
+          frameH: stage == 1 ? 434 : 435,
+          decodeScale: 0.5,
+          scale: _owMapScale[stage],
+          anims: {
+            'walk': SheetAnim('$d/${h}_walk.webp', 8, 10),
+            'idle': SheetAnim('$d/${h}_idle.webp', _owIdleFrames[stage], 12),
+          },
+        ),
+    };
+  }
+
+  static final List<Map<String, MonsterSheetSet>> _owMap = [
+    for (var s = 0; s < 3; s++) _owWalkSets(s),
+  ];
+
   /// Species that have baked, animated art (battle, lists, map).
   static bool hasBaked(String? speciesId) =>
-      speciesId == 'tidelord' || speciesId == 'glimmergnaw';
+      speciesId == 'tidelord' ||
+      speciesId == 'glimmergnaw' ||
+      speciesId == _phoenixId ||
+      speciesId == _dragonId ||
+      speciesId == _duckId ||
+      speciesId == _owlId;
 
   /// The map headings, named by the screen direction of the world axis they
   /// walk along: se = +x, ne = +y, nw = -x, sw = -y.
@@ -239,6 +469,18 @@ abstract final class MonsterSheets {
     if (speciesId == 'glimmergnaw' && stage >= 0 && stage < 3) {
       return (back ? _ggBack : _ggFront)[stage];
     }
+    if (speciesId == _phoenixId && stage >= 0 && stage < 3) {
+      return (back ? _pxBack : _pxFront)[stage];
+    }
+    if (speciesId == _dragonId && stage >= 0 && stage < 3) {
+      return (back ? _drBack : _drFront)[stage];
+    }
+    if (speciesId == _duckId && stage >= 0 && stage < 3) {
+      return (back ? _dkBack : _dkFront)[stage];
+    }
+    if (speciesId == _owlId && stage >= 0 && stage < 3) {
+      return (back ? _owBack : _owFront)[stage];
+    }
     return null;
   }
 
@@ -273,6 +515,30 @@ abstract final class MonsterSheets {
       if (url.contains('creature-images/glimmergnaw_$s.png')) {
         return (set: _ggFront[s], back: false);
       }
+      if (url.contains('creature-images/${_phoenixId}_${s}_back.png')) {
+        return (set: _pxBack[s], back: true);
+      }
+      if (url.contains('creature-images/${_phoenixId}_$s.png')) {
+        return (set: _pxFront[s], back: false);
+      }
+      if (url.contains('creature-images/${_dragonId}_${s}_back.png')) {
+        return (set: _drBack[s], back: true);
+      }
+      if (url.contains('creature-images/${_dragonId}_$s.png')) {
+        return (set: _drFront[s], back: false);
+      }
+      if (url.contains('creature-images/${_duckId}_${s}_back.png')) {
+        return (set: _dkBack[s], back: true);
+      }
+      if (url.contains('creature-images/${_duckId}_$s.png')) {
+        return (set: _dkFront[s], back: false);
+      }
+      if (url.contains('creature-images/${_owlId}_${s}_back.png')) {
+        return (set: _owBack[s], back: true);
+      }
+      if (url.contains('creature-images/${_owlId}_$s.png')) {
+        return (set: _owFront[s], back: false);
+      }
     }
     return null;
   }
@@ -285,6 +551,18 @@ abstract final class MonsterSheets {
     }
     if (speciesId == 'glimmergnaw' && stage >= 0 && stage < _ggMap.length) {
       return _ggMap[stage][heading];
+    }
+    if (speciesId == _phoenixId && stage >= 0 && stage < _pxMap.length) {
+      return _pxMap[stage][heading];
+    }
+    if (speciesId == _dragonId && stage >= 0 && stage < _drMap.length) {
+      return _drMap[stage][heading];
+    }
+    if (speciesId == _duckId && stage >= 0 && stage < _dkMap.length) {
+      return _dkMap[stage][heading];
+    }
+    if (speciesId == _owlId && stage >= 0 && stage < _owMap.length) {
+      return _owMap[stage][heading];
     }
     return null;
   }
@@ -497,6 +775,7 @@ class _MonsterSheetPlayerState extends State<MonsterSheetPlayer>
   final math.Random _rng = math.Random();
   bool _playing = false;
   Duration _nextPlay = Duration.zero;
+  Duration _lastBreath = Duration.zero;
 
   bool get _resting => widget.anim == 'idle' && _anim.loop;
 
@@ -550,7 +829,13 @@ class _MonsterSheetPlayerState extends State<MonsterSheetPlayer>
       } else {
         if (_frame.value != 0) _frame.value = 0;
       }
-      // ~4.2 s per breath.
+      // ~4.2 s per breath. The squash is so slow that ~20 updates a second look
+      // the same as 60, and every update is a repaint of the whole creature:
+      // while the rest pose is held (nothing else changing) a resting monster
+      // now repaints a third as often. Always updated while the baked idle
+      // plays, so its hand-over stays seamless.
+      if (!_playing && (elapsed - _lastBreath).inMilliseconds < 48) return;
+      _lastBreath = elapsed;
       final v = amp * math.sin(elapsed.inMilliseconds / 1000 * 1.5);
       if (v != _breath.value) _breath.value = v;
       return;
@@ -648,16 +933,14 @@ class _SheetPainter extends CustomPainter {
       canvas.scale(1 - 0.008 * b, 1 + 0.025 * b);
       canvas.translate(-px, -py);
     }
-    canvas.drawImageRect(
-      img,
-      src,
-      dst,
-      Paint()
-        ..filterQuality = FilterQuality.medium
-        ..isAntiAlias = true,
-    );
+    canvas.drawImageRect(img, src, dst, _paint);
     if (b != 0) canvas.restore();
   }
+
+  /// One Paint for every frame of every creature: it never changes.
+  static final Paint _paint = Paint()
+    ..filterQuality = FilterQuality.medium
+    ..isAntiAlias = true;
 
   @override
   bool shouldRepaint(_SheetPainter old) =>

@@ -5,7 +5,6 @@ import '../../core/theme/foe_theme.dart';
 import '../../core/ui/pressable.dart';
 import '../common/widgets/empty_monster_slot.dart';
 import '../common/widgets/filter_pills.dart';
-import '../common/widgets/monster_tile_grid.dart';
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
 import '../settlement/settlement_controller.dart';
@@ -20,6 +19,7 @@ import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/picker_detail_panel.dart';
+import 'widgets/picker_stage.dart';
 import 'widgets/versus_kit.dart';
 import '../../core/theme/voxel_icons.dart';
 import '../../core/ui/game_text.dart';
@@ -495,7 +495,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
           height: 26,
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: active ? goldButton() : raisedTile(radius: 10),
+          decoration: active ? goldButton() : menuButton(),
           child: Text(
             team.name,
             maxLines: 1,
@@ -525,6 +525,10 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
         onPick: (c) => _pick(c, slotIndex),
         chosen: () => _selected.length,
         partySize: widget.partySize,
+        seat: slotIndex,
+        current: slotIndex != null && slotIndex < _selected.length
+            ? ready.where((c) => c.id == _selected[slotIndex]).firstOrNull
+            : null,
         isTutorial: _isFirstBattleTutorial,
       ),
     );
@@ -577,6 +581,10 @@ class _TeamPickerScreen extends StatefulWidget {
   final int Function() chosen;
   final int partySize;
 
+  /// The seat being filled (null = the next free one) and who stands in it.
+  final int? seat;
+  final CreatureInstance? current;
+
   /// The tutorial's first fight (user 2026-09-30: "Who Fights: ein kurzer
   /// Text, dass ich das Monster anwählen soll und dieses Highlighten (sonst
   /// nichts anwählbar)") — this screen had no tutorial awareness at all
@@ -590,6 +598,8 @@ class _TeamPickerScreen extends StatefulWidget {
     required this.onPick,
     required this.chosen,
     required this.partySize,
+    this.seat,
+    this.current,
     this.isTutorial = false,
   });
 
@@ -667,77 +677,69 @@ class _TeamPickerScreenState extends State<_TeamPickerScreen> {
 
   Widget _body() => Padding(
     padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: SearchPill(
-                controller: _search,
-                palette: _pills,
-                onChanged: (v) => setState(() => _query = v),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(flex: 2, child: _sortPill()),
-            const SizedBox(width: 8),
-            Expanded(flex: 2, child: _filterPill()),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _detail(),
-              const SizedBox(width: 10),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(top: 14, bottom: 16),
-                  child: monsterTileGrid([
-                    for (final c in _filtered) _tile(c),
-                  ]),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
+    child: _stage(),
   );
 
-  /// The left panel: combat power, HP and type — what a battle pick is
-  /// judged on. [action] is the only thing that actually commits a pick now;
-  /// tapping a tile just fills this in for a look first.
-  Widget _detail() {
+  /// The card stage (user 2026-11-11): the seat on the left, the previewed
+  /// monster on the right, what the swap does between them, every candidate as
+  /// a card along the bottom. [PickerStage] is the shared frame; the plate's
+  /// button is still the only thing that commits a pick.
+  Widget _stage() {
     final c = _preview;
-    if (c == null) {
-      return const PickerDetailPanel(
-        placeholder: 'Tap a monster to see its stats.',
-      );
-    }
-    final picked = widget.isPicked(c);
-    return PickerDetailPanel(
-      art: CreatureCard(creature: c, showHp: false),
-      title: c.displayName,
-      subtitle: 'Lv ${c.level}',
-      rows: [
-        pickerStatRow('Power', '⚡ ${combatPower(c)}'),
-        pickerStatRow('HP', '${c.hp} / ${c.maxHp}'),
-        pickerStatRow('Type', c.species?.element.label ?? '—'),
-        if (c.species?.rarity != null)
-          pickerStatRow('Rarity', c.species!.rarity.label),
-      ],
-      action: pickerChooseButton(
-        label: picked ? 'Remove' : 'Choose',
-        onTap: () {
-          final close = widget.onPick(c);
-          setState(() {});
-          if (close) Navigator.pop(context);
-        },
+    final now = widget.current;
+    final picked = c != null && widget.isPicked(c);
+    return PickerStage(
+      banner: pickerBanner(
+        'BATTLE TEAM',
+        widget.seat == null
+            ? 'Pick the next fighter'
+            : 'Pick who takes seat ${widget.seat! + 1}',
       ),
+      currentLabel: widget.seat == null
+          ? 'NEXT SEAT'
+          : 'SEAT ${widget.seat! + 1}',
+      current: now == null ? null : CreatureCard(creature: now),
+      preview: c == null ? null : CreatureCard(creature: c),
+      plateTitle: c?.displayName,
+      rows: c == null
+          ? null
+          : [
+              pickerCompareRow(
+                'Power',
+                from: now == null ? null : combatPower(now),
+                to: combatPower(c),
+              ),
+              pickerCompareRow('HP', from: now?.maxHp, to: c.maxHp),
+              pickerCompareRow('Level', from: now?.level, to: c.level),
+              pickerPlateRow('Type', c.species?.element.label ?? '—'),
+            ],
+      action: c == null
+          ? null
+          : pickerChooseButton(
+              label: picked ? 'Remove' : (now == null ? 'Place' : 'Swap'),
+              onTap: () {
+                final close = widget.onPick(c);
+                setState(() {});
+                if (close) Navigator.pop(context);
+              },
+            ),
+      controls: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: SearchPill(
+              controller: _search,
+              palette: _pills,
+              onChanged: (v) => setState(() => _query = v),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(flex: 2, child: _sortPill()),
+          const SizedBox(width: 8),
+          Expanded(flex: 2, child: _filterPill()),
+        ],
+      ),
+      tiles: [for (final c in _filtered) _tile(c)],
     );
   }
 

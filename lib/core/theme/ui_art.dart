@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'voxel_kit.dart' show VoxelBar;
 
 // ── RENDERED INTERFACE PIECES ───────────────────────────────────────────────
 //
@@ -124,6 +125,7 @@ abstract final class UiArt {
     'Profile' => 'icon_person',
     'Bag' => 'icon_bag',
     'Daily tasks' => 'icon_tasks',
+    'Resources' => 'chest_s',
     _ => null,
   };
 
@@ -310,19 +312,19 @@ abstract final class UiWood {
   // 2026-11-09: no longer walnut. Every screen wears the main screen's blue now,
   // so the pieces that were drawn in wood take the blue family's colours (the
   // names stay, the screens still ask for them).
-  static const Color groundTop = Color(0xFF1E5266);
-  static const Color groundBottom = Color(0xFF0E2530);
-  static const Color beamLight = Color(0xFF4C8CA6);
-  static const Color beam = Color(0xFF2C6A80);
-  static const Color beamDark = Color(0xFF1B4558);
-  static const Color well = Color(0xFF123848);
-  static const Color wellDeep = Color(0xFF0B2330);
-  static const Color gold = Color(0xFF3FD0D0);
-  static const Color goldDeep = Color(0xFF1C8C8C);
-  static const Color glow = Color(0xFF9CF4F4);
+  static const Color groundTop = Color(0xFF3A6A73);
+  static const Color groundBottom = Color(0xFF0B252A);
+  static const Color beamLight = Color(0xFF5F9AA3);
+  static const Color beam = Color(0xFF35656E);
+  static const Color beamDark = Color(0xFF1F434B);
+  static const Color well = Color(0xFF18383E);
+  static const Color wellDeep = Color(0xFF0E2E34);
+  static const Color gold = Color(0xFFEBB752);
+  static const Color goldDeep = Color(0xFFA0762A);
+  static const Color glow = Color(0xFFF5D890);
 
   /// Text on the dark plates.
-  static const Color onWood = Color(0xFFEAF4F8);
+  static const Color onWood = Color(0xFFEBF5F5);
   static final Color onWoodSoft = onWood.withValues(alpha: 0.86);
 }
 
@@ -1506,69 +1508,22 @@ class UiEnergyHalf extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     // Slimmer bars in the board (user 2026-11-05: "etwas zu gross, hoch").
     padding: const EdgeInsets.symmetric(vertical: 5),
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0C1630),
-        borderRadius: BorderRadius.circular(5),
-        // Set INTO the timber board: dark rim, a light lip under it.
-        border: Border.all(color: const Color(0xFF081024), width: 2),
-        boxShadow: const [
-          BoxShadow(color: Color(0x55BFD8FF), offset: Offset(0, 1)),
+    // Cut into whole blocks like every other bar of the game (user
+    // 2026-11-12); the label still lies across it.
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 18),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: VoxelBar(
+              value: fraction.clamp(0.0, 1.0),
+              color: bonus ? const Color(0xFF7DB83A) : const Color(0xFFE0A030),
+              onDark: true,
+            ),
+          ),
+          if (label != null) FittedBox(fit: BoxFit.scaleDown, child: label),
         ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(3),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // The shade the rim casts into the recess.
-            const Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              height: 5,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xAA000000), Color(0x00000000)],
-                  ),
-                ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: fraction.clamp(0.0, 1.0),
-                heightFactor: 1,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      // The UI's own palette (user 2026-11-05): warm brass
-                      // gold up to 100 %, leaf green for the bonus range.
-                      colors: bonus
-                          ? const [
-                              Color(0xFFD6F08A),
-                              Color(0xFF7DB83A),
-                              Color(0xFF3F7A1E),
-                            ]
-                          : const [
-                              Color(0xFFFFE08A),
-                              Color(0xFFE0A030),
-                              Color(0xFF9A5E16),
-                            ],
-                      stops: const [0, 0.55, 1],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (label != null) FittedBox(fit: BoxFit.scaleDown, child: label),
-          ],
-        ),
       ),
     ),
   );

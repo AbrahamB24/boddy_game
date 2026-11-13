@@ -36,23 +36,33 @@ void main() {
     return s / img.width;
   }
 
+  // levelTile now also lays a per-block speckle over the grass (user
+  // 2026-11-13), so rows are no longer flat. The seam is judged against the
+  // SAME tile without a seam: both get the identical speckle, so what is left
+  // of a difference is the seam itself.
   testWidgets('darker seam rows are brought up to the rest', (t) async {
     await t.runAsync(() async {
       // 150 everywhere, 146 on the first and last two rows (a ~2.7 % dip).
-      final src = await tile(32, 32, (y) => (y < 2 || y > 29) ? 146 : 150);
-      expect(await rowMean(src, 0), lessThan(147));
-      final out = await TerrainLayer.levelTile(src);
-      expect(await rowMean(out, 0), closeTo(await rowMean(out, 16), 1.0));
-      expect(await rowMean(out, 31), closeTo(await rowMean(out, 16), 1.0));
+      final seam = await tile(32, 32, (y) => (y < 2 || y > 29) ? 146 : 150);
+      final even = await tile(32, 32, (y) => 150);
+      expect(await rowMean(seam, 0), lessThan(147));
+      final out = await TerrainLayer.levelTile(seam);
+      final ref = await TerrainLayer.levelTile(even);
+      for (final y in [0, 1, 16, 30, 31]) {
+        expect(await rowMean(out, y), closeTo(await rowMean(ref, y), 1.5));
+      }
     });
   });
 
-  testWidgets('an even tile is left as it is', (t) async {
+  testWidgets('an even tile keeps its overall brightness', (t) async {
     await t.runAsync(() async {
       final src = await tile(32, 32, (y) => 150);
       final out = await TerrainLayer.levelTile(src);
-      expect(await rowMean(out, 0), closeTo(150, 0.5));
-      expect(await rowMean(out, 20), closeTo(150, 0.5));
+      var sum = 0.0;
+      for (var y = 0; y < 32; y++) {
+        sum += await rowMean(out, y);
+      }
+      expect(sum / 32, closeTo(150, 4));
     });
   });
 }

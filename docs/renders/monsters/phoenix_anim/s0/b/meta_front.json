@@ -1,0 +1,28 @@
+{
+  "monster": "phoenix",
+  "stage": 0,
+  "view": "front",
+  "frame_w": 280,
+  "frame_h": 224,
+  "cols": 8,
+  "anims": {
+    "idle_scratch": {
+      "sheet": "front_idle_scratch.webp",
+      "frames": 30,
+      "fps": 12,
+      "loop": true
+    },
+    "idle_shake": {
+      "sheet": "front_idle_shake.webp",
+      "frames": 24,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "front_attack.webp",
+      "frames": 16,
+      "fps": 16,
+      "loop": false
+    }
+  }
+}

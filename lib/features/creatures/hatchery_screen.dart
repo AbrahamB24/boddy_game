@@ -1,3 +1,4 @@
+import '../../core/theme/voxel_kit.dart' show VoxelBar;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -112,7 +113,7 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
           child: Container(
             height: 46,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: on ? goldButton() : raisedTile(radius: 14),
+            decoration: on ? goldButton() : menuButton(),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -557,17 +558,7 @@ class _HatcheryPaneState extends State<HatcheryPane> {
                   ],
                 ),
                 const SizedBox(height: 5),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: frac,
-                    minHeight: 8,
-                    backgroundColor: CreamPalette.tanShadow.withValues(
-                      alpha: 0.5,
-                    ),
-                    valueColor: AlwaysStoppedAnimation(barColor),
-                  ),
-                ),
+                VoxelBar(value: frac, height: 10, block: 8, color: barColor),
               ],
             ),
           ),

@@ -15,17 +15,18 @@ import 'package:flutter/material.dart';
 /// Used by the monster detail screen for species that have voxel art; nothing
 /// else in the app depends on it.
 abstract final class Voxel {
-  static const String font = 'Jersey10';
+  static const String font = 'Jersey15';
 
   /// One "block" of UI, in logical pixels. Corners, outlines and bevels are
   /// multiples of it.
   static const double unit = 2;
 
-  static const Color outline = Color(0xFF0B1E27);
+  static const Color outline = Color(0xFF081F24);
 
-  /// The lit top/left rim every block wears: the loading bar's blue, see-through
-  /// so it stays close to the plate (user 2026-11-09).
-  static const Color rim = Color(0x663FD0D0);
+  /// The lit top/left rim every block wears: Petrol's pale silver-teal,
+  /// see-through so it stays close to the plate (user 2026-11-10, palette no. 10
+  /// "Petrol" of the UI colour mock-up; the accent/gold is amber now).
+  static const Color rim = Color(0x808EC4C9);
 
   /// THE one fill of the UI: [base] lit from the top, shaded at the bottom — the
   /// loading screen's blue gradient, whatever the base colour. Every panel,
@@ -298,37 +299,37 @@ class _VoxelBarPainter extends CustomPainter {
     const gap = 2.0;
     final w = (size.width - gap * (n - 1)) / n;
     final filled = v * n;
+    // Every edge snapped to a whole pixel and drawn without anti-aliasing, so
+    // a lit block sits exactly on its socket (user 2026-11-13: "die beiden
+    // balken decken sich nicht").
+    final h = size.height.roundToDouble();
+    final topStrip = (h * 0.28).roundToDouble();
+    final botStrip = (h * 0.22).roundToDouble();
+    final p = Paint()..isAntiAlias = false;
     for (var i = 0; i < n; i++) {
-      final x = i * (w + gap);
-      final r = Rect.fromLTWH(x, 0, w, size.height);
+      final left = (i * (w + gap)).roundToDouble();
+      final right = (i * (w + gap) + w).roundToDouble();
+      final bw = right - left;
       canvas.drawRect(
-        r,
-        Paint()
-          ..color = onDark
-              ? const Color(0x33FFFFFF)
-              : const Color(0x522B1810),
+        Rect.fromLTWH(left, 0, bw, h),
+        p..color = onDark ? const Color(0x33FFFFFF) : const Color(0x522B1810),
       );
       canvas.drawRect(
-        Rect.fromLTWH(r.left, r.top, r.width, 1.5),
-        Paint()..color = const Color(0x40000000),
+        Rect.fromLTWH(left, 0, bw, 1),
+        p..color = const Color(0x40000000),
       );
       final f = (filled - i).clamp(0.0, 1.0);
       if (f <= 0) continue;
-      final fr = Rect.fromLTWH(x, 0, w * (f >= 0.5 ? 1 : 0.5), size.height);
-      canvas.drawRect(fr, Paint()..color = color);
+      final fw = f >= 0.5 ? bw : (bw / 2).roundToDouble();
+      canvas.drawRect(Rect.fromLTWH(left, 0, fw, h), p..color = color);
       // lit top strip, shaded bottom strip
       canvas.drawRect(
-        Rect.fromLTWH(fr.left, fr.top, fr.width, size.height * 0.28),
-        Paint()..color = Color.lerp(color, Colors.white, 0.45)!,
+        Rect.fromLTWH(left, 0, fw, topStrip),
+        p..color = Color.lerp(color, Colors.white, 0.45)!,
       );
       canvas.drawRect(
-        Rect.fromLTWH(
-          fr.left,
-          fr.bottom - size.height * 0.22,
-          fr.width,
-          size.height * 0.22,
-        ),
-        Paint()..color = Color.lerp(color, Colors.black, 0.35)!,
+        Rect.fromLTWH(left, h - botStrip, fw, botStrip),
+        p..color = Color.lerp(color, Colors.black, 0.35)!,
       );
     }
   }
@@ -341,17 +342,82 @@ class _VoxelBarPainter extends CustomPainter {
 /// The page behind: flat square blocks in the element's hue with a stable,
 /// uneven brightness (so it reads as a wall of blocks, not a texture), darker
 /// toward the edges.
+/// The menus' ground (user 2026-11-12, "Voxelwand fein"): a fine wall of square
+/// blocks, each with its own fixed brightness (±8 %), lit from the top and
+/// falling off toward the edges. Finer and brighter than [VoxelBackdrop], whose
+/// element-coloured walls it leaves alone.
+class VoxelWall extends StatelessWidget {
+  final Color color;
+
+  /// Edge length of one block in logical px.
+  final double cell;
+  const VoxelWall({super.key, required this.color, this.cell = 12});
+
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: CustomPaint(
+      painter: _WallPainter(color, cell),
+      size: Size.infinite,
+    ),
+  );
+}
+
+class _WallPainter extends CustomPainter {
+  final Color color;
+  final double cell;
+  _WallPainter(this.color, this.cell);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cols = (size.width / cell).ceil();
+    final rows = (size.height / cell).ceil();
+    final lit = Color.lerp(color, Colors.white, 0.22)!;
+    final paint = Paint()..isAntiAlias = false;
+    for (var y = 0; y < rows; y++) {
+      final top = Color.lerp(lit, color, (y / (rows * 0.68)).clamp(0.0, 1.0))!;
+      for (var x = 0; x < cols; x++) {
+        // a stable hash: the same wall every frame
+        final h = ((x * 73856093) ^ (y * 19349663)) & 0xFFFF;
+        final jitter = ((h % 17) / 16.0 - 0.5) * 0.16; // ±8 %
+        final dx = (x / cols - 0.5) * 2, dy = (y / rows - 0.5) * 2;
+        final fall = (0.5 * (dx * dx * 0.6 + dy * dy * 0.6)).clamp(0.0, 1.0);
+        var c = Color.lerp(Colors.black, top, (1 + jitter).clamp(0.0, 1.3))!;
+        c = Color.lerp(c, Colors.black, fall)!;
+        canvas.drawRect(
+          Rect.fromLTWH(x * cell, y * cell, cell, cell),
+          paint..color = c,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WallPainter o) => o.color != color || o.cell != cell;
+}
+
 class VoxelBackdrop extends StatelessWidget {
   final Color color;
 
   /// How much the edges darken: 1 = the monster page's full vignette, 0 = none.
   /// A menu only shows a thin frame of it, so it takes a gentler one.
   final double vignette;
-  const VoxelBackdrop({super.key, required this.color, this.vignette = 1});
+  /// How far the tiles are pushed toward black (0.46 = the screens' dark wall;
+  /// less = livelier, for a card that wants the colour itself to show).
+  final double darken;
+
+  /// Edge length of one tile in logical px.
+  final double cell;
+  const VoxelBackdrop({
+    super.key,
+    required this.color,
+    this.vignette = 1,
+    this.darken = 0.46,
+    this.cell = 26,
+  });
 
   @override
   Widget build(BuildContext context) => CustomPaint(
-    painter: _BackdropPainter(color, vignette),
+    painter: _BackdropPainter(color, vignette, darken, cell),
     size: Size.infinite,
   );
 }
@@ -359,11 +425,12 @@ class VoxelBackdrop extends StatelessWidget {
 class _BackdropPainter extends CustomPainter {
   final Color color;
   final double vignette;
-  _BackdropPainter(this.color, this.vignette);
+  final double darken;
+  final double cell;
+  _BackdropPainter(this.color, this.vignette, this.darken, this.cell);
 
   @override
   void paint(Canvas canvas, Size size) {
-    const cell = 26.0;
     final cols = (size.width / cell).ceil();
     final rows = (size.height / cell).ceil();
     for (var y = 0; y < rows; y++) {
@@ -375,7 +442,7 @@ class _BackdropPainter extends CustomPainter {
           math.min(x, cols - 1 - x) / 4.0,
           math.min(y, rows - 1 - y) / 3.0,
         ).clamp(0.0, 1.0);
-        final base = Color.lerp(color, Colors.black, 0.46 - 0.10 * jitter)!;
+        final base = Color.lerp(color, Colors.black, darken - 0.10 * jitter)!;
         final c = Color.lerp(Colors.black, base, 1 - vignette * 0.45 * (1 - edge))!;
         canvas.drawRect(
           Rect.fromLTWH(x * cell, y * cell, cell, cell),
@@ -396,7 +463,10 @@ class _BackdropPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BackdropPainter o) =>
-      o.color != color || o.vignette != vignette;
+      o.color != color ||
+      o.vignette != vignette ||
+      o.darken != darken ||
+      o.cell != cell;
 }
 
 /// Pixel-grid icons for the tab rail and small marks. Each is a string bitmap:

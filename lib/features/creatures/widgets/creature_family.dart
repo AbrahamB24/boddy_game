@@ -7,6 +7,7 @@ import '../models/combatant.dart';
 import '../models/creature_enums.dart';
 import '../models/creature_instance.dart';
 import 'battle_scene.dart' show TypePodium;
+import '../../../core/theme/voxel_kit.dart' show VoxelBackdrop;
 import 'creature_sprite.dart';
 import '../../../core/theme/voxel_icons.dart';
 import '../../../core/ui/game_text.dart';
@@ -246,6 +247,196 @@ class SockelAvatar extends StatelessWidget {
 ///
 /// [u] scales the whole tile; the caller shows the name only while the tile is
 /// big enough to carry it. Drawn at [width] × [height] for u = 1.
+/// A crew seat as a CARD ("Karten mit Balken", user 2026-11-11): the monster on
+/// its podium rising out of a lighter card, underneath the name, a bar for the
+/// stat that drives its output, and the figure it makes here. [u] scales it all;
+/// the name and the stat figure only show while it is big enough.
+class CreatureCrewCard extends StatelessWidget {
+  final CreatureFace face;
+  final String? name;
+  final String figure;
+
+  /// 0..1, how full the stat bar is.
+  final double stat;
+
+  /// The stat's number, printed beside the figure while there is room.
+  final String? statLabel;
+  final double u;
+
+  const CreatureCrewCard({
+    super.key,
+    required this.face,
+    required this.figure,
+    required this.stat,
+    this.name,
+    this.statLabel,
+    this.u = 1,
+    this.compact = false,
+  });
+
+  /// Natural size at u = 1: the card itself, and the strip above it the
+  /// monster's head rises into.
+  /// The COMPACT form (monster, podium, figure — no card): what 20+ seats use.
+  static const double compactWidth = 46;
+  static const double compactHeight = 64;
+  final bool compact;
+
+  static const double width = 104;
+  static const double height = 96;
+  static const double rise = 16;
+
+  @override
+  Widget build(BuildContext context) {
+    if (compact) return _buildCompact();
+    final w = width * u;
+    return SizedBox(
+      width: w,
+      height: (height + rise) * u,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            top: rise * u,
+            // The trading card's foot: dark element base, the element
+            // backdrop with its symbol at the top, a shade toward the text.
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: ShapeDecoration(
+                color: Color.lerp(face.element.color, Colors.black, 0.36),
+                shape: FoE.facet(radius: 14 * u),
+                shadows: const [
+                  BoxShadow(color: Color(0x4D000000), offset: Offset(0, 3)),
+                ],
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Same block-tile wall as the Monsters screen's trading card.
+                  VoxelBackdrop(
+                    color: face.element.color,
+                    vignette: 0.7,
+                    darken: 0.22,
+                    cell: 18 * u,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 58 * u,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: face.ko ? 0.35 : 1,
+                child: CreatureFigure(
+                  imageUrl: face.imageUrl,
+                  element: face.element,
+                  decodeSize: 58 * u,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 7 * u,
+            right: 7 * u,
+            bottom: 6 * u,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (name != null)
+                  Text(
+                    name!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: FoE.label(
+                      size: 10.5 * u,
+                    ).copyWith(color: Colors.white, fontWeight: FontWeight.w400),
+                    textAlign: TextAlign.center,
+                  ),
+                SizedBox(height: 3 * u),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    figure,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: FoE.value(
+                      size: (12 * u).clamp(8.0, 15.0),
+                    ).copyWith(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+extension on CreatureCrewCard {
+  Widget _buildCompact() {
+    final w = CreatureCrewCard.compactWidth * u;
+    return SizedBox(
+      width: w,
+      height: CreatureCrewCard.compactHeight * u,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0,
+            top: 28 * u,
+            child: TypePodium(
+              element: face.element,
+              width: w,
+              hpFraction: null,
+              hpColor: kBoxInk,
+              gauge: (2.4 * u).clamp(1.5, 3.5),
+            ),
+          ),
+          Positioned(
+            left: -3 * u,
+            right: -3 * u,
+            top: 0,
+            height: 42 * u,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: face.ko ? 0.35 : 1,
+                child: CreatureFigure(
+                  imageUrl: face.imageUrl,
+                  element: face.element,
+                  decodeSize: 42 * u,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                figure,
+                maxLines: 1,
+                style: FoE.value(
+                  size: (12 * u).clamp(8.0, 14.0),
+                ).copyWith(color: kBoxInk),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class CreatureSeatTile extends StatelessWidget {
   final CreatureFace face;
 

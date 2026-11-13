@@ -39,41 +39,41 @@ import '../ui/game_text.dart';
 /// the dark of a roof tile, and the ground is a timber beam in shade. Gold
 /// stays — it is the lit windows and the ridge finial.
 abstract final class CreamPalette {
-  static const Color paperTop = Color(0xFF1F4E63);
-  static const Color paperBottom = Color(0xFF1B4558);
+  static const Color paperTop = Color(0xFF244B52);
+  static const Color paperBottom = Color(0xFF1F434B);
 
   /// Lines, dashed seats — light timber.
-  static const Color tan = Color(0xFF4C8CA6);
+  static const Color tan = Color(0xFF5F9AA3);
 
   /// The hard shadow under a card or tile — timber in shade.
-  static const Color tanShadow = Color(0xFF0A2029);
+  static const Color tanShadow = Color(0xFF0B252A);
 
   /// Headings on a card — a shaded roof tile.
-  static const Color accent = Color(0xFF7FD6E8);
-  static const Color ink = Color(0xFF08222B);
+  static const Color accent = Color(0xFFA9C9CC);
+  static const Color ink = Color(0xFF0D292F);
 
   /// The one button colour (a lit window), and the shade its hard shadow
   /// falls in.
-  static const Color gold = Color(0xFF3FD0D0);
-  static const Color goldDeep = Color(0xFF1C8C8C);
+  static const Color gold = Color(0xFFEBB752);
+  static const Color goldDeep = Color(0xFFA0762A);
 
   /// Gold as TEXT or glyph colour on a card: [goldDeep] is a shadow tone and is
   /// too dim to read on the dark cards.
-  static const Color goldInk = Color(0xFF7DE8E8);
+  static const Color goldInk = Color(0xFFF0D08A);
 
   /// A raised tile standing on a card — fresh plaster.
-  static const Color tileTop = Color(0xFF2C6A80);
-  static const Color tileBottom = Color(0xFF265C70);
+  static const Color tileTop = Color(0xFF35656E);
+  static const Color tileBottom = Color(0xFF2E5B63);
 
   /// The menu ground and the tint dimming the map behind a dialog.
-  static const Color groundTop = Color(0xFF1E5266);
-  static const Color groundBottom = Color(0xFF0E2530);
-  static const Color dim = Color(0x9E0E2530);
+  static const Color groundTop = Color(0xFF3A6A73);
+  static const Color groundBottom = Color(0xFF0B252A);
+  static const Color dim = Color(0x9E0B252A);
 
   /// A locked seat.
-  static const Color lockedTop = Color(0xFF2E5367);
-  static const Color lockedBottom = Color(0xFF28485A);
-  static const Color lockedShadow = Color(0xFF1A3442);
+  static const Color lockedTop = Color(0xFF395B5F);
+  static const Color lockedBottom = Color(0xFF305056);
+  static const Color lockedShadow = Color(0xFF1F383D);
 
   /// "Gets better" — the upgrade deltas. The lawn's shaded green.
   static const Color better = Color(0xFF4AE08F);
@@ -87,7 +87,7 @@ abstract final class CreamPalette {
 /// ("Production", "Storage").
 // NACHT (2026-11-03): the cards are dark now, so ink ON THEM is light. [CreamPalette.ink]
 // stays the dark navy that goes on the orange buttons.
-const Color kBoxInk = Color(0xFFEAF4F8);
+const Color kBoxInk = Color(0xFFEBF5F5);
 // Voxel pass (2026-11-03): a pixel face has thin strokes, so ink that was fine
 // for a smooth face at 78 % / 50 % is too faint now. Raised to read at 11-12 px.
 final Color kBoxInkSoft = kBoxInk.withValues(alpha: 0.92);
@@ -200,8 +200,7 @@ class _CreamPatternPainter extends CustomPainter {
 
     if (pattern == CreamPatternStyle.diamond) _paintDiamond(canvas, size);
     if (pattern == CreamPatternStyle.blocks) _paintBlocks(canvas, size);
-    // Plaster grain (Fachwerk, 2026-11-02).
-    paintPlaster(canvas, Offset.zero & size);
+    // No plaster grain: the speckles read as sparkles (user 2026-11-11).
 
     // A warm glow in the top-left corner, where the light comes from.
     canvas.drawRect(
@@ -467,12 +466,12 @@ BoxDecoration raisedTile({
 /// The one button look: a chunky GOLD pill like the build menu's active
 /// category, navy ink on it — or, when it can't be pressed, the grey the menu
 /// shows for a card you cannot afford.
-BoxDecoration goldButton({bool active = true}) => chunkyDecoration(
-  fill: active ? CreamPalette.gold : Strategy.locked,
-  deep: active ? CreamPalette.goldDeep : Strategy.lockedDeep,
-  radius: 14,
-  shadowOffset: 3,
-);
+Decoration goldButton({bool active = true}) =>
+    voxelButtonDecoration(fill: active ? CreamPalette.gold : Strategy.locked);
+
+/// The quiet button next to a [goldButton]: the main menu's blue plate.
+Decoration menuButton({bool locked = false}) =>
+    voxelButtonDecoration(fill: locked ? Strategy.locked : null);
 
 Color goldButtonInk({bool active = true}) =>
     active ? CreamPalette.ink : kBoxInk.withValues(alpha: 0.6);
@@ -497,7 +496,7 @@ class VoxelGround extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
     fit: StackFit.expand,
     children: [
-      const VoxelBackdrop(color: CreamPalette.groundTop, vignette: 0.45),
+      const VoxelWall(color: CreamPalette.groundTop),
       child,
     ],
   );
@@ -569,6 +568,10 @@ class MenuScaffold extends StatelessWidget {
   /// walnut board for the body, a bronze medal to leave by. See [UiBar].
   final bool timber;
 
+  /// No card at all: title and body stand straight on the block-wall
+  /// background (user 2026-11-10, Monsters screen).
+  final bool bare;
+
   const MenuScaffold({
     super.key,
     required this.title,
@@ -582,6 +585,9 @@ class MenuScaffold extends StatelessWidget {
     this.floatingActionButton,
     this.pattern = CreamPatternStyle.none,
     this.timber = false,
+    // User 2026-11-11: the big card is gone from every menu, the way the
+    // Monsters screen already had it.
+    this.bare = true,
   });
 
   // [timber] is ignored: every menu wears the main screen's blue (2026-11-09).
@@ -596,7 +602,7 @@ class MenuScaffold extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           const Positioned.fill(
-            child: VoxelBackdrop(color: CreamPalette.groundTop, vignette: 0.3),
+            child: VoxelWall(color: CreamPalette.groundTop),
           ),
           SafeArea(
             child: Center(
@@ -618,14 +624,17 @@ class MenuScaffold extends StatelessWidget {
                 // shows round the card now: a frame of 8 px instead of nothing.
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: creamCard(
-                    padding: const EdgeInsets.fromLTRB(14, 9, 10, 10),
-                    pattern: pattern,
-                    // Fachwerk (2026-11-02): the screen is a house wall — a beam
-                    // round it and the roof's tiles over its title.
-                    framed: true,
-                    roof: showHeader,
-                    child: Column(
+                  child: _cardOrBare(
+                    creamCard: (body) => creamCard(
+                      padding: const EdgeInsets.fromLTRB(14, 9, 10, 10),
+                      pattern: pattern,
+                      // Fachwerk (2026-11-02): the screen is a house wall — a
+                      // beam round it and the roof's tiles over its title.
+                      framed: true,
+                      roof: showHeader,
+                      child: body,
+                    ),
+                    body: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         if (showHeader) ...[
@@ -636,10 +645,18 @@ class MenuScaffold extends StatelessWidget {
                                   title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 21,
                                     letterSpacing: 0.3,
                                     color: kBoxInk,
+                                    shadows: bare
+                                        ? const [
+                                            Shadow(
+                                              color: Colors.black87,
+                                              blurRadius: 4,
+                                            ),
+                                          ]
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -668,6 +685,13 @@ class MenuScaffold extends StatelessWidget {
       ),
     ),
   );
+
+  Widget _cardOrBare({
+    required Widget Function(Widget body) creamCard,
+    required Widget body,
+  }) => bare
+      ? Padding(padding: const EdgeInsets.fromLTRB(14, 9, 10, 10), child: body)
+      : creamCard(body);
 }
 
 /// Knows whether a menu was opened OVER another menu: the first one on the stack
@@ -748,8 +772,10 @@ class KitCloseButton extends StatelessWidget {
             shape: const VoxelShape(notch: 2),
             shadows: voxelDrop(
               depth: 2,
+              // Dark, never gold: a gold slab outside the outline reads as
+              // colour spilling over the edge (user 2026-11-11).
               color: color == null
-                  ? CreamPalette.goldDeep
+                  ? CreamPalette.tanShadow
                   : Color.lerp(fill, Colors.black, 0.35)!,
             ),
           ),
@@ -889,40 +915,45 @@ class EmptySeat extends StatelessWidget {
       radius: radius,
     ),
     child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            decoration: BoxDecoration(
-              shape: BoxShape.rectangle,
-              color: CreamPalette.gold,
-              boxShadow: [
-                BoxShadow(
-                  color: CreamPalette.goldDeep,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const PixelIcon(
-              Icons.add,
-              size: 18,
-              color: CreamPalette.ink,
-            ),
-          ),
-          if (label != null) ...[
-            const SizedBox(height: 5),
-            Text(
-              label!,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-                color: CreamPalette.accent,
+      // A tiny seat (the picker's 39 px mini card) shrinks plus and caption
+      // together instead of overflowing.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                shape: BoxShape.rectangle,
+                color: CreamPalette.gold,
+                boxShadow: [
+                  BoxShadow(
+                    color: CreamPalette.goldDeep,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const PixelIcon(
+                Icons.add,
+                size: 18,
+                color: CreamPalette.ink,
               ),
             ),
+            if (label != null) ...[
+              const SizedBox(height: 5),
+              Text(
+                label!,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: CreamPalette.accent,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     ),
   );

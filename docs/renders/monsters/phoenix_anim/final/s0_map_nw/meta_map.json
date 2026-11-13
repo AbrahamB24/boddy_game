@@ -1,0 +1,24 @@
+{
+  "monster": "phoenix",
+  "stage": 0,
+  "view": "map",
+  "cols": 8,
+  "frame_w": 543,
+  "frame_h": 434,
+  "headings": {
+    "se": "+x",
+    "ne": "+y",
+    "nw": "-x",
+    "sw": "-y"
+  },
+  "anims": {
+    "nw": {
+      "idle": {
+        "sheet": "nw_idle.webp",
+        "frames": 28,
+        "fps": 12,
+        "loop": true
+      }
+    }
+  }
+}

@@ -180,7 +180,7 @@ class _WorkScreenState extends State<WorkScreen> {
           child: Container(
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: on ? goldButton() : raisedTile(radius: 12),
+            decoration: on ? goldButton() : menuButton(),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -647,7 +647,7 @@ class _WorkScreenState extends State<WorkScreen> {
           height: 28,
           padding: const EdgeInsets.symmetric(horizontal: 9),
           alignment: Alignment.center,
-          decoration: on ? goldButton() : raisedTile(radius: 11),
+          decoration: on ? goldButton() : menuButton(),
           child: Text(
             text,
             style: const TextStyle(

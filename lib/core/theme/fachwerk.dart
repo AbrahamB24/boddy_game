@@ -33,9 +33,9 @@ abstract final class Fachwerk {
   static const Color tileGap = Color(0xFF5C2412);
 
   // Timber beams.
-  static const Color timber = Color(0xFF25596B);
-  static const Color timberLight = Color(0xFF3A7F96);
-  static const Color timberDark = Color(0xFF143E4C);
+  static const Color timber = Color(0xFF275058);
+  static const Color timberLight = Color(0xFF447681);
+  static const Color timberDark = Color(0xFF1C424B);
 
   // Plaster.
   static const Color plaster = Color(0xFFF6EFE0);
@@ -318,36 +318,36 @@ class _PlatePainter extends CustomPainter {
 // ─────────────────────────────────────────────────────────────────────────────
 abstract final class HudBlocks {
   // The header surface, lit → shaded.
-  static const Color stoneLight = Color(0xFF1585D0);
-  static const Color stone = Color(0xFF0A66B0);
-  static const Color stoneDark = Color(0xFF064F8F);
+  // PETROL (user 2026-11-10): muted blue-green greys instead of the saturated blues.
+  static const Color stoneLight = Color(0xFF427983);
+  static const Color stone = Color(0xFF316069);
+  static const Color stoneDark = Color(0xFF1F434B);
   // The darkest edge: rim shadow and the trim's foot.
-  static const Color stoneMortar = Color(0xFF00A6B8);
+  static const Color stoneMortar = Color(0xFF5F9AA3);
 
   // Round buttons: the main row, its shade, the drawer's quieter tone.
-  static const Color moss = Color(0xFF1A86D6);
-  static const Color mossDark = Color(0xFF04305C);
-  static const Color mossDeep = Color(0xFF0E68B0);
-  // Lit / pressed: the light blue of the loading bar (user 2026-11-04: "aus dem
-  // Rot das hellere Blau, das den Ladebalken ausfüllt"), once coral.
-  static const Color accent = Color(0xFF1FE6E0);
+  static const Color moss = Color(0xFF447681);
+  static const Color mossDark = Color(0xFF18383E);
+  static const Color mossDeep = Color(0xFF316069);
+  // Lit / pressed: the amber accent.
+  static const Color accent = Color(0xFFEBB752);
 
   // Cream ink on the dark surface, its quieter weight, and the plaque's tones.
-  static const Color ink = Color(0xFFE6FBFF);
-  static const Color inkSoft = Color(0xFF9CC8DB);
-  static const Color plaqueTop = Color(0xFF1F8FD8);
-  static const Color plaqueBottom = Color(0xFF0F6CB4);
-  static const Color plaqueEdge = Color(0xFF04305C);
+  static const Color ink = Color(0xFFEBF5F5);
+  static const Color inkSoft = Color(0xFFB7CBCC);
+  static const Color plaqueTop = Color(0xFF447681);
+  static const Color plaqueBottom = Color(0xFF316069);
+  static const Color plaqueEdge = Color(0xFF18383E);
 
   // States read ON the dark surface.
   static const Color warn = Color(0xFFFF4560);
   static const Color good = Color(0xFF4DFF98);
 
   /// Light ink for a glyph on a round button.
-  static const Color glyph = Color(0xFFE6FBFF);
+  static const Color glyph = Color(0xFFEBF5F5);
 
   /// The ring of a lit (pressed / open) button.
-  static const Color litRim = Color(0xFFE6FBFF);
+  static const Color litRim = Color(0xFFEBF5F5);
 }
 
 // ── GOLD FILIGREE (user 2026-11-04, ornament proposal no. 1 of the fantasy

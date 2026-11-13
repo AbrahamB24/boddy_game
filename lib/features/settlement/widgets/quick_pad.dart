@@ -142,14 +142,10 @@ class _QuickDockState extends State<QuickDock> {
       mainAxisSize: MainAxisSize.min,
       children: [
         QuickRail._anchored(widget.main),
-        // Right up against the compass (user 2026-11-04: "näher an Expedition").
-        const SizedBox(width: 1),
-        // At the compass's BOTTOM RIGHT (user 2026-11-04: "unten rechts von
-        // Expeditions"), tucked 12 px over its edge; it keeps its own tap area.
-        Transform.translate(
-          offset: const Offset(-12, 0),
-          child: _foldButton(hidden),
-        ),
+        // Beside the compass, no longer tucked over its edge (user 2026-11-12:
+        // "der Aufklappbutton sollte nicht den andern Button überlagern").
+        const SizedBox(width: QuickRail.gap),
+        _foldButton(hidden),
         // Clipped to the row's own WIDTH while it animates, but free above and
         // below (user 2026-09-28: "die Notification ist abgeschnitten und unten
         // der Schatten von den Icons"): the badge on a button's corner and its
@@ -173,7 +169,11 @@ class _QuickDockState extends State<QuickDock> {
               heightFactor: 1,
               child: Padding(
                 // Right: room for a badge that hangs past the last button.
-                padding: const EdgeInsets.only(right: _kHang),
+                // Left: the same gap as between the compass and the fold tab.
+                padding: const EdgeInsets.only(
+                  left: QuickRail.gap,
+                  right: _kHang,
+                ),
                 child: QuickRail(items: widget.more),
               ),
             ),
@@ -190,8 +190,8 @@ class _QuickDockState extends State<QuickDock> {
     label: _open ? 'Fold away' : 'More buttons',
     button: true,
     child: SizedBox(
-      width: 40,
-      height: 40,
+      width: 34,
+      height: 34,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -203,7 +203,7 @@ class _QuickDockState extends State<QuickDock> {
               child: Center(
                 child: PixelIcon(
                   _open ? Icons.chevron_left : Icons.chevron_right,
-                  size: 19,
+                  size: 16,
                   color: VoxelHud.ink,
                 ),
               ),
@@ -302,7 +302,10 @@ class _QuickTile extends StatelessWidget {
     // The compass tile is Manage, drawn as a globe (user 2026-11-08); the rest
     // wear their pixel glyph, or the flat icon where there is none.
     final pxName = item.compass ? 'globe' : UiArt.iconPxFor(item.label);
-    final shown = item.compass ? 'Manage' : item.label;
+    // "Daily tasks" is too long for one fixed size on the plate.
+    final shown = item.compass
+        ? 'Expedition'
+        : (item.label == 'Daily tasks' ? 'Tasks' : item.label);
     return Semantics(
       label: item.label,
       button: true,
@@ -320,7 +323,10 @@ class _QuickTile extends StatelessWidget {
                 child: VoxelCell(
                   onTap: item.onTap,
                   color: lit ? const Color(0xFFC07A1E) : null,
-                  padding: const EdgeInsets.fromLTRB(4, 5, 4, 4),
+                  // Room for the plate's lit rim at the sides and its dark foot
+                  // at the bottom, so a label never runs into either (user
+                  // 2026-11-12).
+                  padding: const EdgeInsets.fromLTRB(7, 5, 7, 8),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -335,13 +341,15 @@ class _QuickTile extends StatelessWidget {
                                 ),
                         ),
                       ),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          shown,
-                          maxLines: 1,
-                          style: Voxel.text(size: 15, color: VoxelHud.ink),
-                        ),
+                      // ONE size for every label (user 2026-11-12): sized so the
+                      // longest ("Expedition") fits the plate; no per-label
+                      // shrinking, which made them all different.
+                      Text(
+                        shown,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.visible,
+                        style: Voxel.text(size: 10, color: VoxelHud.ink),
                       ),
                     ],
                   ),

@@ -1,0 +1,501 @@
+00:34.719  cycles           | WARNING CUEW initialization failed: Error opening the library
+01:00.516  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_00.png'
+frame se walk 0
+01:26.203  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_01.png'
+frame se walk 1
+01:51.391  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_02.png'
+frame se walk 2
+02:16.578  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_03.png'
+frame se walk 3
+02:41.922  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_04.png'
+frame se walk 4
+03:13.594  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_05.png'
+frame se walk 5
+03:48.656  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_06.png'
+frame se walk 6
+04:23.438  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_07.png'
+frame se walk 7
+WARNING se_walk: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR'), (6, 'TR'), (7, 'TR')]
+04:59.031  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_in_00.png'
+frame se walk_in 0
+05:33.547  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_in_01.png'
+frame se walk_in 1
+06:05.985  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_in_02.png'
+frame se walk_in 2
+06:38.469  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_in_03.png'
+frame se walk_in 3
+07:12.781  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_in_04.png'
+frame se walk_in 4
+07:46.328  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_in_05.png'
+frame se walk_in 5
+WARNING se_walk_in: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR')]
+08:30.656  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_out_00.png'
+frame se walk_out 0
+09:08.906  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_out_01.png'
+frame se walk_out 1
+09:35.625  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_out_02.png'
+frame se walk_out 2
+09:58.891  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_out_03.png'
+frame se walk_out 3
+10:19.235  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_out_04.png'
+frame se walk_out 4
+10:42.969  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_walk_out_05.png'
+frame se walk_out 5
+WARNING se_walk_out: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR')]
+11:13.563  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_00.png'
+frame se idle 0
+11:37.422  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_01.png'
+frame se idle 1
+12:02.422  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_02.png'
+frame se idle 2
+12:27.266  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_03.png'
+frame se idle 3
+12:52.500  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_04.png'
+frame se idle 4
+13:17.375  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_05.png'
+frame se idle 5
+13:41.453  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_06.png'
+frame se idle 6
+14:06.375  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_07.png'
+frame se idle 7
+14:31.266  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_08.png'
+frame se idle 8
+14:55.953  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_09.png'
+frame se idle 9
+15:21.172  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_10.png'
+frame se idle 10
+15:45.985  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_11.png'
+frame se idle 11
+16:10.719  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_12.png'
+frame se idle 12
+16:37.250  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_13.png'
+frame se idle 13
+17:03.297  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_14.png'
+frame se idle 14
+17:28.860  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_15.png'
+frame se idle 15
+17:53.188  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_16.png'
+frame se idle 16
+18:18.469  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_17.png'
+frame se idle 17
+18:42.766  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_18.png'
+frame se idle 18
+19:08.781  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_19.png'
+frame se idle 19
+19:34.313  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_20.png'
+frame se idle 20
+19:59.797  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_21.png'
+frame se idle 21
+20:27.110  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_22.png'
+frame se idle 22
+20:50.219  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_23.png'
+frame se idle 23
+21:11.672  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_24.png'
+frame se idle 24
+21:33.781  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_25.png'
+frame se idle 25
+21:55.594  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_26.png'
+frame se idle 26
+22:15.906  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_27.png'
+frame se idle 27
+22:36.906  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_28.png'
+frame se idle 28
+22:58.469  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_29.png'
+frame se idle 29
+23:20.188  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_30.png'
+frame se idle 30
+23:41.281  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_31.png'
+frame se idle 31
+24:02.656  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_32.png'
+frame se idle 32
+24:22.781  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_33.png'
+frame se idle 33
+24:38.438  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_34.png'
+frame se idle 34
+24:53.688  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_35.png'
+frame se idle 35
+25:13.688  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_36.png'
+frame se idle 36
+25:35.203  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_37.png'
+frame se idle 37
+25:56.438  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_38.png'
+frame se idle 38
+26:23.031  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\se_idle_39.png'
+frame se idle 39
+WARNING se_idle: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR'), (6, 'TR'), (7, 'TR'), (8, 'TR'), (9, 'TR'), (10, 'TR'), (11, 'TR'), (12, 'TR'), (13, 'TR'), (14, 'TR'), (15, 'TR'), (16, 'TR'), (17, 'TR'), (18, 'TR'), (19, 'TR'), (20, 'TR'), (21, 'TR'), (22, 'TR'), (23, 'TR'), (24, 'TR'), (25, 'TR'), (26, 'TR'), (27, 'TR'), (28, 'TR'), (29, 'TR'), (30, 'TR'), (31, 'TR'), (32, 'TR'), (33, 'TR'), (34, 'TR'), (35, 'TR'), (36, 'TR'), (37, 'TR'), (38, 'TR'), (39, 'TR')]
+27:08.469  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_00.png'
+frame ne walk 0
+27:35.594  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_01.png'
+frame ne walk 1
+28:01.203  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_02.png'
+frame ne walk 2
+28:19.016  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_03.png'
+frame ne walk 3
+28:41.563  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_04.png'
+frame ne walk 4
+29:03.344  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_05.png'
+frame ne walk 5
+29:25.016  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_06.png'
+frame ne walk 6
+29:45.703  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_07.png'
+frame ne walk 7
+WARNING ne_walk: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR'), (6, 'TR'), (7, 'TR')]
+30:11.328  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_in_00.png'
+frame ne walk_in 0
+30:32.391  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_in_01.png'
+frame ne walk_in 1
+30:52.250  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_in_02.png'
+frame ne walk_in 2
+31:15.047  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_in_03.png'
+frame ne walk_in 3
+31:36.969  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_in_04.png'
+frame ne walk_in 4
+31:58.922  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_in_05.png'
+frame ne walk_in 5
+WARNING ne_walk_in: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR')]
+32:24.625  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_out_00.png'
+frame ne walk_out 0
+32:47.500  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_out_01.png'
+frame ne walk_out 1
+33:10.406  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_out_02.png'
+frame ne walk_out 2
+33:32.344  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_out_03.png'
+frame ne walk_out 3
+33:53.297  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_out_04.png'
+frame ne walk_out 4
+34:13.922  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_walk_out_05.png'
+frame ne walk_out 5
+WARNING ne_walk_out: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR')]
+34:38.016  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_00.png'
+frame ne idle 0
+35:01.344  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_01.png'
+frame ne idle 1
+35:21.156  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_02.png'
+frame ne idle 2
+35:42.328  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_03.png'
+frame ne idle 3
+36:02.735  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_04.png'
+frame ne idle 4
+36:24.219  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_05.png'
+frame ne idle 5
+36:44.250  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_06.png'
+frame ne idle 6
+37:04.156  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_07.png'
+frame ne idle 7
+37:25.031  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_08.png'
+frame ne idle 8
+37:44.406  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_09.png'
+frame ne idle 9
+38:05.828  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_10.png'
+frame ne idle 10
+38:27.172  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_11.png'
+frame ne idle 11
+38:51.625  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_12.png'
+frame ne idle 12
+39:13.516  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_13.png'
+frame ne idle 13
+39:33.047  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_14.png'
+frame ne idle 14
+39:52.641  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_15.png'
+frame ne idle 15
+40:12.547  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_16.png'
+frame ne idle 16
+40:35.188  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_17.png'
+frame ne idle 17
+40:56.156  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_18.png'
+frame ne idle 18
+41:17.031  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_19.png'
+frame ne idle 19
+41:37.188  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_20.png'
+frame ne idle 20
+41:57.703  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_21.png'
+frame ne idle 21
+42:18.125  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_22.png'
+frame ne idle 22
+42:39.594  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_23.png'
+frame ne idle 23
+42:59.516  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_24.png'
+frame ne idle 24
+43:19.078  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_25.png'
+frame ne idle 25
+43:39.141  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_26.png'
+frame ne idle 26
+43:59.453  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_27.png'
+frame ne idle 27
+44:19.938  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_28.png'
+frame ne idle 28
+44:35.781  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_29.png'
+frame ne idle 29
+44:55.110  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_30.png'
+frame ne idle 30
+45:15.328  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_31.png'
+frame ne idle 31
+45:35.610  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_32.png'
+frame ne idle 32
+45:56.094  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_33.png'
+frame ne idle 33
+46:17.610  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_34.png'
+frame ne idle 34
+46:38.781  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_35.png'
+frame ne idle 35
+46:53.797  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_36.png'
+frame ne idle 36
+47:13.328  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_37.png'
+frame ne idle 37
+47:34.094  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_38.png'
+frame ne idle 38
+47:55.235  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\ne_idle_39.png'
+frame ne idle 39
+WARNING ne_idle: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR'), (6, 'TR'), (7, 'TR'), (8, 'TR'), (9, 'TR'), (10, 'TR'), (11, 'TR'), (12, 'TR'), (13, 'TR'), (14, 'TR'), (15, 'TR'), (16, 'TR'), (17, 'TR'), (18, 'TR'), (19, 'TR'), (20, 'TR'), (21, 'TR'), (22, 'TR'), (23, 'TR'), (24, 'TR'), (25, 'TR'), (26, 'TR'), (27, 'TR'), (28, 'TR'), (29, 'TR'), (30, 'TR'), (31, 'TR'), (32, 'TR'), (33, 'TR'), (34, 'TR'), (35, 'TR'), (36, 'TR'), (37, 'TR'), (38, 'TR'), (39, 'TR')]
+48:29.922  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_00.png'
+frame nw walk 0
+48:50.656  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_01.png'
+frame nw walk 1
+49:11.125  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_02.png'
+frame nw walk 2
+49:30.531  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_03.png'
+frame nw walk 3
+49:50.610  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_04.png'
+frame nw walk 4
+50:11.375  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_05.png'
+frame nw walk 5
+50:31.188  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_06.png'
+frame nw walk 6
+50:51.391  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_07.png'
+frame nw walk 7
+WARNING nw_walk: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR'), (6, 'TR'), (7, 'TR')]
+51:13.438  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_in_00.png'
+frame nw walk_in 0
+51:33.328  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_in_01.png'
+frame nw walk_in 1
+51:53.094  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_in_02.png'
+frame nw walk_in 2
+52:13.203  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_in_03.png'
+frame nw walk_in 3
+52:32.578  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_in_04.png'
+frame nw walk_in 4
+52:53.797  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_in_05.png'
+frame nw walk_in 5
+WARNING nw_walk_in: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR')]
+53:17.219  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_out_00.png'
+frame nw walk_out 0
+53:36.625  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_out_01.png'
+frame nw walk_out 1
+53:50.141  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_out_02.png'
+frame nw walk_out 2
+54:10.656  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_out_03.png'
+frame nw walk_out 3
+54:30.875  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_out_04.png'
+frame nw walk_out 4
+54:52.656  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_walk_out_05.png'
+frame nw walk_out 5
+WARNING nw_walk_out: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR')]
+55:18.875  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_00.png'
+frame nw idle 0
+55:42.203  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_01.png'
+frame nw idle 1
+56:03.594  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_02.png'
+frame nw idle 2
+56:23.703  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_03.png'
+frame nw idle 3
+56:44.203  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_04.png'
+frame nw idle 4
+57:04.797  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_05.png'
+frame nw idle 5
+57:25.813  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_06.png'
+frame nw idle 6
+57:45.000  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_07.png'
+frame nw idle 7
+58:05.344  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_08.png'
+frame nw idle 8
+58:26.250  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_09.png'
+frame nw idle 9
+58:46.750  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_10.png'
+frame nw idle 10
+59:09.610  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_11.png'
+frame nw idle 11
+59:29.563  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_12.png'
+frame nw idle 12
+59:49.969  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_13.png'
+frame nw idle 13
+01:00:10.297  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_14.png'
+frame nw idle 14
+01:00:30.703  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_15.png'
+frame nw idle 15
+01:00:51.094  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_16.png'
+frame nw idle 16
+01:01:12.328  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_17.png'
+frame nw idle 17
+01:01:32.781  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_18.png'
+frame nw idle 18
+01:01:52.469  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_19.png'
+frame nw idle 19
+01:02:13.110  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_20.png'
+frame nw idle 20
+01:02:34.031  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_21.png'
+frame nw idle 21
+01:02:54.047  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_22.png'
+frame nw idle 22
+01:03:14.828  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_23.png'
+frame nw idle 23
+01:03:30.297  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_24.png'
+frame nw idle 24
+01:03:49.563  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_25.png'
+frame nw idle 25
+01:04:09.547  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_26.png'
+frame nw idle 26
+01:04:29.672  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_27.png'
+frame nw idle 27
+01:04:50.078  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_28.png'
+frame nw idle 28
+01:05:11.328  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_29.png'
+frame nw idle 29
+01:05:31.328  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_30.png'
+frame nw idle 30
+01:05:51.063  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_31.png'
+frame nw idle 31
+01:06:11.078  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_32.png'
+frame nw idle 32
+01:06:29.547  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_33.png'
+frame nw idle 33
+01:06:49.875  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_34.png'
+frame nw idle 34
+01:07:10.328  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_35.png'
+frame nw idle 35
+01:07:30.250  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_36.png'
+frame nw idle 36
+01:07:44.969  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_37.png'
+frame nw idle 37
+01:08:04.906  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_38.png'
+frame nw idle 38
+01:08:24.828  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\nw_idle_39.png'
+frame nw idle 39
+WARNING nw_idle: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR'), (6, 'TR'), (7, 'TR'), (8, 'TR'), (9, 'TR'), (10, 'TR'), (11, 'TR'), (12, 'TR'), (13, 'TR'), (14, 'TR'), (15, 'TR'), (16, 'TR'), (17, 'TR'), (18, 'TR'), (19, 'TR'), (20, 'TR'), (21, 'TR'), (22, 'TR'), (23, 'TR'), (24, 'TR'), (25, 'TR'), (26, 'TR'), (27, 'TR'), (28, 'TR'), (29, 'TR'), (30, 'TR'), (31, 'TR'), (32, 'TR'), (33, 'TR'), (34, 'TR'), (35, 'TR'), (36, 'TR'), (37, 'TR'), (38, 'TR'), (39, 'TR')]
+01:09:02.110  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_00.png'
+frame sw walk 0
+01:21:46.172  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_01.png'
+frame sw walk 1
+01:22:02.016  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_02.png'
+frame sw walk 2
+01:22:18.438  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_03.png'
+frame sw walk 3
+01:22:35.500  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_04.png'
+frame sw walk 4
+01:22:55.985  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_05.png'
+frame sw walk 5
+01:23:17.438  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_06.png'
+frame sw walk 6
+01:23:37.703  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_07.png'
+frame sw walk 7
+WARNING sw_walk: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR'), (6, 'TR'), (7, 'TR')]
+01:24:01.985  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_in_00.png'
+frame sw walk_in 0
+01:24:23.438  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_in_01.png'
+frame sw walk_in 1
+01:24:45.313  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_in_02.png'
+frame sw walk_in 2
+01:25:05.406  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_in_03.png'
+frame sw walk_in 3
+01:25:25.688  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_in_04.png'
+frame sw walk_in 4
+01:25:47.922  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_in_05.png'
+frame sw walk_in 5
+WARNING sw_walk_in: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR')]
+01:26:10.078  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_out_00.png'
+frame sw walk_out 0
+01:26:28.813  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_out_01.png'
+frame sw walk_out 1
+01:26:50.469  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_out_02.png'
+frame sw walk_out 2
+01:27:10.438  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_out_03.png'
+frame sw walk_out 3
+01:27:30.516  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_out_04.png'
+frame sw walk_out 4
+01:27:50.891  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_walk_out_05.png'
+frame sw walk_out 5
+WARNING sw_walk_out: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR')]
+01:28:14.625  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_00.png'
+frame sw idle 0
+01:28:34.688  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_01.png'
+frame sw idle 1
+01:28:55.563  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_02.png'
+frame sw idle 2
+01:29:16.094  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_03.png'
+frame sw idle 3
+01:29:39.891  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_04.png'
+frame sw idle 4
+01:30:02.813  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_05.png'
+frame sw idle 5
+01:30:24.281  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_06.png'
+frame sw idle 6
+01:30:46.031  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_07.png'
+frame sw idle 7
+01:31:08.063  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_08.png'
+frame sw idle 8
+01:31:29.000  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_09.png'
+frame sw idle 9
+01:31:50.250  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_10.png'
+frame sw idle 10
+01:32:11.281  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_11.png'
+frame sw idle 11
+01:32:31.281  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_12.png'
+frame sw idle 12
+01:32:50.516  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_13.png'
+frame sw idle 13
+01:33:10.797  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_14.png'
+frame sw idle 14
+01:33:32.438  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_15.png'
+frame sw idle 15
+01:33:54.047  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_16.png'
+frame sw idle 16
+01:34:19.750  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_17.png'
+frame sw idle 17
+01:34:44.047  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_18.png'
+frame sw idle 18
+01:35:00.281  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_19.png'
+frame sw idle 19
+01:35:15.485  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_20.png'
+frame sw idle 20
+01:35:30.656  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_21.png'
+frame sw idle 21
+01:35:45.656  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_22.png'
+frame sw idle 22
+01:36:00.625  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_23.png'
+frame sw idle 23
+01:36:15.188  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_24.png'
+frame sw idle 24
+01:36:29.844  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_25.png'
+frame sw idle 25
+01:36:43.750  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_26.png'
+frame sw idle 26
+01:36:57.406  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_27.png'
+frame sw idle 27
+01:37:11.453  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_28.png'
+frame sw idle 28
+01:37:25.922  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_29.png'
+frame sw idle 29
+01:37:40.453  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_30.png'
+frame sw idle 30
+01:37:54.875  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_31.png'
+frame sw idle 31
+01:38:09.141  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_32.png'
+frame sw idle 32
+01:38:23.531  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_33.png'
+frame sw idle 33
+01:38:40.063  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_34.png'
+frame sw idle 34
+01:38:57.656  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_35.png'
+frame sw idle 35
+01:39:13.266  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_36.png'
+frame sw idle 36
+01:39:30.172  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_37.png'
+frame sw idle 37
+01:39:40.797  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_38.png'
+frame sw idle 38
+01:39:55.235  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0\_frames\sw_idle_39.png'
+frame sw idle 39
+WARNING sw_idle: art touches the cell edge (cut off): [(0, 'TR'), (1, 'TR'), (2, 'TR'), (3, 'TR'), (4, 'TR'), (5, 'TR'), (6, 'TR'), (7, 'TR'), (8, 'TR'), (9, 'TR'), (10, 'TR'), (11, 'TR'), (12, 'TR'), (13, 'TR'), (14, 'TR'), (15, 'TR'), (16, 'TR'), (17, 'TR'), (18, 'TR'), (19, 'TR'), (20, 'TR'), (21, 'TR'), (22, 'TR'), (23, 'TR'), (24, 'TR'), (25, 'TR'), (26, 'TR'), (27, 'TR'), (28, 'TR'), (29, 'TR'), (30, 'TR'), (31, 'TR'), (32, 'TR'), (33, 'TR'), (34, 'TR'), (35, 'TR'), (36, 'TR'), (37, 'TR'), (38, 'TR'), (39, 'TR')]
+done C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_anim\s0
+Blender 5.2.2 LTS (hash d13f752e3b9c built 2026-09-15 01:37:04)
+
+Blender quit

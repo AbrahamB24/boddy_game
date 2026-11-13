@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' hide Text;
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
+import '../../settlement/widgets/voxel_hud.dart' show VoxelHud;
 import '../models/pvp_match.dart';
 import '../../../core/theme/voxel_kit.dart' show vr;
 import '../../../core/theme/voxel_icons.dart';
@@ -157,19 +158,19 @@ class SocialTileButton extends StatelessWidget {
     child: Container(
       height: height,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: raisedTile(radius: 11),
+      decoration: menuButton(locked: onTap == null),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            PixelIcon(icon, size: fontSize + 3, color: kBoxInk),
+            PixelIcon(icon, size: fontSize + 3, color: VoxelHud.ink),
             const SizedBox(width: 6),
           ],
           Text(
             label,
             maxLines: 1,
             style: TextStyle(
-              color: kBoxInk,
+              color: VoxelHud.ink,
               fontSize: fontSize,
               fontWeight: FontWeight.w400,
             ),
@@ -212,12 +213,12 @@ class SocialGlyphButton extends StatelessWidget {
             width: size,
             height: size,
             alignment: Alignment.center,
-            decoration: gold
-                ? goldButton().copyWith(
-                    borderRadius: vr(size),
-                  )
-                : raisedTile(radius: size),
-            child: PixelIcon(icon, size: size * 0.56, color: kBoxInk),
+            decoration: gold ? goldButton() : menuButton(),
+            child: PixelIcon(
+              icon,
+              size: size * 0.56,
+              color: gold ? kBoxInk : VoxelHud.ink,
+            ),
           ),
           if (badge > 0)
             Positioned(right: -6, top: -6, child: CountBadge(badge)),
@@ -253,7 +254,7 @@ Widget socialRow({
               ],
             ),
             boxShadow: const [
-              BoxShadow(color: CreamPalette.goldDeep, offset: Offset(0, 3)),
+              BoxShadow(color: CreamPalette.tanShadow, offset: Offset(0, 3)),
             ],
           )
         : raisedTile(lit: lit),

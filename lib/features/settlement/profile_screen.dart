@@ -614,7 +614,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       alignment: Alignment.center,
       decoration: gold
           ? goldButton(active: onTap != null)
-          : raisedTile(radius: 12),
+          : menuButton(),
       child: Text(
         label,
         style: FoE.label(size: 13).copyWith(
@@ -645,7 +645,7 @@ class _Switch extends StatelessWidget {
       borderRadius: vr(12),
       boxShadow: value
           ? const [
-              BoxShadow(color: CreamPalette.goldDeep, offset: Offset(0, 2)),
+              BoxShadow(color: CreamPalette.tanShadow, offset: Offset(0, 2)),
             ]
           : null,
     ),

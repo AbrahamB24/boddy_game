@@ -125,12 +125,6 @@ class _SettlementScreenState extends State<SettlementScreen>
   // [_showBuildCarousel].
   bool _buildOpen = false;
 
-  // The header's resources dropdown (user 2026-09-30: "wie früher eine Art
-  // Hovermenü... öffnet nach unten... nur so weit... wie aktuell Ressourcen
-  // freigeschalten sind"). Toggled by the tab under the header; closes on a
-  // tap anywhere else — see [_resourcesDropdown].
-  bool _resourcesOpen = false;
-
   // The category a page other than the map asked the strip to open on (Work's
   // "Build a house"); null = wherever the strip was. See [BuildMenuRequest].
   BuildingCategory? _requestedCategory;
@@ -1062,14 +1056,12 @@ class _SettlementScreenState extends State<SettlementScreen>
           const SizedBox(height: 28),
           SizedBox(
             width: 180,
-            child: ClipRRect(
-              borderRadius: vr(4),
-              child: LinearProgressIndicator(
-                value: _progress,
-                minHeight: 8,
-                backgroundColor: FoE.gold.withValues(alpha: 0.2),
-                color: FoE.gold,
-              ),
+            child: VoxelBar(
+              value: _progress,
+              height: 10,
+              block: 8,
+              color: VoxelHud.good,
+              onDark: true,
             ),
           ),
           const SizedBox(height: 16),
@@ -1272,7 +1264,6 @@ class _SettlementScreenState extends State<SettlementScreen>
             ),
           ),
         ),
-      if (_resourcesOpen) _resourcesDropdown(),
       // The intro card ITSELF is the lit control (every step still holding
       // its own unpressed CTA) — centred on the screen rather than pinned
       // above the quick menu (user 2026-09-02: "diese Textboxen in die
@@ -1640,118 +1631,6 @@ class _SettlementScreenState extends State<SettlementScreen>
   /// middle is the tallest thing on the bar.
   static const double _kCellHeight = 52;
 
-  /// The resources dropdown itself (user 2026-09-30) — a cream panel hanging
-  /// under the tab, GOLD ALONE AND CENTRED AT THE TOP ("Gold ist immer oben
-  /// mittig", it belongs to no era — same rule [ResourcesScreen] itself
-  /// follows), then one row of chips per era actually unlocked so far, via
-  /// the exact same [unlockedResourceShelves]/[ResourceTile] the full page
-  /// uses — so the two can never show different numbers. Sized to its own
-  /// content, not a fixed height: an early game with one era shows a short
-  /// panel, not a mostly-empty one. A tap anywhere outside it closes it.
-  Widget _resourcesDropdown() {
-    final rates = _ctrl.hourlyRates;
-    final eraShelves = unlockedResourceShelves(
-      _ctrl,
-    ).where((s) => s.era != null);
-    return Positioned.fill(
-      child: Stack(
-        children: [
-          // The scrim — transparent (a hover menu, not a modal that dims the
-          // world) but still opaque to hit-testing, so a tap anywhere else
-          // (the map, the quick rails underneath) closes this instead of
-          // reaching them.
-          Positioned.fill(
-            child: Pressable(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _resourcesOpen = false),
-              child: const ColoredBox(color: Colors.transparent),
-            ),
-          ),
-          Positioned(
-            top: _mapTop + 6,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  // Absorbs its own taps so pressing a tile (or the padding
-                  // around them) never falls through to the scrim behind it.
-                  child: Pressable(
-                    onTap: () {},
-                    child: creamCard(
-                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 124,
-                            child: ResourceTile(
-                              id: 'gold',
-                              rate: rates['gold'] ?? 0,
-                            ),
-                          ),
-                          for (final s in eraShelves) ...[
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                romanNumeral(s.era!),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w400,
-                                  letterSpacing: 1.0,
-                                  color: kBoxAccent,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (final id in s.ids)
-                                  SizedBox(
-                                    width: 124,
-                                    child: ResourceTile(
-                                      id: id,
-                                      rate: rates[id] ?? 0,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          Pressable(
-                            onTap: () {
-                              setState(() => _resourcesOpen = false);
-                              _openResources();
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Text(
-                                'See all →',
-                                style: FoE.dim(size: 11.5).copyWith(
-                                  color: kBoxAccent,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Shown only when the last save FAILED for a real reason (network/RLS). Local
   /// progress is kept and retried every tick, so this is a heads-up, not an
   /// error — it clears itself the moment a write lands again.
@@ -2028,28 +1907,11 @@ class _SettlementScreenState extends State<SettlementScreen>
                   ).copyWith(color: kBoxInk, fontWeight: FontWeight.w400),
                 ),
                 const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: vr(4),
-                  child: SizedBox(
-                    height: 8,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        ColoredBox(color: kBoxInk.withValues(alpha: 0.16)),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: FractionallySizedBox(
-                            widthFactor: frac,
-                            child: ColoredBox(
-                              color: t.done
-                                  ? CreamPalette.better
-                                  : CreamPalette.gold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                VoxelBar(
+                  value: frac,
+                  height: 8,
+                  block: 6,
+                  color: t.done ? CreamPalette.better : CreamPalette.gold,
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -2082,7 +1944,7 @@ class _SettlementScreenState extends State<SettlementScreen>
                   ),
                   decoration: t.claimable
                       ? goldButton()
-                      : raisedTile(radius: 10),
+                      : menuButton(),
                   child: Text(
                     'Claim',
                     style: FoE.label(size: 12).copyWith(
@@ -2587,7 +2449,6 @@ class _SettlementScreenState extends State<SettlementScreen>
               ? '–'
               : hoursWords(energy.hoursLeft),
           onTap: _showEnergyOverview,
-          onChest: () => setState(() => _resourcesOpen = !_resourcesOpen),
         ),
       ),
     );
@@ -2738,6 +2599,8 @@ class _SettlementScreenState extends State<SettlementScreen>
         // quick way to move just that one.
         // The account settings — a tile like Manage (user 2026-09-18).
         QuickPadItem(Icons.person, 'Profile', _showProfile),
+        // The treasure chest: straight to the Resources page (user 2026-11-12).
+        QuickPadItem(Icons.inventory_2, 'Resources', _openResources),
         QuickPadItem(
           Icons.backpack,
           'Bag',

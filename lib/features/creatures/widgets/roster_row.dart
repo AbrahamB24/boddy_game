@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' hide Text;
 
+import '../../../core/theme/voxel_kit.dart' show VoxelBar;
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/pressable.dart';
@@ -143,24 +144,11 @@ class RosterRow extends StatelessWidget {
 
   Widget _statBar() {
     final frac = statMax > 0 ? (statValue / statMax).clamp(0.0, 1.0) : 0.0;
-    return ClipRRect(
-      borderRadius: vr(4),
-      child: SizedBox(
-        height: 7,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(color: kBoxInk.withValues(alpha: 0.16)),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: frac,
-                child: const ColoredBox(color: CreamPalette.gold),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return VoxelBar(
+      value: frac,
+      height: 8,
+      block: 6,
+      color: CreamPalette.gold,
     );
   }
 

@@ -203,7 +203,7 @@ class SlotPill extends StatelessWidget {
         height: 24,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         alignment: Alignment.center,
-        decoration: gold ? goldButton() : raisedTile(radius: 9),
+        decoration: gold ? goldButton() : menuButton(),
         child: Text(
           label,
           style: const TextStyle(

@@ -970,7 +970,7 @@ final List<Dial> kDials = [
     label: 'Trainer-Stärke (Beschleunigung pro Trainer)',
     help:
         'Beschleunigung eines Trainers = Trainer-Stat × (1 − q^Level) × '
-        'dieser Wert. Alle Trainer addieren sich zu 1 + Σ.',
+        'dieser Wert. Alle Trainer addieren sich zu 1 + Summe.',
     def: 6,
   ),
   Dial(
@@ -1014,7 +1014,7 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Legendäre',
     label: 'Belohnungsanteil 3. Trainer',
-    help: '',
+    help: 'Anteil an der Belohnung, wenn so viele Trainer mitkämpfen (siehe 1. Trainer).',
     def: 0.18,
     kind: DialKind.percent,
   ),
@@ -1023,7 +1023,7 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Legendäre',
     label: 'Belohnungsanteil 4. Trainer',
-    help: '',
+    help: 'Anteil an der Belohnung, wenn so viele Trainer mitkämpfen (siehe 1. Trainer).',
     def: 0.10,
     kind: DialKind.percent,
   ),
@@ -1032,7 +1032,7 @@ final List<Dial> kDials = [
     group: TuningGroup.monster,
     section: 'Legendäre',
     label: 'Belohnungsanteil 5. Trainer',
-    help: '',
+    help: 'Anteil an der Belohnung, wenn so viele Trainer mitkämpfen (siehe 1. Trainer).',
     def: 0.07,
     kind: DialKind.percent,
   ),

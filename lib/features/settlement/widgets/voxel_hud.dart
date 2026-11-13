@@ -20,16 +20,16 @@ abstract final class VoxelHud {
   static const LinearGradient gradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFF2A7A90), Color(0xFF1D566A), Color(0xFF133848)],
+    colors: [Color(0xFF427983), Color(0xFF316069), Color(0xFF1D3F46)],
     stops: [0.0, 0.5, 1.0],
   );
 
-  static const Color plate = Color(0xFF2A6A80);
-  static const Color plateDeep = Color(0xFF1F4A5C);
+  static const Color plate = Color(0xFF316069);
+  static const Color plateDeep = Color(0xFF244B52);
 
   /// Text on the plates: bright ink, a quieter weight, and the two states.
-  static const Color ink = Color(0xFFEAF4F8);
-  static const Color inkSoft = Color(0xFFB4CEDB);
+  static const Color ink = Color(0xFFEBF5F5);
+  static const Color inkSoft = Color(0xFFB7CBCC);
   static const Color warn = Color(0xFFFF8A5C);
   static const Color good = Color(0xFF4AE08F);
 
@@ -52,7 +52,7 @@ abstract final class VoxelHud {
     'fish' => const Color(0xFF7FC8E8),
     'gold' => const Color(0xFFFFD96A),
     'housing' => const Color(0xFFC9A0E8),
-    _ => const Color(0xFF7FD6E8),
+    _ => const Color(0xFFA9C9CC),
   };
 }
 
@@ -104,7 +104,6 @@ class VoxelEnergyBlock extends StatelessWidget {
   /// "2 h 54 min" — how long the pool lasts at the steady drain.
   final String timeLeft;
   final VoidCallback onTap;
-  final VoidCallback onChest;
 
   const VoxelEnergyBlock({
     super.key,
@@ -112,7 +111,6 @@ class VoxelEnergyBlock extends StatelessWidget {
     required this.maxPercent,
     required this.timeLeft,
     required this.onTap,
-    required this.onChest,
   });
 
   @override
@@ -127,7 +125,7 @@ class VoxelEnergyBlock extends StatelessWidget {
           button: true,
           child: VoxelCell(
             onTap: onTap,
-            padding: const EdgeInsets.fromLTRB(8, 6, 30, 6),
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
             child: Row(
               children: [
                 DecoratedBox(
@@ -195,20 +193,6 @@ class VoxelEnergyBlock extends StatelessWidget {
                   ],
                 ),
               ],
-            ),
-          ),
-        ),
-        Positioned(
-          right: -6,
-          top: -8,
-          child: Semantics(
-            label: 'All resources',
-            button: true,
-            child: VoxelCell(
-              onTap: onChest,
-              color: const Color(0xFFA8821A),
-              padding: const EdgeInsets.all(6),
-              child: VoxelHud.px('chest_s', 24),
             ),
           ),
         ),

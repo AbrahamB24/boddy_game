@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>Dragon preview</title>
+<style>body{background:#2b2622;color:#eee;font:13px sans-serif;margin:12px}h2{margin:14px 0 4px}
+.row{display:flex;flex-wrap:wrap;gap:8px}.c{background:#e8e2d6;border-radius:6px;color:#222;text-align:center}
+.s{width:280px;height:224px;background-repeat:no-repeat}.m{width:272px;height:217px}</style>
+<body><h1>Dragon: alle Stufen und Animationen</h1><div id="r"></div>
+<script>
+const A=[['front_idle',30,12,560,448],['front_attack',16,16,560,448],['front_hurt',10,14,560,448],['back_idle',30,12,560,448]];
+const H=['se','ne','nw','sw'];
+function mk(parent,st,name,n,fps,w,h,sc){const d=document.createElement('div');d.className='c';
+ const s=document.createElement('div');s.className='s';s.style.cssText=`width:${w*sc}px;height:${h*sc}px;background-image:url(../assets/images/monsters/dragon_s${st}/${name}.webp);background-size:${w*sc*8}px auto`;
+ const l=document.createElement('div');l.textContent=name;d.append(s,l);parent.append(d);
+ let i=0;setInterval(()=>{const c=i%8,r=Math.floor(i/8);s.style.backgroundPosition=`${-c*w*sc}px ${-r*h*sc}px`;i=(i+1)%n},1000/fps)}
+for(let st=0;st<3;st++){const t=document.createElement('h2');t.textContent='Stufe '+(st+1);r.append(t);
+ const a=document.createElement('div');a.className='row';r.append(a);A.forEach(x=>mk(a,st,x[0],x[1],x[2],x[3],x[4],.5));
+ const b=document.createElement('div');b.className='row';r.append(b);
+ H.forEach(h=>{mk(b,st,h+'_walk',8,10,st?544:543,st?435:434,.5);mk(b,st,h+'_idle',30,12,st?544:543,st?435:434,.5)})}
+</script>

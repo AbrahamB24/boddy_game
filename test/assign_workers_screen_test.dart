@@ -211,10 +211,11 @@ void main() {
       tester,
     ) async {
       await _pump(tester);
-      double y(String id) => tester.getTopLeft(find.text(id)).dy;
-      // 40 > 25 > 5.
-      expect(y('ace'), lessThan(y('busy')));
-      expect(y('busy'), lessThan(y('rookie')));
+      // The roster is a strip of cards now (2026-11-11), best first from the
+      // left: 40 > 25 > 5.
+      double x(String id) => tester.getTopLeft(find.text(id)).dx;
+      expect(x('ace'), lessThan(x('busy')));
+      expect(x('busy'), lessThan(x('rookie')));
     });
   });
 
@@ -229,7 +230,8 @@ void main() {
       // The roster lists every available monster, including the one just
       // tapped off the seat (user 2026-08-30: "inkl. dem abgewählten") — so
       // "worker" shows TWICE: the still-filled seat and its own roster row.
-      expect(find.text('worker'), findsNWidgets(2));
+      // …and the stage names it a third time, as the card being swapped out.
+      expect(find.text('worker'), findsNWidgets(3));
       expect(find.text('ace'), findsOneWidget);
     });
 
@@ -246,7 +248,7 @@ void main() {
       // One seat filled, now by ace — and worker is back to being a plain
       // roster row (unposted, so exactly once, not the seat any more).
       expect(find.text('1 / 3'), findsOneWidget);
-      expect(find.text('ace'), findsOneWidget);
+      expect(find.text('ace'), findsWidgets); // the seat + the stage's preview
       expect(find.text('worker'), findsOneWidget);
     });
 
@@ -286,11 +288,12 @@ void main() {
       // A plain plus would promise a free hire. Taking this monster empties a
       // post somewhere else, and the icon has to say so.
       await _pump(tester);
-      expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
-      // ace + rookie are free hires; busy is the transfer. (The two free seats
-      // wear a + of their own, so four in all.)
+      // The cards carry no action icon any more (2026-11-11); the transfer is
+      // named under the card, and the stage's button reads Swap in / Post here.
+      expect(find.text('At Saw Mill'), findsOneWidget);
+      // Only the two free SEATS draw an empty seat: the stage hides its own
+      // while nobody is being swapped out.
       expect(find.byType(EmptySeat), findsNWidgets(2));
-      expect(find.byIcon(Icons.add), findsNWidgets(4));
     });
 
     testWidgets('being AWAY outranks the posting — it cannot work at all', (

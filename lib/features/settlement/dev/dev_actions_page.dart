@@ -387,7 +387,7 @@ class _DevActionsPageState extends State<DevActionsPage> {
           height: gold ? 36 : 28,
           padding: EdgeInsets.symmetric(horizontal: gold ? 16 : 10),
           alignment: Alignment.center,
-          decoration: gold ? goldButton() : raisedTile(radius: 9),
+          decoration: gold ? goldButton() : menuButton(),
           child: Text(
             label,
             style: TextStyle(

@@ -1,0 +1,545 @@
+<!doctype html><meta charset=utf-8><title>Duck animations</title>
+<style>body{background:#1c2430;color:#eee;font:13px sans-serif;margin:12px}h2{margin:18px 0 4px}
+.g{display:flex;flex-wrap:wrap;gap:8px}.c{background:#fff;border-radius:6px;padding:2px;text-align:center;color:#222}
+canvas{width:220px;height:176px;display:block}</style><body><h1>Ente – alle Animationen</h1><div id=r></div><script>
+const D={};
+D['s0/front']={
+  "monster": "duck",
+  "stage": 0,
+  "view": "front",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "front_idle.webp",
+      "frames": 28,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "front_attack.webp",
+      "frames": 16,
+      "fps": 16,
+      "loop": false
+    },
+    "hurt": {
+      "sheet": "front_hurt.webp",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+};
+D['s0/back']={
+  "monster": "duck",
+  "stage": 0,
+  "view": "back",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "back_idle.webp",
+      "frames": 28,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "back_attack.webp",
+      "frames": 16,
+      "fps": 16,
+      "loop": false
+    },
+    "hurt": {
+      "sheet": "back_hurt.webp",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+};
+D['s0/map']={
+  "monster": "duck",
+  "stage": 0,
+  "view": "map",
+  "cols": 8,
+  "frame_w": 544,
+  "frame_h": 435,
+  "headings": {
+    "se": "+x",
+    "ne": "+y",
+    "nw": "-x",
+    "sw": "-y"
+  },
+  "anims": {
+    "se": {
+      "walk": {
+        "sheet": "se_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "se_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "se_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "se_idle.webp",
+        "frames": 28,
+        "fps": 12,
+        "loop": true
+      }
+    },
+    "ne": {
+      "walk": {
+        "sheet": "ne_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "ne_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "ne_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "ne_idle.webp",
+        "frames": 28,
+        "fps": 12,
+        "loop": true
+      }
+    },
+    "nw": {
+      "walk": {
+        "sheet": "nw_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "nw_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "nw_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "nw_idle.webp",
+        "frames": 28,
+        "fps": 12,
+        "loop": true
+      }
+    },
+    "sw": {
+      "walk": {
+        "sheet": "sw_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "sw_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "sw_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "sw_idle.webp",
+        "frames": 28,
+        "fps": 12,
+        "loop": true
+      }
+    }
+  }
+};
+D['s1/front']={
+  "monster": "duck",
+  "stage": 1,
+  "view": "front",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "front_idle.webp",
+      "frames": 30,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "front_attack.webp",
+      "frames": 16,
+      "fps": 16,
+      "loop": false
+    },
+    "hurt": {
+      "sheet": "front_hurt.webp",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+};
+D['s1/back']={
+  "monster": "duck",
+  "stage": 1,
+  "view": "back",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "back_idle.webp",
+      "frames": 30,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "back_attack.webp",
+      "frames": 16,
+      "fps": 16,
+      "loop": false
+    },
+    "hurt": {
+      "sheet": "back_hurt.webp",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+};
+D['s1/map']={
+  "monster": "duck",
+  "stage": 1,
+  "view": "map",
+  "cols": 8,
+  "frame_w": 543,
+  "frame_h": 434,
+  "headings": {
+    "se": "+x",
+    "ne": "+y",
+    "nw": "-x",
+    "sw": "-y"
+  },
+  "anims": {
+    "se": {
+      "walk": {
+        "sheet": "se_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "se_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "se_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "se_idle.webp",
+        "frames": 30,
+        "fps": 12,
+        "loop": true
+      }
+    },
+    "ne": {
+      "walk": {
+        "sheet": "ne_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "ne_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "ne_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "ne_idle.webp",
+        "frames": 30,
+        "fps": 12,
+        "loop": true
+      }
+    },
+    "nw": {
+      "walk": {
+        "sheet": "nw_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "nw_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "nw_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "nw_idle.webp",
+        "frames": 30,
+        "fps": 12,
+        "loop": true
+      }
+    },
+    "sw": {
+      "walk": {
+        "sheet": "sw_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "sw_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "sw_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "sw_idle.webp",
+        "frames": 30,
+        "fps": 12,
+        "loop": true
+      }
+    }
+  }
+};
+D['s2/front']={
+  "monster": "duck",
+  "stage": 2,
+  "view": "front",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "front_idle.webp",
+      "frames": 30,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "front_attack.webp",
+      "frames": 16,
+      "fps": 16,
+      "loop": false
+    },
+    "hurt": {
+      "sheet": "front_hurt.webp",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+};
+D['s2/back']={
+  "monster": "duck",
+  "stage": 2,
+  "view": "back",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "back_idle.webp",
+      "frames": 30,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "back_attack.webp",
+      "frames": 16,
+      "fps": 16,
+      "loop": false
+    },
+    "hurt": {
+      "sheet": "back_hurt.webp",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+};
+D['s2/map']={
+  "monster": "duck",
+  "stage": 2,
+  "view": "map",
+  "cols": 8,
+  "frame_w": 544,
+  "frame_h": 435,
+  "headings": {
+    "se": "+x",
+    "ne": "+y",
+    "nw": "-x",
+    "sw": "-y"
+  },
+  "anims": {
+    "se": {
+      "walk": {
+        "sheet": "se_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "se_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "se_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "se_idle.webp",
+        "frames": 30,
+        "fps": 12,
+        "loop": true
+      }
+    },
+    "ne": {
+      "walk": {
+        "sheet": "ne_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "ne_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "ne_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "ne_idle.webp",
+        "frames": 30,
+        "fps": 12,
+        "loop": true
+      }
+    },
+    "nw": {
+      "walk": {
+        "sheet": "nw_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "nw_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "nw_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "nw_idle.webp",
+        "frames": 30,
+        "fps": 12,
+        "loop": true
+      }
+    },
+    "sw": {
+      "walk": {
+        "sheet": "sw_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "sw_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "sw_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "sw_idle.webp",
+        "frames": 30,
+        "fps": 12,
+        "loop": true
+      }
+    }
+  }
+};
+const items=[];
+for(const k in D){const m=D[k],st=k.split('/')[0];
+ if(m.view=='map'){for(const h in m.anims)for(const a in m.anims[h])items.push([st,'map '+h+' '+a,st+'/'+m.anims[h][a].sheet,m.anims[h][a],m]);}
+ else for(const a in m.anims)items.push([st,m.view+' '+a,st+'/'+m.anims[a].sheet,m.anims[a],m]);}
+const root=document.getElementById('r');let cur='';
+for(const [st,name,src,an,m] of items){
+ if(st!=cur){cur=st;const h=document.createElement('h2');h.textContent='Stufe '+(+st[1]+1);root.append(h);var g=document.createElement('div');g.className='g';root.append(g);}
+ const c=document.createElement('div');c.className='c';const cv=document.createElement('canvas');cv.width=m.frame_w;cv.height=m.frame_h;c.append(cv,name+' ('+an.frames+'f, '+an.fps+'fps'+(an.loop?'':', 1x')+')');g.append(c);
+ const img=new Image();img.src=src;const x=cv.getContext('2d');let i=0;
+ img.onload=()=>{setInterval(()=>{x.clearRect(0,0,cv.width,cv.height);x.drawImage(img,(i%m.cols)*m.frame_w,Math.floor(i/m.cols)*m.frame_h,m.frame_w,m.frame_h,0,0,m.frame_w,m.frame_h);i=(i+1)%(an.loop?an.frames:an.frames+Math.round(an.fps/2));if(i>=an.frames&&!an.loop)i=an.frames-1<0?0:(i>=an.frames?an.frames-1:i);},1000/an.fps);};
+}
+</script>

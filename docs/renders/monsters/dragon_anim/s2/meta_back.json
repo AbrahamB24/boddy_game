@@ -1,0 +1,16 @@
+{
+  "monster": "dragon",
+  "stage": 2,
+  "view": "back",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "back_idle.webp",
+      "frames": 30,
+      "fps": 12,
+      "loop": true
+    }
+  }
+}

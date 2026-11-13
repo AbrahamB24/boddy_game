@@ -854,7 +854,7 @@ class _CarouselCard extends StatelessWidget {
   });
 
   /// Height of the written band: name + facts row + cost/reason + padding.
-  static const double _textH = 60;
+  static const double _textH = 78;
 
   @override
   Widget build(BuildContext context) {
@@ -1016,11 +1016,12 @@ class _CarouselCard extends StatelessWidget {
   /// much ground it covers, and how many of it you have (of the allowed cap,
   /// when there is one — roads are laid freely, so they show none).
   Widget _factsRow(Color ink, {required int placed, required int? max}) {
-    Widget fact(IconData icon, String text) => Row(
+    // Icon ABOVE its figure (user 2026-11-11), easier to read at a glance.
+    Widget fact(IconData icon, String text) => Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         PixelIcon(icon, size: 11, color: ink),
-        const SizedBox(width: 2),
+        const SizedBox(height: 1),
         Text(
           text,
           maxLines: 1,

@@ -7,7 +7,6 @@ import 'package:flutter/gestures.dart'
 import 'package:flutter/material.dart' hide Text;
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
-import '../../../core/theme/ui_art.dart';
 import '../../../core/theme/strategy_theme.dart'
     show chunkyDecoration, strategyDarken;
 import '../../../core/ui/duration_format.dart';
@@ -37,7 +36,8 @@ import 'terrain_layer.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import '../../creatures/services/creatures_controller.dart';
 import '../../../core/ui/pressable.dart';
-import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_kit.dart' show Voxel, VoxelShape, VoxelBar, voxelDrop;
+import 'voxel_hud.dart' show VoxelHud, VoxelCell;
 import '../../../core/theme/voxel_icons.dart';
 import '../../../core/ui/game_text.dart';
 
@@ -745,13 +745,7 @@ class SettlementMapState extends State<SettlementMap>
     final setDown = _aimDefOf(type);
     if (setDown != null) {
       setState(() {
-        _pulse = (
-          x: x,
-          y: y,
-          w: setDown.gridW,
-          h: setDown.gridH,
-          n: ++_pulseN,
-        );
+        _pulse = (x: x, y: y, w: setDown.gridW, h: setDown.gridH, n: ++_pulseN);
       });
     }
     final isNewRoad = moveId == null && (kBuildingDefs[type]?.isRoad ?? false);
@@ -1115,6 +1109,7 @@ class SettlementMapState extends State<SettlementMap>
       final f = 1 - math.max(d, 0) / _kEdgeBand;
       return f * f * _kEdgeSpeed;
     }
+
     // Near the LEFT edge the content slides right, which is what reveals what
     // lies further left.
     final dx = push(at.dx) - push(view.width - at.dx);
@@ -1735,7 +1730,8 @@ class SettlementMapState extends State<SettlementMap>
         : _chaining
         ? {
             for (final b in widget.ctrl.buildings)
-              if (!b.isStored && !(placedDefOf(b)?.isRoad ?? true) &&
+              if (!b.isStored &&
+                  !(placedDefOf(b)?.isRoad ?? true) &&
                   !(placedDefOf(b)?.isBuildPlot ?? true))
                 b.id,
           }
@@ -1855,8 +1851,9 @@ class SettlementMapState extends State<SettlementMap>
                                 tween: Tween(begin: 0.0, end: 1.0),
                                 duration: const Duration(milliseconds: 260),
                                 curve: Curves.easeOut,
-                                builder: (context, v, grid) =>
-                                    v >= 1 ? grid! : Opacity(opacity: v, child: grid),
+                                builder: (context, v, grid) => v >= 1
+                                    ? grid!
+                                    : Opacity(opacity: v, child: grid),
                                 child: CustomPaint(
                                   painter: _GridPainter(
                                     buildableRegion:
@@ -1930,11 +1927,12 @@ class SettlementMapState extends State<SettlementMap>
                                               l.kind == AnimKind.flicker,
                                         ))
                                           if (isoBounds(
-                                            b.gridX,
-                                            b.gridY,
-                                            d.gridW,
-                                            d.gridH,
-                                          ) case final iso)
+                                                b.gridX,
+                                                b.gridY,
+                                                d.gridW,
+                                                d.gridH,
+                                              )
+                                              case final iso)
                                             Positioned(
                                               left: iso.left,
                                               top: iso.top,
@@ -1963,7 +1961,12 @@ class SettlementMapState extends State<SettlementMap>
                                           // roads are ground, and a build plot
                                           // only widens the buildable area
                                           if (!d.isRoad && !d.isBuildPlot)
-                                            (b.gridX, b.gridY, d.gridW, d.gridH),
+                                            (
+                                              b.gridX,
+                                              b.gridY,
+                                              d.gridW,
+                                              d.gridH,
+                                            ),
                                   ]),
                                 ),
                               ),
@@ -2139,13 +2142,10 @@ class SettlementMapState extends State<SettlementMap>
         // WHERE ITS ROAD HAS TO GO — only while it is cut off; see
         // [_buildingTile].
         if (isDisconnected)
-          for (final (i, e) in (entrancesFor(
-                    def.artId,
-                    def.gridW,
-                    def.gridH,
-                  ) ??
-                  const <BuildingEntrance>[])
-              .indexed)
+          for (final (i, e)
+              in (entrancesFor(def.artId, def.gridW, def.gridH) ??
+                      const <BuildingEntrance>[])
+                  .indexed)
             Positioned.fill(
               child: IgnorePointer(
                 child: CustomPaint(
@@ -2252,8 +2252,9 @@ class SettlementMapState extends State<SettlementMap>
           onEnd: () {
             if (mounted && _pulse?.n == p.n) setState(() => _pulse = null);
           },
-          builder: (context, t, _) =>
-              CustomPaint(painter: _PulsePainter(w: p.w, h: p.h, t: t)),
+          builder: (context, t, _) => CustomPaint(
+            painter: _PulsePainter(w: p.w, h: p.h, t: t),
+          ),
         ),
       ),
     );
@@ -2313,104 +2314,104 @@ class SettlementMapState extends State<SettlementMap>
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOut,
           builder: (context, lift, _) => Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // The validity mark is the footprint's own diamond — a rectangle here
-          // would promise a shape the placement rules do not use.
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _FootprintPainter(
-                w: def.gridW,
-                h: def.gridH,
-                color: Color.lerp(
-                  const Color(0xFF69F0AE),
-                  const Color(0xFFFF5252),
-                  bad,
-                )!,
-                lift: lift,
-              ),
-            ),
-          ),
-          // A ROAD GHOST SHOWS THE JUNCTION IT WOULD MAKE. Counting the cell
-          // being aimed as already laid is the point: dragging a road up to a
-          // straight run turns the preview into a tee before you commit, which
-          // is the whole question you are asking while you aim it.
-          if (def.isRoad)
-            Positioned.fill(
-              child: _ghostFx(
-                pop: pop,
-                lift: 0,
-                bad: bad,
-                alpha: 0.75,
-                child: Image.asset(
-                  roadAsset(
-                    roadMask(
-                      {...widget.ctrl.walkCells, roadCellKey(gx, gy)},
-                      gx,
-                      gy,
-                    ),
+            clipBehavior: Clip.none,
+            children: [
+              // The validity mark is the footprint's own diamond — a rectangle here
+              // would promise a shape the placement rules do not use.
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _FootprintPainter(
+                    w: def.gridW,
+                    h: def.gridH,
+                    color: Color.lerp(
+                      const Color(0xFF69F0AE),
+                      const Color(0xFFFF5252),
+                      bad,
+                    )!,
+                    lift: lift,
                   ),
-                  fit: BoxFit.fill,
-                  filterQuality: FilterQuality.medium,
-                  cacheWidth: kRoadDecodeWidth,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
               ),
-            )
-          else
-            Builder(
-              builder: (_) {
-                final local = isoLocalBounds(def.gridW, def.gridH);
-                final box = artBoxOf(def);
-                final art = artPlacement(
-                  local,
-                  baseWidth: box.baseWidth,
-                  anchorX: box.anchorX,
-                  lift: box.lift,
-                );
-                return Positioned(
-                  left: art.left,
-                  width: art.width,
-                  bottom: local.height - art.bottom,
+              // A ROAD GHOST SHOWS THE JUNCTION IT WOULD MAKE. Counting the cell
+              // being aimed as already laid is the point: dragging a road up to a
+              // straight run turns the preview into a tee before you commit, which
+              // is the whole question you are asking while you aim it.
+              if (def.isRoad)
+                Positioned.fill(
                   child: _ghostFx(
                     pop: pop,
-                    lift: lift,
+                    lift: 0,
                     bad: bad,
-                    child: BuildingIcon(
-                      imageUrl: def.imageUrl,
-                      defId: def.artId,
+                    alpha: 0.75,
+                    child: Image.asset(
+                      roadAsset(
+                        roadMask(
+                          {...widget.ctrl.walkCells, roadCellKey(gx, gy)},
+                          gx,
+                          gy,
+                        ),
+                      ),
+                      fit: BoxFit.fill,
+                      filterQuality: FilterQuality.medium,
+                      cacheWidth: kRoadDecodeWidth,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ),
+                )
+              else
+                Builder(
+                  builder: (_) {
+                    final local = isoLocalBounds(def.gridW, def.gridH);
+                    final box = artBoxOf(def);
+                    final art = artPlacement(
+                      local,
+                      baseWidth: box.baseWidth,
+                      anchorX: box.anchorX,
+                      lift: box.lift,
+                    );
+                    return Positioned(
+                      left: art.left,
                       width: art.width,
-                      anchorBottomOverflowTop: true,
-                    ),
-                  ),
-                );
-              },
-            ),
-          // THE ENTRANCE, over the art (user 2026-11-03: "Dieser Punkt soll
-          // beim Bauen speziell markiert sein und betrifft immer eine ganze
-          // Kachel"). Over, not under: the picture covers most of its own
-          // footprint, and a mark you cannot see while aiming is no mark.
-          // Every one of them — the Castle has a gate on each side.
-          if (entrancesFor(def.artId, def.gridW, def.gridH) case final es?)
-            for (final e in es)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: CustomPaint(
-                    painter: _EntrancePainter(
-                      w: def.gridW,
-                      h: def.gridH,
-                      entrance: e,
-                      hasRoad: () {
-                        final (rx, ry) = entranceRoadCell(e, gx, gy);
-                        return widget.ctrl.roadCells.contains(
-                          roadCellKey(rx, ry),
-                        );
-                      }(),
-                    ),
-                  ),
+                      bottom: local.height - art.bottom,
+                      child: _ghostFx(
+                        pop: pop,
+                        lift: lift,
+                        bad: bad,
+                        child: BuildingIcon(
+                          imageUrl: def.imageUrl,
+                          defId: def.artId,
+                          width: art.width,
+                          anchorBottomOverflowTop: true,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ),
-        ],
+              // THE ENTRANCE, over the art (user 2026-11-03: "Dieser Punkt soll
+              // beim Bauen speziell markiert sein und betrifft immer eine ganze
+              // Kachel"). Over, not under: the picture covers most of its own
+              // footprint, and a mark you cannot see while aiming is no mark.
+              // Every one of them — the Castle has a gate on each side.
+              if (entrancesFor(def.artId, def.gridW, def.gridH) case final es?)
+                for (final e in es)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _EntrancePainter(
+                          w: def.gridW,
+                          h: def.gridH,
+                          entrance: e,
+                          hasRoad: () {
+                            final (rx, ry) = entranceRoadCell(e, gx, gy);
+                            return widget.ctrl.roadCells.contains(
+                              roadCellKey(rx, ry),
+                            );
+                          }(),
+                        ),
+                      ),
+                    ),
+                  ),
+            ],
           ),
         ),
       ),
@@ -2469,17 +2470,15 @@ class SettlementMapState extends State<SettlementMap>
         child: Container(
           width: size,
           height: size,
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: fill,
-            shape: BoxShape.rectangle,
-            boxShadow: [
-              BoxShadow(
-                color: erase
-                    ? strategyDarken(fill, 0.35)
-                    : CreamPalette.goldDeep,
-                offset: const Offset(0, 3),
-              ),
-            ],
+            shape: const VoxelShape(notch: 2, light: VoxelHud.rim),
+            shadows: voxelDrop(
+              depth: 2,
+              color: erase
+                  ? strategyDarken(fill, 0.35)
+                  : CreamPalette.tanShadow,
+            ),
           ),
           child: Transform.rotate(
             angle: angle,
@@ -2514,38 +2513,26 @@ class SettlementMapState extends State<SettlementMap>
         child: Container(
           width: size,
           height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.rectangle,
-            gradient: primary && enabled
-                ? null
-                : LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: enabled
-                        ? const [CreamPalette.tileTop, CreamPalette.tileBottom]
-                        : const [
-                            CreamPalette.lockedTop,
-                            CreamPalette.lockedBottom,
-                          ],
-                  ),
-            color: primary && enabled ? CreamPalette.gold : null,
-            boxShadow: [
-              BoxShadow(
-                color: !enabled
-                    ? CreamPalette.lockedShadow
-                    : primary
-                    ? CreamPalette.goldDeep
-                    : CreamPalette.tanShadow,
-                offset: const Offset(0, 3),
-              ),
-            ],
+          decoration: ShapeDecoration(
+            color: primary && enabled
+                ? CreamPalette.gold
+                : enabled
+                ? CreamPalette.tileBottom
+                : CreamPalette.lockedBottom,
+            shape: const VoxelShape(notch: 2, light: VoxelHud.rim),
+            shadows: voxelDrop(
+              depth: 2,
+              color: !enabled
+                  ? CreamPalette.lockedShadow
+                  : CreamPalette.tanShadow,
+            ),
           ),
           child: PixelIcon(
             icon,
             size: 22,
             color: !enabled
                 ? CreamPalette.ink.withValues(alpha: 0.4)
-                : (ink ?? CreamPalette.ink),
+                : (ink ?? (primary ? CreamPalette.ink : VoxelHud.ink)),
           ),
         ),
       ),
@@ -2649,12 +2636,13 @@ class SettlementMapState extends State<SettlementMap>
                 width: 16,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE2CE9C),
-                  borderRadius: vr(3),
+                  color: above
+                      ? const Color(0xFF1D3F46)
+                      : const Color(0xFF427983),
                   boxShadow: [
                     BoxShadow(
                       color: CreamPalette.tanShadow,
-                      offset: const Offset(0, 3),
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
@@ -2663,111 +2651,124 @@ class SettlementMapState extends State<SettlementMap>
           ),
           Positioned.fill(
             // A strapped parchment scroll (user 2026-11-04, painted concept).
-            child: UiScroll(
-              padding: const EdgeInsets.fromLTRB(40, 9, 38, 9),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: FoE.title(size: 14.5).copyWith(color: kBoxInk),
-                        ),
-                        const SizedBox(height: 3),
-                        // ONE line, always (user 2026-09-19: "immer die drei
-                        // Ressourcen nebeneinander"): footprint, time and every
-                        // cost side by side, scaled down rather than wrapped onto
-                        // a second line the tag has no height for.
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              for (var i = 0; i < facts.length; i++) ...[
-                                if (i > 0) const SizedBox(width: 10),
-                                facts[i],
-                              ],
-                            ],
+            child: DecoratedBox(
+              decoration: ShapeDecoration(
+                gradient: VoxelHud.gradient,
+                shape: const VoxelShape(
+                  notch: 3,
+                  lines: 2,
+                  light: VoxelHud.rim,
+                ),
+                shadows: voxelDrop(depth: 3),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: FoE.title(
+                              size: 14.5,
+                            ).copyWith(color: kBoxInk),
                           ),
-                        ),
-                        // A line only when there is something to say — a spot
-                        // that fits says nothing, and a footprint on top of a
-                        // building is already red (user 2026-09-19: "damit
-                        // alles kleiner wird").
-                        if (status != null) ...[
-                          const SizedBox(height: 5),
-                          Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.rectangle,
-                                  color: ok
-                                      ? CreamPalette.better
-                                      : CreamPalette.warn,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  status,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w400,
+                          const SizedBox(height: 3),
+                          // ONE line, always (user 2026-09-19: "immer die drei
+                          // Ressourcen nebeneinander"): footprint, time and every
+                          // cost side by side, scaled down rather than wrapped onto
+                          // a second line the tag has no height for.
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (var i = 0; i < facts.length; i++) ...[
+                                  if (i > 0) const SizedBox(width: 10),
+                                  facts[i],
+                                ],
+                              ],
+                            ),
+                          ),
+                          // A line only when there is something to say — a spot
+                          // that fits says nothing, and a footprint on top of a
+                          // building is already red (user 2026-09-19: "damit
+                          // alles kleiner wird").
+                          if (status != null) ...[
+                            const SizedBox(height: 5),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.rectangle,
                                     color: ok
                                         ? CreamPalette.better
                                         : CreamPalette.warn,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    status,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w400,
+                                      color: ok
+                                          ? CreamPalette.better
+                                          : CreamPalette.warn,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (onRotate != null) ...[
+                    const SizedBox(width: 8),
+                    if (onRotate != null) ...[
+                      _tagButton(
+                        icon: Icons.rotate_90_degrees_cw_rounded,
+                        label: 'Rotate',
+                        onTap: onRotate,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    if (onDelete != null) ...[
+                      _tagButton(
+                        icon: Icons.delete_outline_rounded,
+                        label: 'Delete',
+                        onTap: onDelete,
+                        ink: CreamPalette.warn,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    if (onCancel != null) ...[
+                      _tagButton(
+                        icon: Icons.close_rounded,
+                        label: cancelLabel,
+                        onTap: onCancel,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
                     _tagButton(
-                      icon: Icons.rotate_90_degrees_cw_rounded,
-                      label: 'Rotate',
-                      onTap: onRotate,
+                      icon: Icons.check_rounded,
+                      label: 'Confirm',
+                      onTap: onOk,
+                      primary: true,
                     ),
-                    const SizedBox(width: 6),
                   ],
-                  if (onDelete != null) ...[
-                    _tagButton(
-                      icon: Icons.delete_outline_rounded,
-                      label: 'Delete',
-                      onTap: onDelete,
-                      ink: CreamPalette.warn,
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  if (onCancel != null) ...[
-                    _tagButton(
-                      icon: Icons.close_rounded,
-                      label: cancelLabel,
-                      onTap: onCancel,
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  _tagButton(
-                    icon: Icons.check_rounded,
-                    label: 'Confirm',
-                    onTap: onOk,
-                    primary: true,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -3361,18 +3362,39 @@ class _BuildingTile extends StatelessWidget {
         right: 1,
         child: Text('⏳', style: TextStyle(fontSize: 12)),
       ),
+    // Big enough to read at map scale, centred ON the building (user
+    // 2026-11-12: "Fortschrittsbalken auf der map sehen" — the old 3 px strip
+    // sat on the footprint's bottom corner, under the art). Same for a fresh
+    // build and an upgrade, which is just a rebuild.
     if (!done && !queued)
-      Positioned(
-        bottom: 2,
-        left: 2,
-        right: 2,
-        child: ClipPath(
-          clipper: ShapeBorderClipper(shape: FoE.facet(radius: 2)),
-          child: LinearProgressIndicator(
-            value: building.constructionProgress,
-            minHeight: 3,
-            color: FoE.gold,
-            backgroundColor: FoE.panelDark,
+      Positioned.fill(
+        child: IgnorePointer(
+          child: Center(
+            // The HUD's own cell (stepped corners, kit outline, rim, gradient,
+            // hard drop shadow), not a lookalike.
+            child: SizedBox(
+              width: 84,
+              child: VoxelCell(
+                padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
+                child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${(building.constructionProgress * 100).floor()} %',
+                    style: Voxel.text(size: 14, color: VoxelHud.ink),
+                  ),
+                  const SizedBox(height: 3),
+                  VoxelBar(
+                    value: building.constructionProgress,
+                    color: VoxelHud.good,
+                    height: 8,
+                    block: 7,
+                    onDark: true,
+                  ),
+                ],
+                ),
+              ),
+            ),
           ),
         ),
       ),

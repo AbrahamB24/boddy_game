@@ -1,0 +1,11 @@
+58:53.859  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\dragon_all\dragon_s1_front.png'
+58:57.453  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\dragon_all\dragon_s1_back.png'
+59:00.672  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\dragon_all\dragon_s1_side.png'
+59:04.047  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\dragon_all\dragon_s1_q.png'
+wrote docs/renders/monsters/dragon_all\dragon_s1_front.png 560 x 560
+wrote docs/renders/monsters/dragon_all\dragon_s1_back.png 560 x 560
+wrote docs/renders/monsters/dragon_all\dragon_s1_side.png 560 x 560
+wrote docs/renders/monsters/dragon_all\dragon_s1_q.png 560 x 560
+Blender 5.2.2 LTS (hash d13f752e3b9c built 2026-09-15 01:37:04)
+
+Blender quit

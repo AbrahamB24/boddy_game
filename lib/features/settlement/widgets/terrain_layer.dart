@@ -552,6 +552,17 @@ class _TerrainData {
     }
   }
 
+  /// How far the grass tile is pulled towards grey (0 = as rendered).
+  static const double _kGrassDesaturate = 0.22;
+
+  /// Deterministic 0..1 hash of a texture block.
+  static double _blockHash(int x, int y, int salt) {
+    var h = (x * 374761393 + y * 668265263 + salt * 2147483647) & 0x7fffffff;
+    h = ((h ^ (h >> 13)) * 1274126177) & 0x7fffffff;
+    h = h ^ (h >> 16);
+    return (h & 0xffff) / 0xffff;
+  }
+
   /// The grass tile with every ROW and COLUMN brought to the same average
   /// brightness (user 2026-09-28: "die Rasenstruktur ist nicht die genau
   /// gleiche"). The swatch repeats across the whole map, and its outermost rows
@@ -585,10 +596,29 @@ class _TerrainData {
       for (var y = 0; y < h; y++) {
         for (var x = 0; x < w; x++) {
           final o = (y * w + x) * 4;
-          final k = rg[y] * cg[x];
-          for (var c = 0; c < 3; c++) {
-            px[o + c] = (px[o + c] * k).round().clamp(0, 255);
+          // Grass texture (user 2026-11-13): per-block brightness speckle at
+          // two sizes plus the odd lighter or darker tuft. Hashed on the
+          // pixel's own block, so it tiles exactly like the swatch itself.
+          final fine = _blockHash(x ~/ 4, y ~/ 4, 1);
+          final mid = _blockHash(x ~/ 16, y ~/ 16, 2);
+          final tuft = _blockHash(x ~/ 8, y ~/ 8, 3);
+          var tex = 1.0 + (fine - 0.5) * 0.14 + (mid - 0.5) * 0.10;
+          if (tuft > 0.94) {
+            tex += 0.10;
+          } else if (tuft < 0.05) {
+            tex -= 0.10;
           }
+          final k = rg[y] * cg[x] * tex;
+          // Calmer grass (user 2026-11-13: "ein bisschen zu knallig"): pull
+          // each pixel 22 % towards its own grey, so the green keeps its hue
+          // and texture but loses its punch.
+          final r = px[o] * k, g = px[o + 1] * k, b = px[o + 2] * k;
+          final grey = 0.299 * r + 0.587 * g + 0.114 * b;
+          px[o] = (r + (grey - r) * _kGrassDesaturate).round().clamp(0, 255);
+          px[o + 1] =
+              (g + (grey - g) * _kGrassDesaturate).round().clamp(0, 255);
+          px[o + 2] =
+              (b + (grey - b) * _kGrassDesaturate).round().clamp(0, 255);
         }
       }
       final done = Completer<ui.Image>();
@@ -972,7 +1002,18 @@ class _TerrainPlanner {
       final ring = bands.water.contains(k)
           ? 0
           : (bands.beachRing[k] ?? _kBeachRingCap);
-      final alpha = 1.0 - ring / (_kBeachRingCap + 1);
+      // Eased (smoothstep) instead of linear, and nudged by smooth noise: the
+      // linear ring fade followed the cell diamonds, so the sand/grass border
+      // read as stair steps (user 2026-11-13: "noch blockig"). The noise makes
+      // the border wander, the easing removes the crease where it starts.
+      // The last ring fades to EXACTLY 0: it used to stop at ~0.3 and drop to
+      // nothing in the next cell, a zig-zag edge along the cell diamonds.
+      final nl = (1.0 - ring / _kBeachRingCap).clamp(0.0, 1.0);
+      final n = nl * nl * (3 - 2 * nl);
+      // Wander is strongest mid-fade and zero at both ends.
+      final wander =
+          0.35 * (_noise(gx / 2.5, gy / 2.5, 83) - 0.5) * 4 * n * (1 - n);
+      final alpha = (n + wander).clamp(0.0, 1.0);
       // A TINT for the voxel sand tile (modulated, see paintBeach): a little
       // lighter or darker per cell, and damp-dark at the waterline.
       // Smooth noise, not a per-cell roll: a roll shows the tile grid.
@@ -2233,6 +2274,27 @@ class _TerrainPainter extends CustomPainter {
       filterQuality: FilterQuality.medium,
     );
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
+    // A second copy of the swatch at an incommensurate scale, offset and
+    // half transparent (user 2026-11-10: zoomed out, the grass reads as a
+    // grid). One tile repeating every ~262 px — and it is mirrored inside, so
+    // its seams and symmetry line up into a lattice. Two layers whose periods
+    // never coincide hide both the repeat and the symmetry.
+    const k2 = _kGrassTileScale * 0.71;
+    final shader2 = ImageShader(
+      data.images[_kGrass]!,
+      TileMode.repeated,
+      TileMode.repeated,
+      (Matrix4.translationValues(97, 41, 0)
+            ..scaleByDouble(k2, k2, 1, 1))
+          .storage,
+      filterQuality: FilterQuality.medium,
+    );
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()
+        ..shader = shader2
+        ..color = const Color(0x8CFFFFFF),
+    );
 
     final sheets = data.sheets;
     final propBatch = data.propBatch;
@@ -2753,6 +2815,7 @@ const double _kGrassTileScale = 1 / _kPropPx;
 /// The pictures face down-right (`_Se`) or up-right (`_Ne`) on screen and are
 /// mirrored for the left-hand directions. Walking is a bob, a rabbit hops, a
 /// gull's two flying pictures alternate.
+// ignore: unused_element
 class _FaunaPainter extends CustomPainter {
   final _TerrainData data;
   final ValueListenable<double> time;

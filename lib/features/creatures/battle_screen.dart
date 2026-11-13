@@ -2415,7 +2415,7 @@ class _BattleScreenState extends State<BattleScreen>
                   decoration: const BoxDecoration(
                     color: Color(0xFF6B4528),
                     border: Border(
-                      top: BorderSide(color: Color(0xFF0B1E27), width: 2),
+                      top: BorderSide(color: Color(0xFF081F24), width: 2),
                     ),
                   ),
                   child: bar,
@@ -2544,7 +2544,7 @@ class _BattleScreenState extends State<BattleScreen>
         child: Container(
           height: _kTabH,
           alignment: Alignment.center,
-          decoration: on ? goldButton() : raisedTile(radius: 11),
+          decoration: on ? goldButton() : menuButton(),
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Row(
@@ -4101,7 +4101,7 @@ class _BattleScreenState extends State<BattleScreen>
         ? FoE.danger
         : acting
         ? CreamPalette.gold
-        : const Color(0xFF0B1E27);
+        : const Color(0xFF081F24);
     // DARK plate, light ink (user 2026-11-08: the text could not be read — the
     // light ink of the kit sat on a cream plate). The state is the plate's
     // BACKGROUND: tinted gold on its turn, red when aimed at, and flooded with
@@ -5245,7 +5245,7 @@ class _BattleScreenState extends State<BattleScreen>
         alignment: Alignment.center,
         decoration: _autoBattle
             ? goldButton(active: enabled)
-            : raisedTile(radius: 11, locked: !enabled),
+            : menuButton(locked: !enabled),
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: Row(

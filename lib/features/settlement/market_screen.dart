@@ -295,7 +295,7 @@ class _MarketScreenState extends State<MarketScreen> {
         child: Container(
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: on ? goldButton() : raisedTile(),
+          decoration: on ? goldButton() : menuButton(),
           child: Row(
             children: [
               Text(glyph, style: const TextStyle(fontSize: 24)),

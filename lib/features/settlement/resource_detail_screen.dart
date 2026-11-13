@@ -11,7 +11,7 @@ import 'services/game_engine.dart';
 import 'settlement_controller.dart';
 import 'sheets/building_detail_dialog.dart';
 import 'widgets/building_icon.dart';
-import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_kit.dart' show VoxelBar;
 import '../../core/theme/voxel_icons.dart';
 import '../../core/ui/game_text.dart';
 
@@ -485,7 +485,7 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
     child: Container(
       height: 38,
       alignment: Alignment.center,
-      decoration: primary ? goldButton() : raisedTile(radius: 12),
+      decoration: primary ? goldButton() : menuButton(),
       child: Text(
         label,
         style: FoE.label(size: 13).copyWith(
@@ -571,25 +571,11 @@ class _ResourceDetailScreenState extends State<ResourceDetailScreen> {
     ),
   );
 
-  Widget _bar(double frac, Color color, double height) => ClipRRect(
-    borderRadius: vr(height / 2),
-    child: SizedBox(
-      height: height,
-      width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ColoredBox(color: kBoxInk.withValues(alpha: 0.16)),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FractionallySizedBox(
-              widthFactor: frac,
-              child: ColoredBox(color: color),
-            ),
-          ),
-        ],
-      ),
-    ),
+  Widget _bar(double frac, Color color, double height) => VoxelBar(
+    value: frac,
+    height: height,
+    block: height < 10 ? 6 : 8,
+    color: color,
   );
 
   // ── Formatting ────────────────────────────────────────────

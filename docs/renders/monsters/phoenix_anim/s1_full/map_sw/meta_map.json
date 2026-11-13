@@ -1,0 +1,42 @@
+{
+  "monster": "phoenix",
+  "stage": 1,
+  "view": "map",
+  "cols": 8,
+  "frame_w": 544,
+  "frame_h": 435,
+  "headings": {
+    "se": "+x",
+    "ne": "+y",
+    "nw": "-x",
+    "sw": "-y"
+  },
+  "anims": {
+    "sw": {
+      "walk": {
+        "sheet": "sw_walk.webp",
+        "frames": 8,
+        "fps": 10,
+        "loop": true
+      },
+      "walk_in": {
+        "sheet": "sw_walk_in.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "walk_out": {
+        "sheet": "sw_walk_out.webp",
+        "frames": 6,
+        "fps": 10,
+        "loop": false
+      },
+      "idle": {
+        "sheet": "sw_idle.webp",
+        "frames": 30,
+        "fps": 12,
+        "loop": true
+      }
+    }
+  }
+}

@@ -151,8 +151,8 @@ void main() {
       c.assignedStat = CreatureStat.medicine;
       CreaturesController().creatures.add(c);
       await open(t);
-      expect(find.textContaining('Improves'), findsOneWidget);
-      expect(find.textContaining('Healing time'), findsOneWidget);
+      expect(find.textContaining('Improves'), findsNothing);
+      expect(find.text('Healing time'), findsOneWidget);
       expect(t.takeException(), isNull);
     },
   );
@@ -169,8 +169,6 @@ void main() {
     expect(find.text('Production'), findsOneWidget);
     expect(find.text('Wood Production'), findsOneWidget);
     expect(find.text('2 per Statpoint'), findsOneWidget);
-    // The Crew card's own caption still says it too, as one line.
-    expect(find.text('Wood Production per Statpoint   2'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 

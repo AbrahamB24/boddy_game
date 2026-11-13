@@ -76,7 +76,7 @@ void pipelineTest() {
     // Already resolved by preload — the very first frame has the terrain.
     expect(
       find.byWidgetPredicate((w) => w is CustomPaint && w.painter != null),
-      findsNWidgets(3), // the still ground, the moving half and the animals
+      findsNWidgets(2), // the still ground and the moving half (animals are off, user 2026-11-07)
     );
     await tester.runAsync(() async {
       final boundary =

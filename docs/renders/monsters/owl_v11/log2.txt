@@ -1,0 +1,11 @@
+00:31.890  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_v11\owl_s2_front.png'
+00:33.109  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_v11\owl_s2_side.png'
+00:34.531  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_v11\owl_s2_back.png'
+00:35.921  render           | Saved: 'C:\Users\hirschi\Documents\GitHub\boddy_game\docs\renders\monsters\owl_v11\owl_s2_q.png'
+wrote docs/renders/monsters/owl_v11\owl_s2_front.png 360 x 360
+wrote docs/renders/monsters/owl_v11\owl_s2_side.png 360 x 360
+wrote docs/renders/monsters/owl_v11\owl_s2_back.png 360 x 360
+wrote docs/renders/monsters/owl_v11\owl_s2_q.png 360 x 360
+Blender 5.2.2 LTS (hash d13f752e3b9c built 2026-09-15 01:37:04)
+
+Blender quit

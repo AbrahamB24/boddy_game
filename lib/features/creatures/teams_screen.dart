@@ -5,7 +5,6 @@ import '../../core/theme/cream_kit.dart';
 import '../../core/theme/strategy_theme.dart'
     show chunkyDecoration, strategyDarken;
 import '../../core/ui/snack.dart';
-import '../../core/ui/scroll_cue.dart';
 import '../common/widgets/filter_pills.dart';
 import '../settlement/settlement_controller.dart';
 import 'models/creature_enums.dart';
@@ -17,7 +16,7 @@ import 'services/overworld_path.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/creature_family.dart';
 import 'widgets/picker_detail_panel.dart';
-import 'widgets/roster_row.dart';
+import 'widgets/picker_stage.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/voxel_icons.dart';
@@ -867,34 +866,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
                 const SizedBox(height: 8),
                 _controlsRow(),
                 const SizedBox(height: 8),
-                SizedBox(
-                  height: 240,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _detail(cap),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Builder(
-                          builder: (context) {
-                            final roster = _roster(ctrl);
-                            return roster.isEmpty
-                                ? RosterRow.emptyState('No monsters.')
-                                : ScrollCue(
-                                    builder: (context, controller) => ListView(
-                                      controller: controller,
-                                      shrinkWrap: true,
-                                      children: [
-                                        for (final c in roster) _row(c, cap),
-                                      ],
-                                    ),
-                                  );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                SizedBox(height: 330, child: _stage(ctrl, cap)),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
@@ -927,92 +899,51 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
     );
   }
 
-  /// One roster row via the shared [RosterRow] (user 2026-10-05: "wirklich
-  /// überall den gleichen [Monsterpicker] nehmen") — same face/bar/pill/
-  /// figure/icon layout the worker-assignment picker uses, with team-editor
-  /// values in its slots: Power for the bar, this monster's seat (or why
-  /// it has none) for the status pill, Level for the figure. A tap only
-  /// PREVIEWS it in [_detail] now — the icon still says what the detail
-  /// panel's button will do, but that button is what actually does it.
-  Widget _row(CreatureInstance c, int cap) {
-    final at = _picked.indexOf(c.id);
-    final picked = at >= 0;
-    // Over-cap picks are allowed but flagged: the cap grows with research, and
-    // silently refusing the 4th monster reads as a bug rather than a rule.
-    final overCap = picked && at >= cap;
-    // Already on the team in a different slot while one is armed for a
-    // swap — a tap here is ignored (see _tapRoster), so it reads as such.
-    final blocked = _replaceTarget != null && picked && at != _replaceTarget;
-    final statMax = CreaturesController().creatures.fold<int>(
-      1,
-      (m, o) => totalPower(o) > m ? totalPower(o) : m,
-    );
-    final (status, kind) = c.isKo
-        ? ('💀 K.O.', RosterPillKind.no)
-        : overCap
-        ? ('Over cap', RosterPillKind.warn)
-        : picked
-        ? ('Seat ${at + 1}', RosterPillKind.free)
-        : ('Not picked', RosterPillKind.no);
-    return pickerPreviewFrame(
-      active: _preview?.id == c.id,
-      child: RosterRow(
-        creature: c,
-        statValue: totalPower(c),
-        statMax: statMax,
-        status: status,
-        statusKind: kind,
-        figureText: 'Lv ${c.level}',
-        figureColor: kBoxInkSoft,
-        dimmed: blocked,
-        actionIcon: picked
-            ? Icons.close
-            : (_replaceTarget != null ? Icons.swap_horiz : Icons.add),
-        actionColor: picked ? CreamPalette.warn : CreamPalette.gold,
-        actionIconColor: picked ? Colors.white : CreamPalette.ink,
-        onTap: () => setState(() => _preview = c),
-      ),
-    );
-  }
-
-  /// The left panel: power and this monster's seat — what the team editor's
-  /// roster is judged on. [action] is the only thing that actually adds,
-  /// removes or swaps a member now; tapping a row just fills this in first.
-  Widget _detail(int cap) {
+  /// The card stage (user 2026-11-11): the slot being filled (or the free
+  /// one), the previewed monster, what the swap does to power, the roster as
+  /// cards along the bottom. [pickerChooseButton] is still the only thing that
+  /// adds, removes or swaps a member.
+  Widget _stage(CreaturesController ctrl, int cap) {
     final c = _preview;
-    if (c == null) {
-      return const PickerDetailPanel(
-        placeholder: 'Tap a monster to see its details.',
-      );
-    }
-    final at = _picked.indexOf(c.id);
-    final picked = at >= 0;
-    final overCap = picked && at >= cap;
-    final armed = _replaceTarget != null;
-    final blocked = armed && picked && at != _replaceTarget;
-    final (status, statusColor) = c.isKo
-        ? ('K.O.', CreamPalette.warn)
-        : overCap
-        ? ('Over cap', CreamPalette.warn)
-        : picked
-        ? ('Seat ${at + 1}', CreamPalette.better)
-        : ('Not picked', kBoxInkSoft);
-    final label = blocked
-        ? 'On the team already'
-        : armed
-        ? 'Place in slot ${_replaceTarget! + 1}'
-        : picked
-        ? 'Remove from team'
-        : 'Add to team';
-    return PickerDetailPanel(
-      art: CreatureCard(creature: c),
-      title: c.displayName,
-      subtitle: 'Lv ${c.level}',
-      rows: [
-        pickerStatRow('Power', '⚡ ${totalPower(c)}'),
-        pickerStatRow('Status', status, valueColor: statusColor),
-      ],
-      action: pickerChooseButton(
+    final target = _replaceTarget;
+    final nowId = target != null && target < _picked.length
+        ? _picked[target]
+        : null;
+    final now = nowId == null
+        ? null
+        : ctrl.creatures.where((m) => m.id == nowId).firstOrNull;
+    List<Widget>? rows;
+    Widget? action;
+    if (c != null) {
+      final at = _picked.indexOf(c.id);
+      final picked = at >= 0;
+      final overCap = picked && at >= cap;
+      final armed = target != null;
+      final blocked = armed && picked && at != target;
+      final (status, statusColor) = c.isKo
+          ? ('K.O.', CreamPalette.warn)
+          : overCap
+          ? ('Over cap', CreamPalette.warn)
+          : picked
+          ? ('Seat ${at + 1}', CreamPalette.better)
+          : ('Not picked', kBoxInkSoft);
+      final label = blocked
+          ? 'On the team already'
+          : armed
+          ? 'Place in slot ${target + 1}'
+          : picked
+          ? 'Remove from team'
+          : 'Add to team';
+      rows = [
+        pickerCompareRow(
+          'Power',
+          from: now == null ? null : totalPower(now),
+          to: totalPower(c),
+        ),
+        pickerCompareRow('Level', from: now?.level, to: c.level),
+        pickerPlateRow('Status', status, valueColor: statusColor),
+      ];
+      action = pickerChooseButton(
         label: label,
         onTap: blocked
             ? null
@@ -1020,6 +951,53 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
                 _tapRoster(c);
                 setState(() {});
               },
+      );
+    }
+    final roster = _roster(ctrl);
+    return PickerStage(
+      currentLabel: target == null ? 'FREE SLOT' : 'SLOT ${target + 1}',
+      current: now == null ? null : CreatureCard(creature: now),
+      preview: c == null ? null : CreatureCard(creature: c),
+      plateTitle: c?.displayName,
+      rows: rows,
+      action: action,
+      emptyText: 'No monsters.',
+      tiles: [for (final m in roster) _stageTile(m, cap)],
+    );
+  }
+
+  /// One roster card: the monster, its power as a flag, ticked when it is in
+  /// the team, dimmed when a swap is armed and it sits in another slot (a tap
+  /// there is ignored, see [_tapRoster]). A tap only PREVIEWS it.
+  Widget _stageTile(CreatureInstance c, int cap) {
+    final at = _picked.indexOf(c.id);
+    final picked = at >= 0;
+    final blocked = _replaceTarget != null && picked && at != _replaceTarget;
+    return pickerPreviewFrame(
+      active: _preview?.id == c.id,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: blocked ? 0.4 : 1,
+              child: CreatureCard(
+                creature: c,
+                extras: [TileValue('Power', totalPower(c))],
+                onTap: () => setState(() => _preview = c),
+              ),
+            ),
+          ),
+          if (picked)
+            Positioned(
+              top: 2,
+              left: 2,
+              child: PixelIcon(
+                Icons.check_circle,
+                size: 18,
+                color: at >= cap ? CreamPalette.warn : CreamPalette.better,
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -1,0 +1,22 @@
+{
+  "monster": "owl",
+  "stage": 0,
+  "view": "front",
+  "frame_w": 336,
+  "frame_h": 268,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "front_idle.webp",
+      "frames": 40,
+      "fps": 12,
+      "loop": true
+    },
+    "attack": {
+      "sheet": "front_attack.webp",
+      "frames": 20,
+      "fps": 16,
+      "loop": false
+    }
+  }
+}

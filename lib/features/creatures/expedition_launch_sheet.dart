@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' hide Text;
 
-import '../../core/theme/cream_kit.dart' show goldButton, sectionLabel, zoneBox;
+import '../../core/theme/cream_kit.dart'
+    show CreamPalette, goldButton, sectionLabel, zoneBox;
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/feel.dart';
 import '../settlement/resources_screen.dart' show romanNumeral;
@@ -19,6 +20,7 @@ import 'services/expedition_targets.dart';
 import 'services/gather_math.dart';
 import 'widgets/creature_card.dart';
 import 'widgets/picker_detail_panel.dart';
+import 'widgets/picker_stage.dart';
 import '../common/widgets/empty_monster_slot.dart';
 import '../common/widgets/filter_pills.dart';
 import '../common/widgets/monster_tile_grid.dart';
@@ -892,63 +894,21 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
                   ),
                 ),
                 Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          left: kMonsterTilePageMargin,
-                        ),
-                        child: _pickerDetail(preview, sheetCtx, setSheetState),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: GridView.builder(
-                          controller: scrollCtrl,
-                          // 24, not 26 (user 2026-08-31: "genau gleich gross
-                          // sein wie die Kacheln beim Monstersscreen") — the
-                          // 2px difference from [kMonsterTilePageMargin] was
-                          // enough to hand every tile in this sheet a
-                          // slightly narrower cell than the Monsters grid's
-                          // own.
-                          padding: const EdgeInsets.fromLTRB(
-                            0,
-                            0,
-                            kMonsterTilePageMargin,
-                            20,
-                          ),
-                          gridDelegate: monsterTileGridDelegate(sheetCtx),
-                          itemCount: candidates.length + (swapping ? 1 : 0),
-                          itemBuilder: (_, i) {
-                            // A dedicated EMPTY tile (user 2026-08-31: "beim
-                            // Auswahlscreen eine 'leere' Kachel anbieten, wenn
-                            // ich diese anwähle, dann ist dieser Slot leer")
-                            // — swapping in nothing, the same clearing job
-                            // the ✗ badge used to do, but as a real choice in
-                            // the roster instead of a shortcut on the tile
-                            // behind it. Clearing is unambiguous, so it stays
-                            // a single tap rather than going through preview.
-                            if (swapping && i == 0) {
-                              return EmptyMonsterSlot(
-                                label: 'Empty',
-                                onTap: () {
-                                  setState(
-                                    () => _selected.remove(_swapTargetId),
-                                  );
-                                  Navigator.pop(sheetCtx);
-                                },
-                              );
-                            }
-                            final c = candidates[i - (swapping ? 1 : 0)];
-                            return _pickerTile(
-                              c,
-                              preview,
-                              (p) => setSheetState(() => preview = p),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      kMonsterTilePageMargin,
+                      0,
+                      kMonsterTilePageMargin,
+                      10,
+                    ),
+                    child: _pickerStage(
+                      candidates,
+                      swapping,
+                      preview,
+                      sheetCtx,
+                      setSheetState,
+                      (p) => setSheetState(() => preview = p),
+                    ),
                   ),
                 ),
               ],
@@ -961,47 +921,58 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
     if (mounted) setState(() {});
   }
 
-  /// The left panel: the stat this trip actually judges a member on, plus
-  /// carry — not combat power or HP, which neither hunting nor gathering
-  /// cares about.
-  Widget _pickerDetail(
+  /// The card stage (user 2026-11-11): who is in the seat being swapped (or
+  /// the free one), the previewed monster, the stat this trip judges a member
+  /// on, every candidate as a card along the bottom. A dedicated EMPTY card
+  /// first while swapping clears the seat in one tap.
+  Widget _pickerStage(
+    List<CreatureInstance> candidates,
+    bool swapping,
     CreatureInstance? preview,
     BuildContext sheetCtx,
     void Function(VoidCallback) setSheetState,
+    ValueChanged<CreatureInstance> onPreview,
   ) {
-    if (preview == null) {
-      return const PickerDetailPanel(
-        placeholder: 'Tap a monster to see its details.',
-      );
-    }
-    final picked = _selected.contains(preview.id);
-    final swapping = _swapTargetId != null;
-    final label = swapping
-        ? 'Swap in'
-        : (picked ? 'Remove from group' : 'Add to group');
-    return PickerDetailPanel(
-      art: CreatureCard(creature: preview, showHp: true),
-      title: preview.displayName,
-      subtitle: 'Lv ${preview.level}',
-      rows: [
-        pickerStatRow(
+    final c = preview;
+    final now = swapping
+        ? CreaturesController().creatures
+              .where((m) => m.id == _swapTargetId)
+              .firstOrNull
+        : null;
+    int stat(CreatureInstance m) => (_isHunt
+            ? m.statValue(CreatureStat.catchRate)
+            : gatherPowerOf(m))
+        .round();
+    List<Widget>? rows;
+    Widget? action;
+    if (c != null) {
+      final picked = _selected.contains(c.id);
+      rows = [
+        pickerCompareRow(
           _isHunt ? 'Catch' : 'Mining',
-          '${_isHunt ? preview.statValue(CreatureStat.catchRate) : gatherPowerOf(preview)}',
+          from: now == null ? null : stat(now),
+          to: stat(c),
         ),
-        pickerStatRow('Carry', '${preview.statValue(CreatureStat.carry)}'),
-      ],
-      action: pickerChooseButton(
-        label: label,
+        pickerCompareRow(
+          'Carry',
+          from: now?.statValue(CreatureStat.carry),
+          to: c.statValue(CreatureStat.carry),
+        ),
+      ];
+      action = pickerChooseButton(
+        label: swapping
+            ? 'Swap in'
+            : (picked ? 'Remove from group' : 'Add to group'),
         onTap: () {
           if (_swapTargetId != null) {
             setState(() {
               _selected.remove(_swapTargetId);
-              _selected.add(preview.id);
+              _selected.add(c.id);
             });
             Navigator.pop(sheetCtx);
             return;
           }
-          _toggle(preview);
+          _toggle(c);
           setSheetState(() {});
           // A full group means the question is answered; holding the picker
           // open would leave a list that refuses every further tap.
@@ -1009,7 +980,34 @@ class _ExpeditionLaunchPanelState extends State<ExpeditionLaunchPanel> {
             Navigator.pop(sheetCtx);
           }
         },
+      );
+    }
+    return PickerStage(
+      banner: pickerBanner(
+        _isHunt ? 'HUNT' : 'MINING',
+        swapping ? 'Pick the replacement' : 'Pick who joins the group',
+        trailing: Text(
+          '${_members.length} / $_groupCap',
+          style: FoE.value(size: 16).copyWith(color: CreamPalette.gold),
+        ),
       ),
+      currentLabel: swapping ? 'SWAPPING OUT' : 'FREE SEAT',
+      current: now == null ? null : CreatureCard(creature: now),
+      preview: c == null ? null : CreatureCard(creature: c, showHp: true),
+      plateTitle: c?.displayName,
+      rows: rows,
+      action: action,
+      tiles: [
+        if (swapping)
+          EmptyMonsterSlot(
+            label: 'Empty',
+            onTap: () {
+              setState(() => _selected.remove(_swapTargetId));
+              Navigator.pop(sheetCtx);
+            },
+          ),
+        for (final m in candidates) _pickerTile(m, preview, onPreview),
+      ],
     );
   }
 

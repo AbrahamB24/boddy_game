@@ -69,6 +69,18 @@ flutter:
     - assets/images/monsters/glimmergnaw_s0/
     - assets/images/monsters/glimmergnaw_s1/
     - assets/images/monsters/glimmergnaw_s2/
+    - assets/images/monsters/phoenix_s0/
+    - assets/images/monsters/phoenix_s1/
+    - assets/images/monsters/phoenix_s2/
+    - assets/images/monsters/dragon_s0/
+    - assets/images/monsters/dragon_s1/
+    - assets/images/monsters/dragon_s2/
+    - assets/images/monsters/duck_s0/
+    - assets/images/monsters/duck_s1/
+    - assets/images/monsters/duck_s2/
+    - assets/images/monsters/owl_s0/
+    - assets/images/monsters/owl_s1/
+    - assets/images/monsters/owl_s2/
     - assets/images/terrain/
     - assets/sfx/
     - assets/music/
@@ -78,22 +90,22 @@ flutter:
     # not at all offline on a fresh install. Only the weights the app asks
     # for; the licence (SIL OFL) travels with them.
     - assets/fonts/
-  # The app's one face (Jersey 10, SIL OFL): a pixel font cut for small sizes.
+  # The app's one face (Jersey 15, SIL OFL; was Jersey 10 until 2026-11-10 — finer pixel grid, easier to read): a pixel font cut for small sizes.
   # The one Regular file is registered for EVERY weight on purpose: a pixel
   # font has no bold, and without these entries Flutter would smear a fake one
   # over it wherever the code asks for w700/w800.
   fonts:
-    - family: Jersey10
+    - family: Jersey15
       fonts:
-        - asset: assets/fonts/Jersey10-Regular.ttf
+        - asset: assets/fonts/Jersey15-Regular.ttf
           weight: 400
-        - asset: assets/fonts/Jersey10-Regular.ttf
+        - asset: assets/fonts/Jersey15-Regular.ttf
           weight: 500
-        - asset: assets/fonts/Jersey10-Regular.ttf
+        - asset: assets/fonts/Jersey15-Regular.ttf
           weight: 600
-        - asset: assets/fonts/Jersey10-Regular.ttf
+        - asset: assets/fonts/Jersey15-Regular.ttf
           weight: 700
-        - asset: assets/fonts/Jersey10-Regular.ttf
+        - asset: assets/fonts/Jersey15-Regular.ttf
           weight: 800
-        - asset: assets/fonts/Jersey10-Regular.ttf
+        - asset: assets/fonts/Jersey15-Regular.ttf
           weight: 900

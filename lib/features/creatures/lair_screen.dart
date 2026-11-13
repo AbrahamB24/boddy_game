@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text;
 
+import '../settlement/widgets/voxel_hud.dart' show VoxelHud;
+import '../../core/theme/voxel_kit.dart' show VoxelBar;
 import '../../core/theme/cream_kit.dart';
 import '../../core/ui/game_text.dart';
 import '../../core/ui/pressable.dart';
@@ -199,7 +201,11 @@ class _LairScreenState extends State<LairScreen> {
             ),
             const SizedBox(height: 6),
             if (lair.upgrading) ...[
-              LinearProgressIndicator(value: lair.progress.clamp(0.0, 1.0)),
+              VoxelBar(
+                value: lair.progress.clamp(0.0, 1.0),
+                height: 10,
+                color: VoxelHud.good,
+              ),
               const SizedBox(height: 6),
               Text(
                 'Level ${lair.level + 1} in ${_fmt(lair.remaining)}'

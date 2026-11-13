@@ -7,7 +7,8 @@ import '../../core/theme/cream_kit.dart';
 import '../../core/theme/fachwerk.dart';
 import '../../core/ui/pressable.dart';
 import '../settlement/widgets/building_icon.dart';
-import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/strategy_theme.dart' show voxelButtonDecoration;
+import '../../core/theme/voxel_kit.dart' show Voxel, VoxelShape;
 import '../../core/ui/game_text.dart';
 
 // ── The front door ──────────────────────────────────────────
@@ -47,7 +48,7 @@ class AuthShell extends StatelessWidget {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 840),
+              constraints: const BoxConstraints(maxWidth: 900),
               child: LayoutBuilder(
                 builder: (context, box) {
                   final card = SizedBox(
@@ -65,7 +66,7 @@ class AuthShell extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Expanded(child: brand),
-                            const SizedBox(width: 28),
+                            const SizedBox(width: 40),
                             card,
                           ],
                         )
@@ -91,10 +92,10 @@ class _Brand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(left: 24),
+    padding: const EdgeInsets.symmetric(horizontal: 8),
     child: Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         // Fachwerk (2026-11-02): the name hangs as a timber SIGN under a
         // course of roof tiles, the way the buildings wear them.
@@ -102,37 +103,41 @@ class _Brand extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const ClipRRect(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
-                child: RoofTileStrip(height: 14, tileWidth: 16),
-              ),
-              TimberPlate(
-                radius: 6,
-                padding: const EdgeInsets.fromLTRB(30, 8, 30, 12),
-                child: Text(
-                  heading,
-                  maxLines: 1,
-                  softWrap: false,
-                  style: const TextStyle(
-                    fontSize: 44,
-                    height: 1.05,
-                    fontWeight: FontWeight.w400,
-                    letterSpacing: 0.4,
-                    color: Fachwerk.windowGlow,
-                    shadows: [
-                      Shadow(color: Color(0x99000000), offset: Offset(0, 2)),
-                    ],
+              // The name on the main menu's plate (stepped corners, outline,
+              // lit rim, hard shadow), like every button and panel.
+              DecoratedBox(
+                decoration: voxelButtonDecoration(notch: 3, depth: 3),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(30, 10, 30, 12),
+                  child: Text(
+                    heading,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: const TextStyle(
+                      fontSize: 44,
+                      height: 1.05,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.4,
+                      color: Fachwerk.windowGlow,
+                      shadows: [
+                        Shadow(color: Color(0x99000000), offset: Offset(0, 2)),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 18),
+        // One centred axis: name, castle, tagline.
+        const SizedBox(height: 6),
+        const BuildingIcon(defId: 'castle', emoji: '🏰', size: 250),
+        const SizedBox(height: 4),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
           child: Text(
             tagline,
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 15,
               height: 1.5,
@@ -140,8 +145,6 @@ class _Brand extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 14),
-        const BuildingIcon(defId: 'castle', emoji: '🏰', size: 96),
       ],
     ),
   );
@@ -208,14 +211,16 @@ class _CreamFieldState extends State<_CreamField> {
         height: 40,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         alignment: Alignment.centerLeft,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.55),
-          borderRadius: vr(11),
-          border: Border.all(
-            color: _focus.hasFocus
-                ? CreamPalette.gold
-                : CreamPalette.tan.withValues(alpha: 0.55),
-            width: _focus.hasFocus ? 2 : 1.5,
+        // The kit's plate, dug in: a dark well with the same stepped corners
+        // and outline as the buttons; the outline turns gold while focused.
+        decoration: ShapeDecoration(
+          color: const Color(0xFF0B252A),
+          shape: VoxelShape(
+            notch: 2,
+            bevel: false,
+            shade: false,
+            lines: _focus.hasFocus ? 1.5 : 1,
+            edge: _focus.hasFocus ? CreamPalette.gold : Voxel.outline,
           ),
         ),
         child: Row(
@@ -243,29 +248,29 @@ class _CreamFieldState extends State<_CreamField> {
   );
 
   Widget _buildField(BuildContext context) => TextField(
-          controller: widget.controller,
-          focusNode: _focus,
-          obscureText: widget.obscure && !_revealed,
-          autofocus: widget.autofocus,
-          keyboardType: widget.keyboardType,
-          textInputAction: widget.action,
-          cursorColor: kBoxInk,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            color: kBoxInk,
-          ),
-          decoration: const InputDecoration.collapsed(hintText: null),
-          // Enter submits — moves to the next field, or logs in/signs up from
-          // the last one, whichever mode is active.
-          onSubmitted: (_) {
-            if (widget.action == TextInputAction.done) {
-              widget.onDone?.call();
-            } else {
-              FocusScope.of(context).nextFocus();
-            }
-          },
-        );
+    controller: widget.controller,
+    focusNode: _focus,
+    obscureText: widget.obscure && !_revealed,
+    autofocus: widget.autofocus,
+    keyboardType: widget.keyboardType,
+    textInputAction: widget.action,
+    cursorColor: kBoxInk,
+    style: const TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w400,
+      color: kBoxInk,
+    ),
+    decoration: const InputDecoration.collapsed(hintText: null),
+    // Enter submits — moves to the next field, or logs in/signs up from
+    // the last one, whichever mode is active.
+    onSubmitted: (_) {
+      if (widget.action == TextInputAction.done) {
+        widget.onDone?.call();
+      } else {
+        FocusScope.of(context).nextFocus();
+      }
+    },
+  );
 }
 
 /// The gold commit button, with a spinner while [busy].
@@ -316,41 +321,29 @@ class _ModeSwitch extends StatelessWidget {
       child: Pressable(
         onTap: () => onChanged(value),
         child: Container(
-          height: 34,
+          height: 38,
           alignment: Alignment.center,
-          decoration: on
-              ? BoxDecoration(
-                  color: CreamPalette.gold,
-                  borderRadius: vr(9),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: CreamPalette.goldDeep,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                )
-              : null,
+          // The live half is a main-menu button, the other a menu-blue one.
+          decoration: on ? goldButton() : menuButton(),
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               fontWeight: FontWeight.w400,
-              color: on ? kBoxInk : kBoxInkSoft,
+              color: on ? CreamPalette.ink : kBoxInk,
             ),
           ),
         ),
       ),
     );
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: CreamPalette.tan.withValues(alpha: 0.18),
-        borderRadius: vr(12),
-      ),
+    // Two separate buttons, no track behind them (the hard shadow needs a
+    // little room to the right and below).
+    return Padding(
+      padding: const EdgeInsets.only(right: 2, bottom: 2),
       child: Row(
         children: [
           half('Sign in', !signUp, false),
-          const SizedBox(width: 3),
+          const SizedBox(width: 12),
           half('Register', signUp, true),
         ],
       ),

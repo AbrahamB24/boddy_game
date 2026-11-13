@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' hide Text;
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/theme/strategy_theme.dart';
 import '../../settlement/widgets/parchment_sheet.dart';
+import '../../settlement/widgets/voxel_hud.dart' show VoxelHud;
 import '../../../core/theme/cream_kit.dart';
 import '../../settlement/widgets/scroll_paper.dart' show kActionGreen;
 import 'parchment_page.dart';
@@ -249,10 +250,13 @@ class ParchmentButton extends StatelessWidget {
         : primary
         ? Strategy.gold
         : Strategy.tan;
-    final ink = strategyTextOn(fill);
+    final neutral = !danger && !primary;
+    // The neutral button is the main menu's blue plate with its bright ink.
+    final ink = neutral ? VoxelHud.ink : strategyTextOn(fill);
     return ChunkyButton(
       onTap: onTap,
       fill: fill,
+      menuBlue: neutral,
       expand: expand,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
       child: Column(

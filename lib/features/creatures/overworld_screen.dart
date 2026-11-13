@@ -33,7 +33,7 @@ import 'services/overworld_path.dart';
 import 'services/region_dungeon.dart'
     show spawnPathBattle, scriptedFirstBattleEnemy;
 import '../../core/theme/voxel_icons.dart';
-import '../../core/theme/voxel_kit.dart' show VoxelBackdrop, vr;
+import '../../core/theme/voxel_kit.dart' show VoxelWall, vr;
 import '../../core/ui/game_text.dart';
 
 // ── The Overworld (the campaign) ────────────────────────────
@@ -158,7 +158,7 @@ class _OverworldScreenState extends State<OverworldScreen> {
         body: Stack(
           children: [
             const Positioned.fill(
-              child: VoxelBackdrop(color: CreamPalette.groundTop),
+              child: VoxelWall(color: CreamPalette.groundTop),
             ),
             SafeArea(
               child: Column(

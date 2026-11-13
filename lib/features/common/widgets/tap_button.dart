@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/foe_theme.dart';
+import '../../../core/theme/voxel_kit.dart';
+import '../../settlement/widgets/voxel_hud.dart' show VoxelHud;
 
 // A small tappable control (stepper +/-, filter/sort icon, back chevron, …)
 // that carries a real Material hover/press overlay — a plain GestureDetector
@@ -33,14 +35,20 @@ class TapButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final side = borderColor != null
-        ? BorderSide(color: borderColor!)
-        : BorderSide.none;
-    final ShapeBorder shape = circle
-        ? CircleBorder(side: side)
-        : FoE.facet(radius: radius ?? FoE.radius, side: side);
+    // The main menu's plate for every small control (user 2026-11-10): stepped
+    // corners, outline, lit rim and a hard shadow — also for the "round" ones,
+    // which are blocks now. A [borderColor] tints the outline.
+    final ShapeBorder shape = VoxelShape(
+      notch: circle ? 2 : ((radius ?? FoE.radius) >= 12 ? 2 : 1),
+      light: VoxelHud.rim,
+      edge: borderColor,
+    );
     return DecoratedBox(
-      decoration: ShapeDecoration(color: background, shape: shape),
+      decoration: ShapeDecoration(
+        color: background,
+        shape: shape,
+        shadows: onTap == null ? null : voxelDrop(depth: 2),
+      ),
       child: Material(
         color: Colors.transparent,
         shape: shape,

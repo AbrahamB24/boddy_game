@@ -1,3 +1,4 @@
+import '../../core/theme/voxel_kit.dart' show VoxelBar;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -303,16 +304,11 @@ class _CaptureBarScreenState extends State<CaptureBarScreen>
 
   Widget _durationBar() {
     final remain = (1 - _elapsed.inMilliseconds / _durationMs).clamp(0.0, 1.0);
-    return ClipRRect(
-      borderRadius: vr(4),
-      child: SizedBox(
-        height: 6,
-        child: LinearProgressIndicator(
-          value: remain,
-          backgroundColor: CreamPalette.tan.withValues(alpha: 0.25),
-          color: remain < 0.25 ? CreamPalette.warn : CreamPalette.better,
-        ),
-      ),
+    return VoxelBar(
+      value: remain,
+      height: 8,
+      block: 7,
+      color: remain < 0.25 ? CreamPalette.warn : CreamPalette.better,
     );
   }
 
@@ -384,17 +380,7 @@ class _CaptureBarScreenState extends State<CaptureBarScreen>
           // 2026-10-04: "der Balken soll breit/hoch genug sein") — this is
           // the ONLY progress indicator on screen now that it sits above
           // the track instead of a thin strip underneath it.
-          ClipRRect(
-            borderRadius: vr(10),
-            child: SizedBox(
-              height: 20,
-              child: LinearProgressIndicator(
-                value: pct / 100,
-                backgroundColor: CreamPalette.tan.withValues(alpha: 0.2),
-                color: color,
-              ),
-            ),
-          ),
+          VoxelBar(value: pct / 100, height: 18, block: 12, color: color ?? CreamPalette.better),
         ],
       ),
     );

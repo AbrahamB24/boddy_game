@@ -410,19 +410,20 @@ class _BuildingUpgradeSheet extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-                sectionCard(
-                  title: 'Effects',
-                  icon: Icons.bolt,
-                  child: rows.isEmpty
-                      ? Text(
-                          'No scaling effects — a purely decorative building.',
-                          style: FoE.dim(size: 12).copyWith(color: _inkSoft),
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: rows,
-                        ),
-                ),
+                // One card is enough (user 2026-11-11): the heading stands
+                // straight on the dialog's card, no inner box.
+                const CreamHeading(title: 'Effects', icon: Icons.bolt),
+                const SizedBox(height: 10),
+                if (rows.isEmpty)
+                  Text(
+                    'No scaling effects — a purely decorative building.',
+                    style: FoE.dim(size: 12).copyWith(color: _inkSoft),
+                  )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: rows,
+                  ),
               ],
             ),
           ),

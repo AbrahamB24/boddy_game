@@ -61,7 +61,7 @@ void main() {
         for (final h in ['se', 'ne', 'nw', 'sw'])
           MonsterSheets.map('tidelord', stage, h)!,
       // The isometric arena's sheets, built from the map's idle and walk.
-      for (final species in ['tidelord', 'glimmergnaw'])
+      for (final species in ['tidelord', 'glimmergnaw', 'blazeling', 'droplet', 'solarion'])
         for (var stage = 0; stage < 3; stage++)
           for (final mine in [true, false])
             MonsterSheets.battleIso(species, stage, mine: mine)!,
@@ -72,15 +72,36 @@ void main() {
         for (final h in ['se', 'ne', 'nw', 'sw'])
           MonsterSheets.map('glimmergnaw', stage, h)!,
       ],
+      // Phoenix line (species id blazeling): attack and hurt on the front only.
+      for (var stage = 0; stage < 3; stage++) ...[
+        MonsterSheets.battle('blazeling', stage, back: false)!,
+        MonsterSheets.battle('blazeling', stage, back: true)!,
+        for (final h in ['se', 'ne', 'nw', 'sw'])
+          MonsterSheets.map('blazeling', stage, h)!,
+      ],
+      // Duck line (species id droplet).
+      for (var stage = 0; stage < 3; stage++) ...[
+        MonsterSheets.battle('droplet', stage, back: false)!,
+        MonsterSheets.battle('droplet', stage, back: true)!,
+        for (final h in ['se', 'ne', 'nw', 'sw'])
+          MonsterSheets.map('droplet', stage, h)!,
+      ],
+      // Owl line (species id solarion): 40-frame idles, five sheet rows.
+      for (var stage = 0; stage < 3; stage++) ...[
+        MonsterSheets.battle('solarion', stage, back: false)!,
+        MonsterSheets.battle('solarion', stage, back: true)!,
+        for (final h in ['se', 'ne', 'nw', 'sw'])
+          MonsterSheets.map('solarion', stage, h)!,
+      ],
     ];
     for (final s in sets) {
       for (final a in s.anims.values) {
         expect(File(a.asset).existsSync(), isTrue, reason: a.asset);
-        expect(a.frames, inInclusiveRange(2, 32));
+        expect(a.frames, inInclusiveRange(2, 40));
         expect(a.fps, inInclusiveRange(4, 30));
         expect(
           (a.frames + s.cols - 1) ~/ s.cols,
-          lessThanOrEqualTo(4),
+          lessThanOrEqualTo(5),
           reason: '${a.asset} would need an absurd sheet height',
         );
       }

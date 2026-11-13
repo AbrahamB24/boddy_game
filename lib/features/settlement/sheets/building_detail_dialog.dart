@@ -36,7 +36,7 @@ import '../../creatures/models/species_def.dart';
 import '../../creatures/overworld_screen.dart';
 import '../../creatures/services/creatures_controller.dart';
 import '../../creatures/widgets/creature_family.dart'
-    show CreatureFace, CreatureSeatTile;
+    show CreatureFace, CreatureCrewCard;
 import '../../onboarding/intro_flow.dart';
 import '../../onboarding/intro_spotlight.dart';
 import '../crafting_screen.dart';
@@ -318,7 +318,10 @@ Future<void> showBuildingDetailDialog(
                           // BEFORE hero and content shared one card (a bare
                           // 80 + 10 + middleH + …), so no padding here and a
                           // hairline no taller than the 10px gap it replaces.
-                          padding: EdgeInsets.zero,
+                          // Side + bottom room (user 2026-11-11: content ran
+                          // over the card edges); the hero sheds its own
+                          // insets to match, and _kDialogChrome counts the 12.
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -372,21 +375,39 @@ Future<void> showBuildingDetailDialog(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.stretch,
                                           children: [
-                                            sectionLabel(
-                                              'Effects',
-                                              icon: Icons.bolt,
-                                            ),
+                                            sectionLabel('Effects'),
                                             const SizedBox(height: 10),
+                                            // Indented under the heading (user
+                                            // 2026-11-11).
                                             Expanded(
-                                              child: _EffectsBody(
-                                                items: panels.effects,
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.only(
+                                                      left: 12,
+                                                    ),
+                                                child: _EffectsBody(
+                                                  items: panels.effects,
+                                                ),
                                               ),
                                             ),
                                           ],
                                         ),
                                       ),
                                       if (hasCrew) ...[
-                                        vHairline(),
+                                        // Closer on the Effects side, so the
+                                        // figures sit near the rule.
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            left: 4,
+                                            right: 12,
+                                          ),
+                                          child: Container(
+                                            width: 2,
+                                            color: CreamPalette.tan.withValues(
+                                              alpha: 0.6,
+                                            ),
+                                          ),
+                                        ),
                                         Expanded(
                                           flex: 7,
                                           child: _crewBody(
@@ -461,7 +482,7 @@ Future<void> showBuildingDetailDialog(
 // 10px gaps + 4 of slack.
 const double _kHeroH = 80;
 const double _kBarH = 52;
-const double _kDialogChrome = 24 + 18 + _kHeroH + _kBarH + 10 + 10 + 4;
+const double _kDialogChrome = 24 + 18 + _kHeroH + _kBarH + 10 + 10 + 4 + 12;
 
 /// How far the art may rise above the hero card's top edge (user 2026-09-28:
 /// "das Gebäudeasset geht oben aus dem Bildschirm hinaus"). The art is scaled
@@ -509,15 +530,15 @@ Widget _heroCard(
         // card's top edge (user 2026-07-22).
         // Paused: the art loses its colour, like on the map (user 2026-09-22).
         Positioned(
-          left: 12,
+          left: 0,
           top: 8,
           child: b.isComplete && b.isPaused
               ? ColorFiltered(colorFilter: kPausedFilter, child: _artPanel(def))
               : _artPanel(def),
         ),
         Positioned(
-          left: 156,
-          right: 12,
+          left: 144,
+          right: 0,
           top: 0,
           bottom: 0,
           child: Row(
@@ -605,9 +626,8 @@ Widget _circleBtn(IconData icon, VoidCallback onTap, {double size = 32}) =>
           shape: BoxShape.rectangle,
           // Timber ring, like the kit's close button (Fachwerk).
           border: Border.all(color: Fachwerk.timber, width: 2),
-          boxShadow: [
-            BoxShadow(color: CreamPalette.goldDeep, offset: const Offset(0, 2)),
-          ],
+          // No hard shadow underneath (user 2026-11-11: the line under the
+          // pause and statistics buttons goes).
         ),
         child: PixelIcon(icon, size: size * 0.55, color: CreamPalette.ink),
       ),
@@ -632,7 +652,6 @@ Widget _crewBody(_Panels p, BuildingDef def, bool functional, Widget? notes) {
     children: [
       sectionLabel(
         'Crew',
-        icon: Icons.groups,
         trailing: def.workshops.isEmpty || !functional
             ? null
             : Text(
@@ -886,22 +905,6 @@ Widget _artPanel(BuildingDef def) => SizedBox(
   ),
 );
 
-/// A system role's contribution. The wording lives in
-/// workshop_role_effects.dart, shared with the build menu, the upgrade sheet
-/// and the Dev-Mode preview.
-///
-/// NO GLYPH unless the value needs one to say WHICH system it belongs to
-/// (user 2026-07-27: "icon bei der Reduktion löschen (−n%)"). On a worker's
-/// row the post above already names the role, and on a single-role building
-/// so does the whole dialog — there the 🩹 beside "−25 %" was decoration.
-/// Only the Total line of a building with SEVERAL system roles (the Scout
-/// Post's travel/carry/goods) keeps it, because there three bare percentages
-/// would sit side by side with nothing to tell them apart.
-String _systemRoleValue(String res, double power, {bool withGlyph = false}) =>
-    withGlyph
-    ? '${workshopRoleEffect(res, power)} ${workshopRoleEmoji(res)}'
-    : workshopRoleEffect(res, power);
-
 /// One resource/role glyph — kResourceEmoji is the app-wide source, goods
 /// bring their own, and the three non-resource role keys get their own icon.
 String _resEmoji(String res) => switch (res) {
@@ -949,7 +952,7 @@ class _PostGroup {
   final String label;
   final int workers;
   final int slots;
-  final List<Widget Function(double u)> tiles;
+  final List<Widget Function(double u, bool compact)> tiles;
 
   /// "Improves …" — what a COMBINED post feeds, spelled out because with no
   /// monster posted nothing else on the card says so (user 2026-07-30).
@@ -1019,8 +1022,9 @@ _Panels _buildPanels(
   List<String> amounts(Map<String, double> m) => [
     for (final e in m.entries)
       if (e.value > 0)
-        '${e.key == WorkshopRole.kConstruction ? buildPointsLabel(e.value) : '+${e.value.toStringAsFixed(1)}/h'} '
-            '${_resEmoji(e.key)}',
+        e.key == WorkshopRole.kConstruction
+            ? buildPointsLabel(e.value)
+            : '+${e.value.toStringAsFixed(1)}/h',
   ];
 
   /// Label left, value(s) right — stacked, right-aligned, one per line. With
@@ -1041,6 +1045,9 @@ _Panels _buildPanels(
     // heading rather than reading as a heading itself.
     Color? labelColor,
     double indent = 0,
+    // The resource's glyph, LEFT of the label and nowhere else (user
+    // 2026-11-11).
+    String? leading,
   }) => Padding(
     padding: EdgeInsets.fromLTRB(indent, 2.5, 0, 2.5),
     child: Row(
@@ -1048,6 +1055,10 @@ _Panels _buildPanels(
           ? CrossAxisAlignment.start
           : CrossAxisAlignment.center,
       children: [
+        if (leading != null) ...[
+          Text(leading, style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 6),
+        ],
         Text(
           label,
           style: FoE.label(size: 12).copyWith(color: labelColor ?? kBoxAccent),
@@ -1102,7 +1113,7 @@ _Panels _buildPanels(
   );
 
   Widget heading(String text) => Padding(
-    padding: const EdgeInsets.only(top: 2, bottom: 2),
+    padding: const EdgeInsets.symmetric(vertical: 2.5),
     child: Text(text, style: FoE.label(size: 12).copyWith(color: kBoxAccent)),
   );
 
@@ -1161,7 +1172,8 @@ _Panels _buildPanels(
                       : '+${v.toStringAsFixed(1)}/h')
                 : 'offline',
           ],
-          icons: [functional ? _resEmoji(key) : null],
+          icons: const [null],
+          leading: functional ? _resEmoji(key) : null,
           color: !functional ? FoE.danger : kBoxInk,
           labelColor: kBoxInk,
           indent: 12,
@@ -1194,7 +1206,8 @@ _Panels _buildPanels(
         headline(
           '${_resLabel(e.key)} Production',
           ['${_num(e.value)} per Statpoint'],
-          icons: [_resEmoji(e.key)],
+          icons: const [null],
+          leading: _resEmoji(e.key),
           labelColor: kBoxInk,
           indent: 12,
         ),
@@ -1338,32 +1351,10 @@ _Panels _buildPanels(
     // A COMBINED post feeds several systems at once, and its name can only be
     // the trip as a whole ("Expedition", "Caravan"). Parts dialled to zero are
     // left out: they do nothing.
-    String? improves;
-    if (role.isCombined) {
-      final parts = [
-        for (final p in role.parts.entries)
-          if ((role.mults[p.key] ?? 0) != 0)
-            '${workshopRoleEmoji(p.value)} '
-                '${workshopRoleName(p.value) ?? p.value}',
-      ];
-      if (parts.isNotEmpty) improves = 'Improves ${parts.join(' · ')}';
-    } else if (training) {
-      improves = '🏋️ Trains for XP — produces nothing here';
-    } else if (role.resource == WorkshopRole.kStorageRoom) {
-      improves = '🏚 Adds room in this store';
-    } else if (workshopRoleFeedsSystem(role.resource)) {
-      final name = workshopRoleName(role.resource) ?? role.resource;
-      improves = 'Improves ${workshopRoleEmoji(role.resource)} $name';
-    } else {
-      // The EXACT rate, not just the resource's name (user 2026-09-29: "Wood
-      // Production per Statpoint  1.1. So sieht man genau, was wirklich
-      // produziert wird") — the number every worker tile below is computed
-      // from: stat × this = the tile's own "+N/h" figure, at THIS level.
-      final perPoint = role.mult * role.levelScale(b.level);
-      improves =
-          '${resourceName(role.resource)} Production per Statpoint   '
-          '${_num(perPoint)}';
-    }
+    // The Crew card never carries an effect caption (user 2026-11-11: effects
+    // all stand on the left). Every effect — system posts, training, store
+    // room — is a row in the Effects card.
+    const String? improves = null;
     final free = (slotCap - assigned.length).clamp(0, 1 << 20);
     groups.add(
       _PostGroup(
@@ -1373,21 +1364,23 @@ _Panels _buildPanels(
         improves: improves,
         tiles: [
           for (final c in assigned)
-            (u) => _workerTile(
+            (u, compact) => _workerTile(
               c,
               role,
               b.level,
               training,
               storageKeys,
               u: u,
+              compact: compact,
               onTap: lockAssignedSeats
                   ? null
                   : () =>
                         _openAssignPicker(context, ctrl, b, role, swapId: c.id),
             ),
           for (var i = 0; i < free; i++)
-            (u) => _emptyWorkerTile(
+            (u, compact) => _emptyWorkerTile(
               u: u,
+              compact: compact,
               onTap: () => _openAssignPicker(context, ctrl, b, role),
               // Only the first free seat is the lit control while the tutorial
               // walks the player through posting a worker.
@@ -1458,17 +1451,63 @@ _Panels _buildPanels(
         if (res.amountOf(input) <= 0) input,
   ];
 
+  // ── System effects, named on the left (user 2026-11-11: "ich will sofort
+  // wissen, was dieses Gebäude alles für Effekte hat") ──
+  // One row per system the building's posts feed — "Healing time  −25 %" —
+  // shown even with nobody posted (then "—"). The value is the SUMMED power,
+  // which is the figure the game really uses: one breeder's 25 % and
+  // another's 25 % are not 50 %.
+  if (functional && def.workshops.any((r) => r.resource == WorkshopRole.kTraining)) {
+    put(
+      headline(
+        'Training',
+        [
+          trainees > 0
+              ? '🏋️ +${(trainees * kTrainingXpPerHour).toStringAsFixed(0)} XP/h'
+              : '🏋️ Trains for XP',
+        ],
+        icons: const [null],
+        color: trainees > 0 ? kBoxInk : kBoxInkFaint,
+      ),
+      lineH(1),
+    );
+  }
+  if (functional) {
+    final systemKeys = <String>{};
+    for (final r in def.workshops) {
+      if (r.isCombined) {
+        for (final p in r.parts.entries) {
+          if ((r.mults[p.key] ?? 0) != 0) systemKeys.add(p.value);
+        }
+      } else if (workshopRoleFeedsSystem(r.resource) &&
+          r.resource != WorkshopRole.kStorageRoom) {
+        systemKeys.add(r.resource);
+      }
+    }
+    for (final key in systemKeys) {
+      final power = systemPower[key] ?? 0;
+      put(
+        headline(
+          workshopRoleName(key) ?? _resLabel(key),
+          [power > 0 ? workshopRoleEffect(key, power) : '—'],
+          icons: const [null],
+          color: power > 0 ? kBoxInk : kBoxInkFaint,
+        ),
+        lineH(1),
+      );
+    }
+  }
+
   // ── Total: base + everyone working, the number the settlement banks ──
-  if (def.workshops.isNotEmpty) {
+  // Only for posts that make something; the system effects have their own rows.
+  final hasPlainPost = def.workshops.any(
+    (r) => !r.isCombined && !workshopRoleFeedsSystem(r.resource),
+  );
+  if (hasPlainPost) {
     final parts = <String>[
       if (functional && total.isNotEmpty) ...amounts(total),
       if (functional && trainees > 0)
         '🏋️ +${(trainees * kTrainingXpPerHour).toStringAsFixed(0)} XP/h',
-      // The system roles' SUMMED power, which is the figure the game really
-      // uses — one breeder's 25 % and another's 25 % are not 50 %.
-      if (functional)
-        for (final e in systemPower.entries)
-          _systemRoleValue(e.key, e.value, withGlyph: systemPower.length > 1),
     ];
     // THE TOP BAR AND THIS CARD MUST AGREE (user 2026-07-30): low energy shows
     // up as a reduced (not zeroed) Total.
@@ -1506,7 +1545,6 @@ _Panels _buildPanels(
                 : '—',
           ]
         : parts;
-    put(const SizedBox(height: 6), 6);
     put(
       headline(
         'Total',
@@ -1522,7 +1560,6 @@ _Panels _buildPanels(
   }
 
   if (recipes.isNotEmpty) {
-    put(const SizedBox(height: 6), 6);
     put(
       headline(
         'Consumes',
@@ -1795,7 +1832,7 @@ class _CrewGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, c) {
-      final u = _fitScale(groups, c.maxWidth, c.maxHeight);
+      final fit = _fitScale(groups, c.maxWidth, c.maxHeight);
       final several = groups.length > 1;
       return SingleChildScrollView(
         child: Column(
@@ -1838,7 +1875,9 @@ class _CrewGrid extends StatelessWidget {
               Wrap(
                 spacing: _kSeatGap,
                 runSpacing: _kSeatRowGap,
-                children: [for (final t in groups[i].tiles) t(u)],
+                children: [
+                  for (final t in groups[i].tiles) t(fit.u, fit.compact),
+                ],
               ),
             ],
           ],
@@ -1858,14 +1897,21 @@ const double _kImprovesH = 13;
 /// the monster's head rising 16 out of the card); at 24 seats in the card's
 /// ~390×175 the fit lands near 0.6.
 const double _kMaxTileScale = 1.25;
-const double _kMinTileScale = 0.5;
+const double _kMinTileScale = 0.6;
+const double _kMinCardScale = 0.85;
+const double _kMaxCompactScale = 1.3;
 
 /// The height [groups] take at scale [u] in a body [w] wide — the same wrap
 /// arithmetic the [Wrap] itself does (1/2 px of margin, so a rounding
 /// difference can only make the real thing SHORTER than this).
-double _crewHeight(List<_PostGroup> groups, double w, double u) {
-  final tw = _kWorkerTileW * u;
-  final th = (_kWorkerTileH + _kWorkerTileRise) * u;
+double _crewHeight(
+  List<_PostGroup> groups,
+  double w,
+  double u,
+  bool compact,
+) {
+  final tw = _tileW(compact) * u;
+  final th = _tileH(compact) * u;
   final cols = math.max(1, ((w - 0.5 + _kSeatGap) / (tw + _kSeatGap)).floor());
   var total = 0.0;
   for (var i = 0; i < groups.length; i++) {
@@ -1882,12 +1928,30 @@ double _crewHeight(List<_PostGroup> groups, double w, double u) {
 
 /// The largest tile scale at which every seat fits [w]×[h]; the floor if none
 /// does (the grid then scrolls — past ~40 seats).
-double _fitScale(List<_PostGroup> groups, double w, double h) {
-  for (var u = _kMaxTileScale; u > _kMinTileScale; u -= 0.02) {
-    if (_crewHeight(groups, w, u) <= h) return u;
+///
+/// Two tile shapes (user 2026-11-11: "alles hat Platz ohne scrollen"): the full
+/// CARD while it can stay readable ([_kMinCardScale]), and below that the
+/// COMPACT tile — monster, podium and figure, no card — which is what fits 20
+/// or 24 seats into the same body in two rows.
+({double u, bool compact}) _fitScale(
+  List<_PostGroup> groups,
+  double w,
+  double h,
+) {
+  for (var u = _kMaxTileScale; u >= _kMinCardScale; u -= 0.02) {
+    if (_crewHeight(groups, w, u, false) <= h) return (u: u, compact: false);
   }
-  return _kMinTileScale;
+  for (var u = _kMaxCompactScale; u > _kMinTileScale; u -= 0.02) {
+    if (_crewHeight(groups, w, u, true) <= h) return (u: u, compact: true);
+  }
+  return (u: _kMinTileScale, compact: true);
 }
+
+double _tileW(bool compact) =>
+    compact ? CreatureCrewCard.compactWidth : _kWorkerTileW;
+double _tileH(bool compact) => compact
+    ? CreatureCrewCard.compactHeight
+    : _kWorkerTileH + _kWorkerTileRise;
 
 /// A recipe amount: "2", not "2.0".
 String _num(double v) =>
@@ -1983,7 +2047,7 @@ _WorkerReadout _workerReadout(
           // of the three (user 2026-07-29). They are STACKED below, not joined.
           ? workshopPowerLabel(contribution, withGlyph: role.isCombined)
           // Icon after the value (user 2026-07-24).
-          : '+${contrib.toStringAsFixed(1)}/h ${_resEmoji(role.resource)}');
+          : '+${contrib.toStringAsFixed(1)}/h');
   // The stacked form of that same value. A combined post and a STORE post have
   // more than one line; every other row keeps its single [value] string.
   final lines = absent || training || construction
@@ -1999,9 +2063,9 @@ _WorkerReadout _workerReadout(
 /// The tiles' natural size at scale 1. [_CrewGrid] scales all three together
 /// (see [_fitScale]); [_kWorkerTileRise] is the empty strip above the card the
 /// monster's head rises into.
-const double _kWorkerTileW = 60;
-const double _kWorkerTileH = 72;
-const double _kWorkerTileRise = 16;
+const double _kWorkerTileW = CreatureCrewCard.width;
+const double _kWorkerTileH = CreatureCrewCard.height;
+const double _kWorkerTileRise = CreatureCrewCard.rise;
 
 /// A posted monster, as one of the build menu's cards (user 2026-09-18, "Variante
 /// 3"): a light card with a hard tan shadow, the monster rising OUT of its top
@@ -2015,6 +2079,7 @@ Widget _workerTile(
   bool training,
   List<String> storageKeys, {
   required double u,
+  required bool compact,
   required VoidCallback? onTap,
 }) {
   final r = _workerReadout(c, role, level, training, storageKeys);
@@ -2027,7 +2092,7 @@ Widget _workerTile(
     training ? '${c.displayName} · Lv ${c.level}' : c.displayName,
     absent ? r.absence! : (r.lines.length > 1 ? r.lines.join('   ') : r.value),
   ].join('\n');
-  final showName = u >= 0.9;
+  final showName = u >= 0.7;
   return Tooltip(
     message: details,
     // A tap is the swap; the details wait for a long press.
@@ -2037,12 +2102,15 @@ Widget _workerTile(
       child: Opacity(
         opacity: absent ? 0.55 : 1,
         child: SizedBox(
-          width: _kWorkerTileW * u,
-          height: (_kWorkerTileH + _kWorkerTileRise) * u,
-          child: CreatureSeatTile(
+          width: _tileW(compact) * u,
+          height: _tileH(compact) * u,
+          child: CreatureCrewCard(
+            compact: compact,
             face: CreatureFace.of(c),
-            name: showName ? c.displayName : null,
+            name: showName && !compact ? c.displayName : null,
             figure: label,
+            stat: c.statValue(role.stat) / 120,
+            statLabel: "${c.statValue(role.stat)}",
             u: u,
           ),
         ),
@@ -2055,6 +2123,7 @@ Widget _workerTile(
 /// amber "+".
 Widget _emptyWorkerTile({
   required double u,
+  required bool compact,
   required VoidCallback onTap,
   Key? anchorKey,
 }) {
@@ -2065,10 +2134,12 @@ Widget _emptyWorkerTile({
     child: Pressable(
       onTap: onTap,
       child: SizedBox(
-        width: _kWorkerTileW * u,
-        height: (_kWorkerTileH + _kWorkerTileRise) * u,
+        width: _tileW(compact) * u,
+        height: _tileH(compact) * u,
         child: Padding(
-          padding: EdgeInsets.only(top: _kWorkerTileRise * u),
+          padding: EdgeInsets.only(
+            top: compact ? 12 * u : _kWorkerTileRise * u,
+          ),
           child: CustomPaint(
             painter: DashedRRectPainter(
               color: CreamPalette.tan.withValues(alpha: 0.85),
@@ -2279,7 +2350,7 @@ Widget _upgradeBar(
   );
 
   return creamCard(
-    padding: const EdgeInsets.fromLTRB(14, 0, 8, 0),
+    padding: const EdgeInsets.fromLTRB(16, 0, 14, 0),
     child: SizedBox(
       height: _kBarH,
       child: Row(
@@ -2337,7 +2408,7 @@ Widget _upgradeBar(
               // decoration is the tap cue.
               child: Container(
                 width: 178,
-                height: 40,
+                height: 44,
                 alignment: Alignment.center,
                 decoration: goldButton(active: afford),
                 child: Column(
@@ -2350,10 +2421,13 @@ Widget _upgradeBar(
                       ).copyWith(color: goldButtonInk(active: afford)),
                     ),
                     const SizedBox(height: 2),
-                    _costLine(
-                      def.resourceCostAt(target),
-                      stock,
-                      fmtDuration(def.constructionSecondsAt(target)),
+                    Transform.translate(
+                      offset: const Offset(0, -2),
+                      child: _costLine(
+                        def.resourceCostAt(target),
+                        stock,
+                        fmtDuration(def.constructionSecondsAt(target)),
+                      ),
                     ),
                   ],
                 ),

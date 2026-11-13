@@ -1,0 +1,34 @@
+{
+  "monster": "phoenix",
+  "stage": 0,
+  "view": "front",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle": {
+      "sheet": "front_idle.webp",
+      "frames": 24,
+      "fps": 12,
+      "loop": true
+    },
+    "idle_look": {
+      "sheet": "front_idle_look.webp",
+      "frames": 30,
+      "fps": 12,
+      "loop": true
+    },
+    "idle_peck": {
+      "sheet": "front_idle_peck.webp",
+      "frames": 28,
+      "fps": 12,
+      "loop": true
+    },
+    "idle_roar": {
+      "sheet": "front_idle_roar.webp",
+      "frames": 32,
+      "fps": 12,
+      "loop": true
+    }
+  }
+}

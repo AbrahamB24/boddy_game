@@ -229,7 +229,7 @@ class _CraftingScreenState extends State<CraftingScreen> {
                   }),
                   child: Container(
                     height: 56,
-                    decoration: g == current ? goldButton() : raisedTile(),
+                    decoration: g == current ? goldButton() : menuButton(),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [

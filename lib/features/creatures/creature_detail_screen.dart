@@ -491,6 +491,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             );
           }
           final species = creature.species;
+          // The tile background stays in the monster's TYPE colour (user
+          // 2026-11-10, after trying the UI colour here for a moment).
           final element = species?.element.color ?? CreamPalette.tan;
           // EVERY species now (user 2026-11-03: "der Monsterdetailscreen soll
           // noch überall angepasst werden wie bei tidelord") — only the art's
@@ -975,7 +977,11 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
 
   Widget _chip(String text, {Color? bg, Color fg = Colors.white, Color? dot}) =>
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+        // One fixed height for every chip: emoji glyphs (⚡, element) have
+        // taller line boxes than plain text, which made the chips uneven.
+        // (No `alignment` here: it would stretch each chip to full width.)
+        height: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 9),
         decoration: ShapeDecoration(
           color: bg ?? (_vox ? Voxel.tone(_elem, 1) : const Color(0x47000000)),
           shape: _sh(radius: 9),
@@ -983,6 +989,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (dot != null) ...[
               Container(
@@ -1000,7 +1007,13 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               style: TextStyle(
                 color: fg,
                 fontSize: 11,
+                height: 1.2,
                 fontWeight: FontWeight.w400,
+              ),
+              strutStyle: const StrutStyle(
+                fontSize: 11,
+                height: 1.2,
+                forceStrutHeight: true,
               ),
             ),
           ],
@@ -1345,6 +1358,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       width: double.infinity,
       alignment: Alignment.center,
       decoration: ShapeDecoration(
+        color: const Color(0xFF6B2E26),
         shape: _sh(
           radius: 10,
           side: const BorderSide(color: _releaseTint, width: 1.2),
@@ -1642,16 +1656,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     List<String> labels,
     int selected,
     ValueChanged<int> onSelected,
-  ) => Container(
+  ) => SizedBox(
     height: 28,
-    padding: const EdgeInsets.all(2),
-    decoration: ShapeDecoration(
-      color: _vox ? Voxel.tone(_elem, 0) : const Color(0x33000000),
-      shape: _sh(radius: 14),
-    ),
     child: Row(
       children: [
-        for (var i = 0; i < labels.length; i++)
+        for (var i = 0; i < labels.length; i++) ...[
+          if (i > 0) const SizedBox(width: 4),
           Expanded(
             child: Pressable(
               behavior: HitTestBehavior.opaque,
@@ -1659,7 +1669,11 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               child: Container(
                 alignment: Alignment.center,
                 decoration: ShapeDecoration(
-                  color: i == selected ? Colors.white : Colors.transparent,
+                  color: i == selected
+                      ? Colors.white
+                      : (_vox
+                            ? Voxel.tone(_elem, 0)
+                            : const Color(0x33000000)),
                   shape: _sh(radius: 12),
                 ),
                 child: FittedBox(
@@ -1677,6 +1691,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
               ),
             ),
           ),
+        ],
       ],
     ),
   );

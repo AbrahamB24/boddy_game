@@ -1,0 +1,22 @@
+{
+  "monster": "phoenix",
+  "stage": 0,
+  "view": "front",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "idle_rear": {
+      "sheet": "front_idle_rear.webp",
+      "frames": 34,
+      "fps": 12,
+      "loop": true
+    },
+    "hurt": {
+      "sheet": "front_hurt.webp",
+      "frames": 10,
+      "fps": 14,
+      "loop": false
+    }
+  }
+}

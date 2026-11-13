@@ -7,6 +7,7 @@ import 'cream_kit.dart' show MenuScaffold;
 import 'foe_theme.dart';
 import 'voxel_kit.dart';
 import 'voxel_icons.dart';
+import '../../features/settlement/widgets/voxel_hud.dart' show VoxelHud;
 import '../ui/game_text.dart';
 
 /// The app-wide chunky "strategy HUD" look (2026-09-18 redesign, following
@@ -27,14 +28,14 @@ class Strategy {
   /// existing tokens (its own `FoE.gold` is actually a cyan-blue, kept for
   /// historical reasons — see that file's own doc comment); this is a new,
   /// deliberate addition in the same warm family as [FoE.danger]/coral.
-  static const Color gold = Color(0xFF3FD0D0);
-  static const Color goldDeep = Color(0xFF1C8C8C);
+  static const Color gold = Color(0xFFEBB752);
+  static const Color goldDeep = Color(0xFFA0762A);
 
   /// The "active/positive" accent. Named `cyan` from the blue theme; since
   /// 2026-09-22 ("Alle blauen Reste im UI ersetzen") it is the kit's gold, and the
   /// name is kept only so no caller changes.
   static const Color cyan = FoE.gold;
-  static const Color cyanDeep = Color(0xFF1C8C8C);
+  static const Color cyanDeep = Color(0xFFA0762A);
 
   /// Danger/alert — [FoE.danger], unchanged.
   static const Color coral = FoE.danger;
@@ -43,8 +44,8 @@ class Strategy {
   /// A locked/disabled fill — distinct from every action colour so a
   /// disabled chunky button reads as "can't", not as a dimmed version of
   /// whatever it would otherwise do.
-  static const Color locked = Color(0xFF3B6176);
-  static const Color lockedDeep = Color(0xFF1F3C4C);
+  static const Color locked = Color(0xFF44686F);
+  static const Color lockedDeep = Color(0xFF274A4F);
 
   /// Card surfaces — [FoE.cream]/[FoE.tan], unchanged (the light card every
   /// resource/creature tile sits on against the navy chrome).
@@ -54,7 +55,7 @@ class Strategy {
   /// The dark navy outline/rim every chunky shape casts its hard shadow in —
   /// deliberately darker than [FoE.bg] itself so the shadow reads as a real
   /// drop rather than a slightly-darker fill.
-  static const Color outline = Color(0xFF0E2530);
+  static const Color outline = Color(0xFF0B252A);
 }
 
 /// [c], darkened toward black by [amount] — the bevel/shadow colour a fill
@@ -106,6 +107,23 @@ BoxDecoration chunkyDecoration({
   ],
 );
 
+/// THE MAIN MENU'S BUTTON, as a decoration (user 2026-11-10: every button in
+/// the app wears the look of the main screen's buttons): a stepped plate with
+/// the kit's outline, a lit top-left rim, the light-to-shade finish and a hard
+/// offset slab of shadow. [fill] null = the loading screen's blue gradient the
+/// main buttons use; a colour gives a flat plate (the amber "active" cells).
+/// Layout-neutral — the outline is painted inside the box.
+ShapeDecoration voxelButtonDecoration({
+  Color? fill,
+  int notch = 2,
+  double depth = 2,
+}) => ShapeDecoration(
+  color: fill,
+  gradient: fill == null ? VoxelHud.gradient : null,
+  shape: VoxelShape(notch: notch, light: VoxelHud.rim, shade: true),
+  shadows: voxelDrop(depth: depth),
+);
+
 /// A bevelled 3D button — the screen's one pressable shape, coloured per
 /// action. Disabled falls back to [Strategy.locked] rather than a dimmed
 /// opacity of whatever colour it would otherwise be, so "can't" always
@@ -122,6 +140,10 @@ class ChunkyButton extends StatelessWidget {
   final double borderWidth;
   final bool expand;
 
+  /// Wear the main menu's blue gradient instead of a flat [fill] — the quiet,
+  /// neutral button.
+  final bool menuBlue;
+
   const ChunkyButton({
     super.key,
     required this.child,
@@ -133,15 +155,12 @@ class ChunkyButton extends StatelessWidget {
     this.shadowOffset = 4,
     this.borderWidth = 0,
     this.expand = false,
+    this.menuBlue = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
-    final effectiveFill = enabled ? fill : Strategy.locked;
-    final effectiveDeep = enabled
-        ? (deep ?? strategyDarken(fill))
-        : Strategy.lockedDeep;
     return Pressable(
       onTap: onTap,
       child: Opacity(
@@ -149,53 +168,16 @@ class ChunkyButton extends StatelessWidget {
         child: Container(
           width: expand ? double.infinity : null,
           clipBehavior: Clip.antiAlias,
-          decoration: chunkyDecoration(
-            fill: effectiveFill,
-            deep: effectiveDeep,
-            radius: radius,
-            shadowOffset: shadowOffset,
-            borderWidth: borderWidth,
+          // The same plate as the main menu's buttons; disabled is the locked
+          // grey. ([deep], [shadowOffset], [borderWidth] are kept for callers
+          // but the kit now owns the outline and the shadow.)
+          decoration: voxelButtonDecoration(
+            fill: !enabled ? Strategy.locked : (menuBlue ? null : fill),
+            notch: radius >= 12 ? 2 : 1,
           ),
-          child: Stack(
-            children: [
-              Padding(
-                padding: padding,
-                child: Center(child: child),
-              ),
-              // The glossy top-highlight sheen — a plain gradient overlay
-              // covering the top ~46%, exactly the CSS `.chunky::after`
-              // technique the HTML mockups used, ported to a Positioned
-              // child since Flutter has no pseudo-elements.
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: FractionallySizedBox(
-                      heightFactor: 0.0,
-                      widthFactor: 1,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(radius),
-                            topRight: Radius.circular(radius),
-                            bottomLeft: Radius.circular(radius * 0.4),
-                            bottomRight: Radius.circular(radius * 0.4),
-                          ),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.white.withValues(alpha: 0.55),
-                              Colors.white.withValues(alpha: 0),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          child: Padding(
+            padding: padding,
+            child: Center(child: child),
           ),
         ),
       ),

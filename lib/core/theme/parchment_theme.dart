@@ -209,29 +209,33 @@ ThemeData buildParchmentTheme() {
     // ElevatedButton lands in the same family instead of Material's default.
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: kActionGreen,
-        foregroundColor: kParchmentLight,
-        disabledBackgroundColor: ink.withValues(alpha: 0.10),
+        // The main menu's plate (user 2026-11-10): the loading blue, stepped
+        // corners, a hard shadow — the kit's own gold for the commit button.
+        backgroundColor: Strategy.gold,
+        foregroundColor: Voxel.outline,
+        disabledBackgroundColor: Strategy.locked,
         disabledForegroundColor: inkFaint,
         elevation: 0,
+        shadowColor: Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        textStyle: FoE.label(size: 13),
-        shape: FoE.facet(radius: 12),
+        textStyle: Voxel.text(size: 15),
+        shape: const VoxelShape(notch: 2),
       ).copyWith(overlayColor: touchOnly(kParchmentLight)),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: accent,
-        textStyle: FoE.label(size: 13),
-        shape: FoE.facet(radius: 10),
+        textStyle: Voxel.text(size: 15),
+        shape: const VoxelShape(notch: 1),
       ).copyWith(overlayColor: touchOnly(accent)),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: accent,
-        side: BorderSide(color: accent.withValues(alpha: 0.55)),
-        textStyle: FoE.label(size: 13),
-        shape: FoE.facet(radius: 12),
+        foregroundColor: const Color(0xFFEBF5F5),
+        backgroundColor: const Color(0xFF316069),
+        side: BorderSide.none,
+        textStyle: Voxel.text(size: 15),
+        shape: const VoxelShape(notch: 2),
       ).copyWith(overlayColor: touchOnly(accent)),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(

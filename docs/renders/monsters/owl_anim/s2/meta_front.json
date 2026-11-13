@@ -1,0 +1,16 @@
+{
+  "monster": "owl",
+  "stage": 2,
+  "view": "front",
+  "frame_w": 560,
+  "frame_h": 448,
+  "cols": 8,
+  "anims": {
+    "attack": {
+      "sheet": "front_attack.webp",
+      "frames": 20,
+      "fps": 16,
+      "loop": false
+    }
+  }
+}

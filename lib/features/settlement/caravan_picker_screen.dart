@@ -9,6 +9,7 @@ import '../creatures/models/creature_instance.dart';
 import '../creatures/services/creatures_controller.dart';
 import '../creatures/widgets/creature_card.dart';
 import '../creatures/widgets/picker_detail_panel.dart';
+import '../creatures/widgets/picker_stage.dart';
 import '../../core/theme/voxel_icons.dart';
 import '../../core/ui/game_text.dart';
 
@@ -125,65 +126,7 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _detail(),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: options.isEmpty
-                          ? Text(
-                              _query.isEmpty
-                                  ? 'Nobody is free to travel.'
-                                  : 'No monster matches.',
-                              style: FoE.dim(
-                                size: 12,
-                              ).copyWith(color: _inkSoft),
-                            )
-                          : Builder(
-                              // THE CAPTION IS EXTRA (user 2026-07-27): the
-                              // carry/speed line used to live INSIDE the 0.70
-                              // cell, so it ate its height off the tile and
-                              // every monster here stood squashed next to the
-                              // same monster on the Monsters screen.
-                              // mainAxisExtent is the only way to say "the
-                              // tile's height, and then some" — and the CARD
-                              // portion of that height now comes from the
-                              // shared [monsterTileHeight] (user 2026-08-31:
-                              // "genau gleich gross sein wie die Kacheln beim
-                              // Monstersscreen"), not this screen's own local
-                              // width computation.
-                              builder: (context) => SingleChildScrollView(
-                                // Fixed-width cells (the shared tile width),
-                                // not a max-extent grid: that one hands the
-                                // tile ANY width up to its cap, and the
-                                // tile's height follows its width — the
-                                // caption row then no longer fitted.
-                                padding: const EdgeInsets.only(
-                                  top: 18,
-                                  bottom: 16,
-                                ),
-                                child: Wrap(
-                                  spacing: kMonsterTileSpacing,
-                                  runSpacing: kMonsterTileSpacing,
-                                  children: [
-                                    for (final c in options)
-                                      SizedBox(
-                                        width: monsterTileWidth(context),
-                                        height:
-                                            monsterTileHeight(context) +
-                                            _kCaptionHeight,
-                                        child: _tile(c),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
-              ),
+              Expanded(child: _stage(options)),
             ],
           ),
         ),
@@ -256,28 +199,33 @@ class _CaravanPickerScreenState extends State<CaravanPickerScreen> {
     );
   }
 
-  /// The left panel: carry and speed — the two stats a hauler is actually
-  /// picked on here, same as the tile's own caption.
-  Widget _detail() {
+  /// The card stage (user 2026-11-11): the hauler's card, what it carries and
+  /// how fast it goes, every free monster as a card along the bottom.
+  Widget _stage(List<CreatureInstance> options) {
     final c = _preview;
-    if (c == null) {
-      return const PickerDetailPanel(
-        placeholder: 'Tap a monster to see its details.',
-      );
-    }
-    final loaded = _loaded(c);
-    return PickerDetailPanel(
-      art: CreatureCard(creature: c, showHp: false),
-      title: c.displayName,
-      subtitle: 'Lv ${c.level}',
-      rows: [
-        pickerStatRow('Carry', '🏋 ${c.statValue(CreatureStat.carry)}'),
-        pickerStatRow('Speed', '🥾 ${c.statValue(CreatureStat.speed)}'),
-      ],
-      action: pickerChooseButton(
-        label: loaded ? 'Already loaded' : 'Add this hauler',
-        onTap: loaded ? null : () => Navigator.pop(context, [c]),
-      ),
+    final loaded = c != null && _loaded(c);
+    return PickerStage(
+      currentLabel: 'NEXT HAULER',
+      preview: c == null ? null : CreatureCard(creature: c, showHp: false),
+      plateTitle: c?.displayName,
+      rows: c == null
+          ? null
+          : [
+              pickerPlateRow('Carry', '${c.statValue(CreatureStat.carry)}'),
+              pickerPlateRow('Speed', '${c.statValue(CreatureStat.speed)}'),
+              pickerPlateRow('Level', '${c.level}'),
+            ],
+      action: c == null
+          ? null
+          : pickerChooseButton(
+              label: loaded ? 'Already loaded' : 'Add this hauler',
+              onTap: loaded ? null : () => Navigator.pop(context, [c]),
+            ),
+      tileExtra: _kCaptionHeight,
+      emptyText: _query.isEmpty
+          ? 'Nobody is free to travel.'
+          : 'No monster matches.',
+      tiles: [for (final c in options) _tile(c)],
     );
   }
 

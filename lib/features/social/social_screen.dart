@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' hide Text;
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/pressable.dart';
+import '../guild/guild_screen.dart';
 import 'chat_pane.dart';
 import 'friends_pane.dart';
 import 'pvp_pane.dart';
@@ -141,6 +142,12 @@ class _SocialScreenState extends State<SocialScreen> {
             ),
             const SizedBox(width: 8),
             SocialGlyphButton(
+              Icons.shield,
+              tooltip: 'Guild',
+              onTap: () => pushMenu(context, const GuildScreen()),
+            ),
+            const SizedBox(width: 8),
+            SocialGlyphButton(
               Icons.people_alt_outlined,
               gold: _pane == _Pane.friends,
               badge: _ctrl.incomingRequests.length,
@@ -184,7 +191,7 @@ class _SocialScreenState extends State<SocialScreen> {
                 color: CreamPalette.gold,
                 borderRadius: vr(9),
                 boxShadow: const [
-                  BoxShadow(color: CreamPalette.goldDeep, offset: Offset(0, 2)),
+                  BoxShadow(color: CreamPalette.tanShadow, offset: Offset(0, 2)),
                 ],
               )
             : null,

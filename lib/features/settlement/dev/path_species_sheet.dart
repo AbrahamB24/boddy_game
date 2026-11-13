@@ -1,3 +1,4 @@
+import '../../../core/theme/voxel_kit.dart' show VoxelBar;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Text;
@@ -315,14 +316,12 @@ class _PathSpeciesSheetState extends State<PathSpeciesSheet> {
           ),
         ),
         Expanded(
-          child: ClipPath(
-            clipper: ShapeBorderClipper(shape: FoE.facet(radius: 3)),
-            child: LinearProgressIndicator(
-              value: maxTotal == 0 ? 0 : total / maxTotal,
-              minHeight: 8,
-              backgroundColor: FoE.panelDark,
-              valueColor: AlwaysStoppedAnimation(speciesNameColor(speciesId)),
-            ),
+          child: VoxelBar(
+            value: maxTotal == 0 ? 0 : total / maxTotal,
+            height: 10,
+            block: 8,
+            color: speciesNameColor(speciesId),
+            onDark: true,
           ),
         ),
         const SizedBox(width: 8),
