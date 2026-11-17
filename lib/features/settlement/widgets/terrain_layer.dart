@@ -82,7 +82,7 @@ class TerrainLayer extends StatefulWidget {
 
   @visibleForTesting
   static Future<ui.Image> levelTile(ui.Image image) =>
-      _TerrainData._levelled(image);
+      _TerrainData._levelled(image, down: 1);
 }
 
 class _TerrainLayerState extends State<TerrainLayer>
@@ -553,15 +553,7 @@ class _TerrainData {
   }
 
   /// How far the grass tile is pulled towards grey (0 = as rendered).
-  static const double _kGrassDesaturate = 0.22;
-
-  /// Deterministic 0..1 hash of a texture block.
-  static double _blockHash(int x, int y, int salt) {
-    var h = (x * 374761393 + y * 668265263 + salt * 2147483647) & 0x7fffffff;
-    h = ((h ^ (h >> 13)) * 1274126177) & 0x7fffffff;
-    h = h ^ (h >> 16);
-    return (h & 0xffff) / 0xffff;
-  }
+  static const double _kGrassDesaturate = 0.38;
 
   /// The grass tile with every ROW and COLUMN brought to the same average
   /// brightness (user 2026-09-28: "die Rasenstruktur ist nicht die genau
@@ -570,7 +562,8 @@ class _TerrainData {
   /// repeated every 512 px it is a faint dark line across the lawn, "besonders
   /// unten". Each line's gain is capped at ±4 %, so only a seam is removed and
   /// the grass's own texture is left alone. Falls back to the picture as it is.
-  static Future<ui.Image> _levelled(ui.Image image) async {
+  static Future<ui.Image> _levelled(ui.Image image,
+      {int down = _kGrassDown}) async {
     try {
       final w = image.width, h = image.height;
       final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
@@ -596,19 +589,10 @@ class _TerrainData {
       for (var y = 0; y < h; y++) {
         for (var x = 0; x < w; x++) {
           final o = (y * w + x) * 4;
-          // Grass texture (user 2026-11-13): per-block brightness speckle at
-          // two sizes plus the odd lighter or darker tuft. Hashed on the
-          // pixel's own block, so it tiles exactly like the swatch itself.
-          final fine = _blockHash(x ~/ 4, y ~/ 4, 1);
-          final mid = _blockHash(x ~/ 16, y ~/ 16, 2);
-          final tuft = _blockHash(x ~/ 8, y ~/ 8, 3);
-          var tex = 1.0 + (fine - 0.5) * 0.14 + (mid - 0.5) * 0.10;
-          if (tuft > 0.94) {
-            tex += 0.10;
-          } else if (tuft < 0.05) {
-            tex -= 0.10;
-          }
-          final k = rg[y] * cg[x] * tex;
+          // (A per-block brightness speckle used to be added here; it read as
+          // a regular dotted GRID on the map, user 2026-11-16, so it is gone —
+          // the swatch has its own texture.)
+          final k = rg[y] * cg[x];
           // Calmer grass (user 2026-11-13: "ein bisschen zu knallig"): pull
           // each pixel 22 % towards its own grey, so the green keeps its hue
           // and texture but loses its punch.
@@ -621,14 +605,51 @@ class _TerrainData {
               (b + (grey - b) * _kGrassDesaturate).round().clamp(0, 255);
         }
       }
+      // Box-average the swatch down by [_kGrassDown] (user 2026-11-16: "regel-
+      // mässiges Raster"). It is drawn ~3.9x smaller than it is stored, and
+      // the web has no mipmaps, so its fine grain was point-sampled into a
+      // moiré lattice. Averaging 4x4 blocks first leaves nothing to alias.
+      final f = down;
+      final nw = w ~/ f, nh = h ~/ f;
+      final out = Uint8List(nw * nh * 4);
+      for (var y = 0; y < nh; y++) {
+        for (var x = 0; x < nw; x++) {
+          var r = 0, g = 0, b = 0, a = 0;
+          for (var dy = 0; dy < f; dy++) {
+            for (var dx = 0; dx < f; dx++) {
+              final o = ((y * f + dy) * w + x * f + dx) * 4;
+              r += px[o];
+              g += px[o + 1];
+              b += px[o + 2];
+              a += px[o + 3];
+            }
+          }
+          final o = (y * nw + x) * 4;
+          out[o] = (r / (f * f)).round();
+          out[o + 1] = (g / (f * f)).round();
+          out[o + 2] = (b / (f * f)).round();
+          out[o + 3] = (a / (f * f)).round();
+        }
+      }
       final done = Completer<ui.Image>();
-      ui.decodeImageFromPixels(px, w, h, ui.PixelFormat.rgba8888, done.complete);
+      ui.decodeImageFromPixels(
+          out, nw, nh, ui.PixelFormat.rgba8888, done.complete);
       return await done.future;
     } catch (_) {
       return image;
     }
   }
+
 }
+
+/// How many times smaller the grass swatch is held in memory than stored
+/// (see [_TerrainData._levelled]); the painter scales it back up by the same
+/// factor. Keep the two in step.
+const int _kGrassDown = 4;
+
+/// The grass's colour-cloud wash ([_TerrainPainter.paintGrassWash]).
+const bool _kGrassWashOn = false;
+const double _kGrassDownScale = 4;
 
 /// The terrain's detail packed for BATCHED drawing (user 2026-11-03: "mache
 /// alles, aber wirklich alles, damit die Performance besser läuft").
@@ -1077,7 +1098,7 @@ class _TerrainPlanner {
   }
 
   /// One diamond per cell, as two triangles (north-east-south, north-south-west)
-  /// with a per-vertex colour. See [_TerrainPainter.paintShore] for why a mesh
+  /// with a per-vertex colour. One mesh
   /// and not a path per cell.
   (Float32List, Int32List) _shoreMesh(
     Set<int> cells,
@@ -2270,7 +2291,9 @@ class _TerrainPainter extends CustomPainter {
       data.images[_kGrass]!,
       TileMode.repeated,
       TileMode.repeated,
-      Matrix4.diagonal3Values(_kGrassTileScale, _kGrassTileScale, 1).storage,
+      Matrix4.diagonal3Values(_kGrassTileScale * _kGrassDownScale,
+              _kGrassTileScale * _kGrassDownScale, 1)
+          .storage,
       filterQuality: FilterQuality.medium,
     );
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
@@ -2279,7 +2302,7 @@ class _TerrainPainter extends CustomPainter {
     // grid). One tile repeating every ~262 px — and it is mirrored inside, so
     // its seams and symmetry line up into a lattice. Two layers whose periods
     // never coincide hide both the repeat and the symmetry.
-    const k2 = _kGrassTileScale * 0.71;
+    const k2 = _kGrassTileScale * _kGrassDownScale * 0.71;
     final shader2 = ImageShader(
       data.images[_kGrass]!,
       TileMode.repeated,
@@ -2294,6 +2317,27 @@ class _TerrainPainter extends CustomPainter {
       Paint()
         ..shader = shader2
         ..color = const Color(0x8CFFFFFF),
+    );
+    // A third copy, ROTATED and at yet another scale (user 2026-11-16: "die
+    // Muster auf dem Gras sind zu regelmässig"). Two axis-aligned layers still
+    // line up into a faint grid of repeating tufts; a turned third one has no
+    // axis in common with them, so no row or column of tufts survives.
+    const k3 = _kGrassTileScale * _kGrassDownScale * 0.53;
+    final shader3 = ImageShader(
+      data.images[_kGrass]!,
+      TileMode.repeated,
+      TileMode.repeated,
+      (Matrix4.translationValues(311, 173, 0)
+            ..rotateZ(0.52)
+            ..scaleByDouble(k3, k3, 1, 1))
+          .storage,
+      filterQuality: FilterQuality.medium,
+    );
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()
+        ..shader = shader3
+        ..color = const Color(0x66FFFFFF),
     );
 
     final sheets = data.sheets;
@@ -2338,6 +2382,11 @@ class _TerrainPainter extends CustomPainter {
   /// The grass's soft colour wash, both layers. Drawn live only on the
   /// fallback path; normally baked once into [_TerrainSheets.wash].
   static void paintGrassWash(Canvas canvas, Size size) {
+    // OFF (user 2026-11-16: the colour clouds read as a regular pattern, and a
+    // horizontal edge showed in them). The wash is a few percent of alpha,
+    // baked at 1/8 size into 8 bits, so its soft slopes band into contours.
+    // The three tile layers carry the variety instead. Flip to bring it back.
+    if (!_kGrassWashOn) return;
     // TWO layers, coarse then fine (user 2026-09-29, after the first pass
     // still read as flat: "Das Gras hat mir noch zu wenig Tiefe... auch
     // etwas grössere Bereiche in dunkleren oder helleren Grün- und
@@ -2380,11 +2429,11 @@ class _TerrainPainter extends CustomPainter {
   /// The greens and browns every grass blob (coarse region or fine mottle)
   /// is drawn from — see [_paintGrassBlobs].
   static const List<Color> _kGrassTones = [
-    Color(0xFF4C7A26), // shaded green (the buildings' leaf family, 2026-11-05)
-    Color(0xFF6F9B30), // sunlit green
-    Color(0xFF86A63A), // pale yellow-green
-    Color(0xFF7E7A3C), // dry olive
-    Color(0xFF6A5A30), // damp brown
+    Color(0xFF58773A), // shaded green (muted 2026-11-16)
+    Color(0xFF73914A), // sunlit green
+    Color(0xFF86A055), // pale yellow-green
+    Color(0xFF7E7A4C), // dry olive
+    Color(0xFF6A5A3C), // damp brown
   ];
 
   /// A blob's alpha across its own radius, as (position, fraction-of-peak)
@@ -2465,35 +2514,6 @@ class _TerrainPainter extends CustomPainter {
         i++;
       }
     }
-  }
-
-  /// The beach, banded smoothly from sand at the waterline to fully
-  /// transparent (pure grass) at its outer ring, then the water banded
-  /// from shallow to deep the same way — both per-cell rather than
-  /// per-run, since the colour now varies cell to cell (user 2026-09-08:
-  /// "das Wasser deutlich spannender gestalten und es soll wieder ein
-  /// Ufer geben... Übergangslinien... löschen"). Beach pebbles are ordinary
-  /// props drawn later in [_scatterProps] so they depth-sort with
-  /// everything else.
-  ///
-  /// `isAntiAlias: false` on both fills (user 2026-09-14: visible seam lines
-  /// between tiles) — each cell is its own [footprintPath], and two
-  /// independently anti-aliased polygons whose edges land on the same
-  /// floating-point line still rasterise a faint translucent seam where they
-  /// meet, most visible against water's fairly uniform colour. Snapping the
-  /// fill to whole pixels closes the gap; the tiles are small enough at this
-  /// zoom that the loss of edge smoothing is not visible.
-  ///
-  /// ONE drawVertices call per band instead of a path per cell (tens of
-  /// thousands of them): the picture stays small to record, and the GPU
-  /// replays a single mesh each frame instead of a draw op per diamond. Two
-  /// triangles per cell with `isAntiAlias: false` cover exactly the pixels the
-  /// old per-cell diamond did — shared edges still land on the same pixel
-  /// grid, so no seams.
-  @visibleForTesting
-  void paintShore(Canvas canvas) {
-    paintBeach(canvas);
-    paintWater(canvas, 0);
   }
 
   /// The sand: the VOXEL sand tile (the same block size as the grass and the
@@ -2793,12 +2813,6 @@ class _SwayBatch {
     return out;
   }
 }
-
-/// Test hook: paints the shore meshes of [plan] onto [canvas].
-@visibleForTesting
-void paintShoreForTest(Canvas canvas, Object plan) => _TerrainPainter(
-  _TerrainData(const {}, const [], plan as _TerrainPlan),
-).paintShore(canvas);
 
 /// The grass tile is rendered at 4x the canvas (terrain_voxel.py TILE_SCALE: one
 /// cell = 256 px, the canvas draws a cell 64 px wide), exactly the way the

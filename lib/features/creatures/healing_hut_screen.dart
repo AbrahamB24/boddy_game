@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../guild/guild_help.dart';
 
 import 'package:flutter/material.dart' hide Text;
 
@@ -248,15 +249,28 @@ class _HealingHutScreenState extends State<HealingHutScreen> {
       time: _fmt(left),
       // Finish it now for gold — the same buy-out the build queue and the
       // Hatchery offer, priced on the REAL time left.
-      action: skip > 0
-          ? SlotPill(
+      action: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GuildHelpButton(
+            compact: true,
+            kind: GuildHelpKind.heal,
+            target: c.id,
+            label: c.displayName,
+            endsAt: c.healingUntil ?? DateTime.now(),
+          ),
+          if (skip > 0) ...[
+            const SizedBox(width: 4),
+            SlotPill(
               '🪙 $skip',
               gold: true,
               onTap: _busy == key || _ctrl.gold < skip
                   ? null
                   : () => _run(key, () => _creatures.skipHealWithGold(c)),
-            )
-          : null,
+            ),
+          ],
+        ],
+      ),
     );
   }
 

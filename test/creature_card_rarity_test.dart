@@ -26,7 +26,7 @@ void main() {
   );
 
   for (final rarity in CreatureRarity.values) {
-    testWidgets('${rarity.label} is centred on the tile', (t) async {
+    testWidgets('${rarity.label} is named in the card band', (t) async {
       final def = species('rar_${rarity.name}', rarity);
       kSpeciesDefs[def.id] = def;
       addTearDown(() => kSpeciesDefs.remove(def.id));
@@ -57,7 +57,9 @@ void main() {
       await t.pump(const Duration(milliseconds: 200));
       final word = t.getRect(find.text(rarity.label.toUpperCase()));
       final card = t.getRect(find.byType(CreatureCard));
-      expect(word.center.dx, moreOrLessEquals(card.center.dx, epsilon: 2));
+      expect(word.left, greaterThanOrEqualTo(card.left));
+      expect(word.right, lessThanOrEqualTo(card.right));
+      expect(word.top, greaterThan(card.top + card.height * 0.6));
       expect(t.takeException(), isNull);
     });
   }

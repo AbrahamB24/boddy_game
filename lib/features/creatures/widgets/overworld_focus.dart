@@ -5,12 +5,13 @@ import '../../../core/theme/voxel_icons.dart';
 import '../../../core/ui/pressable.dart';
 import '../../../core/ui/scroll_cue.dart';
 import '../../settlement/widgets/building_icon.dart';
+import '../../common/widgets/parchment_page.dart' show ParchmentDialog;
 import '../../social/widgets/social_kit.dart';
 import '../models/combatant.dart';
 import '../services/battle_rewards.dart';
 import '../services/battle_stars.dart' show kStarHpFraction;
 import '../services/overworld_layout.dart' show OverworldNodeState;
-import 'creature_family.dart' show CreatureAvatar, CreatureFace;
+import 'enemy_card.dart';
 import 'star_row.dart';
 import '../../../core/ui/game_text.dart';
 
@@ -26,9 +27,6 @@ class OverworldFocusView extends StatelessWidget {
   final int battleNumber;
   final bool isBoss;
   final OverworldNodeState state;
-
-  /// The region's name, shown over the title; null leaves it out.
-  final String? regionName;
 
   /// The foes the fight will field — null while the area has none authored.
   final List<Combatant>? enemies;
@@ -59,7 +57,6 @@ class OverworldFocusView extends StatelessWidget {
     required this.enemies,
     required this.rewards,
     required this.onFight,
-    this.regionName,
     this.stars = 0,
     this.noTeam = false,
     this.onPrev,
@@ -129,25 +126,7 @@ class OverworldFocusView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          [
-            if (regionName != null) regionName!,
-            locked
-                ? 'Locked'
-                : done
-                ? 'Cleared'
-                : 'Next fight',
-          ].join(' · ').toUpperCase(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-            letterSpacing: 1.1,
-            color: kBoxAccent,
-          ),
-        ),
-        Text(
-          isBoss ? '👑 Boss $battleNumber' : 'Battle $battleNumber',
+          isBoss ? 'Boss $battleNumber' : 'Battle $battleNumber',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
@@ -158,16 +137,62 @@ class OverworldFocusView extends StatelessWidget {
         ),
         if (!locked) ...[
           const SizedBox(height: 2),
-          StarRow(count: stars, size: 22),
+          Row(
+            children: [
+              StarRow(count: stars, size: 22),
+              const SizedBox(width: 8),
+              // The three stars' rules (battle_stars.dart) live behind a small
+              // "i" (user 2026-11-15) — the card's room goes to the rewards.
+              Builder(
+                builder: (context) => Semantics(
+                  label: 'How stars are earned',
+                  button: true,
+                  child: Pressable(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      barrierColor: CreamPalette.dim,
+                      builder: (_) => ParchmentDialog(
+                        title: 'Stars',
+                        closeLabel: 'Got it',
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                          child: Text(
+                            '★  win the battle\n'
+                            '★★  no monster knocked out\n'
+                            '★★★  team keeps $_hpNeed % of its HP',
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.5,
+                              color: kBoxInk,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: kBoxInkSoft, width: 1.5),
+                      ),
+                      child: Text(
+                        'i',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                          color: kBoxInkSoft,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
-        const SizedBox(height: 6),
-        // The three stars' rules (battle_stars.dart) — what a better result
-        // takes, said before the fight rather than after it.
-        Text(
-          '★ win  ·  ★★ no monster knocked out\n'
-          '★★★ team keeps $_hpNeed % of its HP',
-          style: TextStyle(fontSize: 13, height: 1.3, color: kBoxInkSoft),
-        ),
         const SizedBox(height: 10),
         _heading('Reward'),
         const SizedBox(height: 2),
@@ -228,7 +253,7 @@ class OverworldFocusView extends StatelessWidget {
           child: Container(
             width: 40,
             height: 72,
-            decoration: raisedTile(radius: 12),
+            decoration: voxelBlock(),
             child: PixelIcon(icon, size: 28, color: kBoxInk),
           ),
         ),
@@ -237,51 +262,42 @@ class OverworldFocusView extends StatelessWidget {
   );
 }
 
-/// The foes, BIG — the fight in front of you is the page's subject. Three fit
-/// at full size; a crowd steps the faces down so one row still holds them.
+/// The foes as trading cards (user 2026-11-15), side by side as big as the
+/// room allows — the card's own proportions, shrunk to fit when there are many.
 class _BigEnemies extends StatelessWidget {
   final List<Combatant> enemies;
   const _BigEnemies(this.enemies);
 
+  static const double _aspect = 0.7; // width / height
+  static const double _gap = 14;
+
   @override
   Widget build(BuildContext context) {
     final n = enemies.length;
-    final size = n <= 3
-        ? 88.0
-        : n <= 5
-        ? 66.0
-        : 50.0;
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: n <= 3 ? 22 : 12,
-      runSpacing: 8,
-      children: [
-        for (final e in enemies)
-          SizedBox(
-            width: size + 24,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CreatureAvatar(CreatureFace.combatant(e), size: size),
-                const SizedBox(height: 5),
-                Text(
-                  e.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                    color: kBoxInk,
-                  ),
-                ),
-                Text(
-                  'Lv ${e.level}',
-                  style: TextStyle(fontSize: 13, color: kBoxInkSoft),
-                ),
+    return LayoutBuilder(
+      builder: (context, box) {
+        // The card keeps the library's proportions.
+        var h = (box.maxHeight.isFinite ? box.maxHeight : 190.0);
+        h = h.clamp(60.0, 200.0);
+        var w = h * _aspect;
+        final room = box.maxWidth - (n - 1) * _gap;
+        if (n * w > room) {
+          w = room / n;
+          h = w / _aspect;
+        }
+        return SizedBox(
+          height: h,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < n; i++) ...[
+                if (i > 0) const SizedBox(width: _gap),
+                SizedBox(width: w, height: h, child: EnemyCard(enemies[i])),
               ],
-            ),
+            ],
           ),
-      ],
+        );
+      },
     );
   }
 }

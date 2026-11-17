@@ -468,10 +468,10 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
                 if (away || breeding || c.isKo)
                   Text(
                     away
-                        ? '🎒 no output'
+                        ? 'no output'
                         : c.isKo
-                        ? '💀 no output'
-                        : '💤 no output',
+                        ? 'no output'
+                        : 'no output',
                     style: FoE.label(size: 9.5).copyWith(color: _takenInk),
                   )
                 else if (figure != null)
@@ -649,9 +649,9 @@ class _AssignWorkersScreenState extends State<AssignWorkersScreen> {
     final elsewhere = _postedElsewhere(c);
     final taken = elsewhere != null && !away && !idle;
     final (status, statusColor) = away
-        ? ('🎒 Away', CreamPalette.warn)
+        ? ('Away', CreamPalette.warn)
         : idle
-        ? ('💤 Unfit', CreamPalette.warn)
+        ? ('Unfit', CreamPalette.warn)
         : taken
         ? ('At $elsewhere', CreamPalette.warn)
         : ('Free', CreamPalette.better);

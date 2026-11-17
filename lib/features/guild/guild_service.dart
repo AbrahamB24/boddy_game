@@ -1,7 +1,49 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase/supabase_client.dart';
+import 'guild_crest.dart';
 import 'guild_models.dart';
+
+/// Whether the signed-in player is in a guild — one cheap flag the rest of the
+/// game can listen to (the Build menu offers the Guild Hall only to members,
+/// and the hall leaves the map when its owner does). [GuildScreen] and the
+/// settlement load keep it fresh.
+/// Points needed for level 1..10 (mirrors `_guild_level_for` in migration 0072).
+const List<int> kGuildLevelPoints = [0, 50, 150, 350, 700, 1200, 2000, 3200, 5000, 8000];
+
+/// The bonus a guild of level 1..10 gives each member, as a fraction. The same
+/// share applies to build speed, wood and stone yield and battle XP.
+const List<double> kGuildBonusByLevel = [0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.10];
+
+class GuildMembership extends ChangeNotifier {
+  GuildMembership._();
+  static final GuildMembership instance = GuildMembership._();
+
+  /// Null = not asked yet (treated as "no guild", but nothing is torn down).
+  bool? _inGuild;
+  int level = 1;
+
+  bool get inGuild => _inGuild ?? false;
+
+  /// The level bonus (0 outside a guild).
+  double get bonus =>
+      inGuild ? kGuildBonusByLevel[(level - 1).clamp(0, kGuildBonusByLevel.length - 1)] : 0;
+  bool get known => _inGuild != null;
+
+  /// Never throws: a failed read leaves the last answer in place.
+  Future<void> refresh() async {
+    try {
+      final g = await GuildService().loadMyGuild();
+      final now = g != null;
+      if (now != _inGuild || (g?.level ?? 1) != level) {
+        _inGuild = now;
+        level = g?.level ?? 1;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+}
 
 /// Guild reads and actions. Every change goes through a database function
 /// (`guild_*`, see migration 0069) — those enforce the rules; this class only
@@ -122,14 +164,14 @@ class GuildService {
   Future<void> create({
     required String name,
     required String description,
-    required int emblem,
+    required GuildCrest crest,
     required bool isOpen,
   }) => supabase.rpc(
     'guild_create',
     params: {
       'p_name': name,
       'p_description': description,
-      'p_emblem': emblem,
+      'p_crest': crest.toJson(),
       'p_open': isOpen,
     },
   );
@@ -158,12 +200,16 @@ class GuildService {
   Future<void> kick(String userId) =>
       supabase.rpc('guild_kick', params: {'p_user': userId});
 
-  Future<void> update({String? description, int? emblem, bool? isOpen}) =>
+  Future<void> update({
+    String? description,
+    GuildCrest? crest,
+    bool? isOpen,
+  }) =>
       supabase.rpc(
         'guild_update',
         params: {
           'p_description': description,
-          'p_emblem': emblem,
+          'p_crest': crest?.toJson(),
           'p_open': isOpen,
         },
       );
@@ -223,6 +269,10 @@ String guildErrorText(Object e) {
   final s = e.toString();
   if (s.contains('guild_full')) return 'That guild is full.';
   if (s.contains('already_in_guild')) return 'Already in a guild.';
+  if (s.contains('stud_resting')) return 'That monster is resting after its last loan.';
+  if (s.contains('loan_limit')) return 'You have used today2019s loans.';
+  if (s.contains('stud_limit')) return 'You can list 3 monsters at most.';
+  if (s.contains('not_in_guild')) return 'You are not in a guild.';
   if (s.contains('not_allowed')) return 'You are not allowed to do that.';
   if (s.contains('23505') || s.contains('guilds_name_key')) {
     return 'That guild name is taken.';

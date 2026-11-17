@@ -291,17 +291,17 @@ class ExpeditionController extends ChangeNotifier {
     final (kind, title, body) = switch (e.type) {
       ExpeditionType.trade => (
         NotifyKind.caravan,
-        '🐎 Caravan home',
+        'Caravan home',
         'Your trade run has arrived — the goods are waiting.',
       ),
       ExpeditionType.capture => (
         NotifyKind.expedition,
-        '🪤 Hunt over',
+        'Hunt over',
         'Your hunters are back with what they found.',
       ),
       _ => (
         NotifyKind.expedition,
-        '⛏️ Expedition back',
+        'Expedition back',
         'Your party has returned with its load.',
       ),
     };

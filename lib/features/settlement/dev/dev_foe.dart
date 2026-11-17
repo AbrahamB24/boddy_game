@@ -86,7 +86,7 @@ abstract final class FoE {
     shape: facet(radius: 11),
     shadows: [
       BoxShadow(
-        color: active ? CreamPalette.goldDeep : CreamPalette.tanShadow,
+        color: CreamPalette.tanShadow,
         offset: const Offset(0, 2),
       ),
     ],

@@ -1,5 +1,6 @@
 import '../../core/theme/voxel_kit.dart' show VoxelBar;
 import 'dart:async';
+import '../guild/guild_help.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Text;
@@ -104,7 +105,7 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
 
   Widget _tabSwitcher() {
     final ready = _breeding.hatchingJobs.where((j) => j.isHatchable).length;
-    Widget seg(NurseryTab t, String emoji, String name, String sub) {
+    Widget seg(NurseryTab t, String name, String sub) {
       final on = _tab == t;
       return Expanded(
         child: Pressable(
@@ -117,8 +118,6 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(emoji, style: const TextStyle(fontSize: 19)),
-                const SizedBox(width: 8),
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,14 +151,12 @@ class _HatcheryScreenState extends State<HatcheryScreen> {
       children: [
         seg(
           NurseryTab.breeding,
-          '💞',
           'Breeding Hut',
           '${_breeding.matingJobs.length}/${_breeding.breedingSlots} mating',
         ),
         const SizedBox(width: 10),
         seg(
           NurseryTab.hatchery,
-          '🥚',
           'Hatchery',
           ready > 0
               ? '$ready ready'
@@ -254,7 +251,7 @@ class _HatcheryPaneState extends State<HatcheryPane> {
       if (error == null && _selectedEggId == job.id) _selectedEggId = null;
     });
     context.snack(
-      error ?? '🥚 Egg placed in the Hatchery.',
+      error ?? 'Egg placed in the Hatchery.',
       error: error != null,
     );
   }
@@ -286,7 +283,7 @@ class _HatcheryPaneState extends State<HatcheryPane> {
       Feel.deny();
       context.snack(
         blocked
-            ? '🏠 Settlement full — build more housing before hatching.'
+            ? 'Settlement full — build more housing before hatching.'
             : 'Hatching failed.',
       );
       return;
@@ -303,7 +300,7 @@ class _HatcheryPaneState extends State<HatcheryPane> {
     // A hatchling needs a housing slot — keep the egg pending if full.
     if (_creatures.housingFull) {
       Feel.deny();
-      context.snack('🏠 Settlement full — build more housing before hatching.');
+      context.snack('Settlement full — build more housing before hatching.');
       return;
     }
     setState(() => _busy = true);
@@ -576,6 +573,13 @@ class _HatcheryPaneState extends State<HatcheryPane> {
               ),
             )
           else ...[
+            GuildHelpButton(
+              compact: true,
+              kind: GuildHelpKind.breed,
+              target: job.id,
+              label: species?.name ?? job.speciesId,
+              endsAt: job.readyAt,
+            ),
             if (_heldSpeedItems().isNotEmpty)
               _iconAction(
                 Icons.bolt,
@@ -705,7 +709,7 @@ class _HatcheryPaneState extends State<HatcheryPane> {
                 ),
               ),
               Text(
-                'best ⚡ first',
+                'best $kPowerIcon first',
                 style: FoE.dim(size: 13).copyWith(color: kBoxInkSoft),
               ),
               const SizedBox(width: 4),
@@ -758,7 +762,7 @@ class _HatcheryPaneState extends State<HatcheryPane> {
             SizedBox(
               width: 58,
               child: Text(
-                job.hasChildGenes ? '⚡ ${genePower(job.childBase)}' : '⚡ ?',
+                job.hasChildGenes ? '$kPowerIcon ${genePower(job.childBase)}' : '$kPowerIcon ?',
                 style: FoE.value(size: 15).copyWith(color: kBoxInk),
               ),
             ),
@@ -825,8 +829,8 @@ class _HatcheryPaneState extends State<HatcheryPane> {
                           Text(
                             [
                               job.hasChildGenes
-                                  ? '⚡ ${genePower(job.childBase)}'
-                                  : '⚡ ?',
+                                  ? '$kPowerIcon ${genePower(job.childBase)}'
+                                  : '$kPowerIcon ?',
                               if (species != null) species.rarity.label,
                             ].join(' · '),
                             style: FoE.value(
@@ -1034,7 +1038,7 @@ class _DashedRRect extends CustomPainter {
       ..addRRect(
         RRect.fromRectAndRadius(
           (Offset.zero & size).deflate(1),
-          const Radius.circular(12),
+          const Radius.circular(3),
         ),
       );
     for (final metric in path.computeMetrics()) {

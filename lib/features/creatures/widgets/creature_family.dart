@@ -76,11 +76,15 @@ class CreatureFigure extends StatelessWidget {
   final CreatureElement element;
   final double? decodeSize;
 
+  /// Trading cards: baked art fills the whole box (see [CreatureSprite.tight]).
+  final bool tight;
+
   const CreatureFigure({
     super.key,
     required this.imageUrl,
     required this.element,
     this.decodeSize,
+    this.tight = false,
   });
 
   @override
@@ -98,6 +102,7 @@ class CreatureFigure extends StatelessWidget {
           child: CreatureSprite(
             url: url,
             height: decodeSize,
+            tight: tight,
             alignment: Alignment.bottomCenter,
             fallback: const Center(
               child: PixelIcon(Icons.pets, color: FoE.gold, size: 40),

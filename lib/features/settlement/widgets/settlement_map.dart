@@ -647,6 +647,11 @@ class SettlementMapState extends State<SettlementMap>
         setState(() {
           _aimX = locked.$1;
           _aimY = locked.$2;
+          // The Hospital's door must face the road tile (see
+          // kTutorialHealingHutRotation), and rotating is disabled here.
+          if (typeId == kHealingHutBuildingId) {
+            _aimRotation = kTutorialHealingHutRotation;
+          }
         });
         _focusCell(locked.$1, locked.$2, def.gridW, def.gridH);
       } else if (b != null && !fromStorage) {

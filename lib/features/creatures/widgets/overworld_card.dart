@@ -99,7 +99,7 @@ class OverworldFightCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   isBoss
-                      ? '👑 Boss battle $battleNumber'
+                      ? 'Boss battle $battleNumber'
                       : 'Battle $battleNumber',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

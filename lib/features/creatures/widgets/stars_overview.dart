@@ -68,7 +68,7 @@ class StarsOverviewBody extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          '★ win the battle   ★★ no monster knocked out   '
+          'win the battle   ★★ no monster knocked out   '
           '★★★ your team keeps $need % of its HP.  '
           'More stars pay more XP, and a star reached for the first time pays '
           'a little gold.',

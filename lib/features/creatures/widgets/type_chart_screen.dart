@@ -86,7 +86,7 @@ class _TypeChartScreenState extends State<TypeChartScreen> {
 
   @override
   Widget build(BuildContext context) => MenuScaffold(
-    title: '🛡 Type chart',
+    title: 'Type chart',
     trailing: Text(
       'tap a type · green hits, red is hit',
       style: FoE.dim(size: 12).copyWith(color: kBoxInkSoft),
@@ -101,7 +101,7 @@ class _TypeChartScreenState extends State<TypeChartScreen> {
         if (widget.tutorialBanner) ...[
           creamCard(
             padding: const EdgeInsets.all(10),
-            deep: CreamPalette.goldDeep,
+            deep: CreamPalette.tanShadow,
             child: Text(
               'Look up what beats what here any time you need to. Close '
               'this once you are done.',

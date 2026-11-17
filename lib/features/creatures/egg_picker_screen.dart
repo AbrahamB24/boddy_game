@@ -10,7 +10,7 @@ import 'models/species_def.dart';
 import 'services/breeding_controller.dart';
 import 'services/creature_power.dart';
 import 'widgets/egg_card.dart';
-import 'widgets/picker_detail_panel.dart';
+import 'widgets/picker_detail_panel.dart';
 import '../../core/theme/voxel_icons.dart';
 import '../../core/ui/game_text.dart';
 
@@ -197,7 +197,7 @@ class _EggPickerScreenState extends State<EggPickerScreen> {
       artHeight: 90,
       art: EggGlyph(job: job),
       title: species?.name ?? job.speciesId,
-      subtitle: job.hasChildGenes ? '⚡ ${genePower(job.childBase)}' : '⚡ ?',
+      subtitle: job.hasChildGenes ? '$kPowerIcon ${genePower(job.childBase)}' : '$kPowerIcon ?',
       rows: [
         pickerStatRow('Rarity', species?.rarity.label ?? '—'),
         pickerStatRow('Type', species?.element.label ?? '—'),

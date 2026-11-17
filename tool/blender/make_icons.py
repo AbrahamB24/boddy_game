@@ -20,6 +20,7 @@ import icons3d_a  # noqa: E402,F401
 import icons3d_b  # noqa: E402,F401
 import icons3d_c  # noqa: E402,F401
 import icons3d_d  # noqa: E402,F401
+import icons3d_power  # noqa: E402,F401
 
 
 def ship(png, dst, size):

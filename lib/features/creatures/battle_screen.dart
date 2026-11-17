@@ -1,4 +1,5 @@
 ﻿import '../../core/ui/feel.dart';
+import '../common/widgets/parchment_kit.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -13,6 +14,8 @@ import '../../core/supabase/supabase_client.dart';
 import '../../core/ui/app_navigator.dart';
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
+import '../../core/theme/ui_art.dart' show UiWood;
+import '../../core/theme/fachwerk.dart' show Fachwerk;
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
 import '../settlement/data/item_definitions.dart';
@@ -43,7 +46,8 @@ import 'services/pvp_sync_service.dart';
 import 'widgets/battle_scene.dart';
 import 'widgets/creature_backdrop.dart';
 import 'widgets/creature_card.dart';
-import 'widgets/creature_family.dart' show SockelAvatar;
+import 'widgets/creature_family.dart'
+    show CreatureFace, CreatureFigure, SockelAvatar;
 import 'widgets/monster_sheet.dart';
 import 'widgets/creature_sprite.dart' show CreatureSprite, decodeWidthFor;
 import 'widgets/type_chart_screen.dart';
@@ -53,7 +57,7 @@ import '../common/widgets/parchment_page.dart';
 import '../common/widgets/monster_tile_grid.dart';
 import '../settlement/widgets/building_icon.dart';
 import '../../core/ui/pressable.dart';
-import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_kit.dart' show vr, VoxelBackdrop, VoxelBar, VoxelShape;
 import '../../core/theme/voxel_icons.dart';
 import '../../core/ui/game_text.dart';
 
@@ -967,7 +971,7 @@ class _BattleScreenState extends State<BattleScreen>
       try {
         await Future.wait([
           for (final c in {..._engine.players, ..._engine.enemies})
-            precacheBattleSheets(c.speciesId, c.stage),
+            precacheBattleSheets(c.speciesId, c.stage, mine: c.isPlayerSide),
         ]).timeout(const Duration(milliseconds: 2500));
       } catch (_) {}
       if (mounted) _entry.forward();
@@ -1880,7 +1884,7 @@ class _BattleScreenState extends State<BattleScreen>
               'less damage.';
         });
       case _ScriptBeat.finisher when actor.abilities.indexOf(ability) == 2:
-        _flashMessage('💥 Critical Hit!');
+        _flashMessage('Critical Hit!');
         // The real engine has already detected victory (enemy HP hit 0) by
         // this point — [_endOverlay] just waits for [_scriptInfoHint] to
         // clear before it shows (see build()).
@@ -2181,9 +2185,10 @@ class _BattleScreenState extends State<BattleScreen>
     Offset(0.46, 0.86),
   ];
   static const List<Offset> _kSpotsFoe = [
-    Offset(0.68, 0.50),
-    Offset(0.54, 0.36),
-    Offset(0.82, 0.64),
+    // Pushed down 2026-11-17 (user: the enemy hid behind the turn-order cards).
+    Offset(0.68, 0.61),
+    Offset(0.54, 0.51),
+    Offset(0.82, 0.75),
   ];
 
   /// The size of the ground the formation was last laid out on, so the lunge
@@ -2234,12 +2239,15 @@ class _BattleScreenState extends State<BattleScreen>
   Widget _formation(BoxConstraints box) {
     final w = box.maxWidth;
     final groundH = box.maxHeight - _kBarH;
-    final slotW = (w * 0.2).clamp(104.0, 210.0);
-    final flatH = (groundH * 0.44).clamp(80.0, 180.0);
+    final slotW = (w * 0.22).clamp(112.0, 230.0);
+    final flatH = (groundH * 0.52).clamp(90.0, 220.0);
     // An isometric monster's body is low: its slot only has to hold the part of
     // it standing above the feet, the sheet's empty top overflows past it.
-    final isoH = (groundH * 0.30).clamp(70.0, 170.0);
-    const plateH = 44.0;
+    final isoH = (groundH * 0.38).clamp(80.0, 210.0);
+    // The plate now hangs BELOW the feet (user 2026-11-16), so the monster's
+    // room above the feet never depends on how far up the screen it stands —
+    // before, a monster in a back spot was squeezed by the top HUD.
+    const plateH = 38.0;
     _groundSize = Size(w, groundH);
     final placed = <(double, Widget)>[];
     for (final isEnemy in const [true, false]) {
@@ -2259,14 +2267,14 @@ class _BattleScreenState extends State<BattleScreen>
         final cx = spot.dx * w;
         final foot = spot.dy * groundH;
         final spriteH = _isIso(field[i]) ? isoH : flatH;
-        final top = math.max(64.0, foot - spriteH - plateH);
+        final top = foot - spriteH;
         placed.add((
           foot,
           Positioned(
             left: cx - slotW / 2,
             top: top,
             width: slotW,
-            height: foot - top,
+            height: spriteH + plateH,
             child: _fieldSlot(
               field[i],
               slot: i,
@@ -2305,7 +2313,7 @@ class _BattleScreenState extends State<BattleScreen>
       bar = const Center(
         child: Text(
           'Get ready…',
-          style: TextStyle(fontSize: 15, color: Color(0xFFF3E6C6)),
+          style: TextStyle(fontSize: 15, color: UiWood.onWood),
         ),
       );
     } else if (_choosingBait) {
@@ -2412,10 +2420,15 @@ class _BattleScreenState extends State<BattleScreen>
                     horizontal: 10,
                     vertical: 6,
                   ),
+                  // No bar (user 2026-11-16: "Balken/Box gefällt mir nicht"):
+                  // the buttons stand on the field themselves, with only a
+                  // soft shade from the bottom edge so they read on any
+                  // ground.
                   decoration: const BoxDecoration(
-                    color: Color(0xFF6B4528),
-                    border: Border(
-                      top: BorderSide(color: Color(0xFF081F24), width: 2),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x00000000), Color(0x8C000000)],
                     ),
                   ),
                   child: bar,
@@ -3247,14 +3260,42 @@ class _BattleScreenState extends State<BattleScreen>
     );
     // In the ability's own element colour, like its tile (user 2026-09-21).
     final tint = a.element.color;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
-      decoration: BoxDecoration(
-        color: tint.withValues(alpha: 0.2),
-        borderRadius: vr(10),
-        border: Border.all(color: tint.withValues(alpha: 0.85), width: 1.6),
+    // Same surface as the ability's tile and the trading cards: the type colour
+    // as dark voxel tiles inside the block shape (user 2026-11-16).
+    return DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: const ShapeDecoration(shape: VoxelShape()),
+      child: ClipPath(
+        clipper: ShapeBorderClipper(shape: const VoxelShape()),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: VoxelBackdrop(
+                color: tint,
+                vignette: 0.7,
+                darken: 0.30,
+                cell: 14,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+              child: _abilityInfoBody(a, soft, isDamage, effText, effColor, notes),
+            ),
+          ],
+        ),
       ),
-      child: Column(
+    );
+  }
+
+  Widget _abilityInfoBody(
+    AbilityDef a,
+    TextStyle soft,
+    bool isDamage,
+    String? effText,
+    Color effColor,
+    List<String> notes,
+  ) {
+    return Column(
         children: [
           Expanded(
             child: SingleChildScrollView(
@@ -3351,7 +3392,6 @@ class _BattleScreenState extends State<BattleScreen>
             ),
           ),
         ],
-      ),
     );
   }
 
@@ -3392,43 +3432,20 @@ class _BattleScreenState extends State<BattleScreen>
   );
 
   Future<void> _confirmFlee() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: FoE.panelDark,
-        shape: FoE.facet(
-          radius: 12,
-          side: const BorderSide(color: FoE.borderGold),
-        ),
-        // PvP: "Flee" reads oddly for surrendering to another player (it's
-        // wording built for escaping a wild encounter) — same button, same
-        // mechanism, just "Give up" instead (user 2026-09-17).
-        title: Text(
-          widget.isPvp ? 'Give up?' : 'Flee?',
-          style: FoE.title(size: 15),
-        ),
-        content: Text(
-          widget.isPvp
-              ? 'You lose the match. Your opponent wins.'
-              : 'The battle ends with no reward. HP and energy stay as they are.',
-          style: FoE.label(size: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Keep fighting', style: FoE.dim(size: 13)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              widget.isPvp ? 'Give up' : 'Flee',
-              style: FoE.label(size: 13).copyWith(color: Colors.redAccent),
-            ),
-          ),
-        ],
-      ),
+    final ok = await parchmentConfirm(
+      context,
+      // PvP: "Flee" reads oddly for surrendering to another player (it's
+      // wording built for escaping a wild encounter) — same button, same
+      // mechanism, just "Give up" instead (user 2026-09-17).
+      title: widget.isPvp ? 'Give up?' : 'Flee?',
+      message: widget.isPvp
+          ? 'You lose the match. Your opponent wins.'
+          : 'The battle ends with no reward. HP and energy stay as they are.',
+      confirmLabel: widget.isPvp ? 'Give up' : 'Flee',
+      cancelLabel: 'Keep fighting',
+      danger: true,
     );
-    if (ok == true) {
+    if (ok) {
       final actor = _engine.currentActor;
       _engine.flee();
       // PvP: fleeing is a forfeit — the opponent's own engine only learns
@@ -3633,10 +3650,10 @@ class _BattleScreenState extends State<BattleScreen>
     // free on BOTH sides (so the strip stays on the arena's own centre line).
     final stripW = (arenaW - 2 * (cluster + 6)).clamp(0.0, 300.0);
     return Positioned(
-      top: 6,
+      top: 2,
       left: 0,
       right: 0,
-      height: 54,
+      height: 66,
       child: Stack(
         children: [
           Center(
@@ -3756,15 +3773,12 @@ class _BattleScreenState extends State<BattleScreen>
             width: 34,
             height: 34,
             alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.rectangle,
-              color: const Color(0x80000000),
-              border: Border.all(color: const Color(0x33FFFFFF)),
-            ),
+            // The app's blue voxel button, like AUTO and the deck tabs.
+            decoration: menuButton(locked: onTap == null),
             child: PixelIcon(
               icon,
               size: 17,
-              color: onTap == null ? const Color(0x66FFFFFF) : Colors.white,
+              color: onTap == null ? kBoxInkFaint : kBoxInk,
             ),
           ),
         ),
@@ -3807,9 +3821,11 @@ class _BattleScreenState extends State<BattleScreen>
       // size for count, cramming up to twelve thumbnails into the strip. Six
       // is plenty to plan around; the width that freed up goes into cards you
       // can actually read at a glance.
-      const slot = 44.0;
+      // The acting card is 60 wide, the others 46, on a wooden bar with 8 px
+      // of padding either side.
       const gap = 6.0;
-      final fit = ((box.maxWidth + gap) / (slot + gap)).floor().clamp(1, 6);
+      final fit = (1 + ((box.maxWidth - 54 + gap) / (42 + gap)).floor())
+          .clamp(1, 6);
       // Frozen while a presentation is still playing (user 2026-08-29: "es
       // ist noch immer so, dass manche gegnerische Monster vorgreifen") —
       // forecast() reads the engine's CURRENT queue, which can already have
@@ -3838,28 +3854,66 @@ class _BattleScreenState extends State<BattleScreen>
     },
   );
 
-  /// One place in the queue. [acting] is the fighter whose turn it is.
+  /// One place in the queue (user 2026-11-16: the wooden bar with monsters
+  /// poking out of it is gone). A square tile like the name signs: the monster's
+  /// portrait inside, its side as the tile's colour, the one acting larger with
+  /// a gold rim. Health is a thin trough along the foot.
   Widget _queueCard(Combatant c, {required bool acting}) {
-    final side = c.isPlayerSide ? FoE.positive : FoE.danger;
-    return Container(
-      width: acting ? 44 : 38,
-      height: acting ? 50 : 42,
-      padding: const EdgeInsets.all(3),
-      decoration: ShapeDecoration(
-        // The side, as the card's own tint — no extra bar to read.
-        color: side.withValues(alpha: acting ? 0.30 : 0.16),
-        shape: FoE.facet(
-          radius: 8,
-          side: BorderSide(
-            color: acting ? FoE.lit(side) : side.withValues(alpha: 0.45),
-            width: acting ? 2 : 1,
+    final mine = c.isPlayerSide;
+    final face = CreatureFace.combatant(c);
+    final s = acting ? 54.0 : 42.0;
+    // The tile is the monster's TYPE colour (user 2026-11-17); the side is
+    // said by the rim: green for mine, red for the enemy (the power bar's
+    // colours); the one acting is larger with a thicker rim.
+    final fill = face.element.color;
+    return SizedBox(
+      width: s,
+      height: s,
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: fill,
+          shape: VoxelShape(
+            notch: 2,
+            edge: mine ? CreamPalette.better : CreamPalette.warn,
+            lines: acting ? 3 : 2,
           ),
+          shadows: const [
+            BoxShadow(color: Color(0x73000000), offset: Offset(2, 2)),
+          ],
         ),
-      ),
-      child: SockelAvatar.combatant(
-        c,
-        size: acting ? 34 : 28,
-        hpColor: _hpColor,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              bottom: 5,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: face.ko ? 0.35 : 1,
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: CreatureFigure(
+                      imageUrl: face.imageUrl,
+                      element: face.element,
+                      decodeSize: s,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 3,
+              right: 3,
+              bottom: 3,
+              height: 4,
+              child: VoxelBar(
+                value: face.hp,
+                color: _hpColor(face.hp),
+                height: 4,
+                block: 6,
+                onDark: true,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3976,22 +4030,9 @@ class _BattleScreenState extends State<BattleScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  KeyedSubtree(
-                    key: hpAnchor
-                        ? IntroSpotlightAnchors.of('battle-hp')
-                        : null,
-                    child: _slotPlate(
-                      c0,
-                      acting: acting,
-                      targeted: targeted,
-                      width: width,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, box) {
-                        final spriteW = width * (back ? 0.88 : 1.0);
                         // The feet sit a hair above the slot's bottom edge,
                         // inside the shadow.
                         final feetPad = box.maxHeight * 0.05;
@@ -4006,35 +4047,31 @@ class _BattleScreenState extends State<BattleScreen>
                                   _kSpriteScale;
                         return Stack(
                           alignment: Alignment.bottomCenter,
+                          clipBehavior: Clip.none,
                           children: [
-                            // The shadow on the ground: the map's tint and
-                            // opacity, thrown a little to the lower right like
-                            // every tree's and house's.
-                            Padding(
-                              padding: EdgeInsets.only(
-                                bottom: math.max(0.0, feetPad - spriteW * 0.03),
-                              ),
-                              child: Transform.translate(
-                                offset: Offset(spriteW * 0.07, 0),
-                                // The isometric sheets carry their own cast
-                                // shadow, so this is only a small contact patch.
-                                child: Container(
-                                  width: spriteW * (iso ? 0.46 : 0.74),
-                                  height: spriteW * (iso ? 0.09 : 0.14),
-                                  decoration: BoxDecoration(
-                                    color: kShadowTint.withValues(
-                                      alpha: kShadowOpacity * 1.6,
-                                    ),
-                                    borderRadius: BorderRadius.all(
-                                      Radius.elliptical(
-                                        spriteW * (iso ? 0.23 : 0.37),
-                                        spriteW * (iso ? 0.045 : 0.07),
+                            // Whose turn / who is aimed at: a mark ON the
+                            // ground and a pointer over the head (user
+                            // 2026-11-16: the old plate-edge highlight was
+                            // not liked).
+                            if (acting || targeted)
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  child: AnimatedBuilder(
+                                    animation: _idle,
+                                    builder: (context, _) => CustomPaint(
+                                      painter: _FieldMarkPainter(
+                                        color: targeted
+                                            ? FoE.danger
+                                            : FoE.goldBright,
+                                        target: targeted,
+                                        feetPad: feetPad,
+                                        t: _idle.value,
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
+                            // No round ground shadow (user 2026-11-17).
                             Padding(
                               padding: EdgeInsets.only(bottom: feetPad),
                               child: _bigSprite(
@@ -4050,6 +4087,22 @@ class _BattleScreenState extends State<BattleScreen>
                           ],
                         );
                       },
+                    ),
+                  ),
+                  // The plate hangs UNDER the feet (user 2026-11-16).
+                  // Closer to the monster (user 2026-11-17).
+                  Transform.translate(
+                    offset: const Offset(0, -9),
+                    child: KeyedSubtree(
+                      key: hpAnchor
+                          ? IntroSpotlightAnchors.of('battle-hp')
+                          : null,
+                      child: _slotPlate(
+                        c0,
+                        acting: acting,
+                        targeted: targeted,
+                        width: width,
+                      ),
                     ),
                   ),
                 ],
@@ -4097,21 +4150,14 @@ class _BattleScreenState extends State<BattleScreen>
     final frac = c.maxHp <= 0 ? 0.0 : (c.hp / c.maxHp).clamp(0.0, 1.0);
     // The two states you act on are said by the plate's own edge: gold for the
     // monster whose turn it is, red for the enemy you are aimed at.
-    final edge = targeted
-        ? FoE.danger
-        : acting
-        ? CreamPalette.gold
-        : const Color(0xFF081F24);
-    // DARK plate, light ink (user 2026-11-08: the text could not be read — the
-    // light ink of the kit sat on a cream plate). The state is the plate's
-    // BACKGROUND: tinted gold on its turn, red when aimed at, and flooded with
-    // the striking move's colour while a hit lands on it.
-    const baseFill = Color(0xFF1B3445);
-    final stateFill = targeted
-        ? Color.lerp(baseFill, FoE.danger, 0.45)!
-        : acting
-        ? Color.lerp(baseFill, CreamPalette.goldDeep, 0.7)!
-        : baseFill;
+    // NAME SIGN (user 2026-11-16: the dark bars "passen nicht zum Stil"): a
+    // plaster tag in a dark timber rim, like the signs on the buildings. Whose
+    // turn it is / who is aimed at is NOT said here any more — that is the ring
+    // and pointer on the ground (see [_FieldMarkPainter]). The plate only
+    // flashes in the striking move's colour while a hit lands on it.
+    const edge = Fachwerk.timberDark;
+    // The sign wears the monster's TYPE colour (user 2026-11-17).
+    final stateFill = c.element.color;
     final struck = identical(c, _fxTarget);
     // The status strip FLOATS above the plate instead of sitting in the column:
     // taking layout height made the slot's sprite area shrink (and the monster
@@ -4153,15 +4199,12 @@ class _BattleScreenState extends State<BattleScreen>
                 ? (1 - _fxReact.value)
                 : 0.0;
             return Container(
-              width: (width * 0.78).clamp(84.0, 132.0),
-              padding: const EdgeInsets.fromLTRB(5, 2, 5, 4),
-              decoration: BoxDecoration(
+              width: (width * 0.8).clamp(92.0, 140.0),
+              padding: const EdgeInsets.fromLTRB(6, 3, 6, 5),
+              decoration: ShapeDecoration(
                 color: Color.lerp(stateFill, _fxImpact, hit * 0.75),
-                border: Border.all(
-                  color: edge,
-                  width: (acting || targeted) ? 3 : 2,
-                ),
-                boxShadow: const [
+                shape: VoxelShape(notch: 2, edge: edge, lines: 2),
+                shadows: const [
                   BoxShadow(color: Color(0x73000000), offset: Offset(2, 2)),
                 ],
               ),
@@ -4184,19 +4227,40 @@ class _BattleScreenState extends State<BattleScreen>
               c.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, height: 1.1, color: kBoxInk),
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.1,
+                color: Colors.white,
+                shadows: [Shadow(color: Color(0xCC000000), offset: Offset(1, 1))],
+              ),
             ),
           ),
           const SizedBox(width: 4),
-          Text(
-            'L${c.level}',
-            maxLines: 1,
-            style: TextStyle(fontSize: 13, height: 1.1, color: kBoxInkSoft),
+          // The level as a small dark block on the sign.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            color: Fachwerk.timberDark,
+            child: Text(
+              'L${c.level}',
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.15,
+                color: Colors.white,
+              ),
+            ),
           ),
         ],
       ),
       const SizedBox(height: 3),
-      RecessBar(value: frac, color: _hpColor(frac), height: 7),
+      // The health as the kit's segmented block bar (user 2026-11-17).
+      VoxelBar(
+        value: frac,
+        color: _hpColor(frac),
+        height: 9,
+        block: 7,
+        onDark: true,
+      ),
     ],
   );
 
@@ -4261,12 +4325,10 @@ class _BattleScreenState extends State<BattleScreen>
         padding: const EdgeInsets.fromLTRB(2, 3, 2, 1),
         decoration: ShapeDecoration(
           color: const Color(0x80000000),
-          shape: FoE.facet(
-            radius: 9,
-            side: BorderSide(
-              color: canSwitchTo ? FoE.goldBright : const Color(0x33FFFFFF),
-              width: canSwitchTo ? 1.6 : 1,
-            ),
+          shape: VoxelShape(
+            notch: 1,
+            edge: canSwitchTo ? FoE.goldBright : const Color(0x55FFFFFF),
+            lines: canSwitchTo ? 2 : 1,
           ),
         ),
         child: Column(
@@ -4646,6 +4708,17 @@ class _BattleScreenState extends State<BattleScreen>
           set: sheets,
           anim: anim,
           height: cell,
+          // All monsters about the same size in a fight (user 2026-11-16): the
+          // sheets draw evolutions bigger (set.scale 1.0 / 1.2 / 1.4), so that
+          // growth is divided out here and everyone stands at the middle
+          // stage's size.
+          // Now by the creature's real opaque height (monster_sheet normH),
+          // so a tall owl and a squat duck stand equally tall.
+          // Bigger (user 2026-11-16: "die Monster sind relativ klein", the enemy
+          // Tidelord "viel zu klein"): taller, and a long body (seal, walrus)
+          // may be much wider than before instead of being shrunk to fit 1.4.
+          normH: 0.38,
+          normMaxAspect: 2.3,
           flash: flash,
           flashColor: flashColor,
         ),
@@ -4765,16 +4838,12 @@ class _BattleScreenState extends State<BattleScreen>
         // neuen UI Farben und Stil").
         margin: const EdgeInsets.symmetric(horizontal: 14),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [CreamPalette.paperTop, CreamPalette.paperBottom],
-          ),
-          borderRadius: vr(12),
-          boxShadow: const [
-            BoxShadow(color: CreamPalette.tanShadow, offset: Offset(0, 3)),
-          ],
+        // The block shape of every other panel, on the dark glass the plates
+        // wear (user 2026-11-16: all boxes in the same pixel look).
+        decoration: const ShapeDecoration(
+          color: UiWood.well,
+          shape: VoxelShape(),
+          shadows: [BoxShadow(color: Color(0x73000000), offset: Offset(2, 2))],
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -4979,9 +5048,9 @@ class _BattleScreenState extends State<BattleScreen>
     bool selected = false,
   }) {
     // Dark text on light type colours (e.g. Light), white on the rest.
-    final onColor = element.color.computeLuminance() > 0.5
-        ? const Color(0xFF1A1300)
-        : Colors.white;
+    // The tiles are darkened (see the backdrop below), so the text is white on
+    // every type.
+    const onColor = Colors.white;
     // The tile keeps its element colour when it cannot be used right now (user
     // 2026-09-21: "die Fähigkeitsboxen in der Elementfarbe") — dimmed, not turned
     // into a grey card, so the type still reads during the enemy's turn.
@@ -4991,8 +5060,6 @@ class _BattleScreenState extends State<BattleScreen>
     // Only DAMAGE moves with a real element land bonus/reduced damage.
     final isDamage = ability == null || ability.kind == AbilityKind.damage;
     final mult = (enabled && isDamage) ? _effectivenessVsEnemy(element) : 1.0;
-    final radius = FoE.radiusSmall + 2;
-
     // Dead centre now, not bottom-left (user 2026-08-29: "den Namen komplett
     // mittig von der Box") — with the AP chip its own corner and no second
     // line of text competing for room, the name can just sit in the middle
@@ -5015,14 +5082,28 @@ class _BattleScreenState extends State<BattleScreen>
 
     Widget tile = Opacity(
       opacity: enabled ? 1 : 0.5,
-      child: CreatureBackdrop(
-        element: element,
-        radius: radius,
-        // Bigger (user 2026-08-29: "das Typicon grösser machen") — the card's
-        // own embossed glyph, same scale knob TypePodium uses for the same
-        // reason.
-        symbolScale: 1.35,
-        child: label,
+      // The trading card's own surface (user 2026-11-16: "der Hintergrund der
+      // Fähigkeiten soll in der Farbe des Typs mit den Kacheln sein, wie der
+      // Hintergrund der Trading Cards"): the type colour as dark voxel tiles,
+      // in the block shape with its outline and bevel.
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: const ShapeDecoration(shape: VoxelShape()),
+        child: ClipPath(
+          clipper: ShapeBorderClipper(shape: const VoxelShape()),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              VoxelBackdrop(
+                color: element.color,
+                vignette: 0.7,
+                darken: 0.22,
+                cell: 14,
+              ),
+              label,
+            ],
+          ),
+        ),
       ),
     );
 
@@ -5079,13 +5160,7 @@ class _BattleScreenState extends State<BattleScreen>
                   color: enabled
                       ? FoE.gold
                       : CreamPalette.tan.withValues(alpha: 0.28),
-                  shape: const RoundedRectangleBorder(
-                    // Rounded on the inner corner only: the chip is a piece of
-                    // the tile's own edge, not a sticker on it.
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(12),
-                    ),
-                  ),
+                  shape: const VoxelShape(notch: 1),
                 ),
                 child: Text(
                   '$ap',
@@ -5251,8 +5326,6 @@ class _BattleScreenState extends State<BattleScreen>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              PixelIcon(Icons.smart_toy, size: 14, color: ink),
-              const SizedBox(width: 4),
               Text(
                 _autoBattle ? 'AUTO ✔' : 'AUTO',
                 maxLines: 1,
@@ -5334,7 +5407,7 @@ class _BattleScreenState extends State<BattleScreen>
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Text(
-                        '🏆 Victory!',
+                        'Victory!',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 24,
@@ -5509,9 +5582,9 @@ class _BattleScreenState extends State<BattleScreen>
     // Victory has no subtitle any more (user 2026-08-28: "Your Team grew
     // Stronger löschen") — the rewards below already say what was won.
     final (title, subtitle) = switch (outcome) {
-      CombatOutcome.victory => ('🏆 Victory!', null),
-      CombatOutcome.defeat => ('💀 Defeat…', 'Your team needs healing.'),
-      CombatOutcome.fled => ('🏃 Fled', 'No reward.'),
+      CombatOutcome.victory => ('Victory!', null),
+      CombatOutcome.defeat => ('Defeat…', 'Your team needs healing.'),
+      CombatOutcome.fled => ('Fled', 'No reward.'),
     };
     final stars = _stars;
     return Container(
@@ -6449,4 +6522,98 @@ class _BelowFeetClipper extends CustomClipper<Rect> {
 
   @override
   bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
+}
+
+/// The mark for "this one": a stepped (voxel) ring on the ground under the
+/// feet, and a blocky pointer bobbing over the head. Gold = its turn; red with
+/// corner ticks = the enemy being aimed at (user 2026-11-16).
+class _FieldMarkPainter extends CustomPainter {
+  final Color color;
+  final bool target;
+  final double feetPad;
+  final double t;
+
+  const _FieldMarkPainter({
+    required this.color,
+    required this.target,
+    required this.feetPad,
+    required this.t,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!size.isFinite || size.isEmpty) return;
+    final pulse = (math.sin(t * 2 * math.pi) + 1) / 2;
+    final cx = size.width / 2 + size.width * 0.03;
+    final cy = size.height - feetPad - size.width * 0.03;
+    final rx = size.width * 0.36;
+    final ry = rx * 0.36;
+    final ring = Rect.fromCenter(
+      center: Offset(cx, cy),
+      width: rx * 2,
+      height: ry * 2,
+    );
+    canvas.drawOval(
+      ring,
+      Paint()..color = color.withValues(alpha: 0.10 + 0.10 * pulse),
+    );
+    canvas.drawOval(
+      ring,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6
+        ..color = const Color(0xAA000000),
+    );
+    canvas.drawOval(
+      ring,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5
+        ..color = color.withValues(alpha: 0.75 + 0.25 * pulse),
+    );
+    if (target) {
+      // Four blocky ticks pointing in at the ring: a reticle.
+      final tick = Paint()..color = color;
+      final edge = Paint()..color = const Color(0xFF000000);
+      void block(Offset c) {
+        canvas.drawRect(Rect.fromCenter(center: c, width: 11, height: 7), edge);
+        canvas.drawRect(Rect.fromCenter(center: c, width: 8, height: 4), tick);
+      }
+
+      block(Offset(ring.left, cy));
+      block(Offset(ring.right, cy));
+      block(Offset(cx, ring.top));
+      block(Offset(cx, ring.bottom));
+    }
+    // The pointer: a stepped chevron over the head, bobbing a little.
+    const px = 3.0;
+    final bob = pulse * 3;
+    final top = size.height * 0.04 + bob;
+    for (var row = 0; row < 4; row++) {
+      final half = (3 - row) * px + px / 2;
+      final r = Rect.fromLTRB(
+        cx - half,
+        top + row * px * 1.4,
+        cx + half,
+        top + (row + 1) * px * 1.4,
+      );
+      canvas.drawRect(r.inflate(1.5), Paint()..color = const Color(0xFF000000));
+    }
+    for (var row = 0; row < 4; row++) {
+      final half = (3 - row) * px + px / 2;
+      canvas.drawRect(
+        Rect.fromLTRB(
+          cx - half,
+          top + row * px * 1.4,
+          cx + half,
+          top + (row + 1) * px * 1.4,
+        ),
+        Paint()..color = color,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FieldMarkPainter old) =>
+      old.t != t || old.color != color || old.target != target;
 }

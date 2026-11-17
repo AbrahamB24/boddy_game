@@ -64,7 +64,7 @@ class IntroCardPanel extends StatelessWidget {
         ExpeditionController().expeditions.any(
           (e) => e.type == ExpeditionType.capture,
         );
-    final ctaLabel = capturePending ? '🎒 Open Trips' : card.ctaLabel;
+    final ctaLabel = capturePending ? 'Open Trips' : card.ctaLabel;
     final destination = capturePending
         ? IntroDestination.trips
         : card.destination;

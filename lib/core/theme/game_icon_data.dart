@@ -2,6 +2,11 @@
 
 /// Every icon that has a drawing in assets/images/icons/.
 const Set<String> kGameIconKeys = {
+  'scroll',
+  'statBars',
+  'sparkle',
+  'male',
+  'female',
   'sword',
   'shield',
   'heart',
@@ -30,8 +35,6 @@ const Set<String> kGameIconKeys = {
   'grass',
   'sparkles',
   'balance',
-  'robot',
-  'save',
   'chat',
   'medical',
   'bookmark',
@@ -45,15 +48,10 @@ const Set<String> kGameIconKeys = {
   'coin',
   'wood',
   'stone',
-  'ironOre',
-  'copperOre',
-  'silverOre',
-  'goldOre',
   'coal',
   'clay',
   'lime',
   'sand',
-  'ruby',
   'gem',
   'crystalBlue',
   'crystalCyan',
@@ -63,14 +61,11 @@ const Set<String> kGameIconKeys = {
   'saw',
   'axe',
   'pickaxe',
-  'wrench',
-  'scissors',
   'tools',
   'swords',
   'crown',
   'heartPink',
   'heartGreen',
-  'hearts',
   'trap',
   'bandage',
   'stethoscope',
@@ -117,9 +112,7 @@ const Set<String> kGameIconKeys = {
   'tea',
   'flower',
   'basket',
-  'footprints',
   'goal',
-  'turtle',
   'fox',
   'camel',
   'fish',
@@ -137,9 +130,7 @@ const Set<String> kGameIconKeys = {
   'truck',
   'truckSmall',
   'gradcap',
-  'timberHouse',
   'tasks',
-  'bed',
   'banned',
   'warning',
   'stopwatch',
@@ -148,7 +139,6 @@ const Set<String> kGameIconKeys = {
   'skull',
   'skullBones',
   'zzz',
-  'dice',
   'party',
   'gift',
   'alembic',
@@ -156,11 +146,7 @@ const Set<String> kGameIconKeys = {
   'boot',
   'shoe',
   'dumbbell',
-  'pin',
   'clipboard',
-  'vase',
-  'dot',
-  'dotBlue',
   'faceFear',
   'faceSleep',
   'faceCold',
@@ -195,7 +181,6 @@ const Set<String> kGameIconKeys = {
   'chart',
   'grid',
   'hex',
-  'drag',
   'move',
   'door',
   'box',
@@ -226,7 +211,6 @@ const Map<String, String> kEmojiToIcon = {
   '\u{2728}': 'sparkles', // sparkles
   '\u{1F525}': 'flame', // flame
   '\u{1F3DB}': 'bank', // bank
-  '\u{1F534}': 'dot', // dot
   '\u{2694}': 'swords', // swords
   '\u{1F528}': 'hammer', // hammer
   '\u{1F6E0}': 'tools', // tools
@@ -236,7 +220,6 @@ const Map<String, String> kEmojiToIcon = {
   '\u{2764}': 'heart', // heart
   '\u{1F497}': 'heartPink', // heartPink
   '\u{1F49A}': 'heartGreen', // heartGreen
-  '\u{1F49E}': 'hearts', // hearts
   '\u{2B50}': 'star', // star
   '\u{1F31F}': 'star', // star
   '\u{1FAA4}': 'trap', // trap
@@ -293,12 +276,9 @@ const Map<String, String> kEmojiToIcon = {
   '\u{1F375}': 'tea', // tea
   '\u{1F338}': 'flower', // flower
   '\u{1F9FA}': 'basket', // basket
-  '\u{1F4CD}': 'pin', // pin
-  '\u{1F463}': 'footprints', // footprints
   '\u{1F45F}': 'shoe', // shoe
   '\u{1F97E}': 'boot', // boot
   '\u{1F945}': 'goal', // goal
-  '\u{1F422}': 'turtle', // turtle
   '\u{1F98A}': 'fox', // fox
   '\u{1F42B}': 'camel', // camel
   '\u{1F41F}': 'fish', // fish
@@ -315,9 +295,7 @@ const Map<String, String> kEmojiToIcon = {
   '\u{1F682}': 'train', // train
   '\u{1F69B}': 'truck', // truck
   '\u{1F69A}': 'truckSmall', // truckSmall
-  '\u{1F3FA}': 'vase', // vase
   '\u{1F393}': 'gradcap', // gradcap
-  '\u{1F6CF}': 'timberHouse', // timberHouse
   '\u{1F356}': 'meat', // meat
   '\u{1F6AB}': 'banned', // banned
   '\u{26A0}': 'warning', // warning
@@ -327,7 +305,6 @@ const Map<String, String> kEmojiToIcon = {
   '\u{1F480}': 'skull', // skull
   '\u{2620}': 'skullBones', // skullBones
   '\u{1F4A4}': 'zzz', // zzz
-  '\u{1F3B2}': 'dice', // dice
   '\u{1F389}': 'party', // party
   '\u{1F381}': 'gift', // gift
   '\u{1F3CB}': 'dumbbell', // dumbbell

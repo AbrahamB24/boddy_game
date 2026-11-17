@@ -417,7 +417,7 @@ class _CaptureBarScreenState extends State<CaptureBarScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              caught ? '🎉 Caught!' : '💨 Got away.',
+              caught ? 'Caught!' : 'Got away.',
               style: FoE.title(
                 size: 16,
               ).copyWith(color: caught ? CreamPalette.better : CreamPalette.warn),

@@ -28,7 +28,7 @@ class EnergyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final ctrl = SettlementController();
     return MenuScaffold(
-      title: '⚡ Energy',
+      title: 'Energy',
       trailing: AnimatedBuilder(
         animation: ctrl,
         builder: (context, _) {
@@ -353,7 +353,7 @@ class EnergyBattery extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: borderColor,
                           borderRadius: const BorderRadius.horizontal(
-                            right: Radius.circular(7),
+                            right: Radius.circular(2),
                           ),
                         ),
                       ),
@@ -517,7 +517,7 @@ class _StepsCard extends StatelessWidget {
         const SizedBox(height: 10),
         Expanded(
           child: ListView(
-            padding: EdgeInsets.zero,
+            padding: const EdgeInsets.only(bottom: 14),
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.baseline,

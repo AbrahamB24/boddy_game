@@ -247,10 +247,15 @@ async function render(def, key) {
 (async () => {
   const keys = Object.keys(ALL);
   const canvases = {};
+  // ONLY=flag,coin renders just those keys and touches nothing else (no stale
+  // clean-up, no data file, no sheet) — the rest of the set stays as it is.
+  const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
   for (const k of keys) {
+    if (only && !only.includes(k)) continue;
     canvases[k] = await render(ALL[k], k);
     fs.writeFileSync(path.join(OUT_DIR, k + '.webp'), canvases[k].toBuffer('image/webp', 90));
   }
+  if (only) { console.log('rendered:', only.join(', ')); return; }
   // remove stale files
   for (const f of fs.readdirSync(OUT_DIR)) if (!keys.includes(f.replace('.webp', ''))) fs.unlinkSync(path.join(OUT_DIR, f));
 

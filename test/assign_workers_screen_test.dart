@@ -301,7 +301,7 @@ void main() {
     ) async {
       CreaturesController().expeditionIds.add('busy');
       await _pump(tester);
-      expect(find.text('🎒 Away'), findsOneWidget);
+      expect(find.text('Away'), findsOneWidget);
       expect(find.text('At Saw Mill'), findsNothing);
     });
 

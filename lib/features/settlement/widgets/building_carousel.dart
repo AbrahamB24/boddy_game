@@ -6,6 +6,7 @@ import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../../../core/ui/duration_format.dart';
 import '../../../core/ui/pressable.dart';
+import '../../guild/guild_service.dart' show GuildMembership;
 import '../../onboarding/intro_flow.dart' show IntroStep, introBuildTarget;
 import '../../onboarding/intro_spotlight.dart';
 import '../data/building_definitions.dart';
@@ -168,6 +169,7 @@ class _BuildingCarouselState extends State<BuildingCarousel> {
     final available = availableBuildings(
       ctrl.dungeonMaxStage,
       ctrl.battlesCleared,
+      inGuild: GuildMembership.instance.inGuild,
     );
     final sections = _sections(available);
     if (sections.isEmpty) return const SizedBox.shrink();
@@ -644,7 +646,9 @@ ShapeDecoration _tabDecoration(bool active) => ShapeDecoration(
   ),
   shadows: voxelDrop(
     depth: 3,
-    color: active ? CreamPalette.goldDeep : CreamPalette.tanShadow,
+    // Dark for both states: a gold slab outside the outline reads as colour
+    // spilling over the edge (user 2026-11-17).
+    color: CreamPalette.tanShadow,
   ),
 );
 

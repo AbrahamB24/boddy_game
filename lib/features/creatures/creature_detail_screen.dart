@@ -1,3 +1,4 @@
+import '../common/widgets/parchment_kit.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:google_fonts/google_fonts.dart';
 
@@ -266,21 +267,6 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   // nearly black and a light monster's white, and the dark-brown ink over it
   // would have been unreadable in one of those two directions.
 
-  /// The sheet in the kit's paper — the higher [lightness] (the callers pass
-  /// 0.16 at the top of the sheet, 0.10 at its foot) giving the lighter end. LIGHT
-  /// since the Holz palette (user 2026-09-19); it was dark tinted paper before.
-  static Color _paper(Color element, double lightness) {
-    // The kit's paper (Holz), the higher lightness giving the lighter end — with
-    // a breath of the element's hue (7 %), so a fire monster's sheet is not quite
-    // a water monster's. The ink over it is the kit's, legible by construction.
-    final base = Color.lerp(
-      CreamPalette.paperBottom,
-      CreamPalette.paperTop,
-      ((lightness - 0.10) / 0.06).clamp(0.0, 1.0),
-    )!;
-    return Color.lerp(base, element, 0.07)!;
-  }
-
   // ── THE PAGE IS THE ELEMENT (user 2026-09-21, "13" of the Monsterdetail
   // proposals: "Monster in der Mitte"): the element colour runs over the WHOLE
   // screen and everything on it is white on dark glass, so the text tones are
@@ -296,7 +282,6 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   /// like everywhere else in the app), so THEY keep the dark brown ink.
   static const _dlgInk = kBoxInk;
   static const _dlgDim = Color(0x942A1A0C); // ink @ 58 %
-  static const _dlgTrack = Color(0x212A1A0C); // ink @ 13 %
 
   /// True for the starter-preview use ([widget.previewCreature]) — gates off
   /// every action that assumes a real, owned, persisted creature (rename,
@@ -341,63 +326,11 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   // creature's element as the accent) rather than the global FoE gold theme
   // (user 2026-07-18).
   Future<void> _rename(CreatureInstance creature) async {
-    final element = creature.species?.element.color ?? CreamPalette.tan;
-    final controller = TextEditingController(text: creature.nickname ?? '');
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _paper(element, 0.16),
-        shape: _sh(radius: 20),
-        title: Text(
-          'Rename',
-          style: GoogleFonts.outfit(
-            color: _dlgInk,
-            fontSize: 18,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          cursorColor: element,
-          style: GoogleFonts.outfit(color: _dlgInk, fontSize: 15),
-          decoration: InputDecoration(
-            hintText: 'Empty = species name',
-            hintStyle: GoogleFonts.outfit(color: _dlgDim, fontSize: 13),
-            enabledBorder: const UnderlineInputBorder(
-              borderSide: BorderSide(color: _dlgTrack),
-            ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: element, width: 2),
-            ),
-          ),
-          onSubmitted: (v) => Navigator.pop(ctx, v),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.outfit(
-                color: _dlgDim,
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: Text(
-              'Save',
-              style: GoogleFonts.outfit(
-                color: element,
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ),
-        ],
-      ),
+    final name = await parchmentPrompt(
+      context,
+      title: 'Rename',
+      hint: 'Empty = species name',
+      initial: creature.nickname ?? '',
     );
     if (name != null) await _ctrl.rename(creature, name);
   }
@@ -406,42 +339,15 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     // Asked up front so the dialog can SAY why, instead of the old flow
     // (confirm, then nothing happens) — the reason replaces the question.
     final blocked = _ctrl.releaseBlocker(creature);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: CreamPalette.paperTop,
-        shape: _sh(radius: 12, side: BorderSide(color: CreamPalette.tan)),
-        title: Text(
-          blocked == null ? 'Release?' : 'Cannot release',
-          style: FoE.title(size: 15).copyWith(color: _dlgInk),
-        ),
-        content: Text(
-          blocked ?? '${creature.displayName} leaves you forever.',
-          style: FoE.label(size: 13).copyWith(color: _dlgInk),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              blocked == null ? 'Cancel' : 'OK',
-              style: FoE.dim(size: 13).copyWith(color: _dlgDim),
-            ),
-          ),
-          if (blocked == null)
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(
-                'Release',
-                style: FoE.label(size: 13).copyWith(
-                  color: CreamPalette.warn,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ),
-        ],
-      ),
+    final ok = await parchmentConfirm(
+      context,
+      title: blocked == null ? 'Release?' : 'Cannot release',
+      message: blocked ?? '${creature.displayName} leaves you forever.',
+      confirmLabel: blocked == null ? 'Release' : null,
+      cancelLabel: blocked == null ? 'Cancel' : 'OK',
+      danger: true,
     );
-    if (ok == true) {
+    if (ok) {
       final error = await _ctrl.release(creature);
       if (!mounted) return;
       if (error != null) {
@@ -586,7 +492,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                       shape: const VoxelShape(notch: 2),
                       shadows: voxelDrop(depth: 2),
                     ),
-                    child: const VoxelIcon(VoxelGlyph.back, size: 20),
+                    child: const GameIcon('arrowLeft', size: 24),
                   ),
                 )
               : KitCloseButton(
@@ -738,7 +644,19 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             child: Transform.scale(
               scale: 1.3,
               alignment: Alignment.bottomCenter,
-              child: figure,
+              // The baked ground shadow runs into the frame's bottom edge and
+              // is cut there in a hard line (user 2026-11-16); fade the last
+              // stretch of the frame out so the shadow dies away softly.
+              child: ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (r) => const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.white, Colors.white, Color(0x00FFFFFF)],
+                  stops: [0.0, 0.86, 1.0],
+                ).createShader(r),
+                child: figure,
+              ),
             ),
           ),
         ],
@@ -761,12 +679,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     // Evolution soll zeigen, dass eine Evolution möglich ist") — the same
     // green arrow the collection tile wears, so a player never has to open
     // the tab just to learn it is worth opening.
-    const glyphs = [
-      VoxelGlyph.heart,
-      VoxelGlyph.bars,
-      VoxelGlyph.dna,
-      VoxelGlyph.sword,
-    ];
+    const glyphs = ['scroll', 'statBars', 'dna', 'sparkle'];
     final canEvolve = !_isPreview && creature.canEvolve;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -798,14 +711,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (_vox)
-                        VoxelIcon(
-                          glyphs[i],
-                          size: 24,
-                          color: _tab == i
-                              ? Voxel.tone(element, 0)
-                              : Colors.white,
-                          shadow: _tab != i,
-                        )
+                        GameIcon(glyphs[i], size: 24)
                       else
                         Text(tabs[i].$1, style: const TextStyle(fontSize: 20)),
                       const SizedBox(height: 3),
@@ -831,11 +737,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                       label: 'Evolution ready',
                       container: true,
                       child: _vox
-                          ? const VoxelIcon(
-                              VoxelGlyph.arrowUp,
-                              size: 22,
-                              color: Color(0xFF2FD37A),
-                            )
+                          ? const GameIcon('arrowUp', size: 24)
                           : PixelIcon(
                               Icons.arrow_upward_rounded,
                               size: 20,
@@ -898,14 +800,9 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
             ),
             Transform.translate(
               offset: const Offset(4, -7),
-              child: Text(
-                creature.gender.symbol,
-                style: TextStyle(
-                  color: Color.lerp(creature.gender.color, Colors.white, 0.5),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                  shadows: shadow,
-                ),
+              child: GameIcon(
+                creature.gender == CreatureGender.male ? 'male' : 'female',
+                size: 24,
               ),
             ),
             // Never caught before (user 2026-09-14) — same badge shape the
@@ -941,11 +838,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                 child: Padding(
                   padding: EdgeInsets.only(left: 8),
                   child: _vox
-                      ? const VoxelIcon(
-                          VoxelGlyph.edit,
-                          size: 16,
-                          color: _inkDim,
-                        )
+                      ? const GameIcon('pencil', size: 24)
                       : PixelIcon(Icons.edit, size: 15, color: _inkDim),
                 ),
               ),
@@ -964,9 +857,9 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                   ? CreamPalette.ink
                   : Colors.white,
             ),
-            _chip('⚡ ${totalPower(creature)}'),
+            _chip('$kPowerIcon ${totalPower(creature)}'),
             if (species != null) ...[
-              _chip(species.rarity.label, dot: species.rarity.color),
+              _chip(species.rarity.label),
               _chip('${species.element.emoji} ${species.element.label}'),
             ],
           ],
@@ -975,7 +868,12 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     );
   }
 
-  Widget _chip(String text, {Color? bg, Color fg = Colors.white, Color? dot}) =>
+  Widget _chip(
+    String text, {
+    Color? bg,
+    Color fg = Colors.white,
+    Color? dot,
+  }) =>
       Container(
         // One fixed height for every chip: emoji glyphs (⚡, element) have
         // taller line boxes than plain text, which made the chips uneven.
@@ -1246,16 +1144,16 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     if (creature.isTraining) {
       final id = creature.trainingAbilityId;
       final name = id == null ? 'a move' : (kAbilityDefs[id]?.name ?? id);
-      return '📖 Learning $name at the Combat School · '
+      return 'Learning $name at the Combat School · '
           '${_fmt(creature.trainingRemaining)} left.';
     }
     if (creature.isQueuedForTraining) {
-      return '📖 Waiting in line at the Combat School.';
+      return 'Waiting in line at the Combat School.';
     }
-    if (_ctrl.isOnExpedition(creature.id)) return '🎒 Away on an expedition.';
-    if (_ctrl.isBreeding(creature.id)) return '🥚 Busy breeding.';
+    if (_ctrl.isOnExpedition(creature.id)) return 'Away on an expedition.';
+    if (_ctrl.isBreeding(creature.id)) return 'Busy breeding.';
     if (creature.isQueuedForHealing) {
-      return '🩹 Waiting in line for a healing bed.';
+      return 'Waiting in line for a healing bed.';
     }
     return null;
   }
@@ -1367,8 +1265,6 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: const [
-          PixelIcon(Icons.logout_rounded, size: 13, color: _releaseTint),
-          SizedBox(width: 6),
           Text(
             'Release',
             style: TextStyle(
@@ -1751,7 +1647,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                     _evolving
                         ? 'Evolving…'
                         : ready
-                        ? '✨ Evolve'
+                        ? 'Evolve'
                         : 'Level too low',
                     CreamPalette.gold,
                     filled: true,
@@ -1869,25 +1765,20 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     );
   }
 
-  static const _attackId = 'attack';
-
-  /// The equipped ids that fill slots 1..5: known to the catalog, never Attack
-  /// itself, and no more than [kMaxEquippedAbilities] (an old save may still hold
-  /// six). Slot n is `ids[n - 1]`, so display and edits must both go through this.
+  /// The equipped ids that fill the slots: known to the catalog and no more than
+  /// [kMaxEquippedAbilities]. Slot n is `ids[n]`, so display and edits must both
+  /// go through this.
   List<String> _slotIds(CreatureInstance creature) => [
     for (final id in creature.equippedAbilityIds)
-      if (id != _attackId && kAbilityDefs.containsKey(id)) id,
+      if (kAbilityDefs.containsKey(id)) id,
   ].take(kMaxEquippedAbilities).toList();
 
-  /// ABILITIES as six SLOTS (user 2026-09-21: "links und rechts je 3 übereinander
-  /// für das Maximum von 6 Fähigkeiten, Attacke ist auch eine davon"). Slot 0 is
-  /// Attack — free, universal, always in the fight, so it cannot be swapped — and
-  /// slots 1..5 are what the monster has equipped. Tap a slot to swap its ability
-  /// for another learned one; an empty slot is a "+" field.
+  /// ABILITIES as four SLOTS (user 2026-11-16: four in all, Attack an ordinary
+  /// move that can be swapped like any other). Tap a slot to swap its ability for
+  /// another learned one; an empty slot is a "+" field.
   Widget _abilityBody(CreatureInstance creature) {
     final ids = _slotIds(creature);
     final slots = <AbilityDef?>[
-      kAbilityDefs[_attackId],
       for (var i = 0; i < kMaxEquippedAbilities; i++)
         i < ids.length ? kAbilityDefs[ids[i]] : null,
     ];
@@ -1916,24 +1807,8 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
   /// One of the six slots: the ability as a card in its own element's colour, or
   /// the "+" field of an empty slot.
   Widget _abilitySlot(CreatureInstance creature, int slot, AbilityDef? a) {
-    final canEdit = !_isPreview && slot > 0;
+    final canEdit = !_isPreview;
     if (a == null) {
-      // Slot 0 with no Attack in the catalog (not loaded yet) — a plain tile.
-      if (slot == 0) {
-        return _recess(
-          radius: 14,
-          child: const Center(
-            child: Text(
-              'Attack',
-              style: TextStyle(
-                color: _ink,
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ),
-        );
-      }
       return Pressable(
         behavior: HitTestBehavior.opaque,
         onTap: canEdit ? () => _openSlotDialog(creature, slot, null) : null,
@@ -1961,11 +1836,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     }
     return _abilityCard(
       a,
-      icon: slot == 0
-          ? Icons.lock_outline
-          : canEdit
-          ? Icons.swap_horiz
-          : Icons.info_outline,
+      icon: canEdit ? Icons.swap_horiz : Icons.info_outline,
       onTap: () => _openSlotDialog(creature, slot, a),
     );
   }
@@ -2090,13 +1961,13 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     int slot,
     AbilityDef? current,
   ) {
-    final canEdit = !_isPreview && slot > 0;
+    final canEdit = !_isPreview;
     final taken = creature.equippedAbilityIds.toSet();
     final candidates = <AbilityDef>[];
     if (canEdit) {
       for (final id in creature.learnedAbilityIds) {
         final def = kAbilityDefs[id];
-        if (def == null || id == _attackId || taken.contains(id)) continue;
+        if (def == null || taken.contains(id)) continue;
         if (creature.stage < def.unlockStage) continue;
         candidates.add(def);
       }
@@ -2182,19 +2053,6 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                                               ).copyWith(color: _dlgDim),
                                             ),
                                           ),
-                                        if (slot == 0)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 8,
-                                            ),
-                                            child: Text(
-                                              'Attack is always in the fight and '
-                                              'cannot be swapped.',
-                                              style: FoE.label(
-                                                size: 12,
-                                              ).copyWith(color: _dlgDim),
-                                            ),
-                                          ),
                                       ],
                                     ),
                             ),
@@ -2252,7 +2110,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
                               _openCombatSchool();
                             },
                             child: Text(
-                              '📖 Learn new abilities',
+                              'Learn new abilities',
                               style: FoE.label(size: 13).copyWith(
                                 color: CreamPalette.accent,
                                 fontWeight: FontWeight.w400,
@@ -2338,7 +2196,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     );
   }
 
-  /// Puts [abilityId] into [slot] (1..5), or empties the slot when it is null.
+  /// Puts [abilityId] into [slot] (0..3), or empties the slot when it is null.
   /// The equipped list has no holes, so an empty slot is always past its end and
   /// emptying one pulls the ones after it up.
   Future<void> _setSlot(
@@ -2347,7 +2205,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
     String? abilityId,
   ) async {
     final next = _slotIds(creature);
-    final at = slot - 1;
+    final at = slot;
     if (abilityId == null) {
       if (at < next.length) next.removeAt(at);
     } else if (at < next.length) {
@@ -2380,7 +2238,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         shape: _sh(radius: 12),
       ),
       child: const Text(
-        '📖 Learn new',
+        'Learn new',
         style: TextStyle(
           color: CreamPalette.ink,
           fontSize: 12,
@@ -2591,7 +2449,7 @@ class _CreatureDetailScreenState extends State<CreatureDetailScreen> {
         header: _panelTitle('Work'),
         gap: gap,
         child: const Text(
-          '💤 Not stationed anywhere.',
+          'Not stationed anywhere.',
           style: TextStyle(color: _inkDim, fontSize: 12),
         ),
       );

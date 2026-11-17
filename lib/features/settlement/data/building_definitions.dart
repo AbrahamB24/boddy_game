@@ -687,7 +687,6 @@ int get kBaseQueueSlots => GameTuning.i.count(Dials.baseQueueSlots);
 // entirely. That needs a migration before this ships to anyone who has played.
 const kGridCols = 200;
 const kGridRows = 120;
-const kCellSize = 12.0;
 
 // 24x24 since 2026-11-09 (was 20x20): the Hospital grew to 7x6 and the tutorial
 // stacks road + Hospital off the Castle (10x10), which needs 1 + 6 = 7 free
@@ -716,6 +715,9 @@ int get kMainHallStartX =>
     kInitialPlotX + (kInitialPlotSize - _mainHallDef.gridW) ~/ 2;
 int get kMainHallStartY =>
     kInitialPlotY + (kInitialPlotSize - _mainHallDef.gridH) ~/ 2;
+
+/// The guild's own building: free, one per player, members only.
+const String kGuildHallBuildingId = 'guild_hall';
 
 /// Live def when loaded, bundled fallback before that — placement happens in
 /// getOrCreate, which runs BEFORE GameDefsController().load().
@@ -757,6 +759,14 @@ int get kTutorialRoadY => kMainHallStartY + _mainHallDef.gridH;
 int get kTutorialHealingHutX =>
     kTutorialRoadX - _healingHutDef.gridW ~/ 2;
 int get kTutorialHealingHutY => kTutorialRoadY + 1;
+
+/// The Hospital's door (kBuildingEntrance['healing_hut'] = south side) has to
+/// face the Castle's road tile, which lies NORTH of the hut here. Unrotated, its
+/// door road cell was (x+3, y+6) — past the hut's far side, nowhere near the
+/// tutorial road, so no road could ever connect it (user 2026-11-15: "ich kann
+/// keine Strasse daran bauen"). Rotation 2 (180°, still 7×6) puts the door at
+/// (3,0) facing north, exactly onto [kTutorialRoadX]/[kTutorialRoadY].
+const int kTutorialHealingHutRotation = 2;
 
 // ── Building effect (dev-mode authorable, per era) ─────────
 // The rich, per-era effect palette that lives in the `effects` jsonb alongside
@@ -1807,6 +1817,22 @@ List<BuildingDef> _buildRoster() {
       population: 5,
     ),
   );
+  // The Guild Hall (user 2026-11-13): free to build, but only for a member of a
+  // guild — see [availableBuildings] and SettlementController.placeBuilding.
+  // It is the door to the guild menu; it has no level of its own (its look
+  // follows the guild's level), and it leaves the map when its owner leaves.
+  defs.add(
+    const BuildingDef(
+      id: kGuildHallBuildingId,
+      name: 'Guild Hall',
+      color: Color(0xFF8E5BB5),
+      gridW: 4,
+      gridH: 4,
+      constructionHours: 0,
+      maxCount: 1,
+      category: BuildingCategory.civic,
+    ),
+  );
   defs.add(
     const BuildingDef(
       id: 'road',
@@ -2531,7 +2557,11 @@ bool buildingHasPathReward(String buildingId) =>
 /// reached automatically on the last boss clear (user 2026-09-05: no more
 /// paid Castle ascension standing between "boss beaten" and "buildings
 /// available").
-List<BuildingDef> availableBuildings(int currentRegion, int battlesCleared) {
+List<BuildingDef> availableBuildings(
+  int currentRegion,
+  int battlesCleared, {
+  bool inGuild = false,
+}) {
   // CUMULATIVE regions (user 2026-07-22): older buildings STAY buildable
   // when a region passes — a def is available once any of its regions has
   // been reached. Exact matching used to make every region-1 building
@@ -2548,14 +2578,18 @@ List<BuildingDef> availableBuildings(int currentRegion, int battlesCleared) {
   return kBuildingDefs.values
       .where(
         (b) =>
-            !b.isMainBuilding &&
+            // The Guild Hall is not a campaign reward: a guild member can
+            // build it, nobody else can see it.
+            (b.id == kGuildHallBuildingId
+                ? inGuild
+                : (!b.isMainBuilding &&
             !b.isRoad &&
             regionReached(b) &&
             // A Building Plot is governed by expansionsUnlocked/
             // buildPlotLimit, not by a path reward — it stays exempt from
             // this gate the way it already is from the battle number.
             (b.isBuildPlot || buildingHasPathReward(b.id)) &&
-            battlesCleared >= buildingUnlockBattle(b.id),
+            battlesCleared >= buildingUnlockBattle(b.id))),
       )
       .toList();
 }

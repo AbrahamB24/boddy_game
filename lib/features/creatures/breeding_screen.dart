@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../guild/guild_help.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Text;
@@ -195,7 +196,7 @@ class _BreedingPaneState extends State<BreedingPane> {
         _slotBId = null;
       }
     });
-    context.snack(error ?? '💞 Breeding started!');
+    context.snack(error ?? 'Breeding started!');
   }
 
   String _fmt(Duration d) {
@@ -456,12 +457,6 @@ class _BreedingPaneState extends State<BreedingPane> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            PixelIcon(
-              Icons.favorite,
-              size: 15,
-              color: jobs.isEmpty ? _pageInkFaint : CreamPalette.warn,
-            ),
-            const SizedBox(width: 6),
             Text(
               jobs.isEmpty
                   ? 'No pair mating'
@@ -599,6 +594,13 @@ class _BreedingPaneState extends State<BreedingPane> {
   /// mid-notification — which is what the assert catches. Semantics labels the
   /// buttons for screen readers without touching the tracker.
   List<Widget> _jobActions(BreedingJob job) => [
+    GuildHelpButton(
+      compact: true,
+      kind: GuildHelpKind.breed,
+      target: job.id,
+      label: 'Breeding',
+      endsAt: job.readyAt,
+    ),
     if (_heldSpeedItems().isNotEmpty)
       Semantics(
         label: 'Speed up (item)',

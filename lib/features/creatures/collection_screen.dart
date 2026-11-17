@@ -3,8 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/cream_kit.dart';
-import '../../core/theme/voxel_kit.dart'
-    show VoxelBackdrop, VoxelBar, VoxelShape, Voxel, vr;
+import '../../core/theme/voxel_kit.dart' show vr;
 import '../../core/theme/foe_theme.dart';
 import '../../core/ui/pressable.dart';
 import '../common/widgets/filter_pills.dart';
@@ -23,8 +22,8 @@ import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'starter_preview_screen.dart';
 import 'teams_screen.dart';
+import 'widgets/trading_card.dart';
 import 'widgets/creature_card.dart';
-import 'widgets/creature_family.dart' show CreatureFigure, creatureHpColor;
 import '../../core/theme/voxel_icons.dart';
 import '../../core/ui/game_text.dart';
 
@@ -328,10 +327,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               PixelIcon(
-                icon,
-                size: 20,
-                color: highlight ? CreamPalette.ink : kBoxInk,
-              ),
+                  icon,
+                  size: 20,
+                  color: highlight ? CreamPalette.ink : kBoxInk,
+                ),
               const SizedBox(height: 3),
               Text(
                 stat,
@@ -945,216 +944,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
     );
   }
 
-  Widget _tradingCard(CreatureInstance c) {
-    final rarity = c.species?.rarity;
-    final rc = rarity?.color ?? const Color(0xFF9FB0BD);
-    final element = c.species?.element ?? CreatureElement.fire;
-    final ko = c.isKo;
-    final hp = c.maxHp <= 0 ? 0.0 : (c.hp / c.maxHp).clamp(0.0, 1.0);
-    Widget badge(Widget child) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: const Color(0xCC061219),
-        borderRadius: vr(8),
-      ),
-      child: child,
-    );
-    return _HoverLift(
-      child: Pressable(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _openCreature(c),
-        child: Container(
-          // Neutral steel frame, tinted a little by the TYPE (no rarity glow).
-          decoration: ShapeDecoration(
-            shape: VoxelShape(notch: 3, light: Voxel.rim),
-            gradient: Voxel.shaded(
-              Color.lerp(CreamPalette.tileTop, element.color, 0.55)!,
-            ),
-            shadows: const [
-              BoxShadow(color: Color(0x73000000), offset: Offset(3, 3)),
-            ],
-          ),
-          padding: const EdgeInsets.fromLTRB(1, 4, 1, 4),
-          child: ClipRRect(
-            borderRadius: vr(8),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Color.lerp(element.color, Colors.black, 0.7),
-              ),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        // TRY-OUT (user 2026-11-10): the card's picture sits on
-                        // the block tiles in the monster's own colour, replacing
-                        // the painted element scene.
-                        Positioned.fill(
-                          child: VoxelBackdrop(
-                            color: element.color,
-                            vignette: 0.7,
-                            darken: 0.22,
-                            cell: 18,
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(6, 18, 6, 4),
-                            child: Opacity(
-                              opacity: ko ? 0.35 : 1,
-                              child: CreatureFigure(
-                                imageUrl: c.imageUrl,
-                                element: element,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 5,
-                          left: 5,
-                          child: badge(
-                            Text(
-                              'Lv ${c.level}',
-                              style: FoE.value(
-                                size: 11,
-                              ).copyWith(color: const Color(0xFFE6F4F8)),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 4,
-                          right: 7,
-                          child: Text(
-                            c.gender.symbol,
-                            style: TextStyle(
-                              color: Color.lerp(
-                                c.gender.color,
-                                Colors.white,
-                                0.3,
-                              ),
-                              fontSize: 17,
-                              shadows: const [
-                                Shadow(color: Colors.black87, blurRadius: 3),
-                              ],
-                            ),
-                          ),
-                        ),
-                        if (c.canEvolve)
-                          const Positioned(
-                            right: 4,
-                            bottom: 2,
-                            child: PixelIcon(
-                              Icons.arrow_upward_rounded,
-                              size: 22,
-                              color: Color(0xFF2FD37A),
-                              shadows: [
-                                Shadow(
-                                  color: Color(0xCC000000),
-                                  offset: Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                          ),
-                        if (ko)
-                          Positioned.fill(
-                            child: Center(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: ShapeDecoration(
-                                  color: FoE.danger,
-                                  shape: FoE.facet(radius: 6),
-                                ),
-                                child: Text(
-                                  'K.O.',
-                                  style: FoE.title(
-                                    size: 11,
-                                  ).copyWith(color: Colors.white),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  // The name band.
-                  Container(
-                    color: Color.alphaBlend(
-                      const Color(0x73040E14),
-                      Color.lerp(element.color, Colors.black, 0.7)!,
-                    ),
-                    padding: const EdgeInsets.fromLTRB(8, 5, 8, 4),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          c.displayName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: FoE.title(size: 14).copyWith(color: kBoxInk),
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            // Rarity: a small gem and the word — the only place
-                            // the rarity colour shows on the card.
-                            Container(
-                              width: 7,
-                              height: 7,
-                              margin: const EdgeInsets.only(right: 5),
-                              decoration: BoxDecoration(
-                                color: rc,
-                                border: Border.all(color: Voxel.outline),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                (rarity?.label ?? '').toUpperCase(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: FoE.dim(size: 8.5).copyWith(
-                                  color: Color.lerp(rc, Colors.white, 0.35),
-                                  letterSpacing: 1.0,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              '⚡${totalPower(c)}',
-                              style: FoE.value(
-                                size: 12,
-                              ).copyWith(color: const Color(0xFFFFD45A)),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  // HP as the blocky bar of the monster detail screen.
-                  Container(
-                    color: Color.alphaBlend(
-                      const Color(0x73040E14),
-                      Color.lerp(element.color, Colors.black, 0.7)!,
-                    ),
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-                    child: VoxelBar(
-                      value: hp,
-                      color: creatureHpColor(hp),
-                      height: 8,
-                      block: 6,
-                      onDark: true,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _tradingCard(CreatureInstance c) => _HoverLift(
+    child: TradingCard(c, onTap: () => _openCreature(c)),
+  );
 }
 
 /// Clips to the child's box, but [up] pixels taller at the top.

@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
+import '../guild/guild_help.dart' show GuildHelp;
+import '../guild/guild_quests.dart' show GuildQuests;
+import '../guild/guild_service.dart' show GuildMembership;
 import 'package:flutter/foundation.dart';
 import '../../../core/supabase/supabase_client.dart';
 import '../../core/tuning/game_tuning.dart';
@@ -101,6 +104,23 @@ class SettlementController extends ChangeNotifier {
   // no new per-screen wiring.
   SettlementController._() {
     GameDefsController().addListener(notifyListeners);
+    GuildMembership.instance.addListener(_onGuildChanged);
+  }
+
+  /// The Guild Hall belongs to a member: when the player is (or turns out to
+  /// be) in no guild, a standing hall is taken down — it costs nothing, so
+  /// rejoining just means building it again. Also refreshes the Build menu.
+  void _onGuildChanged() {
+    final g = GuildMembership.instance;
+    if (g.known && !g.inGuild && !isLoading) {
+      for (final b in [...buildings]) {
+        if (b.buildingTypeId == kGuildHallBuildingId) {
+          unawaited(deleteBuilding(b.id));
+        }
+      }
+    }
+    GuildHelp.instance.sync();
+    notifyListeners();
   }
 
   final _svc = SettlementService();
@@ -267,6 +287,9 @@ class SettlementController extends ChangeNotifier {
   /// Advances every unclaimed task of [kind] by [amount]. Safe to call from
   /// anywhere (no-op when nothing matches).
   void reportDailyProgress(DailyTaskKind kind, [int amount = 1]) {
+    if (kind == DailyTaskKind.finishBuildings) {
+      GuildQuests.report('builds', n: amount); // the guild's weekly quest
+    }
     _rolloverDailyTasks(DateTime.now().toUtc());
     var changed = false;
     for (final t in dailyTasks.tasks) {
@@ -350,6 +373,9 @@ class SettlementController extends ChangeNotifier {
       // their results; the def maps are global.
       final defsF = GameDefsController().load();
       final creatureDefsF = CreatureDefsController().load();
+      // Guild membership — never throws, so a missing guild table (migration
+      // 0069 not run yet) simply reads as "no guild".
+      final guildF = GuildMembership.instance.refresh();
       // The tuning dials (user 2026-07-29). AWAITED with the defs, unlike the
       // combat dials below: these decide the level curve, the energy budget and
       // the slot counts, and the very first tick reads them — resolving them a
@@ -375,6 +401,7 @@ class SettlementController extends ChangeNotifier {
         creatureDefsF,
         creaturesF,
         tuningF,
+        guildF,
       ]);
 
       resources = await resourcesF;
@@ -592,6 +619,7 @@ class SettlementController extends ChangeNotifier {
 
     isLoading = false;
     notifyListeners();
+    _onGuildChanged(); // a hall left behind by a guild the player has quit
   }
 
   // Call when leaving the settlement screen — stops tick without disposing singleton.
@@ -1610,7 +1638,8 @@ class SettlementController extends ChangeNotifier {
     final base =
         1.0 +
         eb.buildSpeed +
-        GameEngine.buildingsBuildSpeedBonusTotal(buildings);
+        GameEngine.buildingsBuildSpeedBonusTotal(buildings) +
+        GuildMembership.instance.bonus;
     // Jumpstart: a time scale of 0.2 means 5x the build speed. Applied here
     // rather than to constructionSeconds so it rides on the multiplier tick()
     // already uses — and so it simply stops applying when the intro ends,
@@ -1740,8 +1769,11 @@ class SettlementController extends ChangeNotifier {
       techStone: eb.stone + _buildingResourceBonus('stone'),
       // era food bonus applies to goods production
       techGoods: eb.food + _buildingResourceBonus('food'),
-      techAll: eb.all + _buildingResourceBonus('all'),
-      techBuildSpeed: eb.buildSpeed,
+      techAll:
+          eb.all +
+          _buildingResourceBonus('all') +
+          GuildMembership.instance.bonus,
+      techBuildSpeed: eb.buildSpeed + GuildMembership.instance.bonus,
       buildSpeedScale: 1.0 / jumpstartTimeScale(jumpstartActive),
       frozenBuildingIds: _frozenBuildingIds,
     );
@@ -2286,10 +2318,17 @@ class SettlementController extends ChangeNotifier {
     // now, not just an era it happens to belong to (user 2026-08-31:
     // "diejenigen, welche ich noch gar keinem Knoten zugeordnet habe, sollen
     // noch nicht baubar sein").
-    if (!def.isBuildPlot && !def.isRoad && !buildingHasPathReward(typeId)) {
+    final isGuildHall = typeId == kGuildHallBuildingId;
+    if (isGuildHall && !GuildMembership.instance.inGuild) {
+      return 'Join a guild to build the Guild Hall';
+    }
+    if (!isGuildHall &&
+        !def.isBuildPlot &&
+        !def.isRoad &&
+        !buildingHasPathReward(typeId)) {
       return 'Not yet unlocked by the campaign';
     }
-    final unlockBattle = buildingUnlockBattle(typeId);
+    final unlockBattle = isGuildHall ? 0 : buildingUnlockBattle(typeId);
     if (battlesCleared < unlockBattle) {
       return 'Unlocks after battle $unlockBattle on the map';
     }
@@ -2818,7 +2857,7 @@ class SettlementController extends ChangeNotifier {
       techWood: eb.wood,
       techStone: eb.stone,
       techGoods: eb.food,
-      techAll: eb.all,
+      techAll: eb.all + GuildMembership.instance.bonus,
     );
   }
 
@@ -3285,6 +3324,28 @@ class SettlementController extends ChangeNotifier {
     await _persist();
   }
 
+  /// A guild help (stage 3): [fraction] of the construction still to do is
+  /// done at once. Nothing is paid; a finished building is left alone. The
+  /// tick completes it when the rest is built, as for any other progress.
+  Future<void> applyGuildHelpBuild(String buildingId, double fraction) async {
+    final b = buildings.where((x) => x.id == buildingId).firstOrNull;
+    if (b == null || b.isComplete || b.isQueued) return;
+    final left = b.constructionSecondsRequired - b.constructionSecondsBuilt;
+    if (left <= 0) return;
+    _buildingsDirty = true;
+    buildings = [
+      for (final x in buildings)
+        if (x.id == buildingId)
+          x.copyWith(
+            constructionSecondsBuilt: x.constructionSecondsBuilt + left * fraction,
+          )
+        else
+          x,
+    ];
+    notifyListeners();
+    await _persist();
+  }
+
   /// Gold to finish [b]'s construction now. 0 when it's already done.
   int buildSkipCost(PlacedBuilding b) {
     if (b.isComplete) return 0;
@@ -3367,7 +3428,7 @@ class SettlementController extends ChangeNotifier {
         // (see intro_flow.dart's buildRoad card) and this one, the very last
         // thing the tutorial says, was left behind calling it something the
         // player has never seen (fixed 2026-09-21).
-        '🎓 Tutorial complete! Road connectivity is enforced for real now '
+        'Tutorial complete! Road connectivity is enforced for real now '
         '— keep every new building linked back to the Castle via '
         'Build ▸ Roads.',
       );

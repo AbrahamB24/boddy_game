@@ -485,13 +485,11 @@ class Combatant {
       // Combat School) — attack is always first, everything else is exactly
       // what the player chose to equip, each capped at what its OWN
       // unlockStage could afford (see [_capToStage]).
-      abilities: [
-        kAbilityDefs['attack'] ?? _fallbackAttack,
-        // Capped again on the way in: a monster saved when the limit was six
-        // equipped would otherwise bring a seventh move into the fight.
-        for (final a in c.equippedAbilities.take(kMaxEquippedAbilities))
-          _capToStage(a),
-      ],
+      // Exactly what is equipped, Attack included only if it is (user
+      // 2026-11-16). Capped again on the way in; and never empty — a monster
+      // with nothing equipped (or only moves whose defs are gone) still gets
+      // its Attack, so it can always act.
+      abilities: _equippedMoves(c),
       hp: c.hp,
     );
   }
@@ -600,6 +598,17 @@ class Combatant {
     apCost: kBasicAttackApCost,
   );
 
+  static List<AbilityDef> _equippedMoves(CreatureInstance c) {
+    final moves = <AbilityDef>[
+      for (final id in c.equippedAbilityIds.take(kMaxEquippedAbilities))
+        if (id == 'attack')
+          kAbilityDefs['attack'] ?? _fallbackAttack
+        else if (kAbilityDefs[id] case final def?)
+          _capToStage(def),
+    ];
+    return moves.isEmpty ? [kAbilityDefs['attack'] ?? _fallbackAttack] : moves;
+  }
+
   /// A move must be affordable at the STAGE IT UNLOCKS — otherwise the form
   /// that gets it could never pay for it. A move learnable from stage 0 is
   /// therefore capped at the base form's 4 AP; a stage-1/2 one at 5 / 7 (user
@@ -622,6 +631,7 @@ class Combatant {
     final pool = learnableAbilitiesFor(element, stage)
       ..shuffle(rng)
       ..sort((a, b) => b.totalPower.compareTo(a.totalPower));
-    return pool.take(kMaxEquippedAbilities).toList();
+    // One place is Attack's (see [fromSpecies]).
+    return pool.take(kMaxEquippedAbilities - 1).toList();
   }
 }

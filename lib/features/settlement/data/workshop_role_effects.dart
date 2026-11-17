@@ -203,7 +203,7 @@ String buildingEffectEmoji(String type) => switch (type) {
   'craftSlots' => '⚗️',
   'craftQueue' => '⏳',
   'storage' => '🏚',
-  'breeding' => '💞',
+  'breeding' => '🥚',
   'hatching' => '🐣',
   _ => '📦',
 };
@@ -469,7 +469,7 @@ String? workshopRoleName(String resource) => switch (resource) {
 
 /// The glyph that goes with [workshopRoleEffect].
 String workshopRoleEmoji(String resource) => switch (resource) {
-  WorkshopRole.kBreeding => '💞',
+  WorkshopRole.kBreeding => '🥚',
   WorkshopRole.kHatching => '🐣',
   WorkshopRole.kHealSpeed => '🩹',
   WorkshopRole.kTradeRate => '💱',

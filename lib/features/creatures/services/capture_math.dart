@@ -166,10 +166,6 @@ const Map<CreatureRarity, double> kQteBaseSeconds = {
 /// Each successive hit round shrinks a bit faster than the last.
 double get kQteRoundSpeedup => GameTuning.i.raw(Dials.qteRoundSpeedup);
 
-/// Every round's duration is jittered by up to ±this fraction so the rhythm
-/// can't simply be memorized across rounds/retries.
-const double kQteDurationJitter = 0.12;
-
 /// Ring-timing window: the tap counts while the shrinking ring's radius
 /// fraction (1 → 0) sits inside the band around [kQteWindowCenter]. Rarer
 /// finds demand TIGHTER timing — precision scales with rarity alongside

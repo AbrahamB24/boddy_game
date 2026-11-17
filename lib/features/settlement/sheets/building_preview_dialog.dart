@@ -136,7 +136,7 @@ class _BuildingPreviewState extends State<_BuildingPreview> {
       backgroundColor: Colors.transparent,
       elevation: 0,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(16)),
+        borderRadius: BorderRadius.all(Radius.circular(3)),
       ),
       insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: SizedBox(

@@ -423,23 +423,6 @@ BudgetTargets rollBudget({
   int tier = 1,
 }) => defaultBudget(rarity: rarity, tier: tier);
 
-/// The budget a species' current curves actually spend — seeds the editor
-/// fields when opening an existing species.
-BudgetTargets budgetFromStats(Map<CreatureStat, StatCurve> stats) {
-  double baseSum(bool Function(CreatureStat) w) => CreatureStat.values
-      .where(w)
-      .fold(0.0, (s, st) => s + (stats[st]?.baseAt(0) ?? 0));
-  double growthSum(bool Function(CreatureStat) w) => CreatureStat.values
-      .where(w)
-      .fold(0.0, (s, st) => s + (stats[st]?.growth ?? 0));
-  return (
-    combatBase: baseSum((s) => s.isCombat),
-    combatGrowth: growthSum((s) => s.isCombat),
-    workBase: baseSum((s) => s.isCivilian),
-    workGrowth: growthSum((s) => s.isCivilian),
-  );
-}
-
 /// Distributes [weights] so they sum to [baseTotal] (stage 0) and [growthTotal].
 Map<CreatureStat, StatCurve> _distribute(
   Map<CreatureStat, double> weights,

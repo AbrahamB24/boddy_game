@@ -34,7 +34,7 @@ def foot(b, x, y, s, toes=3, claw=True, mat='foot'):
             E(tx + .02 * s, ty, .012 * s, .016 * s, .010 * s, .010 * s, 'claw')
 
 
-def eyes(b, c, k, wy=.24, tilt=.25, bk=1.0, bz=.095):
+def eyes(b, c, k, wy=.24, tilt=.25, bk=1.0, bz=.095, patch=True):
     """Phoenix eye recipe (as face() in phoenix3.py): dark eye, light patch on the outer side, brow ridge above.
     c = (x, y, z) of the +y eye; k scales the recipe to the head."""
     E = b.E
@@ -43,7 +43,8 @@ def eyes(b, c, k, wy=.24, tilt=.25, bk=1.0, bz=.095):
         b.grp = 'eye_' + ('p' if sg > 0 else 'n')
         E(ex, sg * ey, ez, .055 * k, .072 * k, .080 * k, 'dark')
         E(ex + .045 * k, sg * (ey - .018 * k), ez + .05 * k, .016 * k, .016 * k, .016 * k, 'white')             # one highlight voxel
-        E(ex - .005 * k, sg * (ey + wy * .30), ez + .005 * k, .040 * k, .062 * k, .070 * k, 'eyewhite')
+        if patch:
+            E(ex - .005 * k, sg * (ey + wy * .30), ez + .005 * k, .040 * k, .062 * k, .070 * k, 'eyewhite')
         b.grp = 'head'
         E(ex - .02 * k, sg * (ey + .02), ez + bz * k, .06 * k, .11 * k * (.9 if bk < 1 else 1), .034 * k * bk, 'brow', (sg * tilt, 0, 0))
 

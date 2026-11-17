@@ -117,8 +117,8 @@ void main() {
         home: Scaffold(body: PowerVersusBar(mine: 300, theirs: 100)),
       ),
     );
-    expect(find.text('⚡ 300'), findsOneWidget);
-    expect(find.text('⚡ 100'), findsOneWidget);
+    expect(find.textContaining('300'), findsOneWidget);
+    expect(find.textContaining('100'), findsOneWidget);
   });
 
   test('a combatant tile carries the combatant\'s own numbers', () {

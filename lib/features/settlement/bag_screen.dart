@@ -467,8 +467,8 @@ class _BagScreenState extends State<BagScreen>
                     const SizedBox(height: 4),
                     Text(
                       job.hasChildGenes
-                          ? '⚡ ${genePower(job.childBase)}'
-                          : '⚡ ?',
+                          ? '$kPowerIcon ${genePower(job.childBase)}'
+                          : '$kPowerIcon ?',
                       style: FoE.value(size: 15).copyWith(color: kBoxAccent),
                     ),
                   ],
@@ -692,12 +692,12 @@ class _BagScreenState extends State<BagScreen>
   );
 
   String _whereUsed(ItemDef def) => switch (def.kind) {
-    ItemKind.buff => '⚔️ Used during a battle (Items menu)',
-    ItemKind.catchBoost => '🪤 Used on a hunt encounter',
-    ItemKind.expeditionYield => '🎒 Used when sending an expedition',
-    ItemKind.breedSpeed => '🥚 Used on a running breeding or hatching job',
+    ItemKind.buff => 'Used during a battle (Items menu)',
+    ItemKind.catchBoost => 'Used on a hunt encounter',
+    ItemKind.expeditionYield => 'Used when sending an expedition',
+    ItemKind.breedSpeed => 'Used on a running breeding or hatching job',
     ItemKind.cureStatus ||
-    ItemKind.cureDebuffs => '⚔️ Used during a battle (Items menu)',
+    ItemKind.cureDebuffs => 'Used during a battle (Items menu)',
     _ => '',
   };
 

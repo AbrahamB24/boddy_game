@@ -1,3 +1,5 @@
+import 'guild_crest.dart';
+
 // Guild data — see supabase/migrations/0069_guilds.sql.
 
 /// The most members a guild can have (enforced by the database too).
@@ -28,7 +30,7 @@ class Guild {
   final String id;
   final String name;
   final String description;
-  final int emblem;
+  final GuildCrest crest;
   final bool isOpen;
   final String leaderId;
   final int level;
@@ -39,7 +41,7 @@ class Guild {
     required this.id,
     required this.name,
     required this.description,
-    required this.emblem,
+    required this.crest,
     required this.isOpen,
     required this.leaderId,
     required this.level,
@@ -51,7 +53,7 @@ class Guild {
     id: m['id'] as String,
     name: m['name'] as String,
     description: (m['description'] as String?) ?? '',
-    emblem: (m['emblem'] as num?)?.toInt() ?? 0,
+    crest: GuildCrest.fromJson(m['crest'], m['name'] as String),
     isOpen: (m['is_open'] as bool?) ?? true,
     leaderId: m['leader_id'] as String,
     level: (m['level'] as num?)?.toInt() ?? 1,

@@ -193,7 +193,7 @@ class _CreamPatternPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final card = RRect.fromRectAndRadius(
       Offset.zero & size,
-      Radius.circular(radius),
+      Radius.circular(radius.clamp(0.0, 4.0)),
     );
     canvas.save();
     canvas.clipRRect(card);
@@ -429,6 +429,25 @@ Widget zoneBox({
   child: child,
 );
 
+/// A flat block with the kit's stair-cut PIXEL corners (user 2026-11-15: "solche
+/// Boxen sollen auch die pixeligen Ecken haben wie die anderen Buttons") and a
+/// hard slab of shadow. [color] defaults to the light tile tone.
+ShapeDecoration voxelBlock({
+  Color? color,
+  Color? shadow,
+  Color? edge,
+  double depth = 3,
+  int notch = 2,
+}) => ShapeDecoration(
+  color: color ?? CreamPalette.tileTop,
+  shape: VoxelShape(notch: notch, edge: edge, light: Voxel.rim),
+  shadows: voxelDrop(depth: depth, color: shadow ?? CreamPalette.tanShadow)
+      .map(
+        (s) => BoxShadow(color: s.color, offset: Offset(0, depth)),
+      )
+      .toList(),
+);
+
 /// A small light tile standing on a [creamCard] — lighter than the card, with a
 /// hard tan shadow: a trip, a target, a monster. [lit] gives it a gold rim (a
 /// trip that is READY); [locked] greys it (a spot you cannot use).
@@ -457,7 +476,7 @@ BoxDecoration raisedTile({
       blurRadius: 0,
     ),
     BoxShadow(
-      color: lit ? CreamPalette.gold : CreamPalette.tanShadow,
+      color: CreamPalette.tanShadow,
       offset: const Offset(0, 3),
     ),
   ],
@@ -486,6 +505,48 @@ const LinearGradient kMenuGround = LinearGradient(
   colors: [CreamPalette.groundTop, CreamPalette.groundBottom],
 );
 
+/// The ground every menu stands on (user 2026-11-16, picked from a mock-up): calm
+/// blue plaster, rendered once in Blender (tool/blender/menu_bg_plaster.py,
+/// "voxel_grob") as a 115x52 block image that is only scaled up, never smoothed,
+/// so the blocks stay crisp at any size. A lighter 8 px rim round the screen and
+/// a soft darkening toward the corners are drawn here, not baked, so they keep
+/// their size on every aspect ratio.
+class MenuGround extends StatelessWidget {
+  const MenuGround({super.key});
+
+  static const asset = 'assets/images/ui/menu_ground.png';
+
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.asset(
+          asset,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.none,
+          gaplessPlayback: true,
+        ),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.fromBorderSide(
+              BorderSide(color: Color(0x1FFFFFFF), width: 8),
+            ),
+          ),
+        ),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              radius: 0.95,
+              colors: [Color(0x00000000), Color(0x59000000)],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 /// The ground of a screen that is not a [MenuScaffold] (the sign-in, the
 /// loading screen): the block wall of the monster page over the menu gradient.
 class VoxelGround extends StatelessWidget {
@@ -496,7 +557,7 @@ class VoxelGround extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
     fit: StackFit.expand,
     children: [
-      const VoxelWall(color: CreamPalette.groundTop),
+      const MenuGround(),
       child,
     ],
   );
@@ -548,6 +609,9 @@ class MenuScaffold extends StatelessWidget {
   /// nowhere earlier to close back to until it's chosen).
   final bool showHeader;
 
+  /// The hairline under the title row; off where the page wants the height.
+  final bool showHairline;
+
   /// Whether the button reads BACK (an arrow) instead of CLOSE (a cross). Null =
   /// worked out: a menu opened over another menu goes back, a menu opened from
   /// the map closes. See [KitCloseButton].
@@ -580,6 +644,7 @@ class MenuScaffold extends StatelessWidget {
     this.maxWidth = 960,
     this.showClose = true,
     this.showHeader = true,
+    this.showHairline = true,
     this.onClose,
     this.back,
     this.floatingActionButton,
@@ -602,7 +667,7 @@ class MenuScaffold extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           const Positioned.fill(
-            child: VoxelWall(color: CreamPalette.groundTop),
+            child: MenuGround(),
           ),
           SafeArea(
             child: Center(
@@ -671,7 +736,7 @@ class MenuScaffold extends StatelessWidget {
                                 ),
                             ],
                           ),
-                          hairline(gap: 8),
+                          if (showHairline) hairline(gap: 8) else const SizedBox(height: 6),
                         ],
                         Expanded(child: child),
                       ],
@@ -753,11 +818,6 @@ class KitCloseButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fill = color ?? CreamPalette.gold;
-    // A dark tint (most elements, over their own darkened backdrop) reads
-    // best with a light icon; only a pale tint needs the kit's usual dark ink.
-    final ink = fill.computeLuminance() > 0.45
-        ? CreamPalette.ink
-        : Colors.white;
     return Semantics(
       label: back ? 'Back' : 'Close',
       button: true,
@@ -779,12 +839,7 @@ class KitCloseButton extends StatelessWidget {
                   : Color.lerp(fill, Colors.black, 0.35)!,
             ),
           ),
-          child: VoxelIcon(
-            back ? VoxelGlyph.back : VoxelGlyph.close,
-            size: 20,
-            color: ink,
-            shadow: false,
-          ),
+          child: GameIcon(back ? 'arrowLeft' : 'x', size: 24),
         ),
       ),
     );
@@ -796,7 +851,7 @@ class KitCloseButton extends StatelessWidget {
 /// so it can fill the width of a bottom sheet or sit flush in a page.
 Widget creamSurface({
   required Widget child,
-  BorderRadius radius = const BorderRadius.vertical(top: Radius.circular(18)),
+  BorderRadius radius = const BorderRadius.vertical(top: Radius.circular(4)),
 }) => DecoratedBox(
   decoration: BoxDecoration(
     color: CreamPalette.paperTop,
@@ -878,7 +933,7 @@ class DashedRRectPainter extends CustomPainter {
       ..addRRect(
         RRect.fromRectAndRadius(
           Offset.zero & size,
-          Radius.circular(radius),
+          Radius.circular(radius.clamp(0.0, 3.0)),
         ).deflate(0.75),
       );
     final paint = Paint()

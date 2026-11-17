@@ -350,7 +350,7 @@ Future<bool> parchmentConfirm(
   BuildContext context, {
   required String title,
   required String message,
-  required String confirmLabel,
+  String? confirmLabel,
   String cancelLabel = 'Keep',
   bool danger = false,
 }) async {
@@ -384,8 +384,9 @@ Future<bool> parchmentConfirm(
                       onTap: () => Navigator.pop(dctx, false),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
+                  if (confirmLabel != null) const SizedBox(width: 10),
+                  if (confirmLabel != null)
+                    Expanded(
                     child: ParchmentButton(
                       label: confirmLabel,
                       expand: true,
@@ -404,6 +405,121 @@ Future<bool> parchmentConfirm(
   );
   return ok ?? false;
 }
+
+/// A one-line text prompt in the same card as [parchmentConfirm]. Returns the
+/// typed text, or null when cancelled.
+Future<String?> parchmentPrompt(
+  BuildContext context, {
+  required String title,
+  String? hint,
+  String initial = '',
+  String confirmLabel = 'Save',
+  String cancelLabel = 'Cancel',
+  int? maxLength,
+}) {
+  final controller = TextEditingController(text: initial);
+  return showDialog<String>(
+    context: context,
+    builder: (dctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: SizedBox(
+        width: 320,
+        child: creamCard(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CreamHeading(title: title),
+              const SizedBox(height: 10),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                maxLength: maxLength,
+                style: FoE.label(size: 14).copyWith(color: kBoxInk),
+                decoration: InputDecoration(hintText: hint, counterText: ''),
+                onSubmitted: (v) => Navigator.pop(dctx, v),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ParchmentButton(
+                      label: cancelLabel,
+                      expand: true,
+                      onTap: () => Navigator.pop(dctx),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ParchmentButton(
+                      label: confirmLabel,
+                      expand: true,
+                      primary: true,
+                      onTap: () => Navigator.pop(dctx, controller.text),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Pick one of [options] in the same card as [parchmentConfirm].
+Future<T?> parchmentChoose<T>(
+  BuildContext context, {
+  required String title,
+  required List<(T, String)> options,
+}) => showDialog<T>(
+  context: context,
+  builder: (dctx) => Dialog(
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    child: SizedBox(
+      width: 340,
+      child: creamCard(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            CreamHeading(title: title),
+            const SizedBox(height: 10),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final o in options) ...[
+                      ParchmentButton(
+                        label: o.$2,
+                        expand: true,
+                        onTap: () => Navigator.pop(dctx, o.$1),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            ParchmentButton(
+              label: 'Cancel',
+              expand: true,
+              onTap: () => Navigator.pop(dctx),
+            ),
+          ],
+        ),
+      ),
+    ),
+  ),
+);
 
 /// The colour a positive/"go" state is drawn in on paper — the action green
 /// the parchment buttons already use, so a progress bar and the button that

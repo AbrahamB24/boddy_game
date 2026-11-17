@@ -253,7 +253,7 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen> {
       title: 'vs. ${widget.opponentName}',
       trailing: _stageChip(),
       child: VersusStage(
-        enemy: VersusSide(caption: 'You face', fan: _enemyFan(oppSnap)),
+        enemy: VersusSide(caption: 'Opponent', fan: _enemyFan(oppSnap)),
         middle: const Padding(
           padding: EdgeInsets.symmetric(vertical: 4),
           child: VsDivider(),

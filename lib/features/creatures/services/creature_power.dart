@@ -34,6 +34,10 @@ int civilPower(CreatureInstance c) => CreatureStat.values
     .where((s) => s.isCivilian)
     .fold(0, (sum, s) => sum + c.statValue(s));
 
+/// The icon that stands for a monster's POWER everywhere in the UI. It was ⚡, which is now the Lightning element's emoji (user 2026-11-15:
+/// "wir brauchen ein neues icon für die Monsterpower, da es Blitzmonster gibt"), so power is now a crown (user 2026-11-16).
+const String kPowerIcon = '👑'; // drawn as assets/images/icons/crown.webp wherever the text goes through core/ui/game_text.dart
+
 /// The headline number: combat + civil.
 int totalPower(CreatureInstance c) => combatPower(c) + civilPower(c);
 

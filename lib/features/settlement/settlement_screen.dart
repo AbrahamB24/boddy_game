@@ -11,6 +11,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/ui/feel.dart';
 import '../creatures/services/creatures_controller.dart';
+import '../creatures/widgets/battle_scene.dart' show BattleScene;
 import '../creatures/widgets/monster_sheet.dart' show precacheMonsterSheets;
 import 'data/road_tiles.dart' show roadAsset, kRoadDecodeWidth;
 import 'data/resource_icons.dart';
@@ -306,6 +307,9 @@ class _SettlementScreenState extends State<SettlementScreen>
       ]),
     );
     local.add(Feel.preloadClips());
+    // The battle arena's forest floor, so the first fight opens on a finished
+    // ground instead of building it while the fighters walk on.
+    local.add(BattleScene.preload());
     local.add(_preloadFonts());
     local.add(_preloadOwnMonsterArt());
     // The map's ground too: its art and its terrain (shore, forest, props)
@@ -849,8 +853,8 @@ class _SettlementScreenState extends State<SettlementScreen>
       if (energyDrop >= 10)
         notice(
           (d.energyAfter ?? 0) < 1
-              ? '⚡ Energy ran out — production slowed to a crawl'
-              : '⚡ Energy fell from ${d.energyBefore!.round()} % to '
+              ? 'Energy ran out — production slowed to a crawl'
+              : 'Energy fell from ${d.energyBefore!.round()} % to '
                     '${d.energyAfter!.round()} % — production slowed',
         ),
     ];

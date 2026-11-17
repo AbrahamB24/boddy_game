@@ -5,17 +5,17 @@ import 'creature_enums.dart';
 import 'legendary_math.dart';
 import 'species_def.dart';
 
-/// A monster goes into a fight with at most this many moves IN TOTAL — Attack
-/// counts as one of them (user 2026-09-21: "das Maximum von 6 Fähigkeiten
-/// (Attacke ist auch eine davon, aktuell wird diese nicht gezählt)"). It used to
-/// sit outside the cap, which made it seven.
-const int kMaxAbilitiesTotal = 6;
+/// A monster goes into a fight with at most this many moves (user 2026-11-16:
+/// "bitte 4, wobei Attack als normale Fähigkeit behandelt werden kann, welche
+/// auch ausgetauscht werden kann"). Attack is an ordinary move now: it is in
+/// the learned list from the start and takes one of these places only while it
+/// is equipped. Was 6 with Attack fixed in the first place.
+const int kMaxAbilitiesTotal = 4;
 
 /// At most this many learned abilities may be equipped (battle-usable) at once
-/// besides `attack`, which is free and always on and takes the first of the
-/// [kMaxAbilitiesTotal] places (user 2026-09-05: "ich kann mehr als 6 Fähigkeiten
-/// erlernen, aber nur einige davon ausrüsten").
-const int kMaxEquippedAbilities = kMaxAbilitiesTotal - 1;
+/// — Attack included, it is one of them (user 2026-09-05: "ich kann mehr als 6
+/// Fähigkeiten erlernen, aber nur einige davon ausrüsten").
+const int kMaxEquippedAbilities = kMaxAbilitiesTotal;
 
 // One creature OWNED by a player — a row in the `creatures` table. Species
 // data (per-stat mean curves, stages, abilities) lives in kSpeciesDefs; this
@@ -128,8 +128,9 @@ class CreatureInstance {
   // which never surfaces null.
   List<String>? _learnedAbilityIds;
 
-  /// Every ability id this creature has ever finished training (never
-  /// includes `'attack'` — that one is free and always known).
+  /// Every ability id this creature knows. Includes `'attack'` since
+  /// 2026-11-16 (it is free and always known, but an ordinary, swappable move);
+  /// a row whose list lacks it predates that — see [needsAttackMigration].
   List<String> get learnedAbilityIds => _learnedAbilityIds ?? const [];
   set learnedAbilityIds(List<String> v) => _learnedAbilityIds = v;
 
@@ -142,8 +143,8 @@ class CreatureInstance {
   bool get needsAbilityBackfill => _learnedAbilityIds == null;
 
   /// Which of [learnedAbilityIds] are actually battle-usable right now (in
-  /// button order), capped at [kMaxEquippedAbilities]. `attack` is not in
-  /// here — Combatant always prepends it separately.
+  /// button order), capped at [kMaxEquippedAbilities]. `attack` may be in here
+  /// like any other move, and may be taken out.
   List<String> equippedAbilityIds;
 
   /// Resolves [equippedAbilityIds] against the live ability catalog, dropping
@@ -152,6 +153,23 @@ class CreatureInstance {
     for (final id in equippedAbilityIds)
       if (kAbilityDefs[id] case final def?) def,
   ];
+
+  /// True for a row saved before Attack became an ordinary move (2026-11-16):
+  /// its learned list lacks `'attack'`. New and backfilled creatures always
+  /// have it, so this fires once per legacy row, and a player who later takes
+  /// Attack out of the fight does not trigger it again (it stays LEARNED).
+  bool get needsAttackMigration =>
+      _learnedAbilityIds != null && !_learnedAbilityIds!.contains('attack');
+
+  /// Teaches Attack and puts it first in the equipped list, as the old rule had
+  /// it (it was always the first button), trimmed to [kMaxEquippedAbilities].
+  void migrateAttack() {
+    _learnedAbilityIds = ['attack', ...learnedAbilityIds];
+    equippedAbilityIds = [
+      'attack',
+      ...equippedAbilityIds.where((id) => id != 'attack'),
+    ].take(kMaxEquippedAbilities).toList();
+  }
 
   /// Everything this creature may EVER learn at its current stage — every
   /// neutral move plus every move of its own element, gated by each move's
@@ -200,6 +218,7 @@ class CreatureInstance {
     final s = species;
     if (s == null || kAbilityDefs.isEmpty) return false;
     final ids = <String>[
+      'attack',
       for (final sa in s.abilitiesAt(stage))
         if (sa.abilityId != 'attack' && kAbilityDefs.containsKey(sa.abilityId))
           sa.abilityId,

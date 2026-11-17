@@ -33,7 +33,6 @@ import 'services/overworld_path.dart';
 import 'services/region_dungeon.dart'
     show spawnPathBattle, scriptedFirstBattleEnemy;
 import '../../core/theme/voxel_icons.dart';
-import '../../core/theme/voxel_kit.dart' show VoxelWall, vr;
 import '../../core/ui/game_text.dart';
 
 // ── The Overworld (the campaign) ────────────────────────────
@@ -157,9 +156,7 @@ class _OverworldScreenState extends State<OverworldScreen> {
         backgroundColor: CreamPalette.groundBottom,
         body: Stack(
           children: [
-            const Positioned.fill(
-              child: VoxelWall(color: CreamPalette.groundTop),
-            ),
+            const Positioned.fill(child: MenuGround()),
             SafeArea(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -251,23 +248,14 @@ class _OverworldScreenState extends State<OverworldScreen> {
       child: Container(
         width: width,
         height: _kStripH,
-        decoration: BoxDecoration(
+        decoration: voxelBlock(
           color: fill,
-          borderRadius: vr(10),
-          border: Border.all(
-            color: picked
-                ? Colors.white
-                : current || node.isBoss
-                ? Fachwerk.windowGlow
-                : Colors.transparent,
-            width: picked ? 3 : 2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: done ? CreamPalette.goldDeep : CreamPalette.lockedShadow,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          shadow: done ? CreamPalette.tanShadow : CreamPalette.lockedShadow,
+          edge: picked
+              ? Colors.white
+              : current || node.isBoss
+              ? Fachwerk.windowGlow
+              : null,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -324,12 +312,10 @@ class _OverworldScreenState extends State<OverworldScreen> {
   Widget _focus(OverworldNode node) {
     final nodes = _nodes;
     final i = nodes.indexOf(node);
-    final area = areaForBattle(node.battleNumber);
     return OverworldFocusView(
       battleNumber: node.battleNumber,
       isBoss: node.isBoss,
       state: node.state,
-      regionName: area?.name,
       stars: _settlement.starsFor(node.battleNumber),
       enemies: _foesFor(node),
       // Only the current battle grants its unlocks (a re-fight is XP only, see
@@ -363,9 +349,8 @@ class _OverworldScreenState extends State<OverworldScreen> {
   /// Survival Mode (user 2026-09-06) — both hidden during the tutorial, because
   /// a lit control that leads off the guided chain reads as broken, not as a
   /// bonus feature (user 2026-09-02: "zurück sollte nicht anwählbar sein").
-  Widget _topBar() => ParchmentHeader.band(
+  Widget _topBar() => SizedBox(
     height: 46,
-    fill: CreamPalette.groundTop,
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
@@ -391,7 +376,7 @@ class _OverworldScreenState extends State<OverworldScreen> {
               child: Container(
                 height: 30,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: raisedTile(radius: 12),
+                decoration: voxelBlock(),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -439,7 +424,7 @@ class _OverworldScreenState extends State<OverworldScreen> {
       child: Container(
         height: 30,
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: raisedTile(radius: 12),
+        decoration: voxelBlock(),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -535,7 +520,7 @@ class _OverworldScreenState extends State<OverworldScreen> {
       return;
     }
     final title = node.isBoss
-        ? '👑 ${area.name} — Boss'
+        ? 'Boss battle ${node.battleNumber}'
         : 'Battle ${node.battleNumber}';
     // Only clearing the CURRENT node grants the map unlocks, so only preview
     // rewards there (a re-fight just gives XP).
@@ -637,7 +622,7 @@ class _OverworldScreenState extends State<OverworldScreen> {
       context: context,
       barrierColor: CreamPalette.dim,
       builder: (_) => ParchmentDialog(
-        title: '👑 ${area.name} cleared!',
+        title: 'Boss defeated!',
         closeLabel: 'Onwards',
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),

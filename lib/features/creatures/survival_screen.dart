@@ -192,7 +192,7 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
                 children: [
                   Text(
                     isSurvivalBossFloor(_floor)
-                        ? '👑 Floor $_floor cleared — a boss fell!'
+                        ? 'Floor $_floor cleared — a boss fell!'
                         : 'Floor $_floor cleared',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
@@ -371,7 +371,7 @@ class _SurvivalScreenState extends State<SurvivalScreen> {
             if (_isNewBest) ...[
               const SizedBox(height: 8),
               const Text(
-                '🏆 New best run!',
+                'New best run!',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w400,

@@ -857,10 +857,11 @@ void main() {
     },
   );
 
-  test('Licht and Schatten both hit each other hard and resist themselves', () {
+  test('Licht hits Schatten hard (not the reverse) and both resist themselves', () {
     // Advantage is 1.5 (not 2.0) since 2026-07-17; self-resist stays 0.5.
+    // Schatten → Licht became 0.5 on 2026-11-17 (3 strengths / 3 weaknesses).
     expect(CreatureElement.light.multiplierVs(CreatureElement.shadow), 1.5);
-    expect(CreatureElement.shadow.multiplierVs(CreatureElement.light), 1.5);
+    expect(CreatureElement.shadow.multiplierVs(CreatureElement.light), 0.5);
     expect(CreatureElement.light.multiplierVs(CreatureElement.light), 0.5);
     expect(CreatureElement.shadow.multiplierVs(CreatureElement.shadow), 0.5);
   });

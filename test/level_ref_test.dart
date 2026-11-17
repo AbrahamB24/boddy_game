@@ -79,14 +79,14 @@ void main() {
     }
 
     await show(null);
-    expect(find.text('⚡${totalPower(c)}'), findsOneWidget);
+    expect(find.text('${kPowerIcon}${totalPower(c)}'), findsOneWidget);
     // The level shown is the chosen one, not the monster's own.
     expect(find.text('Lv 12'), findsOneWidget);
     await show(1);
-    expect(find.text('⚡${powerAtLevel(c, 1)}'), findsOneWidget);
+    expect(find.text('${kPowerIcon}${powerAtLevel(c, 1)}'), findsOneWidget);
     expect(find.text('Lv 1'), findsOneWidget);
     await show(kCreatureMaxLevel);
-    expect(find.text('⚡${powerAtLevel(c, kCreatureMaxLevel)}'), findsOneWidget);
+    expect(find.text('${kPowerIcon}${powerAtLevel(c, kCreatureMaxLevel)}'), findsOneWidget);
     expect(find.text('Lv $kCreatureMaxLevel'), findsOneWidget);
     // No "At Lv 1" flag any more — the switch says it.
     expect(find.textContaining('At Lv'), findsNothing);

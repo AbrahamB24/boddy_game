@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart' hide Text;
 
 import '../theme/cream_kit.dart';
-import '../theme/voxel_kit.dart' show vr;
 import 'game_text.dart';
 
 /// A scrolling area that SAYS when there is more (user 2026-09-22, the fight
@@ -120,15 +119,11 @@ class _ScrollCueState extends State<ScrollCue> {
                     horizontal: vertical ? 10 : 6,
                     vertical: 2,
                   ),
-                  decoration: BoxDecoration(
+                  decoration: voxelBlock(
                     color: CreamPalette.gold,
-                    borderRadius: vr(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: CreamPalette.goldDeep,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                    shadow: CreamPalette.tanShadow,
+                    depth: 2,
+                    notch: 1,
                   ),
                   child: Text(
                     vertical ? '▾ more' : '▸',

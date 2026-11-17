@@ -1,9 +1,10 @@
+import '../common/widgets/parchment_kit.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text;
 
 import '../settlement/widgets/voxel_hud.dart' show VoxelHud;
-import '../../core/theme/voxel_kit.dart' show VoxelBar;
+import '../../core/theme/voxel_kit.dart' show VoxelBar, vr;
 import '../../core/theme/cream_kit.dart';
 import '../../core/ui/game_text.dart';
 import '../../core/ui/pressable.dart';
@@ -122,7 +123,7 @@ class _LairScreenState extends State<LairScreen> {
           color: _tab == i
               ? CreamPalette.tan.withValues(alpha: 0.55)
               : CreamPalette.tan.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: vr(10),
         ),
         child: Text(
           label,
@@ -247,7 +248,7 @@ class _LairScreenState extends State<LairScreen> {
                       color: canPay
                           ? CreamPalette.tan.withValues(alpha: 0.7)
                           : CreamPalette.tan.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: vr(10),
                     ),
                     child: const Text(
                       'Upgrade',
@@ -349,7 +350,7 @@ class _LairScreenState extends State<LairScreen> {
                 ),
                 decoration: BoxDecoration(
                   color: CreamPalette.tan.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: vr(10),
                 ),
                 child: const Text(
                   'Train',
@@ -377,23 +378,17 @@ class _LairScreenState extends State<LairScreen> {
       );
       return;
     }
-    final picked = await showDialog<CreatureInstance>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text(
-          'Who trains? It stays until the upgrade is done.',
-        ),
-        children: [
-          for (final c in free)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, c),
-              child: Text(
-                '${c.displayName} · Lv ${c.level} · '
+    final picked = await parchmentChoose<CreatureInstance>(
+      context,
+      title: 'Who trains? It stays until the upgrade is done.',
+      options: [
+        for (final c in free)
+          (
+            c,
+            '${c.displayName} · Lv ${c.level} · '
                 '+${(_lairs.trainerEffectOf(c) * 100).round()} % speed',
-              ),
-            ),
-        ],
-      ),
+          ),
+      ],
     );
     if (picked == null || !mounted) return;
     final err = await _lairs.joinAsTrainer(s, picked);

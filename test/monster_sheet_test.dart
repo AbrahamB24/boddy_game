@@ -61,7 +61,7 @@ void main() {
         for (final h in ['se', 'ne', 'nw', 'sw'])
           MonsterSheets.map('tidelord', stage, h)!,
       // The isometric arena's sheets, built from the map's idle and walk.
-      for (final species in ['tidelord', 'glimmergnaw', 'blazeling', 'droplet', 'solarion'])
+      for (final species in ['tidelord', 'glimmergnaw', 'blazeling', 'droplet', 'solarion', 'voltglider'])
         for (var stage = 0; stage < 3; stage++)
           for (final mine in [true, false])
             MonsterSheets.battleIso(species, stage, mine: mine)!,
@@ -92,6 +92,20 @@ void main() {
         MonsterSheets.battle('solarion', stage, back: true)!,
         for (final h in ['se', 'ne', 'nw', 'sw'])
           MonsterSheets.map('solarion', stage, h)!,
+      ],
+      // Leafwing line (species id mossgator).
+      for (var stage = 0; stage < 3; stage++) ...[
+        MonsterSheets.battle('mossgator', stage, back: false)!,
+        MonsterSheets.battle('mossgator', stage, back: true)!,
+        for (final h in ['se', 'ne', 'nw', 'sw'])
+          MonsterSheets.map('mossgator', stage, h)!,
+      ],
+      // Griffin line (species id voltglider).
+      for (var stage = 0; stage < 3; stage++) ...[
+        MonsterSheets.battle('voltglider', stage, back: false)!,
+        MonsterSheets.battle('voltglider', stage, back: true)!,
+        for (final h in ['se', 'ne', 'nw', 'sw'])
+          MonsterSheets.map('voltglider', stage, h)!,
       ],
     ];
     for (final s in sets) {
@@ -166,6 +180,9 @@ void main() {
     expect(MonsterSheets.map('glimmergnaw', 3, 'se'), isNull);
     expect(MonsterSheets.hasBaked('glimmergnaw'), isTrue);
     expect(MonsterSheets.hasBaked('somebody_else'), isFalse);
+    expect(MonsterSheets.forUrl('$base/mossgator_1.png'), isNotNull);
+    expect(MonsterSheets.forUrl('$base/mossgator_2_back.png')!.back, isTrue);
+    expect(MonsterSheets.hasBaked('mossgator'), isTrue);
     expect(MonsterSheets.forUrl(null), isNull);
   });
 

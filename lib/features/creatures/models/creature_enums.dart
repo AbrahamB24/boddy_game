@@ -31,9 +31,11 @@ export 'xp_balance.dart' show XpConfig, kXpBalance;
 ///    (see the old type_circle_dialog.dart's `_kEdges` for the exact draft this
 ///    encodes), same reciprocal-inverse rule for the un-drawn reverse
 ///    direction.
-///  * HUB vs HUB: Licht/Schatten mutually hit each other hard (×1.5 BOTH
-///    ways, not reciprocal) while also strongly resisting themselves
-///    (×0.5) — ring types don't resist themselves (×1.0).
+///  * HUB vs HUB: Licht hits Schatten hard (×1.5), Schatten resists it
+///    (×0.5); both strongly resist themselves (×0.5) — ring types don't
+///    resist themselves (×1.0).
+///  * Since 2026-11-17 every type has exactly 3 strengths, 3 weaknesses and
+///    1 neutral opponent, and the whole matrix is reciprocal.
 ///
 /// Type ADVANTAGE tops out at +50% (×1.5), not double (user decision
 /// 2026-07-17: "doppelt ist sehr viel"). This also shrinks the multiplier
@@ -42,18 +44,18 @@ export 'xp_balance.dart' show XpConfig, kXpBalance;
 enum CreatureElement {
   fire('Fire', '🔥', Color(0xFFE25822)),
   ice('Ice', '🧊', Color(0xFF8ED8F0)),
-  plant('Plant', '🌿', Color(0xFF3BAE78)),
+  plant('Plant', '🌱', Color(0xFF3BAE78)),
   lightning('Lightning', '⚡', Color(0xFF6C63FF)),
   water('Water', '💧', Color(0xFF018ABE)),
   stone('Stone', '🪨', Color(0xFF9B8365)),
-  light('Light', '✨', Color(0xFFE9B44C)),
+  light('Light', '☀', Color(0xFFE9B44C)),
   shadow('Shadow', '🌑', Color(0xFF6B5B95)),
   // A typeless option for abilities that have no elemental identity — most
   // buffs and the normal Attack (user request). Neutral never lands or takes
   // bonus damage (multiplierVs is always 1.0), and it is NOT a creature type
   // (kept out of the species editor). Placed LAST so the 8 real types keep
   // their indices for the effectiveness matrix below.
-  neutral('Neutral', '⚪', Color(0xFF8B95A5));
+  neutral('Neutral', '⭐', Color(0xFF8B95A5));
 
   final String label;
   final String emoji;
@@ -73,14 +75,14 @@ enum CreatureElement {
   // reciprocal inverse; see the class doc above for the derivation).
   static const List<List<double>> _matrix = [
     // vs     Fire  Ice  Plant  Lght  Watr Stone Light Shdw
-    [1.00, 1.25, 1.50, 1.00, 0.50, 0.75, 1.00, 1.25], // Fire attacks
-    [0.75, 1.00, 1.25, 1.50, 1.00, 0.50, 0.75, 1.00], // Ice attacks
+    [1.00, 1.25, 1.50, 0.75, 0.50, 0.75, 1.00, 1.25], // Fire attacks
+    [0.75, 1.00, 1.25, 1.50, 1.25, 0.50, 0.75, 1.00], // Ice attacks
     [0.50, 0.75, 1.00, 1.25, 1.50, 1.00, 0.50, 1.25], // Plant attacks
-    [1.00, 0.50, 0.75, 1.00, 1.25, 1.50, 1.25, 0.75], // Lightning attacks
-    [1.50, 1.00, 0.50, 0.75, 1.00, 1.25, 1.25, 0.75], // Water attacks
+    [1.25, 0.50, 0.75, 1.00, 1.00, 1.50, 1.25, 0.75], // Lightning attacks
+    [1.50, 0.75, 0.50, 1.00, 1.00, 1.25, 1.25, 0.75], // Water attacks
     [1.25, 1.50, 1.00, 0.50, 0.75, 1.00, 1.50, 0.50], // Stone attacks
     [1.00, 1.25, 1.50, 0.75, 0.75, 0.50, 0.50, 1.50], // Light attacks
-    [0.75, 1.00, 0.75, 1.25, 1.25, 1.50, 1.50, 0.50], // Shadow attacks
+    [0.75, 1.00, 0.75, 1.25, 1.25, 1.50, 0.50, 0.50], // Shadow attacks
   ];
 
   /// Damage multiplier when [this] attacks [defender]. Neutral on either side

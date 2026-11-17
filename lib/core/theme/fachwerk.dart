@@ -292,7 +292,7 @@ class _PlatePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rr = RRect.fromRectAndRadius(
       Offset.zero & size,
-      Radius.circular(radius),
+      Radius.circular(radius.clamp(0.0, 4.0)),
     );
     canvas.save();
     canvas.clipRRect(rr);

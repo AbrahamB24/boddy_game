@@ -1,5 +1,5 @@
--- Offene Migrationen Stand 2026-11-13: im Supabase SQL-Editor als EIN Skript ausfuehren.
--- Alle sieben sind wiederholbar (Updates mit festen Werten), nichts loescht Spielerdaten.
+-- Offene Migrationen Stand 2026-11-17: im Supabase SQL-Editor als EIN Skript ausfuehren.
+-- Alle sind wiederholbar (Updates mit festen Werten), nichts loescht Spielerdaten.
 
 -- ===== rename_droplet_to_duck =====
 -- The duck (voxel art in assets/images/monsters/duck_s0..2) takes over the species id 'droplet'.
@@ -116,3 +116,34 @@ where b.id in ('small_house', 'large_house')
 update building_defs
    set name = 'Hospital', grid_w = 7, grid_h = 6
  where id = 'healing_hut';
+
+
+-- ===== rename_mossgator_to_leafwing =====
+-- The id stays, so every owned monster, ability and image URL keeps working; only the names change.
+-- The app finds the baked art through the stage image URL ('creature-images/<id>_<stage>.png', see
+-- MonsterSheets.forUrl), so every stage gets that URL; the baked sprite wins, the file never has to exist.
+update public.species_defs
+set name = 'Leafling',
+    description = 'A green dragon with leaf wings that grows from a drifting leaf-glider into an upright guardian of the woods.',
+    stages = jsonb_build_array(
+      jsonb_build_object('name', 'Leafling',
+        'image_url', 'https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/mossgator_0.png',
+        'back_image_url', 'https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/mossgator_0_back.png'),
+      jsonb_build_object('name', 'Leafwing',
+        'image_url', 'https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/mossgator_1.png',
+        'back_image_url', 'https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/mossgator_1_back.png'),
+      jsonb_build_object('name', 'Verdantdrake',
+        'image_url', 'https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/mossgator_2.png',
+        'back_image_url', 'https://wyvgehzwpslbpibggmea.supabase.co/storage/v1/object/public/creature-images/mossgator_2_back.png'))
+where id = 'mossgator';
+
+
+-- ===== rename_voltglider_to_griffin =====
+-- The griffin (voxel art in assets/images/monsters/griffin_s0..2) takes over the rare lightning species 'voltglider'.
+-- The id stays, so owned monsters, abilities and image URLs keep working; only the names change.
+-- Element, rarity, stats and abilities are untouched. Safe to run more than once.
+update public.species_defs
+set name = 'Gryphlet',
+    stages = jsonb_set(jsonb_set(jsonb_set(stages::jsonb,
+      '{0,name}', '"Gryphlet"'), '{1,name}', '"Gryphwing"'), '{2,name}', '"Stormgryph"')
+where id = 'voltglider';

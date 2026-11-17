@@ -66,7 +66,7 @@ Widget _pickerDelta(int d) {
     padding: const EdgeInsets.fromLTRB(1, 0, 6, 0),
     decoration: BoxDecoration(
       color: c.withValues(alpha: 0.16),
-      borderRadius: BorderRadius.circular(3),
+      borderRadius: vr(3),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,

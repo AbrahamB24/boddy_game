@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:boddygame/core/theme/voxel_icons.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:boddygame/core/theme/voxel_kit.dart';
@@ -74,7 +75,7 @@ void main() {
   ) async {
     await show(t, 'tidelord');
     expect(find.byType(VoxelBackdrop), findsOneWidget);
-    expect(find.byType(VoxelIcon), findsWidgets);
+    expect(find.byType(GameIcon), findsWidgets);
     for (final tab in ['Stats', 'Evolution', 'Abilities', 'General']) {
       await t.tap(find.text(tab));
       await t.pump(const Duration(milliseconds: 400));
@@ -110,7 +111,6 @@ void main() {
                 ),
               ),
               const VoxelBar(value: 0.55, color: Colors.green),
-              for (final g in VoxelGlyph.values) VoxelIcon(g),
             ],
           ),
         ),

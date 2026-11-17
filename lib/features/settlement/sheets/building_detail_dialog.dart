@@ -37,6 +37,8 @@ import '../../creatures/overworld_screen.dart';
 import '../../creatures/services/creatures_controller.dart';
 import '../../creatures/widgets/creature_family.dart'
     show CreatureFace, CreatureCrewCard;
+import '../../guild/guild_help.dart';
+import '../../guild/guild_screen.dart';
 import '../../onboarding/intro_flow.dart';
 import '../../onboarding/intro_spotlight.dart';
 import '../crafting_screen.dart';
@@ -242,7 +244,7 @@ Future<void> showBuildingDetailDialog(
             // Dialog's own bounds; this dialog lets the art rise past them
             // (Clip.none), so the shape carries no side.
             shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(16)),
+              borderRadius: BorderRadius.all(Radius.circular(3)),
             ),
             insetPadding: const EdgeInsets.symmetric(
               horizontal: 14,
@@ -273,7 +275,7 @@ Future<void> showBuildingDetailDialog(
                             padding: const EdgeInsets.all(10),
                             // Amber underneath instead of tan: the note is the
                             // one thing to read here.
-                            deep: CreamPalette.goldDeep,
+                            deep: CreamPalette.tanShadow,
                             child: Text(
                               healStep
                                   // user 2026-09-30: "ein kurzer Text, dass
@@ -440,6 +442,30 @@ Future<void> showBuildingDetailDialog(
                                     child: _skipBuildButton(context, liveB),
                                   )
                                 : _skipBuildButton(context, liveB),
+                          ),
+                          // Members ask their guild for a hand; each help cuts
+                          // a share off what is still to build.
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: GuildHelpButton(
+                                kind: GuildHelpKind.build,
+                                target: liveB.id,
+                                label: def.name,
+                                endsAt: DateTime.now().add(
+                                  Duration(
+                                    seconds:
+                                        ((liveB.constructionSecondsRequired -
+                                                    liveB
+                                                        .constructionSecondsBuilt) /
+                                                ctrl.buildRatePerHour *
+                                                3600)
+                                            .ceil(),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ] else if (upgradeBar != null) ...[
                           const SizedBox(height: 10),
@@ -746,6 +772,10 @@ List<Widget> _primaryActions(
         context,
         MaterialPageRoute(builder: (_) => const OverworldScreen()),
       ),
+    ),
+    kGuildHallBuildingId => (
+      'Guild',
+      () => pushMenu(context, const GuildScreen()),
     ),
     kBreedingHutBuildingId => (
       'Breeding',
@@ -1464,7 +1494,7 @@ _Panels _buildPanels(
         [
           trainees > 0
               ? '🏋️ +${(trainees * kTrainingXpPerHour).toStringAsFixed(0)} XP/h'
-              : '🏋️ Trains for XP',
+              : 'Trains for XP',
         ],
         icons: const [null],
         color: trainees > 0 ? kBoxInk : kBoxInkFaint,
@@ -1999,13 +2029,13 @@ _WorkerReadout _workerReadout(
   // settlement after every lost fight. So the honest fix is to say the reason,
   // not to invent a third state.
   final absence = c.isKo
-      ? '💀 K.O. — heal it'
+      ? 'K.O. — heal it'
       : ctrl.isBreeding(c.id)
-      ? '🥚 in the Breeding Hut'
+      ? 'in the Breeding Hut'
       : ctrl.isOnExpedition(c.id)
-      ? '🎒 away on a trip'
+      ? 'away on a trip'
       : c.isHealing
-      ? '🩺 under treatment'
+      ? 'under treatment'
       : null;
   final absent = absence != null;
   // Construction is shown in POINTS, not in the build-seconds they convert to

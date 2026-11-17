@@ -38,6 +38,10 @@ class CreatureSprite extends StatelessWidget {
   final double? width;
   final double? height;
 
+  /// Baked art only: fill the whole box with the creature's opaque bounds
+  /// (trading cards), see [MonsterSheetPlayer.tight].
+  final bool tight;
+
   /// Shown on load error (and while loading, so there's no flash — pass a
   /// transparent box for the "nothing until it pops in" look).
   final Widget fallback;
@@ -49,6 +53,7 @@ class CreatureSprite extends StatelessWidget {
     this.alignment = Alignment.center,
     this.width,
     this.height,
+    this.tight = false,
     this.fallback = const SizedBox.shrink(),
   });
 
@@ -58,6 +63,22 @@ class CreatureSprite extends StatelessWidget {
     // [MonsterSheets.forUrl]); it idles when big enough to notice, and holds
     // still as a thumbnail so a long list does not run a hundred tickers.
     final baked = MonsterSheets.forUrl(url);
+    if (baked != null && tight) {
+      return LayoutBuilder(
+        builder: (context, c) {
+          final side = [
+            if (c.maxWidth.isFinite) c.maxWidth,
+            if (c.maxHeight.isFinite) c.maxHeight,
+          ].fold<double>(999, (a, b) => a < b ? a : b);
+          return MonsterSheetPlayer(
+            set: baked.set,
+            height: side,
+            animate: side >= 96,
+            tight: true,
+          );
+        },
+      );
+    }
     if (baked != null) {
       return LayoutBuilder(
         builder: (context, c) {

@@ -392,7 +392,7 @@ List<PathNode> _buildFallbackPath() {
         id: 'node_$battle',
         order: battle,
         name: boss
-            ? (area != null ? '${area.name} Boss' : 'Region $region Boss')
+            ? 'Boss $battle'
             : 'Battle $battle',
         areaId: area?.id,
         isBoss: boss,

@@ -7,6 +7,7 @@ import 'package:boddygame/features/creatures/models/ability_def.dart';
 import 'package:boddygame/features/creatures/models/creature_enums.dart';
 import 'package:boddygame/features/creatures/models/creature_instance.dart';
 import 'package:boddygame/features/creatures/models/species_def.dart';
+import 'package:boddygame/features/creatures/services/creature_power.dart';
 import 'package:boddygame/features/creatures/services/creatures_controller.dart';
 
 // The monster detail screen, "Glas auf Farbe" (user 2026-09-21, variant 11 with
@@ -86,7 +87,7 @@ void main() {
     await show(t, monster());
     expect(find.text('Tidetest'), findsWidgets);
     expect(find.text('Lv 12'), findsOneWidget);
-    expect(find.textContaining('⚡'), findsOneWidget);
+    expect(find.textContaining(kPowerIcon), findsOneWidget);
     expect(find.text('Rare'), findsOneWidget);
     expect(find.textContaining('Water'), findsOneWidget);
     expect(t.takeException(), isNull);
@@ -144,26 +145,28 @@ void main() {
   });
 
   testWidgets(
-    'Abilities: six slots, Attack is one of them, empty ones are "+"',
+    'Abilities: four slots, Attack is an ordinary one, empty ones are "+"',
     (t) async {
-      await show(t, monster(equipped: ['tide']));
+      await show(t, monster(equipped: ['attack', 'tide']));
       await t.tap(find.text('Abilities'));
       await t.pump(const Duration(milliseconds: 200));
-      // Slot 0 is Attack, slot 1 the equipped move, slots 2..5 are empty.
+      // Slot 0 is Attack, slot 1 the equipped move, slots 2 and 3 are empty.
       expect(find.text('Attack'), findsOneWidget);
       expect(find.text('Tide Crash'), findsOneWidget);
-      expect(find.byIcon(Icons.add), findsNWidgets(4));
-      expect(find.text('Empty slot'), findsNWidgets(4));
-      // Three above each other on the left, three on the right.
+      expect(find.byIcon(Icons.add), findsNWidgets(2));
+      expect(find.text('Empty slot'), findsNWidgets(2));
+      // Two above each other on the left, two on the right.
       final attack = t.getTopLeft(find.text('Attack'));
       final tide = t.getTopLeft(find.text('Tide Crash'));
       expect(tide.dy, greaterThan(attack.dy));
       expect(tide.dx, moreOrLessEquals(attack.dx, epsilon: 1));
       final adds = find.byIcon(Icons.add);
       final xs = {
-        for (var i = 0; i < 4; i++) t.getCenter(adds.at(i)).dx.round(),
+        for (var i = 0; i < 2; i++) t.getCenter(adds.at(i)).dx.round(),
       };
-      expect(xs.length, 2, reason: 'two columns');
+      // Both empty slots are the right column, beside the left one's moves.
+      expect(xs.length, 1, reason: 'one column');
+      expect(xs.first, greaterThan(attack.dx));
       // A preview creature is not owned, so nothing there can be changed and the
       // Combat School button is not offered.
       expect(find.textContaining('Learn new'), findsNothing);

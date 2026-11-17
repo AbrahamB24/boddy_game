@@ -36,7 +36,7 @@ void main() {
     return s / img.width;
   }
 
-  // levelTile now also lays a per-block speckle over the grass (user
+  // levelTile once laid a per-block speckle over the grass (user
   // 2026-11-13), so rows are no longer flat. The seam is judged against the
   // SAME tile without a seam: both get the identical speckle, so what is left
   // of a difference is the seam itself.

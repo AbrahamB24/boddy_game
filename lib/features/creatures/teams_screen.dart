@@ -1,3 +1,4 @@
+import '../common/widgets/parchment_kit.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/foe_theme.dart';
@@ -281,7 +282,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
           ),
           const SizedBox(width: 12),
           team.isActive
-              ? _miniBtn('★ Active', () => _ctrl.activateTeam(null))
+              ? _miniBtn('Active', () => _ctrl.activateTeam(null))
               : _miniBtn('Use', () => _ctrl.activateTeam(team), active: true),
           const SizedBox(width: 6),
           _miniBtn('Edit', () => _editTeam(team)),
@@ -368,46 +369,14 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 
   Future<void> _confirmDelete(SavedTeam team) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      barrierColor: CreamPalette.dim,
-      builder: (dctx) => AlertDialog(
-        backgroundColor: CreamPalette.paperTop,
-        shape: RoundedRectangleBorder(
-          borderRadius: vr(14),
-          side: BorderSide(color: CreamPalette.tan, width: 1.5),
-        ),
-        title: Text(
-          'Delete "${team.name}"?',
-          style: FoE.title(size: 15).copyWith(color: kBoxInk),
-        ),
-        content: Text(
-          'The monsters are untouched — only the roster goes.',
-          style: TextStyle(fontSize: 13, color: kBoxInkSoft),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dctx, false),
-            child: Text(
-              'Keep',
-              style: TextStyle(fontSize: 13, color: kBoxInkSoft),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dctx, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-                color: CreamPalette.warn,
-              ),
-            ),
-          ),
-        ],
-      ),
+    final ok = await parchmentConfirm(
+      context,
+      title: 'Delete "${team.name}"?',
+      message: 'The monsters are untouched — only the roster goes.',
+      confirmLabel: 'Delete',
+      danger: true,
     );
-    if (ok == true) await _ctrl.deleteTeam(team);
+    if (ok) await _ctrl.deleteTeam(team);
   }
 
   /// Opens the builder for [team], or — with null — for a brand-new team.
@@ -452,7 +421,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
           : active
           ? chunkyDecoration(
               fill: CreamPalette.gold,
-              deep: CreamPalette.goldDeep,
+              deep: CreamPalette.tanShadow,
               radius: 10,
               shadowOffset: 2,
             )
@@ -790,7 +759,7 @@ class _TeamEditorSheetState extends State<_TeamEditorSheet> {
               end: Alignment.bottomCenter,
               colors: [CreamPalette.paperTop, CreamPalette.paperBottom],
             ),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
             border: Border(
               top: BorderSide(color: CreamPalette.gold, width: 2.5),
             ),

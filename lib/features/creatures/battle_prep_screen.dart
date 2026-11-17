@@ -8,7 +8,6 @@ import '../common/widgets/filter_pills.dart';
 import '../onboarding/intro_flow.dart';
 import '../onboarding/intro_spotlight.dart';
 import '../settlement/settlement_controller.dart';
-import '../settlement/widgets/building_icon.dart';
 import '../social/widgets/social_kit.dart';
 import 'models/combatant.dart';
 import 'models/creature_enums.dart';
@@ -18,6 +17,8 @@ import 'services/battle_rewards.dart';
 import 'services/creature_power.dart';
 import 'services/creatures_controller.dart';
 import 'widgets/creature_card.dart';
+import 'widgets/enemy_card.dart';
+import 'widgets/trading_card.dart';
 import 'widgets/picker_detail_panel.dart';
 import 'widgets/picker_stage.dart';
 import 'widgets/versus_kit.dart';
@@ -153,10 +154,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
           MenuScaffold(
             title: widget.title,
             showClose: !_isFirstBattleTutorial,
-            trailing: Text(
-              'party of ${widget.partySize}',
-              style: FoE.value(size: 11).copyWith(color: kBoxInkSoft),
-            ),
+            showHairline: false,
             child: _stage(ready),
           ),
           // Sibling of MenuScaffold, not nested in its `child` — the same fix
@@ -226,64 +224,200 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
 
   // ── The duel ──────────────────────────────────────────────────────────
 
-  /// Tile size for [n] cards in one fan. Two fans share the page's height, so
-  /// they are smaller than a lone fan (Survival's pick, a duel's pick).
-  (double, double) _tileSize(int n, {required bool alone}) {
-    final w = alone
-        ? (n <= 4 ? 96.0 : 86.0)
-        : (n <= 3 ? 72.0 : (n <= 4 ? 68.0 : 60.0));
-    return (w, alone ? 150.0 : w / 0.60);
+  /// A hand of at most [kMaxPerSide] cards (user 2026-11-15: "die Trading Cards
+  /// sollen genau gleich gross sein, immer â€” nur die Positionierung Ã¤ndert
+  /// sich"). The card size depends ONLY on the room of one side (never on how
+  /// many monsters stand there), so every card on the page is the same size: as
+  /// big as six side by side fit, and as tall as the row allows. Fewer cards
+  /// are centred.
+  static const int kMaxPerSide = 6;
+
+  static const double _gap = 8;
+  static const double _presetsW = 92;
+  static const double _capH = 22;
+  static const double _barH = 40;
+
+  /// One card size for the whole page (mine and the opponent's): what the
+  /// larger hand needs in ONE row, within the height of one row.
+  Size _cardSize({
+    required double availW,
+    required double rowH,
+    required int cols,
+  }) {
+    final byW = (availW - _gap * (cols - 1)) / cols;
+    final byH = rowH * 0.72;
+    var w = byW < byH ? byW : byH;
+    if (w / 0.72 > 320) w = 320 * 0.72;
+    if (w < 40) w = 40;
+    return Size(w, w / 0.72);
   }
 
+  /// A hand in one centred row.
+  Widget _row(List<Widget> allCards, Size card) {
+    final cards = allCards.take(kMaxPerSide).toList();
+    final n = cards.length;
+    return Align(
+      alignment: const Alignment(0, -0.7),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var j = 0; j < n; j++)
+            Padding(
+              padding: EdgeInsets.only(left: j == 0 ? 0 : _gap),
+              child: SizedBox(
+                width: card.width,
+                height: card.height,
+                child: Transform.rotate(
+                  angle: (j - (n - 1) / 2) * 0.04,
+                  child: cards[j],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _caption(String text, {String? sub}) => SizedBox(
+    height: _capH,
+    child: Row(
+      children: [
+        Text(
+          text.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w400,
+            letterSpacing: 0.9,
+            color: kBoxAccent,
+          ),
+        ),
+        if (sub != null) ...[
+          const SizedBox(width: 8),
+          Text(sub, style: FoE.dim(size: 11.5).copyWith(color: kBoxInkSoft)),
+        ],
+      ],
+    ),
+  );
+
+  // The duel (user 2026-11-16, composition 2 of 10): the opponent's hand on
+  // top, the power bar with VS between the hands, yours below with the saved
+  // teams at the left edge, Fight bottom right. All cards one size.
   Widget _stage(List<CreatureInstance> ready) {
     final team = _team;
     final myPower = team.fold(0, (sum, c) => sum + totalPower(c));
-    final alone = !_preview;
-    final (mw, mh) = _tileSize(widget.partySize, alone: alone);
 
     final tiles = <Widget>[
       for (var i = 0; i < widget.partySize; i++)
         i < team.length
-            ? CreatureCard(
-                creature: team[i],
+            ? TradingCard(
+                team[i],
                 onTap: () => _openPicker(ready, slotIndex: i),
               )
             : _emptySlot(ready, isNext: i == team.length),
     ];
 
-    final mine = VersusSide(
-      caption: 'Your team',
-      power: _preview ? null : '⚡ $myPower',
-      fan: ready.isEmpty
-          ? versusHint('No battle-ready monster — heal your team first.')
-          : VersusFan(cards: tiles, tileW: mw, tileH: mh, down: true),
-      trailing: _presets(ready),
+    final presets = _presetsColumn(ready);
+    final presetsW = presets != null ? _presetsW : 0.0;
+    final enemyCards = [for (final e in widget.enemies) EnemyCard(e)];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 2),
+      child: Column(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final rows = _preview ? 2 : 1;
+                final fixed = _preview ? _barH : _capH;
+                final rowH = (c.maxHeight - fixed) / rows;
+                var cols = tiles.length;
+                if (_preview && enemyCards.length > cols) {
+                  cols = enemyCards.length;
+                }
+                final card = _cardSize(
+                  availW: c.maxWidth - presetsW,
+                  rowH: rowH,
+                  cols: cols.clamp(1, kMaxPerSide),
+                );
+                return Column(
+                  children: [
+                    if (_preview) ...[
+                      SizedBox(
+                        height: rowH,
+                        child: Padding(
+                          padding: EdgeInsets.only(left: presetsW),
+                          // 12 px up, away from the VS bar (user 2026-11-16).
+                          child: Transform.translate(
+                            offset: const Offset(0, -12),
+                            child: _row(enemyCards, card),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        height: _barH,
+                        child: Center(
+                          child: PowerVersusBar(
+                            mine: myPower,
+                            theirs: _enemyPower,
+                            theirsLabel: 'Opponent',
+                            mineLabel: 'Your team',
+                            height: _barH,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (!_preview)
+                      _caption('Your team', sub: '$kPowerIcon $myPower'),
+                    SizedBox(
+                      height: rowH,
+                      child: ready.isEmpty
+                          ? Center(
+                              child: versusHint(
+                                'No battle-ready monster — heal your team first.',
+                              ),
+                            )
+                          : Row(
+                              children: [
+                                if (presets != null) presets,
+                                // 12 px down, away from the VS bar.
+                                Expanded(
+                                  child: Transform.translate(
+                                    offset: Offset(0, _preview ? 12 : 0),
+                                    child: _row(tiles, card),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          SizedBox(height: 40, child: _actions()),
+        ],
+      ),
     );
+  }
 
-    Widget? enemy;
-    if (_preview) {
-      final (ew, eh) = _tileSize(widget.enemies.length, alone: false);
-      enemy = VersusSide(
-        caption: 'You face',
-        fan: VersusFan(
-          cards: [
-            for (final e in widget.enemies)
-              CreatureCard(creature: enemyInstanceOf(e), showHp: false),
+  /// Saved teams stacked at the right edge of the team half.
+  Widget? _presetsColumn(List<CreatureInstance> ready) {
+    final teams = _ctrl.battleTeams;
+    if (teams.isEmpty) return null;
+    return SizedBox(
+      width: 84,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final t in teams)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _presetChip(t, ready),
+              ),
           ],
-          tileW: ew,
-          tileH: eh,
         ),
-        trailing: widget.rewards.isEmpty ? null : _rewardsChip(),
-      );
-    }
-
-    return VersusStage(
-      enemy: enemy,
-      middle: _preview
-          ? PowerVersusBar(mine: myPower, theirs: _enemyPower)
-          : null,
-      mine: mine,
-      actions: _actions(),
+      ),
     );
   }
 
@@ -299,15 +433,19 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
     );
   }
 
-  Widget _actions() {
+  Widget _actions({Widget? middle}) {
     final canFight = _selected.isNotEmpty;
     return Row(
       children: [
-        Text(
-          '${_selected.length}/${widget.partySize} chosen',
-          style: FoE.dim(size: 11.5).copyWith(color: kBoxInkSoft),
-        ),
-        const Spacer(),
+        if (middle != null)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: middle,
+            ),
+          )
+        else
+          const Spacer(),
         KeyedSubtree(
           key: IntroSpotlightAnchors.of('battleprep-fight'),
           child: SocialGoldButton(
@@ -322,148 +460,7 @@ class _BattlePrepScreenState extends State<BattlePrepScreen> {
     );
   }
 
-  // ── Rewards ───────────────────────────────────────────────────────────
-
-  Widget _rewardsChip() => Pressable(
-    behavior: HitTestBehavior.opaque,
-    onTap: _showRewards,
-    child: Container(
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-      decoration: raisedTile(radius: 11),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'REWARDS',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w400,
-              letterSpacing: 0.9,
-              color: kBoxAccent,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            widget.rewards.take(4).map((r) => r.emoji).join(' '),
-            style: const TextStyle(fontSize: 16),
-          ),
-          if (widget.rewards.length > 4)
-            Text(
-              '+${widget.rewards.length - 4} more',
-              style: FoE.dim(size: 10).copyWith(color: kBoxInkSoft),
-            ),
-        ],
-      ),
-    ),
-  );
-
-  /// Everything winning pays — the fan's neighbour only shows the first four.
-  Future<void> _showRewards() => showDialog<void>(
-    context: context,
-    barrierColor: CreamPalette.dim,
-    builder: (ctx) => Dialog(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      child: SizedBox(
-        width: 340,
-        child: creamCard(
-          padding: const EdgeInsets.all(16),
-          corner: const KitCloseButton(),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                widget.isBoss ? '👑 Boss rewards' : 'Rewards',
-                textAlign: TextAlign.center,
-                style: FoE.title(size: 15).copyWith(color: kBoxInk),
-              ),
-              const SizedBox(height: 10),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final r in widget.rewards)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 3),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 40,
-                                height: 36,
-                                child: Center(
-                                  child: r.buildingId != null
-                                      ? BuildingIcon(
-                                          defId: r.buildingId,
-                                          emoji: r.emoji,
-                                          size: 36,
-                                        )
-                                      : Text(
-                                          r.emoji,
-                                          style: const TextStyle(fontSize: 20),
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  r.text.replaceFirst('New building: ', ''),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w400,
-                                    color: kBoxInk,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-
   // ── Saved teams ───────────────────────────────────────────────────────
-
-  Widget? _presets(List<CreatureInstance> ready) {
-    final teams = _ctrl.battleTeams;
-    if (teams.isEmpty) return null;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 110, maxWidth: 116),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'SAVED TEAMS',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w400,
-                letterSpacing: 0.9,
-                color: kBoxAccent,
-              ),
-            ),
-            const SizedBox(height: 4),
-            for (final t in teams)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: _presetChip(t, ready),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
 
   bool _sameSelection(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
@@ -675,10 +672,8 @@ class _TeamPickerScreenState extends State<_TeamPickerScreen> {
     ],
   );
 
-  Widget _body() => Padding(
-    padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-    child: _stage(),
-  );
+  Widget _body() =>
+      Padding(padding: const EdgeInsets.fromLTRB(0, 10, 0, 0), child: _stage());
 
   /// The card stage (user 2026-11-11): the seat on the left, the previewed
   /// monster on the right, what the swap does between them, every candidate as

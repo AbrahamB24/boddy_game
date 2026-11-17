@@ -1,3 +1,4 @@
+import '../../core/theme/ui_art.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../../core/supabase/supabase_client.dart';
@@ -106,10 +107,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(
-              width: 330,
-              child: zoneBox(padding: EdgeInsets.zero, child: _playerCard()),
-            ),
+            SizedBox(width: 262, child: _playerCard()),
             const SizedBox(width: 14),
             Expanded(child: _settings(isDev)),
           ],
@@ -124,13 +122,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Scrolls rather than overflows on a short phone (the stat tiles at the
     // bottom were cut off at 430 px tall); IntrinsicHeight keeps the Spacer
     // pushing them to the bottom whenever there IS room.
-    return LayoutBuilder(
-      builder: (context, box) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: box.maxHeight),
-          child: IntrinsicHeight(child: _playerCardBody(_stats)),
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFE2B53E), Color(0xFFC9622E)],
         ),
+        borderRadius: vr(14),
+        border: Border.all(color: const Color(0xFF5C2412), width: 4),
+        boxShadow: const [
+          BoxShadow(color: Color(0xFF18383E), offset: Offset(0, 4)),
+        ],
       ),
+      child: _playerCardBody(_stats),
     );
   }
 
@@ -142,92 +148,97 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _playerCardBody(PvpStats? s) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+    const plate = Color(0xFFF6EFE0);
+    const rust = Color(0xFF8E3B1C);
+    Widget fig(String v, String l) => Expanded(
       child: Column(
         children: [
-          Pressable(
-            onTap: _editAvatar,
-            child: SocialAvatar(_username ?? _email, size: 72),
-          ),
-          const SizedBox(height: 8),
           Text(
-            _usernameLoaded
-                ? (_username == null ? 'No username yet' : '@$_username')
-                : '…',
+            v,
+            maxLines: 1,
+            style: FoE.value(size: 15).copyWith(color: rust),
+          ),
+          Text(
+            l,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: FoE.title(size: 19).copyWith(color: kBoxInk),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            _email,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            alignment: WrapAlignment.center,
-            children: [
-              SocialTileButton(
-                _username == null ? 'Set a username' : 'Edit username',
-                height: 30,
-                onTap: _editUsername,
-              ),
-              SocialTileButton('Portrait', height: 30, onTap: _editAvatar),
-            ],
-          ),
-          const Spacer(),
-          Row(
-            children: [
-              _stat(s == null ? '–' : '${s.rating}', 'PvP rating'),
-              const SizedBox(width: 8),
-              _stat(s == null ? '–' : '${s.wins}–${s.losses}', 'Wins – losses'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _stat('${CreaturesController().creatures.length}', 'Monsters'),
-              const SizedBox(width: 8),
-              _stat('$_buildingCount', 'Buildings'),
-            ],
+            style: FoE.dim(size: 9).copyWith(color: UiArt.inkSoft),
           ),
         ],
       ),
     );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Name plate
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(color: plate, borderRadius: vr(8)),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _usernameLoaded
+                      ? (_username == null ? 'No username yet' : '@$_username')
+                      : '…',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FoE.title(size: 17).copyWith(color: UiArt.ink),
+                ),
+              ),
+              Text(
+                s == null ? '' : 'PvP ${s.rating}',
+                style: FoE.dim(size: 10).copyWith(color: UiArt.inkSoft),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        // Art window with the portrait
+        Expanded(
+          child: Pressable(
+            onTap: _editAvatar,
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF9CC9D4),
+                borderRadius: vr(8),
+                border: Border.all(color: const Color(0xFF5C2412), width: 3),
+              ),
+              alignment: Alignment.center,
+              child: LayoutBuilder(
+                builder: (_, c) => SocialAvatar(
+                  _username ?? _email,
+                  size: (c.biggest.shortestSide - 16).clamp(48.0, 150.0),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        // Figures strip
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+          decoration: BoxDecoration(color: plate, borderRadius: vr(8)),
+          child: Row(
+            children: [
+              fig(s == null ? '–' : '${s.rating}', 'rating'),
+              fig(s == null ? '–' : '${s.wins}–${s.losses}', 'W – L'),
+              fig('${CreaturesController().creatures.length}', 'monsters'),
+              fig('$_buildingCount', 'buildings'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _email,
+          maxLines: 1,
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+          style: FoE.dim(size: 10).copyWith(color: plate, shadows: const [Shadow(color: Color(0xAA5C2412), blurRadius: 2)]),
+        ),
+      ],
+    );
   }
-
-  Widget _stat(String value, String label) => Expanded(
-    child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-      decoration: BoxDecoration(
-        color: CreamPalette.tan.withValues(alpha: 0.18),
-        borderRadius: vr(12),
-      ),
-      child: Column(
-        children: [
-          Text(
-            value,
-            maxLines: 1,
-            style: FoE.value(size: 19).copyWith(color: kBoxAccent),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: FoE.dim(
-              size: 10,
-            ).copyWith(color: kBoxInkSoft, fontWeight: FontWeight.w400),
-          ),
-        ],
-      ),
-    ),
-  );
 
   // ── Preferences and account ───────────────────────────────────────────
 
@@ -236,6 +247,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            SocialTileButton(
+              _username == null ? 'Set a username' : 'Edit username',
+              height: 32,
+              onTap: _editUsername,
+            ),
+            SocialTileButton('Change portrait', height: 32, onTap: _editAvatar),
+          ],
+        ),
+        const SizedBox(height: 14),
         socialSection('Preferences'),
         _switchRow(
           icon: Icons.volume_up_outlined,

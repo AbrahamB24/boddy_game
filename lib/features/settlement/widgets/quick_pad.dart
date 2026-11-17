@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart' hide Text;
 
-import '../../../core/theme/fachwerk.dart';
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/ui_art.dart';
 import '../../../core/theme/foe_theme.dart';
@@ -251,39 +250,6 @@ RadialGradient gemGradient(Color accent) => RadialGradient(
   radius: 1.05,
   colors: [_lighten(accent, 0.38), accent, _darken(accent, 0.22)],
   stops: const [0, 0.55, 1],
-);
-
-/// The WHOLE gem chrome — gradient, rim and drop shadow — not just the
-/// colour: the first pass only swapped in [gemGradient] and the fold tab and
-/// the bell still read as a different button (user 2026-09-29: "es fehlt
-/// noch der weisse Rahmen und der Farbverlauf, damit sie gleich sind wie die
-/// Buttons Build und Management"). [shape] picks circle (the bell) or a
-/// rounded rect (the fold tab, which is a narrow pill, not a disc); pass
-/// [borderRadius] only for the rect case.
-BoxDecoration gemDecoration(
-  Color accent, {
-  bool lit = false,
-  BoxShape shape = BoxShape.circle,
-  BorderRadius? borderRadius,
-}) => BoxDecoration(
-  shape: shape,
-  borderRadius: shape == BoxShape.rectangle ? (borderRadius ?? vr(12)) : null,
-  // PERGAMENT UND STEIN (2026-11-04): a round IRON button — the accent lit from
-  // the top left, a dark rim (a brass-lit one while pressed) and a hard slab of
-  // shadow underneath.
-  gradient: RadialGradient(
-    center: const Alignment(-0.35, -0.5),
-    radius: 1.0,
-    colors: [_lighten(accent, 0.35), accent, _darken(accent, 0.4)],
-    stops: const [0, 0.5, 1],
-  ),
-  border: Border.all(
-    color: lit ? HudBlocks.litRim : HudBlocks.mossDark,
-    width: lit ? 3 : 2.5,
-  ),
-  boxShadow: const [
-    BoxShadow(color: Color(0x8C000000), offset: Offset(0, 4), blurRadius: 3),
-  ],
 );
 
 /// A ROUND GEM BUTTON: the accent colour lit from the top left, a cream rim, a

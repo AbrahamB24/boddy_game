@@ -1,3 +1,4 @@
+import '../common/widgets/parchment_kit.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../../core/theme/foe_theme.dart';
@@ -53,7 +54,6 @@ class EggDetailScreen extends StatefulWidget {
 
 class _EggDetailScreenState extends State<EggDetailScreen> {
   // The parchment palette every page reached from a building wears.
-  static const Color _ink = kBoxInk;
   static final Color _inkSoft = kBoxInk.withValues(alpha: 0.78);
   static final Color _inkFaint = kBoxInk.withValues(alpha: 0.55);
 
@@ -75,37 +75,14 @@ class _EggDetailScreenState extends State<EggDetailScreen> {
   );
 
   Future<void> _discard(BreedingJob job) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: CreamPalette.paperTop,
-        title: Text(
-          'Discard this egg?',
-          style: FoE.title(size: 15).copyWith(color: _ink),
-        ),
-        content: Text(
-          'It is gone for good — the child inside it is never born.',
-          style: FoE.dim(size: 12).copyWith(color: _inkSoft),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Keep',
-              style: FoE.label(size: 12).copyWith(color: _ink),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              'Discard',
-              style: FoE.label(size: 12).copyWith(color: CreamPalette.warn),
-            ),
-          ),
-        ],
-      ),
+    final ok = await parchmentConfirm(
+      context,
+      title: 'Discard this egg?',
+      message: 'It is gone for good — the child inside it is never born.',
+      confirmLabel: 'Discard',
+      danger: true,
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     await _breeding.cancel(job);
     if (mounted) Navigator.pop(context);
   }

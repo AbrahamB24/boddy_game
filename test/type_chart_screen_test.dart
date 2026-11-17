@@ -36,13 +36,32 @@ void main() {
       CreatureElement.shadow, // ×1.25
     ]);
     expect(typesHitWeak(f), [
+      CreatureElement.lightning, // ×0.75
       CreatureElement.stone, // ×0.75
       CreatureElement.water, // ×0.5
     ]);
     expect(typesHittingHard(f), [
       CreatureElement.water, // ×1.5
+      CreatureElement.lightning, // ×1.25
       CreatureElement.stone, // ×1.25
     ]);
+    // Every type: exactly 3 strengths, 3 weaknesses, 1 neutral (2026-11-17),
+    // and the matrix is reciprocal.
+    for (final a in kChartTypes) {
+      expect(typesHitHard(a), hasLength(3), reason: '$a strengths');
+      expect(
+        typesHitWeak(a).where((b) => b != a),
+        hasLength(3),
+        reason: '$a weaknesses',
+      );
+      for (final b in kChartTypes.where((b) => b != a)) {
+        expect(
+          a.multiplierVs(b) > 1,
+          b.multiplierVs(a) < 1,
+          reason: '$a vs $b',
+        );
+      }
+    }
     // Every listed pair really is an advantage / a disadvantage.
     for (final a in kChartTypes) {
       for (final b in typesHitHard(a)) {
@@ -61,7 +80,7 @@ void main() {
     t,
   ) async {
     await open(t);
-    expect(find.text('🛡 Type chart'), findsOneWidget);
+    expect(find.text('Type chart'), findsOneWidget);
     expect(heading('Fire'), findsOneWidget);
     expect(find.text('HITS HARD'), findsOneWidget);
     expect(find.text('HITS WEAK'), findsOneWidget);

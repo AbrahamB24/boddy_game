@@ -35,6 +35,11 @@ class BattleScene extends StatelessWidget {
 
   const BattleScene({super.key, this.imageUrl, this.era = 1});
 
+  /// Builds the forest arena's ground art (decodes + shadows) ahead of the
+  /// first fight, behind the loading screen. Never throws.
+  static Future<void> preload() =>
+      _ForestArt.load().then<void>((_) {}, onError: (Object _) {});
+
   /// Sky/ground pair per era — the chapters read as different WORLDS: a green
   /// valley, then bare stone, then embers, and so on up the ladder.
   static const List<List<Color>> _eraPalette = [
@@ -210,22 +215,28 @@ class _ForestArt {
 
   static Future<_ForestArt?> _build() async {
     try {
-      final grass = await _decode('assets/images/terrain/grass_tile.webp');
+      // All at once: this used to decode the 16 pictures (and cast their
+      // shadows) one after the other, which is what made the arena's ground
+      // pop in seconds after the fight screen opened.
       final props = <String, ui.Image>{};
       final shadows = <String, ui.Image>{};
-      for (final e in _files.entries) {
-        final (file, width, depth) = e.value;
-        final image = await _decode(
-          'assets/images/terrain/$file.webp',
-          width: width,
-        );
-        props[e.key] = image;
-        if (depth != null) {
-          final shadow = await castShadowImage(image, groundDepth: depth);
-          if (shadow != null) shadows[e.key] = shadow;
-        }
-      }
-      return cached = _ForestArt(grass, props, shadows);
+      final grassF = _decode('assets/images/terrain/grass_tile.webp');
+      await Future.wait([
+        for (final e in _files.entries)
+          () async {
+            final (file, width, depth) = e.value;
+            final image = await _decode(
+              'assets/images/terrain/$file.webp',
+              width: width,
+            );
+            props[e.key] = image;
+            if (depth != null) {
+              final shadow = await castShadowImage(image, groundDepth: depth);
+              if (shadow != null) shadows[e.key] = shadow;
+            }
+          }(),
+      ]);
+      return cached = _ForestArt(await grassF, props, shadows);
     } catch (_) {
       // Not there: the painter keeps its plain lawn, as the map does.
       _pending = null;

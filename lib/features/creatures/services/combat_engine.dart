@@ -943,7 +943,7 @@ class CombatEngine extends ChangeNotifier {
                 : AbilityEffectKind.regen.defaultTurns,
             value: ability.regenValue,
           );
-          parts.add('🌱 regenerating');
+          parts.add('regenerating');
         }
         // One event for the whole buff action, win or no self-buff/regen was
         // even rolled into it — the UI's white-lines-rising cue reads off
@@ -962,7 +962,7 @@ class CombatEngine extends ChangeNotifier {
                 : AbilityEffectKind.regen.defaultTurns,
             value: ability.regenValue,
           );
-          parts.add('🌱 regenerating');
+          parts.add('regenerating');
         }
         for (final t in targets) {
           final amount = (t.maxHp * ability.healPct).round();

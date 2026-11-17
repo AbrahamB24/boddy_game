@@ -60,7 +60,7 @@ void main() {
   testWidgets('shows the battery, the figures and the step rules without '
       'overflow', (t) async {
     await open(t, 108);
-    expect(find.text('⚡ Energy'), findsOneWidget);
+    expect(find.text('Energy'), findsOneWidget);
     expect(find.text('ENERGY POOL'), findsOneWidget);
     expect(find.text('108 %'), findsWidgets);
     expect(find.text('100 %'), findsOneWidget);

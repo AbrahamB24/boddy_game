@@ -70,7 +70,13 @@ List<InlineSpan>? emojiSpans(String s, double fontSize) {
       alignment: PlaceholderAlignment.middle,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: fontSize * 0.04),
-        child: GameIcon(key, size: fontSize * 1.2),
+        // Nudged UP: moving it down made it worse (user 2026-11-17). "Middle"
+        // centres the box on the line; the glyphs sit differently from that.
+        // Tune this factor if the icons still sit off the text line.
+        child: Transform.translate(
+          offset: Offset(0, -fontSize * 0.1),
+          child: GameIcon(key, size: fontSize * 1.2),
+        ),
       ),
     ));
   }

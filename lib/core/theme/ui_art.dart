@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'voxel_kit.dart' show VoxelBar;
+import 'voxel_kit.dart' show VoxelBar, vr;
 
 // ── RENDERED INTERFACE PIECES ───────────────────────────────────────────────
 //
@@ -28,7 +28,32 @@ abstract final class UiArt {
   static const bool pixelWood = true;
 
   /// Where the pixelated copy of a HUD glyph lives (see tool/pixel/pixelate.js).
-  static String px(String name) => 'assets/images/ui_px/$name.png';
+  static String px(String name) {
+    final icon = _pxAsIcon[name];
+    return icon == null
+        ? 'assets/images/ui_px/$name.png'
+        : 'assets/images/icons/$icon.webp';
+  }
+
+  /// HUD glyphs that are pixel-for-pixel the menu icon of the same thing: they
+  /// load from assets/images/icons/ so there is one picture of each, not two.
+  static const Map<String, String> _pxAsIcon = {
+    'hud_coin': 'coin',
+    'hud_fish': 'fish',
+    'hud_house': 'house',
+    'hud_clock': 'clock',
+    'hud_log': 'wood',
+    'hud_stone': 'stone',
+    'icon_bag': 'backpack',
+    'icon_bell': 'bell',
+    'icon_hammer': 'hammer',
+    'icon_map': 'map',
+    'icon_paw': 'paw',
+    'icon_people': 'groups',
+    'icon_person': 'person',
+    'icon_tasks': 'tasks',
+    'globe': 'globe',
+  };
 
   /// A pixelated glyph, every source pixel [PxArt.pixel] logical px wide, never
   /// smoothed. The files are tiny; the size comes from the picture itself.
@@ -328,26 +353,6 @@ abstract final class UiWood {
   static final Color onWoodSoft = onWood.withValues(alpha: 0.86);
 }
 
-/// A light plaster plaque with a wooden rim and a hard shadow: a shortcut, a
-/// readout. [lit] gives it a gold rim and a warm glow (something is ready).
-BoxDecoration uiPlaque({bool lit = false, double radius = 8}) => BoxDecoration(
-  gradient: const LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [Color(0xFFDBD0B3), Color(0xFFCFC3A3)], // the header plaster
-  ),
-  borderRadius: BorderRadius.circular(radius >= 8 ? 3 : 2),
-  border: Border.all(color: lit ? UiWood.gold : UiArt.plaqueRim, width: 2),
-  boxShadow: [
-    if (lit)
-      BoxShadow(
-        color: UiWood.glow.withValues(alpha: 0.55),
-        blurRadius: 10,
-        spreadRadius: 1,
-      ),
-    const BoxShadow(color: Color(0xCC140A04), offset: Offset(0, 3)),
-  ],
-);
 
 /// The ground of a menu screen: dark walnut planks.
 class UiGround extends StatelessWidget {
@@ -440,7 +445,7 @@ class UiBoard extends StatelessWidget {
                 colors: [UiWood.beamLight, UiWood.beam, UiWood.beamDark],
                 stops: [0, 0.4, 1],
               ),
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: vr(3),
               border: Border.all(color: const Color(0xFF1A0E06), width: 2),
               boxShadow: const [
                 BoxShadow(color: Color(0xCC0E0703), offset: Offset(0, 4)),
@@ -458,7 +463,7 @@ class UiBoard extends StatelessWidget {
                 colors: [UiWood.wellDeep, UiWood.well],
                 stops: [0, 0.12],
               ),
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: vr(2),
               border: Border.all(color: const Color(0xFF140B05), width: 1.5),
             ),
             child: Padding(padding: padding, child: child),
@@ -608,7 +613,7 @@ class WoodBoard extends StatelessWidget {
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
       shape: round ? BoxShape.circle : BoxShape.rectangle,
-      borderRadius: round ? null : BorderRadius.circular(radius),
+      borderRadius: round ? null : vr(radius),
       boxShadow: voxel && UiArt.pixelWood
           ? const []
           : const [

@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' hide Text;
 
 import '../ui/pressable.dart';
-import 'cream_kit.dart' show MenuScaffold;
+import 'cream_kit.dart' show MenuScaffold, CreamPalette;
 import 'foe_theme.dart';
 import 'voxel_kit.dart';
 import 'voxel_icons.dart';
@@ -528,7 +528,7 @@ class SelectChip extends StatelessWidget {
   Widget build(BuildContext context) => ChunkyButton(
     onTap: onTap,
     fill: active ? Strategy.gold : Strategy.tan,
-    deep: active ? Strategy.goldDeep : strategyDarken(Strategy.tan),
+    deep: active ? CreamPalette.tanShadow : strategyDarken(Strategy.tan),
     radius: 20,
     shadowOffset: 3,
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),

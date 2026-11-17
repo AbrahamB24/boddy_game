@@ -3,9 +3,11 @@ import 'package:flutter/material.dart' hide Text;
 import '../../../core/theme/cream_kit.dart';
 import '../../../core/theme/foe_theme.dart';
 import '../models/combatant.dart';
+import '../services/creature_power.dart' show kPowerIcon;
 import '../models/creature_enums.dart';
 import '../models/creature_instance.dart';
-import '../../../core/theme/voxel_kit.dart' show vr;
+import '../../../core/theme/voxel_kit.dart'
+    show VoxelBar, VoxelShape;
 import '../../../core/ui/game_text.dart';
 
 /// THE VERSUS PAGE (user 2026-09-20, "Variante 8, Karten-Duell", with the power
@@ -73,12 +75,12 @@ class VsBadge extends StatelessWidget {
     width: 40,
     height: 40,
     alignment: Alignment.center,
-    decoration: BoxDecoration(
+    // Same block finish as every other panel: stepped corners, bevel, hard drop.
+    decoration: ShapeDecoration(
       color: CreamPalette.gold,
-      shape: BoxShape.rectangle,
-      boxShadow: const [
-        BoxShadow(color: CreamPalette.goldDeep, offset: Offset(0, 3)),
-      ],
+      // No gold drop shadow: it showed as a yellow strip below the outline
+      // (user 2026-11-16: "das gelb geht unten zu weit").
+      shape: const VoxelShape(),
     ),
     child: const Text(
       'VS',
@@ -122,26 +124,84 @@ class PowerVersusBar extends StatelessWidget {
   final int mine;
   final int theirs;
 
-  const PowerVersusBar({super.key, required this.mine, required this.theirs});
+  /// A small caption over the red number (the opponent's side).
+  final String? theirsLabel;
+
+  /// A small caption under the green number (our side), the mirror of
+  /// [theirsLabel] above the red one.
+  final String? mineLabel;
+
+  /// Total height; the captions need room above and below the bar.
+  final double height;
+
+  const PowerVersusBar({
+    super.key,
+    required this.mine,
+    required this.theirs,
+    this.theirsLabel,
+    this.mineLabel,
+    this.height = 40,
+  });
 
   @override
   Widget build(BuildContext context) {
     final total = mine + theirs;
     final share = total <= 0 ? 0.5 : (mine / total).clamp(0.05, 0.95);
-    Widget figure(int v, {required bool mineSide}) => SizedBox(
-      width: 62,
-      child: Text(
-        '⚡ $v',
-        textAlign: mineSide ? TextAlign.left : TextAlign.right,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
-          color: mineSide ? CreamPalette.better : CreamPalette.warn,
-        ),
-      ),
+    // One fixed line box for every piece of text (a fixed strut), so the crown
+    // glyph, the number and the captions can never push each other off the
+    // bar's line (user 2026-11-16: crowns + numbers on the bar's line, the two
+    // captions the same distance from it).
+    const lineH = 14.0;
+    const strut = StrutStyle(fontSize: 13, height: 1, forceStrutHeight: true);
+    const labelStyle = TextStyle(
+      fontSize: 10,
+      height: 1,
+      letterSpacing: 0.9,
+      color: kBoxAccent,
     );
+    // Distance from the bar's centre line to the middle of a caption: the same
+    // above (opponent) and below (own team).
+    const capGap = 19.0;
+    Widget figure(int v, {required bool mineSide}) {
+      final label = mineSide ? mineLabel : theirsLabel;
+      final mid = height / 2;
+      return SizedBox(
+        width: 84,
+        height: height,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: mineSide ? 0 : null,
+              right: mineSide ? null : 0,
+              top: mid - lineH / 2,
+              height: lineH,
+              child: Text(
+                '$kPowerIcon $v',
+                strutStyle: strut,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1,
+                  fontWeight: FontWeight.w400,
+                  color: mineSide ? CreamPalette.better : CreamPalette.warn,
+                ),
+              ),
+            ),
+            if (label != null)
+              Positioned(
+                left: mineSide ? 0 : null,
+                right: mineSide ? null : 0,
+                top: mineSide ? mid + capGap - 5 : mid - capGap - 5,
+                height: 10,
+                child: Text(label.toUpperCase(), style: labelStyle),
+              ),
+          ],
+        ),
+      );
+    }
+
     return SizedBox(
-      height: 40,
+      height: height,
       child: Row(
         children: [
           figure(mine, mineSide: true),
@@ -151,23 +211,29 @@ class PowerVersusBar extends StatelessWidget {
                 alignment: Alignment.center,
                 clipBehavior: Clip.none,
                 children: [
-                  ClipRRect(
-                    borderRadius: vr(6),
-                    child: SizedBox(
-                      height: 12,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            flex: (share * 1000).round(),
-                            child: const ColoredBox(color: CreamPalette.better),
+                  // Two block bars (the kit's VoxelBar), split by the totals.
+                  SizedBox(
+                    height: 12,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: (share * 1000).round(),
+                          child: const VoxelBar(
+                            value: 1,
+                            color: CreamPalette.better,
+                            onDark: true,
                           ),
-                          Expanded(
-                            flex: ((1 - share) * 1000).round(),
-                            child: const ColoredBox(color: CreamPalette.warn),
+                        ),
+                        const SizedBox(width: 2),
+                        Expanded(
+                          flex: ((1 - share) * 1000).round(),
+                          child: const VoxelBar(
+                            value: 1,
+                            color: CreamPalette.warn,
+                            onDark: true,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                   Positioned(

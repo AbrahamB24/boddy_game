@@ -412,6 +412,120 @@ abstract final class MonsterSheets {
     for (var s = 0; s < 3; s++) _owWalkSets(s),
   ];
 
+  // ── Griffin line (tool/blender/griffin_anim.py) ──
+  // Three stages of the user's griffin sheet (chick, juvenile with small wings,
+  // adult with spread feathered wings). ONE idle per stage: s0 looks around and
+  // pecks the ground, s1 ruffles and flutters its wings, s2 rears up and beats
+  // its wings once. Folders: assets/images/monsters/griffin_s<stage>/.
+  // The griffin takes over the rare lightning species 'voltglider' (my choice,
+  // the user named no species); the id stays, supabase/rename_voltglider_to_griffin.sql
+  // renames the three stages.
+  static const String _griffinId = 'voltglider';
+  static const List<int> _gfIdleFrames = [40, 36, 36];
+  static const List<double> _gfBattleScale = [1.0, 1.15, 1.35];
+  static const List<double> _gfMapScale = [1.0, 1.15, 1.3];
+
+  static MonsterSheetSet _gfView(int stage, bool back) {
+    final d = 'assets/images/monsters/griffin_s$stage';
+    final v = back ? 'back' : 'front';
+    return MonsterSheetSet(
+      frameW: 560,
+      frameH: 448,
+      decodeScale: _battleDecode,
+      scale: _gfBattleScale[stage],
+      anims: {
+        'idle': SheetAnim('$d/${v}_idle.webp', _gfIdleFrames[stage], 12),
+        if (!back) ...{
+          'attack': SheetAnim('$d/front_attack.webp', 20, 16, loop: false),
+          'hurt': SheetAnim('$d/front_hurt.webp', 10, 14, loop: false),
+        },
+      },
+    );
+  }
+
+  static final List<MonsterSheetSet> _gfFront = [
+    for (var s = 0; s < 3; s++) _gfView(s, false),
+  ];
+  static final List<MonsterSheetSet> _gfBack = [
+    for (var s = 0; s < 3; s++) _gfView(s, true),
+  ];
+
+  static Map<String, MonsterSheetSet> _gfWalkSets(int stage) {
+    final d = 'assets/images/monsters/griffin_s$stage';
+    return {
+      for (final h in const ['se', 'ne', 'nw', 'sw'])
+        h: MonsterSheetSet(
+          frameW: stage == 1 ? 543 : 544,
+          frameH: stage == 1 ? 434 : 435,
+          decodeScale: 0.5,
+          scale: _gfMapScale[stage],
+          anims: {
+            'walk': SheetAnim('$d/${h}_walk.webp', 8, 10),
+            'idle': SheetAnim('$d/${h}_idle.webp', _gfIdleFrames[stage], 12),
+          },
+        ),
+    };
+  }
+
+  static final List<Map<String, MonsterSheetSet>> _gfMap = [
+    for (var s = 0; s < 3; s++) _gfWalkSets(s),
+  ];
+
+  // â”€â”€ Leafwing line (tool/blender/leafwing_anim.py) â”€â”€
+  // Three stages of the green leaf-winged dragon (Stufe 1 hovering leaf-manta,
+  // Stufe 2 baby dragon, Stufe 3 upright dragon). ONE idle per stage. Wired to
+  // the plant species 'mossgator' (user 2026-11-16; supabase/rename_mossfang_to_leafwing.sql
+  // renames it). Folders: assets/images/monsters/leafwing_s<stage>/.
+  static const String _leafId = 'mossgator';
+  static const List<int> _lwIdleFrames = [40, 40, 40];
+  static const List<double> _lwBattleScale = [1.0, 1.1, 1.2];
+  static const List<double> _lwMapScale = [1.0, 1.1, 1.2];
+
+  static MonsterSheetSet _lwView(int stage, bool back) {
+    final d = 'assets/images/monsters/leafwing_s$stage';
+    final v = back ? 'back' : 'front';
+    return MonsterSheetSet(
+      frameW: 560,
+      frameH: 448,
+      decodeScale: _battleDecode,
+      scale: _lwBattleScale[stage],
+      anims: {
+        'idle': SheetAnim('$d/${v}_idle.webp', _lwIdleFrames[stage], 12),
+        if (!back) ...{
+          'attack': SheetAnim('$d/front_attack.webp', 20, 16, loop: false),
+          'hurt': SheetAnim('$d/front_hurt.webp', 10, 14, loop: false),
+        },
+      },
+    );
+  }
+
+  static final List<MonsterSheetSet> _lwFront = [
+    for (var s = 0; s < 3; s++) _lwView(s, false),
+  ];
+  static final List<MonsterSheetSet> _lwBack = [
+    for (var s = 0; s < 3; s++) _lwView(s, true),
+  ];
+
+  static Map<String, MonsterSheetSet> _lwWalkSets(int stage) {
+    final d = 'assets/images/monsters/leafwing_s$stage';
+    return {
+      for (final h in const ['se', 'ne', 'nw', 'sw'])
+        h: MonsterSheetSet(
+          frameW: 544,
+          frameH: 435,
+          decodeScale: 0.5,
+          scale: _lwMapScale[stage],
+          anims: {
+            'walk': SheetAnim('$d/${h}_walk.webp', 8, 10),
+            'idle': SheetAnim('$d/${h}_idle.webp', _lwIdleFrames[stage], 12),
+          },
+        ),
+    };
+  }
+
+  static final List<Map<String, MonsterSheetSet>> _lwMap = [
+    for (var s = 0; s < 3; s++) _lwWalkSets(s),
+  ];
   /// Species that have baked, animated art (battle, lists, map).
   static bool hasBaked(String? speciesId) =>
       speciesId == 'tidelord' ||
@@ -419,7 +533,9 @@ abstract final class MonsterSheets {
       speciesId == _phoenixId ||
       speciesId == _dragonId ||
       speciesId == _duckId ||
-      speciesId == _owlId;
+      speciesId == _owlId ||
+      speciesId == _griffinId ||
+      speciesId == _leafId;
 
   /// The map headings, named by the screen direction of the world axis they
   /// walk along: se = +x, ne = +y, nw = -x, sw = -y.
@@ -481,6 +597,12 @@ abstract final class MonsterSheets {
     if (speciesId == _owlId && stage >= 0 && stage < 3) {
       return (back ? _owBack : _owFront)[stage];
     }
+    if (speciesId == _griffinId && stage >= 0 && stage < 3) {
+      return (back ? _gfBack : _gfFront)[stage];
+    }
+    if (speciesId == _leafId && stage >= 0 && stage < 3) {
+      return (back ? _lwBack : _lwFront)[stage];
+    }
     return null;
   }
 
@@ -539,6 +661,18 @@ abstract final class MonsterSheets {
       if (url.contains('creature-images/${_owlId}_$s.png')) {
         return (set: _owFront[s], back: false);
       }
+      if (url.contains('creature-images/${_griffinId}_${s}_back.png')) {
+        return (set: _gfBack[s], back: true);
+      }
+      if (url.contains('creature-images/${_griffinId}_$s.png')) {
+        return (set: _gfFront[s], back: false);
+      }
+      if (url.contains('creature-images/${_leafId}_${s}_back.png')) {
+        return (set: _lwBack[s], back: true);
+      }
+      if (url.contains('creature-images/${_leafId}_$s.png')) {
+        return (set: _lwFront[s], back: false);
+      }
     }
     return null;
   }
@@ -564,6 +698,12 @@ abstract final class MonsterSheets {
     if (speciesId == _owlId && stage >= 0 && stage < _owMap.length) {
       return _owMap[stage][heading];
     }
+    if (speciesId == _griffinId && stage >= 0 && stage < _gfMap.length) {
+      return _gfMap[stage][heading];
+    }
+    if (speciesId == _leafId && stage >= 0 && stage < _lwMap.length) {
+      return _lwMap[stage][heading];
+    }
     return null;
   }
 }
@@ -571,6 +711,31 @@ abstract final class MonsterSheets {
 /// Decoded sheets, kept for the life of the app: a sheet is one image, so ten
 /// monsters sharing a species decode it once.
 final Map<String, Future<ui.Image>> _sheetImages = {};
+
+/// The opaque bounds of a sheet's first frame, as fractions of one cell,
+/// keyed by sheet and decoded width ([MonsterSheetPlayer.tight]).
+final Map<String, Rect> _cropCache = {};
+
+Future<Rect> _opaqueBounds(ui.Image img, MonsterSheetSet set) async {
+  final data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+  if (data == null) return const Rect.fromLTRB(0, 0, 1, 1);
+  final k = img.width / (set.cols * set.frameW);
+  final cw = (set.frameW * k).floor(), ch = (set.frameH * k).floor();
+  var x0 = cw, y0 = ch, x1 = -1, y1 = -1;
+  for (var y = 0; y < ch; y++) {
+    final row = y * img.width * 4;
+    for (var x = 0; x < cw; x++) {
+      if (data.getUint8(row + x * 4 + 3) > 24) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  if (x1 < 0) return const Rect.fromLTRB(0, 0, 1, 1);
+  return Rect.fromLTRB(x0 / cw, y0 / ch, (x1 + 1) / cw, (y1 + 1) / ch);
+}
 
 /// The same sheets once decoded, for a synchronous look-up.
 final Map<String, ui.Image> _sheetDone = {};
@@ -663,10 +828,16 @@ Future<void> precacheMonsterSheets(
 /// what a fight draws. Shares its textures with the map walkers. The battle
 /// screen calls this for every combatant before the fighters walk on. Never
 /// throws.
-Future<void> precacheBattleSheets(String? speciesId, int stage) =>
+Future<void> precacheBattleSheets(
+  String? speciesId,
+  int stage, {
+  bool? mine,
+}) =>
     Future.wait([
-      for (final mine in const [true, false])
-        if (MonsterSheets.battleIso(speciesId, stage, mine: mine)
+      // A fighter only ever stands on ONE side ([mine] true = lower left),
+      // so the battle asks for just that heading: half the decodes.
+      for (final m in mine == null ? const [true, false] : [mine])
+        if (MonsterSheets.battleIso(speciesId, stage, mine: m)
             case final set?)
           for (final anim in {set.anims['idle']!, set.anims['walk']!})
             _loadSheet(anim.asset, width: _decodeWidthOf(set)).then<void>(
@@ -696,6 +867,19 @@ class MonsterSheetPlayer extends StatefulWidget {
   /// False = show the first frame and never tick (thumbnails, long lists).
   final bool animate;
 
+  /// Trading-card mode (user 2026-11-15: the monster must fill the card): the
+  /// player fills its whole box, scaling the creature's OPAQUE bounds (measured
+  /// once from the first frame) up until they nearly touch an edge, centred.
+  /// [height], [fill] and [lift] are ignored.
+  final bool tight;
+
+  /// Equal-size mode (user 2026-11-16: all monsters about the same size in a
+  /// fight): the creature's OPAQUE bounds are scaled to [normH] of the box's
+  /// height (width capped at [normMaxAspect] times that), standing on the foot
+  /// line, whatever its sheet's cell holds around it. [fill] is ignored.
+  final double? normH;
+  final double normMaxAspect;
+
   const MonsterSheetPlayer({
     super.key,
     required this.set,
@@ -706,6 +890,9 @@ class MonsterSheetPlayer extends StatefulWidget {
     this.fill = 0.70,
     this.lift = 0.042,
     this.animate = true,
+    this.tight = false,
+    this.normH,
+    this.normMaxAspect = 1.5,
   });
 
   @override
@@ -759,11 +946,30 @@ class _MonsterSheetPlayerState extends State<MonsterSheetPlayer>
     final ready = _sheetDone[width == null ? asset : '$asset@$width'];
     if (ready != null) {
       _image = ready;
+      _ensureCrop();
       return;
     }
     _loadSheet(asset, width: width).then((img) {
       if (!mounted || _loading != asset) return;
       setState(() => _image = img);
+      _ensureCrop();
+    }, onError: (_) {});
+  }
+
+  Rect? _crop;
+
+  void _ensureCrop() {
+    final img = _image;
+    if ((!widget.tight && widget.normH == null) || img == null) return;
+    final key = '${_anim.asset}@${img.width}';
+    final known = _cropCache[key];
+    if (known != null) {
+      _crop = known;
+      return;
+    }
+    _opaqueBounds(img, widget.set).then((r) {
+      _cropCache[key] = r;
+      if (mounted && _image == img) setState(() => _crop = r);
     }, onError: (_) {});
   }
 
@@ -857,6 +1063,32 @@ class _MonsterSheetPlayerState extends State<MonsterSheetPlayer>
   Widget build(BuildContext context) {
     final set = widget.set;
     final fill = (widget.fill * set.scale).clamp(0.0, 0.98);
+    if (widget.tight) {
+      final tightArt = SizedBox.expand(
+        child: RepaintBoundary(
+          child: CustomPaint(
+            painter: _SheetPainter(
+              image: _image,
+              frame: _frame,
+              breath: _breath,
+              set: set,
+              fill: fill,
+              lift: widget.lift,
+              crop: _crop,
+              tight: true,
+            ),
+          ),
+        ),
+      );
+      if (widget.flash <= 0) return tightArt;
+      return ColorFiltered(
+        colorFilter: ColorFilter.mode(
+          widget.flashColor.withValues(alpha: widget.flash),
+          BlendMode.srcATop,
+        ),
+        child: tightArt,
+      );
+    }
     final art = SizedBox(
       width: widget.height * fill * set.aspect,
       height: widget.height,
@@ -869,6 +1101,9 @@ class _MonsterSheetPlayerState extends State<MonsterSheetPlayer>
             set: set,
             fill: fill,
             lift: widget.lift,
+            crop: widget.normH == null ? null : _crop,
+            normH: widget.normH,
+            normMaxAspect: widget.normMaxAspect,
           ),
         ),
       ),
@@ -891,6 +1126,10 @@ class _SheetPainter extends CustomPainter {
   final MonsterSheetSet set;
   final double fill;
   final double lift;
+  final Rect? crop;
+  final bool tight;
+  final double? normH;
+  final double normMaxAspect;
 
   _SheetPainter({
     required this.image,
@@ -899,6 +1138,10 @@ class _SheetPainter extends CustomPainter {
     required this.set,
     required this.fill,
     required this.lift,
+    this.crop,
+    this.tight = false,
+    this.normH,
+    this.normMaxAspect = 1.5,
   }) : super(repaint: Listenable.merge([frame, breath]));
 
   @override
@@ -914,6 +1157,68 @@ class _SheetPainter extends CustomPainter {
       set.frameW * k,
       set.frameH * k,
     );
+    if (tight) {
+      final cr = crop;
+      if (cr == null) return;
+      // The opaque bounds (fractions of the cell) scaled to nearly touch the
+      // box, centred; the whole cell is drawn so a frame that reaches past the
+      // first frame's bounds is not cut.
+      final cw = src.width, ch = src.height;
+      final bw = cr.width * cw, bh = cr.height * ch;
+      if (bw <= 0 || bh <= 0) return;
+      final m = 0.04 * (size.width < size.height ? size.width : size.height);
+      final s = math.min((size.width - 2 * m) / bw, (size.height - 2 * m) / bh);
+      final dstT = Rect.fromLTWH(
+        size.width / 2 - cr.center.dx * cw * s,
+        size.height / 2 - cr.center.dy * ch * s,
+        cw * s,
+        ch * s,
+      );
+      final b = breath.value;
+      if (b != 0) {
+        final px = size.width / 2;
+        final py = size.height / 2 + bh * s / 2;
+        canvas.save();
+        canvas.translate(px, py);
+        canvas.scale(1 - 0.008 * b, 1 + 0.025 * b);
+        canvas.translate(-px, -py);
+      }
+      canvas.drawImageRect(img, src, dstT, _paint);
+      if (b != 0) canvas.restore();
+      return;
+    }
+    final nh = normH;
+    final crN = crop;
+    // Until the bounds are measured the old fill-based drawing stands in.
+    if (nh != null && crN != null && crN.height > 0 && crN.width > 0) {
+      final cr = crN;
+      // Cell height at which the opaque part is nh*size.height tall (and not
+      // wider than normMaxAspect times that), feet on the box's foot line.
+      final wantH = nh * size.height;
+      var dhN = wantH / cr.height;
+      final wantW = wantH * normMaxAspect;
+      final dwN0 = dhN * set.aspect;
+      if (cr.width * dwN0 > wantW) dhN *= wantW / (cr.width * dwN0);
+      final dwN = dhN * set.aspect;
+      final footY = size.height * (1 - lift);
+      final dstN = Rect.fromLTWH(
+        size.width / 2 - cr.center.dx * dwN,
+        footY - cr.bottom * dhN,
+        dwN,
+        dhN,
+      );
+      final bN = breath.value;
+      if (bN != 0) {
+        final px = size.width / 2;
+        canvas.save();
+        canvas.translate(px, footY);
+        canvas.scale(1 - 0.008 * bN, 1 + 0.025 * bN);
+        canvas.translate(-px, -footY);
+      }
+      canvas.drawImageRect(img, src, dstN, _paint);
+      if (bN != 0) canvas.restore();
+      return;
+    }
     final dh = size.height * fill;
     final dw = dh * set.aspect;
     // The foot point (not the cell's edge) is what stands on the box's bottom.
@@ -944,5 +1249,10 @@ class _SheetPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SheetPainter old) =>
-      old.image != image || old.set != set || old.fill != fill;
+      old.image != image ||
+      old.set != set ||
+      old.fill != fill ||
+      old.crop != crop ||
+      old.normH != normH ||
+      old.tight != tight;
 }

@@ -102,7 +102,12 @@ class VoxelShape extends OutlinedBorder {
   /// every panel, tile and button of the app wear the same finish.
   final bool shade;
 
+  /// Anti-aliased outline: for shapes that get ROTATED (trading cards), where
+  /// the hard pixel edge would stair-step along the slanted line.
+  final bool smooth;
+
   const VoxelShape({
+    this.smooth = false,
     this.notch = 2,
     this.bevel = true,
     this.edge,
@@ -127,6 +132,7 @@ class VoxelShape extends OutlinedBorder {
         lines: lines,
         light: light,
         shade: shade,
+        smooth: smooth,
       );
 
   // The outline is part of the shape (see [paint]); a Material side is
@@ -196,7 +202,7 @@ class VoxelShape extends OutlinedBorder {
         ..style = PaintingStyle.stroke
         ..strokeWidth = w
         ..strokeJoin = StrokeJoin.miter
-        ..isAntiAlias = false,
+        ..isAntiAlias = smooth,
     );
     if (!bevel && !shade) return;
     final b = Voxel.unit * 2;
@@ -238,10 +244,12 @@ class VoxelShape extends OutlinedBorder {
       other.edge == edge &&
       other.light == light &&
       other.shade == shade &&
+      other.smooth == smooth &&
       other.lines == lines;
 
   @override
-  int get hashCode => Object.hash(notch, bevel, edge, lines, light, shade);
+  int get hashCode =>
+      Object.hash(notch, bevel, edge, lines, light, shade, smooth);
 }
 
 /// The hard offset shadow a block casts: one solid slab, no blur.
@@ -297,7 +305,11 @@ class _VoxelBarPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final n = math.max(3, (size.width / block).floor());
     const gap = 2.0;
-    final w = (size.width - gap * (n - 1)) / n;
+    // WHOLE-pixel blocks: a fractional width rounded per block gave 6 px and
+    // 7 px blocks side by side, so a lit block never sat squarely on its socket
+    // (user 2026-11-17). The few leftover pixels become a margin each side.
+    final w = math.max(1.0, ((size.width - gap * (n - 1)) / n).floorToDouble());
+    final margin = ((size.width - (w * n + gap * (n - 1))) / 2).floorToDouble();
     final filled = v * n;
     // Every edge snapped to a whole pixel and drawn without anti-aliasing, so
     // a lit block sits exactly on its socket (user 2026-11-13: "die beiden
@@ -307,8 +319,8 @@ class _VoxelBarPainter extends CustomPainter {
     final botStrip = (h * 0.22).roundToDouble();
     final p = Paint()..isAntiAlias = false;
     for (var i = 0; i < n; i++) {
-      final left = (i * (w + gap)).roundToDouble();
-      final right = (i * (w + gap) + w).roundToDouble();
+      final left = margin + i * (w + gap);
+      final right = left + w;
       final bw = right - left;
       canvas.drawRect(
         Rect.fromLTWH(left, 0, bw, h),
@@ -467,153 +479,6 @@ class _BackdropPainter extends CustomPainter {
       o.vignette != vignette ||
       o.darken != darken ||
       o.cell != cell;
-}
-
-/// Pixel-grid icons for the tab rail and small marks. Each is a string bitmap:
-/// `#` = block, `.` = empty, drawn in one colour.
-enum VoxelGlyph { heart, bars, dna, sword, arrowUp, edit, back, close }
-
-const Map<VoxelGlyph, List<String>> _glyphBits = {
-  VoxelGlyph.heart: [
-    '.##..##.',
-    '########',
-    '########',
-    '########',
-    '.######.',
-    '..####..',
-    '...##...',
-    '........',
-  ],
-  VoxelGlyph.bars: [
-    '......##',
-    '......##',
-    '...#..##',
-    '...#..##',
-    '##.#..##',
-    '##.#..##',
-    '##.#..##',
-    '########',
-  ],
-  VoxelGlyph.dna: [
-    '##....##',
-    '.##..##.',
-    '..####..',
-    '...##...',
-    '..####..',
-    '.##..##.',
-    '##....##',
-    '........',
-  ],
-  VoxelGlyph.sword: [
-    '......##',
-    '.....###',
-    '....###.',
-    '#..###..',
-    '.####...',
-    '..##....',
-    '.####...',
-    '##..#...',
-  ],
-  VoxelGlyph.arrowUp: [
-    '...##...',
-    '..####..',
-    '.######.',
-    '########',
-    '...##...',
-    '...##...',
-    '...##...',
-    '........',
-  ],
-  VoxelGlyph.back: [
-    '...#....',
-    '..##....',
-    '.#######',
-    '########',
-    '.#######',
-    '..##....',
-    '...#....',
-    '........',
-  ],
-  VoxelGlyph.close: [
-    '##....##',
-    '###..###',
-    '.######.',
-    '..####..',
-    '..####..',
-    '.######.',
-    '###..###',
-    '##....##',
-  ],
-  VoxelGlyph.edit: [
-    '.....##.',
-    '....####',
-    '...####.',
-    '..####..',
-    '.####...',
-    '.###....',
-    '##......',
-    '........',
-  ],
-};
-
-class VoxelIcon extends StatelessWidget {
-  final VoxelGlyph glyph;
-  final double size;
-  final Color color;
-
-  /// A darker copy offset one block down-right, so the glyph casts its own
-  /// block shadow.
-  final bool shadow;
-
-  const VoxelIcon(
-    this.glyph, {
-    super.key,
-    this.size = 22,
-    this.color = Colors.white,
-    this.shadow = true,
-  });
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: size,
-    height: size,
-    child: CustomPaint(painter: _GlyphPainter(glyph, color, shadow)),
-  );
-}
-
-class _GlyphPainter extends CustomPainter {
-  final VoxelGlyph glyph;
-  final Color color;
-  final bool shadow;
-  _GlyphPainter(this.glyph, this.color, this.shadow);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bits = _glyphBits[glyph]!;
-    final u = (size.width / 9).floorToDouble().clamp(1.0, 99.0);
-    final ox = (size.width - u * 8) / 2;
-    final oy = (size.height - u * 8) / 2;
-    void draw(Color c, double dx, double dy) {
-      final p = Paint()..color = c;
-      for (var y = 0; y < 8; y++) {
-        for (var x = 0; x < 8; x++) {
-          if (bits[y][x] == '#') {
-            canvas.drawRect(
-              Rect.fromLTWH(ox + x * u + dx, oy + y * u + dy, u, u),
-              p,
-            );
-          }
-        }
-      }
-    }
-
-    if (shadow) draw(const Color(0x99000000), u * 0.5, u * 0.5);
-    draw(color, 0, 0);
-  }
-
-  @override
-  bool shouldRepaint(_GlyphPainter o) =>
-      o.glyph != glyph || o.color != color || o.shadow != shadow;
 }
 
 /// The text scale of the voxel UI: a pixel face is small for its size, and the

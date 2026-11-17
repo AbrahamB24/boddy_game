@@ -208,7 +208,7 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
         'The Hospital is ready. Healing always consumes resources, scaled to '
         'the missing HP — a K.O. costs double. It takes real time to '
         'finish — gold can speed it up, same as the Hospital itself did.',
-    ctaLabel: '🌿 Heal it now',
+    ctaLabel: 'Heal it now',
     destination: IntroDestination.healingHut,
   ),
   IntroStep.firstCapture => const IntroCard(
@@ -233,7 +233,7 @@ IntroCard? introCardFor(IntroStep step) => switch (step) {
         'Two monsters now — one can rest while the other fights. Head back '
         'to the map and take the next battle on the path. Still an easy one: '
         'this is the last stretch of hand-holding.',
-    ctaLabel: '🗺 Open the map',
+    ctaLabel: 'Open the map',
     destination: IntroDestination.map,
   ),
   IntroStep.done => null,

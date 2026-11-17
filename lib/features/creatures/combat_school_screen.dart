@@ -225,7 +225,7 @@ class _CombatSchoolScreenState extends State<CombatSchoolScreen> {
   Widget _tile(CreatureInstance c) => SlotTile(
     avatar: CreatureAvatar.of(c, size: 40),
     name: c.displayName,
-    sub: '${c.equippedAbilityIds.length + 1}/$kMaxAbilitiesTotal moves',
+    sub: '${c.equippedAbilityIds.length}/$kMaxAbilitiesTotal moves',
     actionLabel: 'Learn…',
     onAction: _busy == null ? () => _openPicker(c) : null,
     onTap: _busy == null ? () => _openPicker(c) : null,
@@ -294,8 +294,8 @@ class _MovePickerScreen extends StatelessWidget {
                       ),
                       Text(
                         'Lv ${creature.level} · '
-                        '${creature.equippedAbilityIds.length + 1}/'
-                        '$kMaxAbilitiesTotal moves (Attack included)',
+                        '${creature.equippedAbilityIds.length}/'
+                        '$kMaxAbilitiesTotal moves equipped',
                         style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
                       ),
                       const SizedBox(height: 12),

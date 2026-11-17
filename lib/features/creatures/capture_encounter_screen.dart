@@ -348,7 +348,7 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
               style: FoE.dim(size: 11.5).copyWith(color: kBoxInkSoft),
             ),
             const SizedBox(height: 10),
-            _bigBtn('⚔️ Face them!', _startBattle),
+            _bigBtn('Face them!', _startBattle),
           ],
         );
       case _Phase.done:
@@ -368,7 +368,7 @@ class _CaptureEncounterScreenState extends State<CaptureEncounterScreen> {
                 style: FoE.dim(size: 11.5).copyWith(color: CreamPalette.warn),
               ),
               const SizedBox(height: 10),
-              _bigBtn('🐾 Free a slot (Monsters)', _goReleaseAndReturn),
+              _bigBtn('Free a slot (Monsters)', _goReleaseAndReturn),
               const SizedBox(height: 6),
               Pressable(
                 onTap: () => Navigator.of(context).pop(),

@@ -342,10 +342,10 @@ class _ChatPaneState extends State<ChatPane> {
         constraints: const BoxConstraints(maxWidth: 320),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(14),
-            topRight: const Radius.circular(14),
-            bottomLeft: Radius.circular(mine ? 14 : 4),
-            bottomRight: Radius.circular(mine ? 4 : 14),
+            topLeft: const Radius.circular(3),
+            topRight: const Radius.circular(3),
+            bottomLeft: Radius.circular(mine ? 3 : 1),
+            bottomRight: Radius.circular(mine ? 1 : 3),
           ),
           color: mine ? CreamPalette.gold : null,
           gradient: mine

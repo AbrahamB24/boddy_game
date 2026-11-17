@@ -381,7 +381,7 @@ class ParchmentDialog extends StatelessWidget {
                       Navigator.pop(context);
                     },
                     fill: Strategy.gold,
-                    deep: Strategy.goldDeep,
+                    deep: CreamPalette.tanShadow,
                     expand: true,
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Text(

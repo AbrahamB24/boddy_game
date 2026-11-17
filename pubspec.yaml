@@ -81,6 +81,12 @@ flutter:
     - assets/images/monsters/owl_s0/
     - assets/images/monsters/owl_s1/
     - assets/images/monsters/owl_s2/
+    - assets/images/monsters/griffin_s0/
+    - assets/images/monsters/griffin_s1/
+    - assets/images/monsters/griffin_s2/
+    - assets/images/monsters/leafwing_s0/
+    - assets/images/monsters/leafwing_s1/
+    - assets/images/monsters/leafwing_s2/
     - assets/images/terrain/
     - assets/sfx/
     - assets/music/

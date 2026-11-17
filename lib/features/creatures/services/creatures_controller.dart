@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../../guild/guild_quests.dart' show GuildQuests;
+import '../../guild/guild_service.dart' show GuildMembership;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -440,6 +442,17 @@ class CreaturesController extends ChangeNotifier {
   /// defs haven't finished loading yet.
   Future<void> _backfillAbilities() async {
     for (final c in creatures) {
+      // Attack became an ordinary, swappable move (2026-11-16): a row that
+      // predates it gets it taught and equipped first, once.
+      if (c.needsAttackMigration) {
+        c.migrateAttack();
+        try {
+          await _svc.update(c);
+        } catch (e) {
+          debugPrint('[CreaturesController] attack migration failed: $e');
+        }
+        continue;
+      }
       if (!c.needsAbilityBackfill) continue;
       if (c.backfillAbilities()) {
         try {
@@ -1154,7 +1167,7 @@ class CreaturesController extends ChangeNotifier {
             kind: NotifyKind.healing,
             key: c.id,
             at: c.healingUntil!,
-            title: '🩺 Patched up',
+            title: 'Patched up',
             body: '${c.displayName} is out of the Hospital.',
           ),
         );
@@ -1391,6 +1404,31 @@ class CreaturesController extends ChangeNotifier {
     return null;
   }
 
+  /// A guild help (stage 3): cuts [fraction] off the treatment time still to
+  /// run. Nothing is paid; a monster that is no longer healing is left alone.
+  Future<void> applyGuildHelpHeal(String creatureId, double fraction) async {
+    final i = creatures.indexWhere((x) => x.id == creatureId);
+    if (i < 0) return;
+    final c = creatures[i];
+    if (!c.isHealing) return;
+    c.healingUntil = DateTime.now().add(c.healingRemaining * (1 - fraction));
+    unawaited(
+      GameNotifications.schedule(
+        kind: NotifyKind.healing,
+        key: c.id,
+        at: c.healingUntil!,
+        title: 'Patched up',
+        body: '${c.displayName} is out of the Hospital.',
+      ),
+    );
+    try {
+      await _svc.update(c);
+    } catch (e) {
+      debugPrint('[CreaturesController] guild help persist failed: $e');
+    }
+    notifyListeners();
+  }
+
   Future<String?> skipHealWithGold(CreatureInstance c) async {
     if (!c.isHealing) return 'It is not being treated.';
     final cost = healSkipCost(c);
@@ -1493,7 +1531,7 @@ class CreaturesController extends ChangeNotifier {
         kind: NotifyKind.training,
         key: c.id,
         at: c.trainingUntil!,
-        title: '🥋 Lesson complete',
+        title: 'Lesson complete',
         body: '${c.displayName} finished learning ${ability.name}.',
       ),
     );
@@ -1535,7 +1573,7 @@ class CreaturesController extends ChangeNotifier {
           kind: NotifyKind.training,
           key: c.id,
           at: c.trainingUntil!,
-          title: '🥋 Lesson complete',
+          title: 'Lesson complete',
           body: '${c.displayName} finished learning ${ability.name}.',
         ),
       );
@@ -1651,6 +1689,7 @@ class CreaturesController extends ChangeNotifier {
     if (abilityIds.length > kMaxEquippedAbilities) {
       return 'At most $kMaxEquippedAbilities abilities may be equipped.';
     }
+    if (abilityIds.isEmpty) return 'Keep at least one ability equipped.';
     if (abilityIds.any((id) => !c.learnedAbilityIds.contains(id))) {
       return "${c.displayName} hasn't learned all of those yet.";
     }
@@ -1673,6 +1712,10 @@ class CreaturesController extends ChangeNotifier {
     int xpEach = 0,
   }) async {
     final levelUps = <LevelUpResult>[];
+    // A won fight counts for the guild's weekly quest, and the guild's level
+    // bonus adds its share to the XP.
+    if (xpEach > 0) GuildQuests.report('wins');
+    xpEach = (xpEach * (1 + GuildMembership.instance.bonus)).round();
     for (final combatant in playerCombatants) {
       CreatureInstance? creature;
       for (final c in creatures) {

@@ -29,10 +29,14 @@ class BreedingService {
     required String parentBId,
     required String speciesId,
     required DateTime readyAt,
+    Map<String, double>? childBase,
+    Map<String, double>? childSlope,
   }) async {
     final row = await supabase
         .from(_table)
         .insert({
+          if (childBase != null) 'child_base': childBase,
+          if (childSlope != null) 'child_slope': childSlope,
           'user_id': userId,
           'parent_a': parentAId,
           'parent_b': parentBId,

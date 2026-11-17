@@ -67,7 +67,7 @@ void main() {
     }
     await t.pump(const Duration(seconds: 2));
     expect(find.text('Continue'), findsOneWidget);
-    expect(find.text('🏆 Victory!'), findsOneWidget);
+    expect(find.text('Victory!'), findsOneWidget);
     // Nothing on the page scrolls…
     expect(find.byType(SingleChildScrollView), findsNothing);
     expect(find.byType(Scrollable), findsNothing);

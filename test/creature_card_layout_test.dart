@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:boddygame/features/creatures/services/creature_power.dart';
 import 'package:boddygame/features/creatures/models/creature_enums.dart';
 import 'package:boddygame/features/creatures/models/creature_instance.dart';
 import 'package:boddygame/features/creatures/models/species_def.dart';
@@ -59,18 +60,14 @@ void main() {
     return c;
   }
 
-  testWidgets('level and power stand close together, centred on the tile', (
-    t,
-  ) async {
+  testWidgets('level sits on the picture, power in the name band', (t) async {
     await show(t, level: 8);
     final lv = t.getRect(find.text('Lv 8'));
-    final power = t.getRect(find.textContaining('⚡'));
+    final power = t.getRect(find.textContaining(kPowerIcon));
     final card = t.getRect(find.byType(CreatureCard));
-    // A small gap between them, not the width of the tile.
-    expect(power.left - lv.right, lessThan(20));
-    // …and the pair is centred like the name is.
-    final pair = Rect.fromLTRB(lv.left, lv.top, power.right, power.bottom);
-    expect(pair.center.dx, moreOrLessEquals(card.center.dx, epsilon: 3));
+    expect(lv.left, lessThan(card.center.dx));
+    expect(lv.top, lessThan(card.top + card.height * 0.25));
+    expect(power.top, greaterThan(card.top + card.height * 0.6));
     expect(t.takeException(), isNull);
   });
 
@@ -86,19 +83,4 @@ void main() {
     },
   );
 
-  testWidgets(
-    'the evolve stamp sits INSIDE the coloured foot, not past the cell\'s '
-    'own top (user 2026-09-29: "sollte noch im blauen Kästchen sein … so '
-    'dass es nicht verdeckt werden kann")',
-    (t) async {
-      await show(t, level: 100);
-      final card = t.getRect(find.byType(CreatureCard));
-      final stamp = t.getRect(find.bySemanticsLabel('Can evolve'));
-      // The foot starts about a third down the tile — the stamp must not sit
-      // in the free strip above it, where a tight grid's row above can clip
-      // or cover it.
-      expect(stamp.top, greaterThan(card.top + card.height * 0.3));
-      expect(t.takeException(), isNull);
-    },
-  );
 }

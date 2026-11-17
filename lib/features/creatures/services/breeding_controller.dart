@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import '../../../core/notifications/game_notifications.dart';
 
 import '../../../core/supabase/supabase_client.dart';
+import '../../guild/guild_service.dart' show guildErrorText;
+import '../../guild/guild_studs.dart';
 import '../../common/events/game_events.dart';
 import '../../settlement/data/item_definitions.dart';
 import '../../settlement/services/daily_tasks.dart' show DailyTaskKind;
@@ -93,7 +95,9 @@ class BreedingController extends ChangeNotifier {
     for (var i = 0; i < jobs.length; i++) {
       final j = jobs[i];
       if (j.status == BreedingStatus.breeding && j.isReady) {
-        final child = _rollChild(j);
+        // A mating with a borrowed guild monster was rolled when it began (the
+        // borrowed genes are a copy that exists only for that moment).
+        final child = j.hasChildGenes ? (j.childBase, j.childSlope) : _rollChild(j);
         jobs[i] = j.copyWith(
           status: BreedingStatus.egg,
           childBase: child?.$1,
@@ -308,7 +312,7 @@ class BreedingController extends ChangeNotifier {
           kind: NotifyKind.breeding,
           key: job.id,
           at: job.readyAt,
-          title: '🥚 An egg was laid',
+          title: 'An egg was laid',
           body: 'Your pair is done — the egg is ready for the Hatchery.',
         ),
       );
@@ -320,6 +324,111 @@ class BreedingController extends ChangeNotifier {
       // The supplies were already spent — give them back, or a failed insert
       // costs the pair's bill for nothing.
       if (cost.isNotEmpty) await settlement.grantResources(cost, refund: true);
+      return 'Breeding failed: $e';
+    }
+  }
+
+  /// A mating with a monster BORROWED from the guild's breeding board (stage
+  /// 5). [stud] is only a copy of the genes; [mine] is the player's own monster
+  /// of the same species and the other sex. The child's genes are rolled NOW,
+  /// from both, and frozen on the job — the borrowed copy is gone afterwards.
+  ///
+  /// parent_b is stored as [mine] too: the other monster does not belong to this
+  /// player, and pointing at it would let its owner's releasing it delete the
+  /// job. Returns null on success or a user-facing error.
+  Future<String?> startWithLoan(CreatureInstance mine, StudListing stud) async {
+    final userId = _userId;
+    if (userId == null) return 'Not logged in.';
+    final species = kSpeciesDefs[mine.speciesId];
+    if (species == null) return 'Unknown species.';
+    if (mine.speciesId != stud.speciesId) {
+      return 'Only creatures of the same species can breed.';
+    }
+    if (mine.gender == stud.gender) {
+      return 'It takes one male (♂) and one female (♀).';
+    }
+    if (mine.isKo) return 'K.O. creatures cannot breed.';
+    if (mine.isHealing) return 'That creature is still being treated.';
+    if (CreaturesController().breedingIds.contains(mine.id)) {
+      return 'That creature is already breeding.';
+    }
+    if (breedingSlots <= 0) return 'Build a Breeding Hut first.';
+    if (freeBreedingSlots <= 0) {
+      return 'All breeding slots are busy ($breedingSlots).';
+    }
+
+    final settlement = SettlementController();
+    final stock = settlement.resources?.asMap ?? const <String, double>{};
+    final cost = {
+      ...breedCost(mine, mine, stock),
+      'gold': ((breedCost(mine, mine, stock)['gold']) ?? 0) + stud.fee,
+    };
+    // Everything is checked BEFORE the loan is recorded: a loan that cannot be
+    // paid would still use up the day's allowance.
+    for (final e in cost.entries) {
+      if ((stock[e.key] ?? 0) < e.value) {
+        return 'Not enough ${e.key == 'gold' ? 'gold' : breedCostLabel(cost)} '
+            '(the loan costs ${stud.fee} gold).';
+      }
+    }
+
+    try {
+      await GuildStuds.instance.borrow(stud.id);
+    } catch (e) {
+      return guildErrorText(e);
+    }
+    if (!await settlement.spendResources(cost)) {
+      return 'Not enough supplies after all — the loan was used.';
+    }
+
+    final workerPower = settlement.breedingPower(kBreedingHutBuildingId);
+    final hours = breedingHours(
+      kSpeciesBalance.of(species.rarity).breedHours,
+      workerPower,
+    );
+    final favored = breedingFavoredChance();
+    final childBase = CreatureInstance.inheritGenes(
+      mine.statBase,
+      stud.base,
+      _rng,
+      favoredChance: favored,
+    );
+    final childSlope = CreatureInstance.inheritGenes(
+      mine.statSlope,
+      stud.slope,
+      _rng,
+      favoredChance: favored,
+    );
+    try {
+      final job = await _svc.insert(
+        userId: userId,
+        parentAId: mine.id,
+        parentBId: mine.id,
+        speciesId: species.id,
+        readyAt: DateTime.now().add(
+          Duration(milliseconds: (hours * 3600000).round()),
+        ),
+        childBase: BreedingJob.genesToJson(childBase),
+        childSlope: BreedingJob.genesToJson(childSlope),
+      );
+      jobs.add(
+        job.copyWith(childBase: childBase, childSlope: childSlope),
+      );
+      unawaited(
+        GameNotifications.schedule(
+          kind: NotifyKind.breeding,
+          key: job.id,
+          at: job.readyAt,
+          title: 'An egg was laid',
+          body: 'Your pair is done — the egg is ready for the Hatchery.',
+        ),
+      );
+      _syncBlockedIds();
+      notifyListeners();
+      CreaturesController().notifyListeners();
+      return null;
+    } catch (e) {
+      await settlement.grantResources(cost, refund: true);
       return 'Breeding failed: $e';
     }
   }
@@ -365,7 +474,7 @@ class BreedingController extends ChangeNotifier {
           kind: NotifyKind.breeding,
           key: job.id,
           at: readyAt,
-          title: '🐣 Ready to hatch',
+          title: 'Ready to hatch',
           body: 'The egg in the Hatchery has finished incubating.',
         ),
       );
@@ -408,8 +517,8 @@ class BreedingController extends ChangeNotifier {
         key: job.id,
         at: newReadyAt,
         title: job.status == BreedingStatus.hatching
-            ? '🐣 Ready to hatch'
-            : '🥚 An egg was laid',
+            ? 'Ready to hatch'
+            : 'An egg was laid',
         body: 'Hurried along — it is done sooner than planned.',
       ),
     );
@@ -420,6 +529,37 @@ class BreedingController extends ChangeNotifier {
     }
     notifyListeners();
     return null;
+  }
+
+  /// A guild help (stage 3): cuts [fraction] off the time still to run on a
+  /// breeding or hatching job. Nothing is paid; a finished job is left alone.
+  Future<void> applyGuildHelp(String jobId, double fraction) async {
+    final i = jobs.indexWhere((j) => j.id == jobId);
+    if (i < 0) return;
+    final job = jobs[i];
+    if (job.status == BreedingStatus.egg || job.isReady) return;
+    final remainingMs = job.readyAt.difference(DateTime.now()).inMilliseconds;
+    final newReadyAt = DateTime.now().add(
+      Duration(milliseconds: (remainingMs * (1 - fraction)).round()),
+    );
+    jobs[i] = job.copyWith(readyAt: newReadyAt);
+    unawaited(
+      GameNotifications.schedule(
+        kind: NotifyKind.breeding,
+        key: job.id,
+        at: newReadyAt,
+        title: job.status == BreedingStatus.hatching
+            ? 'Ready to hatch'
+            : 'An egg was laid',
+        body: 'Your guild helped — it is done sooner than planned.',
+      ),
+    );
+    try {
+      await _svc.updateStatus(job.id, job.status, readyAt: newReadyAt);
+    } catch (e) {
+      debugPrint('[BreedingController] guild help persist failed: $e');
+    }
+    notifyListeners();
   }
 
   /// Takes an incubating egg back OUT of the Hatchery (user 2026-07-27: "wenn

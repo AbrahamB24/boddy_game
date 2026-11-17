@@ -11,6 +11,15 @@ const rot = (deg, inner, cx = 32, cy = 32) => `<g transform="rotate(${deg} ${cx}
 const ring = (r, w) => `<circle cx="32" cy="32" r="${r}" fill="none" stroke="#000" stroke-width="${w}"/>`;
 
 const FANTASY = {
+  // A white flag on a wooden pole: "I give up" (battle's Flee / Give up key,
+  // user 2026-11-16). Replaces the red pennant of icons_base.
+  flag: C({ a: '#f6f3ec', b: '#c4bfb2', k: '#7a4a22', c: '#ffffff' }, {
+    a: '<path d="M15 8C25 3 33 13 44 8C50 6 54 8 57 10V36C54 34 50 32 44 34C33 40 25 30 15 35Z"/>',
+    b: '<path d="M15 24C25 19 33 29 44 24C50 22 54 24 57 26V36C54 34 50 32 44 34C33 40 25 30 15 35Z"/>',
+    k: '<rect x="9" y="3" width="6" height="58"/>',
+    c: S('M20 13C26 13 30 17 36 15', 3),
+  }),
+
   // A struck gold coin: raised rim, a pressed star, a worn highlight.
   coin: C({ a: '#e2b640', b: '#b7852a', d: '#f6dc7e', k: '#8a5f1a', c: '#fff1b8' }, {
     a: circ(32, 32, 28),

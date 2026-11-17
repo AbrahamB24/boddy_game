@@ -128,7 +128,7 @@ class EggCard extends StatelessWidget {
           Transform.translate(
             offset: const Offset(-4, 0),
             child: Text(
-              job.hasChildGenes ? '⚡ ${genePower(job.childBase)}' : '⚡ ?',
+              job.hasChildGenes ? '$kPowerIcon ${genePower(job.childBase)}' : '$kPowerIcon ?',
               style: FoE.value(size: 13).copyWith(color: _kParchmentAccent),
             ),
           ),

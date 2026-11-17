@@ -1,21 +1,31 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Text;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/theme/cream_kit.dart';
 import '../../core/theme/foe_theme.dart';
-import '../../core/theme/voxel_kit.dart' show vr;
+import '../../core/theme/voxel_kit.dart' show vr, VoxelBar;
 import '../../core/ui/game_text.dart';
 import '../../core/ui/pressable.dart';
 import '../../core/ui/snack.dart';
 import '../settlement/settlement_controller.dart';
 import '../social/social_actions.dart' show confirmDialog;
 import '../social/widgets/social_kit.dart';
+import 'guild_crest.dart';
+import 'guild_help.dart';
+import 'guild_boss.dart';
 import 'guild_models.dart';
+import 'guild_studs.dart';
+import '../creatures/models/creature_instance.dart';
+import '../creatures/models/species_def.dart';
+import '../creatures/services/breeding_controller.dart';
+import '../creatures/services/creatures_controller.dart';
+import 'guild_quests.dart';
 import 'guild_service.dart';
 
-enum _Tab { members, chat, requests, manage }
+enum _Tab { overview, members, chat, help, board, boss, ranking, requests, manage }
 
 /// The guild menu. Without a guild it is a browse list plus "Found a guild";
 /// with one it is the guild's page: members, chat, join requests (officers) and
@@ -47,9 +57,12 @@ class _GuildScreenState extends State<GuildScreen> {
   final _newName = TextEditingController();
   final _newDesc = TextEditingController();
   bool _newOpen = true;
+  GuildCrest _newCrest = GuildCrest.random(math.Random());
 
   // Guild page
-  _Tab _tab = _Tab.members;
+  _Tab _tab = _Tab.overview;
+  List<GuildQuest> _quests = [];
+  DateTime? _questsEnd;
 
   // Chat
   List<GuildMessage> _chat = [];
@@ -72,11 +85,17 @@ class _GuildScreenState extends State<GuildScreen> {
   @override
   void initState() {
     super.initState();
+    GuildHelp.instance.addListener(_onHelp);
+    GuildStuds.instance.addListener(_onHelp);
+    unawaited(GuildStuds.instance.refresh());
+    unawaited(GuildHelp.instance.refresh());
     _reload();
   }
 
   @override
   void dispose() {
+    GuildHelp.instance.removeListener(_onHelp);
+    GuildStuds.instance.removeListener(_onHelp);
     _searchDebounce?.cancel();
     _chatChannel?.unsubscribe();
     _searchCtrl.dispose();
@@ -85,6 +104,10 @@ class _GuildScreenState extends State<GuildScreen> {
     _chatInput.dispose();
     _chatScroll.dispose();
     super.dispose();
+  }
+
+  void _onHelp() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _reload() async {
@@ -110,6 +133,7 @@ class _GuildScreenState extends State<GuildScreen> {
         return;
       }
       final members = await _svc.loadMembers(g.id);
+      final q = await GuildQuests.current();
       final me = members.where((m) => m.userId == _svc.myId);
       final canModerate = me.isNotEmpty && me.first.role.canModerate;
       final requests = canModerate
@@ -118,6 +142,8 @@ class _GuildScreenState extends State<GuildScreen> {
       if (!mounted) return;
       setState(() {
         _guild = g;
+        _quests = q?.quests ?? _quests;
+        _questsEnd = q?.endsAt ?? _questsEnd;
         _members = members;
         _requests = requests;
         _loading = false;
@@ -301,6 +327,12 @@ class _GuildScreenState extends State<GuildScreen> {
         maxLength: 280,
         maxLines: 2,
       ),
+      const SizedBox(height: 10),
+      socialSection('Crest'),
+      CrestCreator(
+        crest: _newCrest,
+        onChanged: (c) => setState(() => _newCrest = c),
+      ),
       const SizedBox(height: 8),
       Row(
         children: [
@@ -322,7 +354,7 @@ class _GuildScreenState extends State<GuildScreen> {
                     () => _svc.create(
                       name: _newName.text,
                       description: _newDesc.text,
-                      emblem: 0,
+                      crest: _newCrest,
                       isOpen: _newOpen,
                     ),
                     done: 'Guild founded.',
@@ -362,7 +394,7 @@ class _GuildScreenState extends State<GuildScreen> {
       height: 54,
       child: Row(
         children: [
-          SocialAvatar.letter(g.name),
+          CrestView(g.crest, size: 34),
           const SizedBox(width: 10),
           _name(
             g.name,
@@ -388,33 +420,96 @@ class _GuildScreenState extends State<GuildScreen> {
   // ── with a guild ──────────────────────────────────────────
 
   Widget _guildPage() {
-    final g = _guild!;
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Row(
+        _crestPanel(_guild!),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SocialAvatar.letter(g.name, size: 40),
-              const SizedBox(width: 10),
-              _name(
-                'Level ${g.level}${g.isOpen ? '' : ' · by request'}',
-                g.description.isEmpty ? 'No description yet.' : g.description,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 12, 16, 8),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: _seg(),
+                ),
               ),
-              _seg(),
+              Expanded(
+                child: switch (_tab) {
+                  _Tab.overview => _overviewTab(),
+                  _Tab.members => _membersTab(),
+                  _Tab.chat => _chatTab(),
+                  _Tab.help => _helpTab(),
+                  _Tab.board => _boardTab(),
+                  _Tab.boss => _bossTab(),
+                  _Tab.ranking => _rankingTab(),
+                  _Tab.requests => _requestsTab(),
+                  _Tab.manage => _manageTab(),
+                },
+              ),
             ],
           ),
         ),
-        Expanded(
-          child: switch (_tab) {
-            _Tab.members => _membersTab(),
-            _Tab.chat => _chatTab(),
-            _Tab.requests => _requestsTab(),
-            _Tab.manage => _manageTab(),
-          },
-        ),
       ],
+    );
+  }
+
+  /// Fixed left panel: crest, name, level progress, member count.
+  Widget _crestPanel(Guild g) {
+    final lv = g.level.clamp(1, kGuildLevelPoints.length);
+    final maxed = lv >= kGuildLevelPoints.length;
+    final from = kGuildLevelPoints[lv - 1];
+    final to = maxed ? from : kGuildLevelPoints[lv];
+    final frac = maxed ? 1.0 : ((g.points - from) / (to - from)).clamp(0.0, 1.0);
+    const light = Color(0xFFEBF5F5);
+    const soft = Color(0xFFB7CBCC);
+    return Container(
+      width: 176,
+      margin: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF275058),
+        borderRadius: vr(10),
+        border: Border.all(color: const Color(0xFF18383E), width: 3),
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            CrestView(g.crest, size: 76),
+            const SizedBox(height: 8),
+            Text(
+              g.name,
+              textAlign: TextAlign.center,
+              style: FoE.label(size: 17).copyWith(color: light),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Level $lv · ${g.memberCount} / $kGuildMaxMembers members'
+              '${g.isOpen ? '' : ' · by request'}',
+              textAlign: TextAlign.center,
+              style: FoE.dim(size: 10.5).copyWith(color: soft),
+            ),
+            const SizedBox(height: 10),
+            VoxelBar(value: frac, height: 10, block: 8, color: CreamPalette.gold),
+            const SizedBox(height: 4),
+            Text(
+              maxed ? '${g.points} points · top level' : '${g.points} / $to points',
+              style: FoE.dim(size: 10.5).copyWith(color: CreamPalette.gold),
+            ),
+            if (g.description.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                g.description,
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: FoE.dim(size: 10.5).copyWith(color: soft),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -427,8 +522,13 @@ class _GuildScreenState extends State<GuildScreen> {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        _segItem('Guild', _Tab.overview),
         _segItem('Members', _Tab.members),
         _segItem('Chat', _Tab.chat),
+        _segItem('Help', _Tab.help, badge: GuildHelp.instance.open.length),
+        _segItem('Board', _Tab.board),
+        _segItem('Boss', _Tab.boss),
+        _segItem('Ranking', _Tab.ranking),
         if (_myRole.canModerate)
           _segItem('Requests', _Tab.requests, badge: _requests.length),
         if (_myRole == GuildRole.leader) _segItem('Manage', _Tab.manage),
@@ -442,6 +542,8 @@ class _GuildScreenState extends State<GuildScreen> {
       onTap: () {
         setState(() => _tab = tab);
         if (tab == _Tab.chat) _scrollChatDown();
+        if (tab == _Tab.boss) unawaited(_loadBoss());
+        if (tab == _Tab.ranking) unawaited(_loadRanking());
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -468,6 +570,488 @@ class _GuildScreenState extends State<GuildScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // Boss and ranking ---------------------------------------
+
+  GuildBossState? _boss;
+  List<BossDamageRow> _bossBoard = [];
+  List<RankedGuild> _ranking = [];
+
+  Future<void> _loadBoss() async {
+    final gold = await GuildBoss.claim();
+    if (gold > 0 && mounted) {
+      context.snack('Boss reward collected: $gold gold.');
+    }
+    final b = await GuildBoss.current();
+    final board = await GuildBoss.board();
+    if (!mounted) return;
+    setState(() {
+      _boss = b;
+      _bossBoard = board;
+    });
+  }
+
+  Future<void> _loadRanking() async {
+    final r = await GuildBoss.ranking();
+    if (mounted) setState(() => _ranking = r);
+  }
+
+  Future<void> _fightBoss() async {
+    final boss = _boss;
+    if (boss == null || _busy) return;
+    setState(() => _busy = true);
+    final msg = await GuildBoss.fight(context, boss);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (msg != null) context.snack(msg);
+    await _loadBoss();
+  }
+
+  Widget _bossTab() {
+    final b = _boss;
+    if (b == null) {
+      return Center(child: socialHint('Loading the boss…'));
+    }
+    final left = b.endsAt.difference(DateTime.now());
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+      children: [
+        socialSection(
+          'This week’s boss',
+          trailing: Text(
+            left.inDays >= 1 ? '${left.inDays} d left' : '${left.inHours.clamp(0, 99)} h left',
+            style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
+          ),
+        ),
+        socialRow(
+          height: 92,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '${b.name} · level ${b.level}',
+                    style: FoE.label(size: 15).copyWith(color: kBoxInk),
+                  ),
+                  const Spacer(),
+                  Text(
+                    b.defeated
+                        ? 'Defeated!'
+                        : '${b.damage} / ${b.maxHp} damage',
+                    style: FoE.dim(size: 11).copyWith(
+                      color: b.defeated ? CreamPalette.better : kBoxInkSoft,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              VoxelBar(
+                value: 1 - b.fraction,
+                height: 12,
+                block: 8,
+                color: b.defeated ? CreamPalette.better : CreamPalette.warn,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'The whole guild fights this one health bar. You have done '
+                '${b.myDamage} so far.',
+                style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            SocialGoldButton(
+              b.defeated
+                  ? 'Boss defeated'
+                  : (b.attemptsLeft > 0
+                        ? 'Fight · ${b.attemptsLeft}/$kBossAttemptsPerDay left today'
+                        : 'No attempts left today'),
+              onTap: b.defeated || b.attemptsLeft <= 0 || _busy
+                  ? null
+                  : _fightBoss,
+            ),
+          ],
+        ),
+        socialHint(
+          'A normal battle against a strong monster; the share of its health '
+          'your team takes counts for the guild. Gold for every point of '
+          'damage, and a bonus if the boss falls before the week ends.',
+        ),
+        socialSection('Damage this week'),
+        if (_bossBoard.isEmpty) socialHint('Nobody has hit it yet.'),
+        for (var i = 0; i < _bossBoard.length; i++)
+          _gap(
+            socialRow(
+              height: 38,
+              child: Row(
+                children: [
+                  Text('${i + 1}.', style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft)),
+                  const SizedBox(width: 8),
+                  _name(_bossBoard[i].name),
+                  Text(
+                    '${_bossBoard[i].damage}',
+                    style: FoE.value(size: 12).copyWith(color: kBoxInk),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _rankingTab() => ListView(
+    padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+    children: [
+      socialHint('The 50 guilds with the most points.'),
+      if (_ranking.isEmpty) socialHint('Loading the ranking…'),
+      for (final r in _ranking)
+        _gap(
+          socialRow(
+            height: 50,
+            warm: r.id == _guild?.id,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 30,
+                  child: Text(
+                    '${r.rank}',
+                    style: FoE.value(size: 13).copyWith(color: kBoxInk),
+                  ),
+                ),
+                CrestView(r.crest, size: 30),
+                const SizedBox(width: 10),
+                _name(
+                  r.name,
+                  'Level ${r.level} · ${r.members}/$kGuildMaxMembers members',
+                ),
+                Text(
+                  '${r.points} pts',
+                  style: FoE.value(size: 12).copyWith(color: kBoxInk),
+                ),
+              ],
+            ),
+          ),
+        ),
+    ],
+  );
+
+  // Board: monster loans for breeding ----------------------
+
+  String _speciesName(String id) => kSpeciesDefs[id]?.name ?? id;
+
+  /// Asks which of my monsters, from those that pass [ok].
+  Future<CreatureInstance?> _pickMonster(
+    String title,
+    bool Function(CreatureInstance) ok,
+  ) async {
+    final list = CreaturesController().creatures.where(ok).toList()
+      ..sort((a, b) => b.level.compareTo(a.level));
+    return showDialog<CreatureInstance>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 420),
+          child: creamCard(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              socialSection(title),
+              if (list.isEmpty) socialHint('None of your monsters fit.'),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final c in list)
+                      _gap(
+                        socialRow(
+                          onTap: () => Navigator.pop(ctx, c),
+                          child: Row(
+                            children: [
+                              _name(
+                                '${c.displayName} ${c.gender.symbol}',
+                                '${_speciesName(c.speciesId)} · level ${c.level}',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: SocialTileButton('Cancel', onTap: () => Navigator.pop(ctx)),
+              ),
+            ],
+          ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _listMonster() async {
+    final c = await _pickMonster(
+      'List which monster?',
+      (c) => GuildStuds.canList(c) && !GuildStuds.instance.isListed(c.id),
+    );
+    if (c == null || !mounted) return;
+    try {
+      await GuildStuds.instance.list(c);
+      if (mounted) context.snack('${c.displayName} is on the board.');
+    } catch (e) {
+      if (mounted) context.snack(guildErrorText(e), error: true);
+    }
+  }
+
+  Future<void> _borrow(StudListing s) async {
+    final breeding = BreedingController();
+    final mine = await _pickMonster(
+      'Breed ${_speciesName(s.speciesId)} ${s.gender.symbol} with…',
+      (c) =>
+          c.speciesId == s.speciesId &&
+          c.gender != s.gender &&
+          !c.isKo &&
+          !c.isHealing &&
+          !CreaturesController().breedingIds.contains(c.id),
+    );
+    if (mine == null || !mounted) return;
+    final ok = await confirmDialog(
+      context,
+      title: 'Borrow ${s.name}?',
+      body:
+          '${s.ownerName} keeps ${s.name}; you breed with a copy of its genes '
+          'once. It costs ${s.fee} gold, paid to ${s.ownerName}, plus the usual '
+          'breeding supplies.',
+      confirmLabel: 'Borrow · ${s.fee} gold',
+      cancelLabel: 'Cancel',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _busy = true);
+    final err = await breeding.startWithLoan(mine, s);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    context.snack(
+      err ?? 'Breeding started with ${s.name}.',
+      error: err != null,
+    );
+    await GuildStuds.instance.refresh();
+  }
+
+  String _rest(DateTime end) {
+    final d = end.difference(DateTime.now());
+    return d.inHours >= 1 ? 'rests ${d.inHours} h' : 'rests ${d.inMinutes.clamp(1, 59)} min';
+  }
+
+  Widget _boardTab() {
+    final st = GuildStuds.instance;
+    final mine = st.mine;
+    final others = st.others;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+      children: [
+        socialHint(
+          'List up to $kStudMaxListed of your monsters. A guild mate can breed '
+          'with a copy of its genes once; the monster stays with you, rests '
+          '12 hours, and you earn the fee. Legendaries cannot be listed.',
+        ),
+        socialSection(
+          'Yours · ${mine.length}/$kStudMaxListed',
+          trailing: mine.length >= kStudMaxListed
+              ? null
+              : SocialGoldButton('List a monster', height: 26, onTap: _listMonster),
+        ),
+        if (mine.isEmpty) socialHint('Nothing listed.'),
+        for (final s in mine)
+          _gap(
+            socialRow(
+              child: Row(
+                children: [
+                  _name(
+                    '${s.name} ${s.gender.symbol}',
+                    '${_speciesName(s.speciesId)} · level ${s.level} · '
+                    '${s.isResting ? _rest(s.readyAt) : 'ready'} · ${s.fee} gold',
+                  ),
+                  SocialTileButton(
+                    'Take off',
+                    height: 28,
+                    onTap: () => GuildStuds.instance.unlist(s.creatureId),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 10),
+        socialSection(
+          'Available · loans today ${st.used}/${st.limit}',
+        ),
+        if (others.isEmpty) socialHint('Nobody has listed a monster yet.'),
+        for (final s in others)
+          _gap(
+            socialRow(
+              child: Row(
+                children: [
+                  _name(
+                    '${s.name} ${s.gender.symbol} · ${s.ownerName}',
+                    '${_speciesName(s.speciesId)} · ${s.rarity.label} · level '
+                    '${s.level} · ${s.fee} gold',
+                  ),
+                  if (s.isResting)
+                    _tag(_rest(s.readyAt))
+                  else
+                    SocialGoldButton(
+                      'Borrow',
+                      height: 28,
+                      onTap: _busy || st.used >= st.limit
+                          ? null
+                          : () => _borrow(s),
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // Overview: level, bonuses, weekly quests ----------------
+
+  String _pct(double f) => '+${(f * 100).round()}%';
+
+  Widget _overviewTab() {
+    final g = _guild!;
+    final lv = g.level.clamp(1, kGuildLevelPoints.length);
+    final maxed = lv >= kGuildLevelPoints.length;
+    final from = kGuildLevelPoints[lv - 1];
+    final to = maxed ? from : kGuildLevelPoints[lv];
+    final frac = maxed ? 1.0 : ((g.points - from) / (to - from)).clamp(0.0, 1.0);
+    final now = kGuildBonusByLevel[lv - 1];
+    final next = maxed ? now : kGuildBonusByLevel[lv];
+    final left = _questsEnd?.difference(DateTime.now());
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+      children: [
+        socialSection('Guild level'),
+        socialRow(
+          height: 72,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'Level $lv',
+                    style: FoE.label(size: 15).copyWith(color: kBoxInk),
+                  ),
+                  const Spacer(),
+                  Text(
+                    maxed
+                        ? '${g.points} points · top level'
+                        : '${g.points} / $to points',
+                    style: FoE.dim(size: 11).copyWith(color: kBoxInkSoft),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              VoxelBar(value: frac, height: 10, block: 8, color: CreamPalette.gold),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        socialSection('What it gives every member'),
+        socialRow(
+          height: 64,
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_pct(now)} build speed · wood and stone yield · battle XP',
+                      style: FoE.label(size: 12.5).copyWith(color: kBoxInk),
+                    ),
+                    Text(
+                      maxed
+                          ? 'The highest bonus.'
+                          : 'Next level: ${_pct(next)}',
+                      style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        socialSection(
+          'This week’s quests',
+          trailing: left == null
+              ? null
+              : Text(
+                  left.inDays >= 1
+                      ? '${left.inDays} d left'
+                      : '${left.inHours.clamp(0, 99)} h left',
+                  style: FoE.dim(size: 10.5).copyWith(color: kBoxInkSoft),
+                ),
+        ),
+        if (_quests.isEmpty) socialHint('No quests yet — check back soon.'),
+        for (final q in _quests)
+          _gap(
+            socialRow(
+              height: 62,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          q.title,
+                          style: FoE.label(size: 13).copyWith(color: kBoxInk),
+                        ),
+                      ),
+                      Text(
+                        q.rewarded
+                            ? 'Done · +${GuildQuest.reward} points'
+                            : '${q.progress} / ${q.goal} · +${GuildQuest.reward} points',
+                        style: FoE.dim(size: 10.5).copyWith(
+                          color: q.rewarded ? CreamPalette.better : kBoxInkSoft,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  VoxelBar(
+                    value: q.goal <= 0 ? 0 : q.progress / q.goal,
+                    height: 9,
+                    block: 8,
+                    color: q.rewarded ? CreamPalette.better : CreamPalette.gold,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        socialHint(
+          'Helping a guild mate earns a point; a finished quest earns '
+          '${GuildQuest.reward}. Points raise the guild level.',
+        ),
+      ],
     );
   }
 
@@ -648,6 +1232,87 @@ class _GuildScreenState extends State<GuildScreen> {
     }
   }
 
+  // Help ---------------------------------------------------
+
+  String _left(DateTime end) {
+    final d = end.difference(DateTime.now());
+    if (d.inHours >= 1) return '${d.inHours} h left';
+    return '${d.inMinutes.clamp(0, 59)} min left';
+  }
+
+  Future<void> _giveHelp(GuildHelpRequest r) async {
+    final res = await GuildHelp.instance.give(r);
+    if (!mounted) return;
+    switch (res) {
+      case 'ok':
+        context.snack('Helped ${r.requesterName}.');
+      case 'capped':
+        context.snack('That one has all the help it can take.');
+      case 'expired':
+        context.snack('That one is already done.');
+      case 'already':
+        context.snack('You already helped with that.');
+      default:
+        context.snack(res.replaceFirst('!', ''), error: true);
+    }
+    await GuildHelp.instance.refresh();
+  }
+
+  Future<void> _helpAll() async {
+    var n = 0;
+    for (final r in [...GuildHelp.instance.open]) {
+      if (await GuildHelp.instance.give(r) == 'ok') n++;
+    }
+    if (!mounted) return;
+    context.snack(n == 0 ? 'Nothing to help with.' : 'Helped $n.');
+    await GuildHelp.instance.refresh();
+  }
+
+  Widget _helpTab() {
+    final open = GuildHelp.instance.open;
+    final cut = (kGuildHelpFraction * 100).round();
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+      children: [
+        socialHint(
+          'Each help takes $cut% off the time that is still to run — for '
+          'building, breeding, hatching and healing. Ask your guild from the '
+          'building or the monster itself.',
+        ),
+        if (open.isEmpty) socialHint('Nobody is waiting for help right now.'),
+        if (open.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SocialGoldButton('Help everyone', onTap: _helpAll),
+            ),
+          ),
+        for (final r in open)
+          _gap(
+            socialRow(
+              child: Row(
+                children: [
+                  SocialAvatar(r.requesterName),
+                  const SizedBox(width: 10),
+                  _name(
+                    '${r.requesterName} · ${r.label}',
+                    '${r.kind.noun} · ${_left(r.expiresAt)} · '
+                    '${r.helps}/$kGuildHelpCap helped',
+                  ),
+                  SocialGoldButton(
+                    'Help',
+                    height: 28,
+                    onTap: () => _giveHelp(r),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   // Requests -----------------------------------------------
 
   Widget _requestsTab() => ListView(
@@ -694,11 +1359,33 @@ class _GuildScreenState extends State<GuildScreen> {
     text: _guild?.description ?? '',
   );
 
+  GuildCrest? _editCrest;
+
   Widget _manageTab() {
     final g = _guild!;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
       children: [
+        socialSection('Crest'),
+        CrestCreator(
+          crest: _editCrest ?? g.crest,
+          onChanged: (c) => setState(() => _editCrest = c),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: SocialGoldButton(
+            'Save crest',
+            onTap: _busy || _editCrest == null
+                ? null
+                : () async {
+                    final c = _editCrest!;
+                    await _do(() => _svc.update(crest: c), done: 'Crest saved.');
+                    _editCrest = null;
+                  },
+          ),
+        ),
+        const SizedBox(height: 14),
         socialSection('Description'),
         _field(_editDesc, 'Describe your guild', maxLength: 280, maxLines: 3),
         const SizedBox(height: 10),

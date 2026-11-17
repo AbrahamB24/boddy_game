@@ -148,13 +148,13 @@ class _WorkScreenState extends State<WorkScreen> {
 
   /// Why a posted monster is not at its post — the building dialog's words.
   String? _absence(CreatureInstance c) => c.isKo
-      ? '💀 K.O.'
+      ? 'K.O.'
       : _creatures.isBreeding(c.id)
-      ? '🥚 breeding'
+      ? 'breeding'
       : _creatures.isOnExpedition(c.id)
-      ? '🎒 away'
+      ? 'away'
       : c.isHealing
-      ? '🩺 treatment'
+      ? 'treatment'
       : null;
 
   /// A monster nobody has posted and who could go to work now.

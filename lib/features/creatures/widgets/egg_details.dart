@@ -192,7 +192,7 @@ class _ParentCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Lv ${creature.level}   ⚡ ${totalPower(creature)}',
+                  'Lv ${creature.level}   $kPowerIcon ${totalPower(creature)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: FoE.dim(size: 10).copyWith(color: _kInkSoft),

@@ -541,7 +541,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
       children: [
         Expanded(
           child: _typeSwitchOption(
-            '⛏️ Gather',
+            'Gather',
             active: kind == ExpeditionTargetKind.gather,
             onTap: () =>
                 setState(() => _composerKind = ExpeditionTargetKind.gather),
@@ -549,7 +549,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
         ),
         Expanded(
           child: _typeSwitchOption(
-            '🪤 Hunt',
+            'Hunt',
             active: kind == ExpeditionTargetKind.hunt,
             onTap: () =>
                 setState(() => _composerKind = ExpeditionTargetKind.hunt),
@@ -820,7 +820,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
     // a notice, and only pressable things are gold.
     child: creamCard(
       padding: const EdgeInsets.all(12),
-      deep: Strategy.goldDeep,
+      deep: CreamPalette.tanShadow,
       child: Row(
         children: [
           const Text('🧭', style: TextStyle(fontSize: 22)),
@@ -919,7 +919,7 @@ class _ExpeditionsBodyState extends State<ExpeditionsBody> {
     return _miniChip(
       '🪙 $cost',
       color: Strategy.gold,
-      deep: Strategy.goldDeep,
+      deep: CreamPalette.tanShadow,
       onTap: canPay
           ? () async {
               final err = await _ctrl.skipWithGold(e);
